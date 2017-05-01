@@ -2,7 +2,7 @@ IDIR=../include/
 CC=gcc
 GPP=g++
 CFLAGS=-I$(IDIR) -Wall -msse4.1
-CPPFLAGS=-I$(IDIR) -Wall
+CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1
 
 ODIR=obj
 BINDIR=bin
@@ -24,7 +24,7 @@ $(ODIR)/%.opp: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
 
 $(BINDIR)/wrapper: $(OBJ) $(OBJPP)
-	$(GPP) -o $@ $^ $(CPPFLAGS) $(LIBS)
+	$(GPP) -o $@ $^ $(CPPFLAGS) -Bstatic $(LIBS)
 
 all: $(BINDIR)/wrapper
 
