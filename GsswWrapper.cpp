@@ -1,7 +1,9 @@
 #include <iostream>
 #include <fstream>
+#include <functional>
 #include "vg.pb.h"
 #include "gssw.h"
+#include "stream.hpp"
 
 class GraphMappingContainer
 {
@@ -24,6 +26,10 @@ public:
 	~GraphMappingContainer()
 	{
 		unload();
+	};
+	operator gssw_graph_mapping*()
+	{
+		return ptr;
 	};
 private:
 	gssw_graph_mapping* ptr;
@@ -57,7 +63,7 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	}
 
 	std::vector<GraphMappingContainer> result;
-	for (int i = 0; i < reads.size(); i++)
+	for (size_t i = 0; i < reads.size(); i++)
 	{
 
 		gssw_graph_fill(graph, reads[i].c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
@@ -75,7 +81,7 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	}
 
     //todo: does the graph need to exist to use the graph mapping?
-	gssw_graph_destroy(graph);
+	// gssw_graph_destroy(graph);
 
 	return result;
 }
@@ -83,21 +89,12 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-	vg::Graph graph;
-	{
-		std::cerr << "load graph from " << argv[1] << std::endl;
-		std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
-		if (!graph.ParseFromIstream(&graphfile))
-		{
-			std::cerr << "Graph load failed." << std::endl;
-			return 1;
-		}
-	}
-	std::vector<std::string> reads;
-	for (int i = 2; i < argc; i++)
-	{
-		reads.emplace_back(argv[i]);
-	}
-	auto result = getOptimalPinnedMappings(graph, reads);
+
+	std::cerr << "load graph from " << argv[1] << std::endl;
+	std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
+	std::function<void(vg::Graph&)> lambda = [](vg::Graph& g) {
+		std::cerr << "graph loaded\n";
+	};
+	stream::for_each(graphfile, lambda);
 	return 0;
 }

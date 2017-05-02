@@ -1,4 +1,4 @@
-IDIR=../include/
+IDIR=/mnt/c/koulujutut/vg/vg/src
 CC=gcc
 GPP=g++
 CFLAGS=-I$(IDIR) -Wall -msse4.1
@@ -7,7 +7,7 @@ CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1
 ODIR=obj
 BINDIR=bin
 
-LIBS=-lm -lz -lprotobuf
+LIBS=-lm -lprotobuf -lz
 
 DEPS = gssw.h vg.pb.h
 
@@ -24,7 +24,7 @@ $(ODIR)/%.opp: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
 
 $(BINDIR)/wrapper: $(OBJ) $(OBJPP)
-	$(GPP) -o $@ $^ $(CPPFLAGS) -Bstatic $(LIBS)
+	$(GPP) -o $@ $^ $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
 all: $(BINDIR)/wrapper
 
