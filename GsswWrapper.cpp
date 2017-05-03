@@ -36,6 +36,7 @@ public:
 	};
 	std::string seq_id;
 	gssw_graph_mapping* ptr;
+	bool reverse;
 private:
 	void unload()
 	{
@@ -56,6 +57,7 @@ vg::Alignment gsswToVgMapping(GraphMappingContainer& mapping)
 		vgmapping->set_allocated_position(position);
 		vgmapping->set_rank(node+1);
 		position->set_node_id(mapping.ptr->cigar.elements[node].node->id);
+		if (mapping.reverse) position->set_is_reverse(true);
 	}
 	return result;
 }
@@ -139,7 +141,7 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	for (size_t i = 0; i < reads.size(); i++)
 	{
 		gssw_graph_fill(graph, reads[i].sequence.c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
-		gssw_graph_mapping* gmp = gssw_graph_trace_back (graph,
+		gssw_graph_mapping* gmpForward = gssw_graph_trace_back (graph,
 			reads[i].sequence.c_str(),
 			reads[i].sequence.size(),
 			nt_table,
@@ -147,18 +149,28 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 			gap_open,
 			gap_extension,
 			0, 0);
-		// gssw_graph_mapping* gmp = gssw_graph_trace_back_pinned_qual_adj (graph,
-		// 	gsswnodes.back(),
-		// 	reads[i].sequence.c_str(),
-		// 	reads[i].quality.c_str(),
-		// 	reads[i].sequence.size(),
-		// 	nt_table,
-		// 	mat,
-		// 	gap_open,
-		// 	gap_extension,
-		// 	0, 0);
 
-		result.emplace_back(gmp);
+		auto reverseComplement = reads[i].reverseComplement();
+		gssw_graph_fill(graph,reverseComplement.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
+		gssw_graph_mapping* gmpBackwards = gssw_graph_trace_back (graph,
+			reverseComplement.sequence.c_str(),
+			reverseComplement.sequence.size(),
+			nt_table,
+			mat,
+			gap_open,
+			gap_extension,
+			0, 0);
+
+		if (gmpForward->score > gmpBackwards->score)
+		{
+			result.emplace_back(gmpForward);
+		}
+		else
+		{
+			result.emplace_back(gmpBackwards);
+			result.back().reverse = true;
+		}
+
 		result.back().seq_id = reads[i].seq_id;
 	}
 
