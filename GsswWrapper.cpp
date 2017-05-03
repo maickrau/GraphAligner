@@ -1,9 +1,12 @@
 #include <iostream>
 #include <fstream>
 #include <functional>
+#include <algorithm>
 #include "vg.pb.h"
 #include "gssw.h"
 #include "stream.hpp"
+#include "fastqloader.h"
+#include "TopologicalSort.h"
 
 class GraphMappingContainer
 {
@@ -39,7 +42,7 @@ private:
 	};
 };
 
-std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vggraph, const std::vector<std::string>& reads)
+std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vggraph, const std::vector<FastQ>& reads)
 {
 	//code mostly from gssw's example.c
 	int8_t match = 1, mismatch = 4;
@@ -47,15 +50,27 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	int8_t* nt_table = gssw_create_nt_table();
 	int8_t* mat = gssw_create_score_matrix(match, mismatch);
 	std::vector<gssw_node*> gsswnodes;
+	std::vector<size_t> order = topologicalSort(vggraph);
+	std::vector<vg::Node> nodesToEnter;
+	for (int i = 0; i< vggraph.node_size(); i++)
+	{
+		nodesToEnter.push_back(vggraph.node(order[i]));
+	}
 	gssw_graph* graph = gssw_graph_create(vggraph.node_size());
 	//todo check: do these need to be in this order? create nodes, create edges and only then insert to graph
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
-		gsswnodes.push_back((gssw_node*)gssw_node_create((void*)"", i, vggraph.node(i).sequence().c_str(), nt_table, mat));
+		gsswnodes.push_back((gssw_node*)gssw_node_create((void*)"", nodesToEnter[i].id(), nodesToEnter[i].sequence().c_str(), nt_table, mat));
+	}
+	std::map<size_t, int> ids;
+	for (int i = 0; i < vggraph.node_size(); i++)
+	{
+		ids[nodesToEnter[i].id()] = i;
+		std::cerr << "node index " << i << " id " << nodesToEnter[i].id() << std::endl;
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
-		gssw_nodes_add_edge(gsswnodes[vggraph.edge(i).from()], gsswnodes[vggraph.edge(i).to()]);
+		gssw_nodes_add_edge(gsswnodes[ids[vggraph.edge(i).from()]], gsswnodes[ids[vggraph.edge(i).to()]]);
 	}
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
@@ -65,17 +80,25 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	std::vector<GraphMappingContainer> result;
 	for (size_t i = 0; i < reads.size(); i++)
 	{
-
-		gssw_graph_fill(graph, reads[i].c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
-		gssw_graph_mapping* gmp = gssw_graph_trace_back_pinned (graph,
-			gsswnodes.back(),
-			reads[i].c_str(),
-			reads[i].size(),
+		gssw_graph_fill(graph, reads[i].sequence.c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
+		gssw_graph_mapping* gmp = gssw_graph_trace_back (graph,
+			reads[i].sequence.c_str(),
+			reads[i].sequence.size(),
 			nt_table,
 			mat,
 			gap_open,
 			gap_extension,
 			0, 0);
+		// gssw_graph_mapping* gmp = gssw_graph_trace_back_pinned_qual_adj (graph,
+		// 	gsswnodes.back(),
+		// 	reads[i].sequence.c_str(),
+		// 	reads[i].quality.c_str(),
+		// 	reads[i].sequence.size(),
+		// 	nt_table,
+		// 	mat,
+		// 	gap_open,
+		// 	gap_extension,
+		// 	0, 0);
 
 		result.emplace_back(gmp);
 	}
@@ -90,11 +113,25 @@ int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+	vg::Graph graph;
 	std::cerr << "load graph from " << argv[1] << std::endl;
 	std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
-	std::function<void(vg::Graph&)> lambda = [](vg::Graph& g) {
-		std::cerr << "graph loaded\n";
+	std::function<void(vg::Graph&)> lambda = [&graph](vg::Graph& g) {
+		graph = g;
 	};
 	stream::for_each(graphfile, lambda);
+
+	auto fastqs = loadFastqFromFile(argv[2]);
+	std::cout << fastqs.size() << " reads" << std::endl;
+	for (size_t i = 0; i < fastqs.size(); i++)
+	{
+		std::cout << fastqs[i].sequence << std::endl;
+	}
+	auto result = getOptimalPinnedMappings(graph, fastqs);
+	for (size_t i = 0; i < result.size(); i++)
+	{
+		gssw_print_graph_mapping(result[i], stdout);
+
+	}
 	return 0;
 }

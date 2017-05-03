@@ -1,8 +1,8 @@
 IDIR=/mnt/c/koulujutut/vg/vg/src
 CC=gcc
 GPP=g++
-CFLAGS=-I$(IDIR) -Wall -msse4.1
-CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1
+CFLAGS=-I$(IDIR) -Wall -msse4.1 -g -pg
+CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1 -g -pg
 
 ODIR=obj
 BINDIR=bin
@@ -13,7 +13,7 @@ DEPS = gssw.h vg.pb.h
 
 _OBJ = gssw.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
-_OBJPP = GsswWrapper.opp vg.pb.opp
+_OBJPP = GsswWrapper.opp vg.pb.opp fastqloader.opp TopologicalSort.opp
 OBJPP = $(patsubst %, $(ODIR)/%, $(_OBJPP))
 
 
