@@ -8,6 +8,41 @@
 #include "fastqloader.h"
 #include "TopologicalSort.h"
 
+vg::Graph mergeGraphs(std::vector<vg::Graph> parts)
+{
+	std::vector<vg::Node> allNodes;
+	std::vector<vg::Edge> allEdges;
+	for (size_t i = 0; i < parts.size(); i++)
+	{
+		for (int j = 0; j < parts[i].node_size(); j++)
+		{
+			allNodes.push_back(parts[i].node(j));
+		}
+		for (int j = 0; j < parts[i].edge_size(); j++)
+		{
+			allEdges.push_back(parts[i].edge(j));
+		}
+	}
+	vg::Graph newGraph;
+	for (size_t i = 0; i < allNodes.size(); i++)
+	{
+		auto node = newGraph.add_node();
+		node->set_id(allNodes[i].id());
+		node->set_sequence(allNodes[i].sequence());
+		node->set_name(allNodes[i].name());
+	}
+	for (size_t i = 0; i < allEdges.size(); i++)
+	{
+		auto edge = newGraph.add_edge();
+		edge->set_from(allEdges[i].from());
+		edge->set_to(allEdges[i].to());
+		edge->set_from_start(allEdges[i].from_start());
+		edge->set_to_end(allEdges[i].to_end());
+		edge->set_overlap(allEdges[i].overlap());
+	}
+	return newGraph;
+}
+
 class GraphMappingContainer
 {
 public:
@@ -52,6 +87,10 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 	std::vector<gssw_node*> gsswnodes;
 	std::vector<size_t> order = topologicalSort(vggraph);
 	std::vector<vg::Node> nodesToEnter;
+	for (int i = 0; i < vggraph.node_size(); i++)
+	{
+		std::cerr << "before sorting: node index " << i << " id " << vggraph.node(i).id() << std::endl;
+	}
 	for (int i = 0; i< vggraph.node_size(); i++)
 	{
 		nodesToEnter.push_back(vggraph.node(order[i]));
@@ -116,10 +155,13 @@ int main(int argc, char** argv)
 	vg::Graph graph;
 	std::cerr << "load graph from " << argv[1] << std::endl;
 	std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
-	std::function<void(vg::Graph&)> lambda = [&graph](vg::Graph& g) {
-		graph = g;
+	std::vector<vg::Graph> parts;
+	std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
+		parts.push_back(g);
 	};
 	stream::for_each(graphfile, lambda);
+
+	graph = mergeGraphs(parts);
 
 	auto fastqs = loadFastqFromFile(argv[2]);
 	std::cout << fastqs.size() << " reads" << std::endl;
