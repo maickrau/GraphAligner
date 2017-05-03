@@ -13,7 +13,7 @@ DEPS = gssw.h vg.pb.h
 
 _OBJ = gssw.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
-_OBJPP = GsswWrapper.opp vg.pb.opp fastqloader.opp TopologicalSort.opp
+_OBJPP = GsswWrapper.opp vg.pb.opp fastqloader.opp TopologicalSort.opp SubgraphFromSeed.opp
 OBJPP = $(patsubst %, $(ODIR)/%, $(_OBJPP))
 
 
