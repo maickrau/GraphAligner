@@ -3,6 +3,7 @@
 
 class FastQ {
 public:
+	std::string seq_id;
 	std::string sequence;
 	std::string quality;
 };

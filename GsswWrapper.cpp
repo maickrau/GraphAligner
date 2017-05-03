@@ -8,6 +8,58 @@
 #include "fastqloader.h"
 #include "TopologicalSort.h"
 
+class GraphMappingContainer
+{
+public:
+	GraphMappingContainer(gssw_graph_mapping* ptr) : ptr(ptr) {};
+	GraphMappingContainer(const GraphMappingContainer& second) = delete;
+	GraphMappingContainer& operator=(const GraphMappingContainer& second) = delete;
+	GraphMappingContainer(GraphMappingContainer&& second)
+	{
+		ptr = second.ptr;
+		second.ptr = nullptr;
+	};
+	GraphMappingContainer& operator=(GraphMappingContainer&& second)
+	{
+		if (&second == this) return *this;
+		unload();
+		ptr = second.ptr;
+		second.ptr = nullptr;
+	};
+	~GraphMappingContainer()
+	{
+		unload();
+	};
+	operator gssw_graph_mapping*()
+	{
+		return ptr;
+	};
+	std::string seq_id;
+	gssw_graph_mapping* ptr;
+private:
+	void unload()
+	{
+		if (ptr != nullptr) gssw_graph_mapping_destroy(ptr);
+	};
+};
+
+vg::Alignment gsswToVgMapping(GraphMappingContainer& mapping)
+{
+	vg::Alignment result;
+	result.set_name(mapping.seq_id);
+	auto path = new vg::Path;
+	result.set_allocated_path(path);
+	for (int node = 0; node < mapping.ptr->cigar.length; node++)
+	{
+		auto vgmapping = path->add_mapping();
+		auto position = new vg::Position;
+		vgmapping->set_allocated_position(position);
+		vgmapping->set_rank(node+1);
+		position->set_node_id(mapping.ptr->cigar.elements[node].node->id);
+	}
+	return result;
+}
+
 vg::Graph mergeGraphs(std::vector<vg::Graph> parts)
 {
 	std::vector<vg::Node> allNodes;
@@ -43,45 +95,12 @@ vg::Graph mergeGraphs(std::vector<vg::Graph> parts)
 	return newGraph;
 }
 
-class GraphMappingContainer
-{
-public:
-	GraphMappingContainer(gssw_graph_mapping* ptr) : ptr(ptr) {};
-	GraphMappingContainer(const GraphMappingContainer& second) = delete;
-	GraphMappingContainer& operator=(const GraphMappingContainer& second) = delete;
-	GraphMappingContainer(GraphMappingContainer&& second)
-	{
-		ptr = second.ptr;
-		second.ptr = nullptr;
-	};
-	GraphMappingContainer& operator=(GraphMappingContainer&& second)
-	{
-		if (&second == this) return *this;
-		unload();
-		ptr = second.ptr;
-		second.ptr = nullptr;
-	};
-	~GraphMappingContainer()
-	{
-		unload();
-	};
-	operator gssw_graph_mapping*()
-	{
-		return ptr;
-	};
-private:
-	gssw_graph_mapping* ptr;
-	void unload()
-	{
-		if (ptr != nullptr) gssw_graph_mapping_destroy(ptr);
-	};
-};
 
 std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vggraph, const std::vector<FastQ>& reads)
 {
 	//code mostly from gssw's example.c
 	int8_t match = 1, mismatch = 4;
-	uint8_t gap_open = 6, gap_extension = 1;
+	uint8_t gap_open = 1, gap_extension = 1;
 	int8_t* nt_table = gssw_create_nt_table();
 	int8_t* mat = gssw_create_score_matrix(match, mismatch);
 	std::vector<gssw_node*> gsswnodes;
@@ -140,6 +159,7 @@ std::vector<GraphMappingContainer> getOptimalPinnedMappings(const vg::Graph& vgg
 		// 	0, 0);
 
 		result.emplace_back(gmp);
+		result.back().seq_id = reads[i].seq_id;
 	}
 
     //todo: does the graph need to exist to use the graph mapping?
@@ -170,10 +190,15 @@ int main(int argc, char** argv)
 		std::cout << fastqs[i].sequence << std::endl;
 	}
 	auto result = getOptimalPinnedMappings(graph, fastqs);
+	std::vector<vg::Alignment> alignments;
 	for (size_t i = 0; i < result.size(); i++)
 	{
+		alignments.push_back(gsswToVgMapping(result[i]));
 		gssw_print_graph_mapping(result[i], stdout);
-
 	}
+
+	std::ofstream alignmentOut { argv[3], std::ios::out | std::ios::binary };
+	stream::write_buffered(alignmentOut, alignments, 0);
+
 	return 0;
 }
