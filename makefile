@@ -1,8 +1,8 @@
 IDIR=/mnt/c/koulujutut/vg/vg/src
 CC=gcc
 GPP=g++
-CFLAGS=-I$(IDIR) -Wall -msse4.1 -g -pg
-CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1 -g -pg
+CFLAGS=-I$(IDIR) -Wall -msse4.1 -g -pg -O3 -DNDEBUG
+CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1 -g -pg -O3 -DNDEBUG
 
 ODIR=obj
 BINDIR=bin
