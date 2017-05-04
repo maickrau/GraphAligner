@@ -9,6 +9,16 @@
 #include "TopologicalSort.h"
 #include "SubgraphFromSeed.h"
 
+size_t GraphSizeInBp(const vg::Graph& graph)
+{
+	size_t result = 0;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		result += graph.node(i).sequence().size();
+	}
+	return result;
+}
+
 vg::Alignment gsswToVgMapping(gssw_graph_mapping* mapping, std::string seq_id, bool reverse)
 {
 	vg::Alignment result;
@@ -102,8 +112,10 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 		gssw_graph_add_node(graph, gsswnodes[i]);
 	}
 
-	std::cerr << "align read " << read.seq_id << " forward" << std::endl;
-	gssw_graph_fill(graph, read.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
+	std::cerr << "read " << read.seq_id << std::endl;
+	std::cerr << "read síze " << read.sequence.size() << " bp, subgraph size " << GraphSizeInBp(vggraph) << " bp" << std::endl;
+	std::cerr << "align forward" << std::endl;
+	gssw_graph_fill(graph, read.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
 	gssw_graph_mapping* gmpForward = gssw_graph_trace_back (graph,
 		read.sequence.c_str(),
 		read.sequence.size(),
@@ -113,9 +125,9 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 		gap_extension,
 		0, 0);
 
-	std::cerr << "align read " << read.seq_id << " backwards" << std::endl;
+	std::cerr << "align backwards" << std::endl;
 	auto reverseComplement = read.reverseComplement();
-	gssw_graph_fill(graph, reverseComplement.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 0, 0, 15, 2);
+	gssw_graph_fill(graph, reverseComplement.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
 	gssw_graph_mapping* gmpBackwards = gssw_graph_trace_back (graph,
 		reverseComplement.sequence.c_str(),
 		reverseComplement.sequence.size(),
@@ -165,6 +177,7 @@ int main(int argc, char** argv)
 		};
 		stream::for_each(graphfile, lambda);
 		graph = mergeGraphs(parts);
+		std::cerr << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
 	}
 
 	auto fastqs = loadFastqFromFile(argv[2]);
