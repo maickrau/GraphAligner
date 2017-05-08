@@ -1919,6 +1919,9 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
             if (!found_trace) {
                 // We're in H and can't go anywhere.
                 fprintf(stderr, "error:[gssw] Stuck in main matrix!\n");
+                scoreHere = -1;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }
@@ -2650,6 +2653,9 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
             if (!found_trace) {
                 // We're in H and can't go anywhere.
                 fprintf(stderr, "error:[gssw] Stuck in main matrix!\n");
+                scoreHere = -1;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }

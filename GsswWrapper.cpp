@@ -215,7 +215,14 @@ int main(int argc, char** argv)
 				bestMapping = checkMapping;
 			}
 		}
-		alignments.push_back(bestMapping);
+		if (bestMapping.score() > -1)
+		{
+			alignments.push_back(bestMapping);
+		}
+		else
+		{
+			std::cerr << "no match for read " << fastqs[i].seq_id << std::endl;
+		}
 	}
 
 	std::ofstream alignmentOut { argv[4], std::ios::out | std::ios::binary };

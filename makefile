@@ -2,7 +2,7 @@ IDIR=/mnt/c/koulujutut/vg/vg/src
 CC=gcc
 GPP=g++
 CFLAGS=-I$(IDIR) -Wall -msse4.1 -g -pg -O3 -DNDEBUG
-CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1 -g -pg -O3 -DNDEBUG
+CPPFLAGS=-I$(IDIR) -Wall -std=c++11 -msse4.1 -O3 -DNDEBUG
 
 ODIR=obj
 BINDIR=bin
@@ -26,7 +26,10 @@ $(ODIR)/%.opp: %.cpp $(DEPS)
 $(BINDIR)/wrapper: $(OBJ) $(OBJPP)
 	$(GPP) -o $@ $^ $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-all: $(BINDIR)/wrapper
+$(BINDIR)/ReadIndexToId: $(OBJ) $(OBJPP)
+	$(GPP) -o $@ ReadIndexToId.cpp $(ODIR)/vg.pb.opp $(ODIR)/fastqloader.opp $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId
 
 clean:
 	rm -f $(ODIR)/*

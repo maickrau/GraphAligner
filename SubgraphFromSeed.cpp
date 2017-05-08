@@ -21,7 +21,7 @@ class Graph
 
     // In a weighted graph, we need to store vertex
     // and weight pair for every edge
-    list< pair<int, int> > *adj;
+    std::vector<list< pair<int, int>>> adj;
 
 public:
     Graph(int V);  // Constructor
@@ -46,12 +46,12 @@ vg::Graph ExtractSubgraph(const vg::Graph& graph, vg::Alignment seed, int length
 	for (int i = 0; i < graph.edge_size(); i++)
 	{
 		dijkstraGraph.addEdge(ids[graph.edge(i).from()], ids[graph.edge(i).to()], graph.node(ids[graph.edge(i).to()]).sequence().size());
-		reverseDijkstraGraph.addEdge(ids[graph.edge(i).to()], ids[graph.edge(i).from()], graph.node(ids[graph.edge(i).to()]).sequence().size());
+		reverseDijkstraGraph.addEdge(ids[graph.edge(i).to()], ids[graph.edge(i).from()], graph.node(ids[graph.edge(i).from()]).sequence().size());
 	}
 	std::vector<int> startNodes;
 	for (int i = 0; i < seed.path().mapping_size(); i++)
 	{
-		startNodes.push_back(seed.path().mapping(i).position().node_id());
+		startNodes.push_back(ids[seed.path().mapping(i).position().node_id()]);
 	}
 	auto forward = dijkstraGraph.shortestPath(startNodes, length);
 	auto backward = reverseDijkstraGraph.shortestPath(startNodes, length);
@@ -89,7 +89,7 @@ vg::Graph ExtractSubgraph(const vg::Graph& graph, vg::Alignment seed, int length
 Graph::Graph(int V)
 {
 	this->V = V;
-	adj = new list<iPair> [V];
+	adj.resize(V);
 }
 
 void Graph::addEdge(int u, int v, int w)
