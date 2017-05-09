@@ -8,6 +8,7 @@ int main(int argc, char** argv)
 	auto fastqs = loadFastqFromFile(argv[1]);
 	std::ifstream gremfile {argv[2], std::ios::in};
 	std::vector<vg::Alignment> output;
+	std::set<std::pair<int, int>> existing;
 	do
 	{
 		std::string line;
@@ -16,6 +17,8 @@ int main(int argc, char** argv)
 		int commapos = line.find(',', 0);
 		int nodeid = std::stoi(line.substr(0, commapos));
 		int readid = std::stoi(line.substr(commapos+1));
+		if (existing.count(std::make_pair(nodeid, readid)) > 0) continue;
+		existing.insert(std::make_pair(nodeid, readid));
 		std::string readname = fastqs[readid].seq_id;
 		vg::Alignment alignment;
 		vg::Path* path = new vg::Path();
