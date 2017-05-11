@@ -1,7 +1,9 @@
+#include <sstream>
 #include <iostream>
 #include <fstream>
 #include <functional>
 #include <algorithm>
+#include <thread>
 #include "vg.pb.h"
 #include "gssw.h"
 #include "stream.hpp"
@@ -83,10 +85,6 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 	std::vector<gssw_node*> gsswnodes;
 	std::vector<size_t> order = topologicalSort(vggraph);
 	std::vector<const vg::Node*> nodesToEnter;
-	for (int i = 0; i < vggraph.node_size(); i++)
-	{
-		std::cout << "before sorting: node index " << i << " id " << vggraph.node(i).id() << std::endl;
-	}
 	for (int i = 0; i< vggraph.node_size(); i++)
 	{
 		nodesToEnter.push_back(&vggraph.node(order[i]));
@@ -101,7 +99,6 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
 		ids[nodesToEnter[i]->id()] = i;
-		std::cout << "node index " << i << " id " << nodesToEnter[i]->id() << std::endl;
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
@@ -112,9 +109,9 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 		gssw_graph_add_node(graph, gsswnodes[i]);
 	}
 
-	std::cerr << "read " << read.seq_id << std::endl;
-	std::cerr << "read síze " << read.sequence.size() << " bp, subgraph size " << GraphSizeInBp(vggraph) << " bp" << std::endl;
-	std::cerr << "align forward" << std::endl;
+	std::cout << "read " << read.seq_id << std::endl;
+	std::cout << "read size " << read.sequence.size() << " bp, subgraph size " << GraphSizeInBp(vggraph) << " bp" << std::endl;
+	std::cout << "align forward" << std::endl;
 	gssw_graph_fill(graph, read.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
 	gssw_graph_mapping* gmpForward = gssw_graph_trace_back (graph,
 		read.sequence.c_str(),
@@ -125,7 +122,7 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 		gap_extension,
 		0, 0);
 
-	std::cerr << "align backwards" << std::endl;
+	std::cout << "align backwards" << std::endl;
 	auto reverseComplement = read.reverseComplement();
 	gssw_graph_fill(graph, reverseComplement.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
 	gssw_graph_mapping* gmpBackwards = gssw_graph_trace_back (graph,
@@ -152,15 +149,58 @@ vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& rea
 
 	vg::Alignment vgResult = gsswToVgMapping(bestMapping, read.seq_id, reverse);
 
-    gssw_graph_mapping_destroy(gmpForward);
-    gssw_graph_mapping_destroy(gmpBackwards);
+	gssw_graph_mapping_destroy(gmpForward);
+	gssw_graph_mapping_destroy(gmpBackwards);
 
 	gssw_graph_destroy(graph);
 
-    free(nt_table);
+	free(nt_table);
 	free(mat);
 
 	return vgResult;
+}
+
+void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg::Alignment>>& fastqAlignmentPairs, std::map<FastQ*, vg::Alignment>& alignments, int threadnum)
+{
+	std::string msg;
+	for (size_t i = 0; i < fastqAlignmentPairs.size(); i++)
+	{
+		{
+			std::ostringstream writer;
+			writer << "thread " << threadnum << " " << i << "/" << fastqAlignmentPairs.size() << std::endl;
+			msg = writer.str();
+		}
+		std::cerr << msg;
+		auto fastq = fastqAlignmentPairs[i].first;
+		auto alignment = fastqAlignmentPairs[i].second;
+		auto seedGraph = ExtractSubgraph(graph, alignment, fastq->sequence.size());
+		auto bestMapping = getOptimalPinnedMapping(seedGraph, *fastq);
+		if (bestMapping.score() > -1)
+		{
+			if (alignments.count(fastq) == 0)
+			{
+				alignments[fastq] = bestMapping;
+				{
+					std::ostringstream writer;
+					writer << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << std::endl;
+					msg = writer.str();
+				}
+				std::cerr << msg;
+				continue;
+			}
+			auto oldScore = alignments[fastq];
+			if (bestMapping.score() > oldScore.score())
+			{
+				alignments[fastq] = bestMapping;
+			}
+		}
+	}
+	{
+		std::ostringstream writer;
+		writer << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << std::endl;
+		msg = writer.str();
+	}
+	std::cerr << msg;
 }
 
 int main(int argc, char** argv)
@@ -169,7 +209,7 @@ int main(int argc, char** argv)
 
 	vg::Graph graph;
 	{
-		std::cerr << "load graph from " << argv[1] << std::endl;
+		std::cout << "load graph from " << argv[1] << std::endl;
 		std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
 		std::vector<vg::Graph> parts;
 		std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
@@ -177,15 +217,11 @@ int main(int argc, char** argv)
 		};
 		stream::for_each(graphfile, lambda);
 		graph = mergeGraphs(parts);
-		std::cerr << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
+		std::cout << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
 	}
 
 	auto fastqs = loadFastqFromFile(argv[2]);
-	std::cerr << fastqs.size() << " reads" << std::endl;
-	for (size_t i = 0; i < fastqs.size(); i++)
-	{
-		std::cout << fastqs[i].sequence << std::endl;
-	}
+	std::cout << fastqs.size() << " reads" << std::endl;
 
 	std::map<std::string, std::vector<vg::Alignment>> seeds;
 	{
@@ -196,34 +232,58 @@ int main(int argc, char** argv)
 		stream::for_each(seedfile, alignmentLambda);
 	}
 
-	std::vector<vg::Alignment> alignments;
+	int numThreads = std::stoi(argv[5]);
+	std::vector<std::vector<std::pair<FastQ*, vg::Alignment>>> readAlignmentPairsPerThread;
+	std::vector<std::map<FastQ*, vg::Alignment>> alignmentsPerThread;
+	readAlignmentPairsPerThread.resize(numThreads);
+	alignmentsPerThread.resize(numThreads);
+	int currentThread = 0;
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
-		if (seeds[fastqs[i].seq_id].size() == 0)
+		if (seeds.count(fastqs[i].seq_id) == 0) continue;
+		for (size_t j = 0; j < seeds[fastqs[i].seq_id].size(); j++)
 		{
-			std::cerr << "no seed for read " << fastqs[i].seq_id << std::endl;
-			continue;
-		}
-		auto seedGraph = ExtractSubgraph(graph, seeds[fastqs[i].seq_id][0], fastqs[i].sequence.size());
-		auto bestMapping = getOptimalPinnedMapping(seedGraph, fastqs[i]);
-		for (size_t j = 1; j < seeds[fastqs[i].seq_id].size(); j++)
-		{
-			seedGraph = ExtractSubgraph(graph, seeds[fastqs[i].seq_id][j], fastqs[i].sequence.size());
-			auto checkMapping = getOptimalPinnedMapping(seedGraph, fastqs[i]);
-			if (checkMapping.score() > bestMapping.score())
-			{
-				bestMapping = checkMapping;
-			}
-		}
-		if (bestMapping.score() > -1)
-		{
-			alignments.push_back(bestMapping);
-		}
-		else
-		{
-			std::cerr << "no match for read " << fastqs[i].seq_id << std::endl;
+			readAlignmentPairsPerThread[currentThread].emplace_back(&fastqs[i], seeds[fastqs[i].seq_id][j]);
+			currentThread++;
+			currentThread %= numThreads;
 		}
 	}
+
+	std::vector<std::thread> threads;
+
+	for (int i = 0; i < numThreads; i++)
+	{
+		threads.emplace_back([&graph, &readAlignmentPairsPerThread, &alignmentsPerThread, i]() { runMappings(graph, readAlignmentPairsPerThread[i], alignmentsPerThread[i], i); });
+	}
+
+	for (int i = 0; i < numThreads; i++)
+	{
+		threads[i].join();
+	}
+
+	std::vector<vg::Alignment> alignments;
+
+	for (size_t i = 0; i < fastqs.size(); i++)
+	{
+		vg::Alignment* bestAlignment = nullptr;
+		for (int j = 0; j < numThreads; j++)
+		{
+			if (alignmentsPerThread[j].count(&fastqs[i]) == 0) continue;
+			if (bestAlignment == nullptr) 
+			{
+				bestAlignment = &alignmentsPerThread[j][&fastqs[i]];
+				continue;
+			}
+			if (alignmentsPerThread[j][&fastqs[i]].score() > bestAlignment->score())
+			{
+				bestAlignment = &alignmentsPerThread[j][&fastqs[i]];
+				continue;
+			}
+		}
+		if (bestAlignment != nullptr) alignments.push_back(*bestAlignment);
+	}
+
+	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
 
 	std::ofstream alignmentOut { argv[4], std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, alignments, 0);

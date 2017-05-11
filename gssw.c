@@ -1056,7 +1056,7 @@ void gssw_print_score_matrix (const char* ref,
                               int32_t readLen,
                               gssw_align* alignment,
                               FILE* out) {
-
+/*
     int32_t i, j;
 
     fprintf(out, "\t");
@@ -1092,7 +1092,7 @@ void gssw_print_score_matrix (const char* ref,
     }
 
     fprintf(out, "\n");
-
+*/
 }
 
 void gssw_graph_print(gssw_graph* graph) {
@@ -1259,6 +1259,7 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
     // other node (??)
     
 #ifdef DEBUG_TRACEBACK
+    /*
     int l, k;
     fprintf(stderr, "mH\n");
     fprintf(stderr, "\t");
@@ -1299,6 +1300,7 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
         }
         fprintf(stderr, "\n");
     }
+    */
 #endif
     
     uint16_t scoreHere;
@@ -1354,6 +1356,8 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from read gap\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -1379,6 +1383,8 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from reference gap\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -1421,6 +1427,8 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Unrecognized matrix type\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -1556,6 +1564,9 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
                 // Something has gone wrong. We're in this matrix but don't have
                 // an open or an extend and can't leave left.
                 fprintf(stderr, "error:[gssw] Stuck in read gap!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }
@@ -1656,12 +1667,18 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
                 // We have hit the end of the read in a gap, which should be
                 // impossible because there's nowhere to open from.
                 fprintf(stderr, "error:[gssw] Ref gap hit edge!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
             else {
                 // Something has gone wrong. We're in this matrix but don't have
                 // an open or an extend and can't leave left.
                 fprintf(stderr, "error:[gssw] Ref gap stuck!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }
@@ -1919,7 +1936,7 @@ gssw_cigar* gssw_alignment_trace_back_byte (gssw_node* node,
             if (!found_trace) {
                 // We're in H and can't go anywhere.
                 fprintf(stderr, "error:[gssw] Stuck in main matrix!\n");
-                scoreHere = -1;
+                scoreHere = 0;
                 found_trace = true;
                 break;
                 assert(0);
@@ -1993,6 +2010,7 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
     // other node (??)
     
 #ifdef DEBUG_TRACEBACK
+    /*
     int l, k;
     fprintf(stderr, "mH\n");
     fprintf(stderr, "\t");
@@ -2033,6 +2051,7 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
         }
         fprintf(stderr, "\n");
     }
+    */
 #endif
     
     uint16_t scoreHere;
@@ -2088,6 +2107,8 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from read gap\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -2113,6 +2134,8 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from reference gap\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -2155,6 +2178,8 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
                             
                         default:
                             fprintf(stderr, "error:[gssw] Unrecognized matrix type\n");
+                            scoreHere = 0;
+                            break;
                             assert(0);
                             break;
                     }
@@ -2171,7 +2196,7 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
         
         int32_t found_trace = 0;
         uint16_t source_score;
-        uint16_t score_diff;
+        int32_t score_diff;
         int32_t next_i = i;
         int32_t next_j = j;
         int32_t next_g_read = gRead;
@@ -2290,6 +2315,9 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
                 // Something has gone wrong. We're in this matrix but don't have
                 // an open or an extend and can't leave left.
                 fprintf(stderr, "error:[gssw] Stuck in read gap!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }
@@ -2384,18 +2412,34 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
                         gssw_add_alignment(alt_alignment_stack, alignment_deflections, alt_score,
                                            j, i, node, node, RefGap, RefGap);
                     }
+                    else {
+                      scoreHere = 0;
+                      found_trace = true;
+                      break;
+                    }
+                }
+                else {
+                  scoreHere = 0;
+                  found_trace = true;
+                  break;
                 }
             }
             else if(j == 0) {
                 // We have hit the end of the read in a gap, which should be
                 // impossible because there's nowhere to open from.
                 fprintf(stderr, "error:[gssw] Ref gap hit edge!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
             else {
                 // Something has gone wrong. We're in this matrix but don't have
                 // an open or an extend and can't leave left.
                 fprintf(stderr, "error:[gssw] Ref gap stuck!\n");
+                scoreHere = 0;
+                found_trace = true;
+                break;
                 assert(0);
             }
         }
@@ -2653,7 +2697,7 @@ gssw_cigar* gssw_alignment_trace_back_word (gssw_node* node,
             if (!found_trace) {
                 // We're in H and can't go anywhere.
                 fprintf(stderr, "error:[gssw] Stuck in main matrix!\n");
-                scoreHere = -1;
+                scoreHere = 0;
                 found_trace = true;
                 break;
                 assert(0);
@@ -2780,7 +2824,7 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                                                      int8_t end_full_length_bonus) {
 
 #ifdef DEBUG_TRACEBACK
-    gssw_graph_print_score_matrices(graph, read, readLen, stderr);
+//    gssw_graph_print_score_matrices(graph, read, readLen, stderr);
 #endif
     
     // Get quality score as integers
@@ -3094,6 +3138,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                                     
                                 default:
                                     fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from match across node boundary\n");
+                                    score = 0;
+                                    break;
                                     assert(0);
                                     break;
                             }
@@ -3354,6 +3400,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                 // Once we go through all the possible previous nodes, we sure hope we found something consistent.
                 if(best_prev == NULL) {
                     fprintf(stderr, "error:[gssw] Could not find a valid previous node\n");
+                    score = 0;
+                    break;
                     assert(0);
                 }
                 
@@ -3402,6 +3450,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                                     
                                 default:
                                     fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from read gap\n");
+                                    score = 0;
+                                    break;
                                     assert(0);
                                     break;
                             }
@@ -3430,6 +3480,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                                     
                                 default:
                                     fprintf(stderr, "error:[gssw] Impossible alternate alignment deflection from match across node boundary\n");
+                                    score = 0;
+                                    break;
                                     assert(0);
                                     break;
                             }
@@ -3689,6 +3741,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                 // Once we go through all the possible previous nodes, we sure hope we found something consistent.
                 if(best_prev == NULL) {
                     fprintf(stderr, "error:[gssw] Could not find a valid previous node\n");
+                    score = 0;
+                    break;
                     assert(0);
                 }
                 
@@ -3716,6 +3770,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
                 
                 if(score > 0) {
                     fprintf(stderr, "error:[gssw] Could not find a node to go to!\n");
+                    score = 0;
+                    break;
                     assert(0);
                 }
                 
@@ -3731,6 +3787,8 @@ gssw_graph_mapping** gssw_graph_trace_back_internal (gssw_graph* graph,
         
         if (deflection_idx < alt_alignment->num_deflections) {
             fprintf(stderr, "error:[gssw] Alternate alignment did not find all of its deflections from optimal alignment\n");
+            score = 0;
+            break;
             assert(0);
         }
         
@@ -5049,7 +5107,7 @@ void gssw_add_alignment(gssw_multi_align_stack* stack, gssw_alternate_alignment_
     }
 #ifdef DEBUG_TRACEBACK
     fprintf(stderr, "###\n###finished updating alignment stack, scores are now: ");
-    if (stack->top_scoring) {
+/*    if (stack->top_scoring) {
         gssw_multi_align_stack_node* n = stack->top_scoring;
         fprintf(stderr, "%d", n->alt_alignment->score);
         while (n->prev != NULL) {
@@ -5060,7 +5118,7 @@ void gssw_add_alignment(gssw_multi_align_stack* stack, gssw_alternate_alignment_
     }
     else {
         fprintf(stderr, ".\n");
-    }
+    }*/
 #endif
 }
 
