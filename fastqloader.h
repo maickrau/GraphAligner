@@ -7,6 +7,7 @@ public:
 	std::string seq_id;
 	std::string sequence;
 	std::string quality;
+	static std::string reverseComplement(std::string str);
 };
 
 std::vector<FastQ> loadFastqFromFile(std::string filename);

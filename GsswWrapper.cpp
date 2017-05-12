@@ -5,11 +5,11 @@
 #include <algorithm>
 #include <thread>
 #include "vg.pb.h"
-#include "gssw.h"
 #include "stream.hpp"
 #include "fastqloader.h"
 #include "TopologicalSort.h"
 #include "SubgraphFromSeed.h"
+#include "GraphAligner.h"
 
 size_t GraphSizeInBp(const vg::Graph& graph)
 {
@@ -18,25 +18,6 @@ size_t GraphSizeInBp(const vg::Graph& graph)
 	{
 		result += graph.node(i).sequence().size();
 	}
-	return result;
-}
-
-vg::Alignment gsswToVgMapping(gssw_graph_mapping* mapping, std::string seq_id, bool reverse)
-{
-	vg::Alignment result;
-	result.set_name(seq_id);
-	auto path = new vg::Path;
-	result.set_allocated_path(path);
-	for (size_t node = 0; node < mapping->cigar.length; node++)
-	{
-		auto vgmapping = path->add_mapping();
-		auto position = new vg::Position;
-		vgmapping->set_allocated_position(position);
-		vgmapping->set_rank(node+1);
-		position->set_node_id(mapping->cigar.elements[node].node->id);
-		if (reverse) position->set_is_reverse(true);
-	}
-	result.set_score(mapping->score);
 	return result;
 }
 
@@ -75,89 +56,37 @@ vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
 	return newGraph;
 }
 
-vg::Alignment getOptimalPinnedMapping(const vg::Graph& vggraph, const FastQ& read)
+vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 {
-	//code mostly from gssw's example.c
-	int8_t match = 1, mismatch = 4;
-	uint8_t gap_open = 1, gap_extension = 1;
-	int8_t* nt_table = gssw_create_nt_table();
-	int8_t* mat = gssw_create_score_matrix(match, mismatch);
-	std::vector<gssw_node*> gsswnodes;
-	std::vector<size_t> order = topologicalSort(vggraph);
-	std::vector<const vg::Node*> nodesToEnter;
-	for (int i = 0; i< vggraph.node_size(); i++)
+	vg::Alignment betterAlignment;
 	{
-		nodesToEnter.push_back(&vggraph.node(order[i]));
+		GraphAligner<uint32_t, int32_t> forwardAlignment;
+		for (int i = 0; i < graph.node_size(); i++)
+		{
+			forwardAlignment.AddNode(graph.node(i).id(), graph.node(i).sequence());
+		}
+		for (int i = 0; i < graph.edge_size(); i++)
+		{
+			forwardAlignment.AddEdge(graph.edge(i).from(), graph.edge(i).to());
+		}
+		forwardAlignment.Finalize();
+		betterAlignment = forwardAlignment.AlignOneWay(read.seq_id, read.sequence, false);
 	}
-	gssw_graph* graph = gssw_graph_create(vggraph.node_size());
-	//todo check: do these need to be in this order? create nodes, create edges and only then insert to graph
-	for (int i = 0; i < vggraph.node_size(); i++)
 	{
-		gsswnodes.push_back((gssw_node*)gssw_node_create((void*)"", nodesToEnter[i]->id(), nodesToEnter[i]->sequence().c_str(), nt_table, mat));
+		GraphAligner<uint32_t, int32_t> backwardAlignment;
+		for (int i = 0; i < graph.node_size(); i++)
+		{
+			backwardAlignment.AddNode(graph.node(i).id(), FastQ::reverseComplement(graph.node(i).sequence()));
+		}
+		for (int i = 0; i < graph.edge_size(); i++)
+		{
+			backwardAlignment.AddEdge(graph.edge(i).to(), graph.edge(i).from());
+		}
+		backwardAlignment.Finalize();
+		auto backwards = backwardAlignment.AlignOneWay(read.seq_id, read.sequence, true);
+		if (backwards.score() > betterAlignment.score()) betterAlignment = backwards;
 	}
-	std::map<size_t, int> ids;
-	for (int i = 0; i < vggraph.node_size(); i++)
-	{
-		ids[nodesToEnter[i]->id()] = i;
-	}
-	for (int i = 0; i < vggraph.edge_size(); i++)
-	{
-		gssw_nodes_add_edge(gsswnodes[ids[vggraph.edge(i).from()]], gsswnodes[ids[vggraph.edge(i).to()]]);
-	}
-	for (int i = 0; i < vggraph.node_size(); i++)
-	{
-		gssw_graph_add_node(graph, gsswnodes[i]);
-	}
-
-	std::cout << "read " << read.seq_id << std::endl;
-	std::cout << "read size " << read.sequence.size() << " bp, subgraph size " << GraphSizeInBp(vggraph) << " bp" << std::endl;
-	std::cout << "align forward" << std::endl;
-	gssw_graph_fill(graph, read.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
-	gssw_graph_mapping* gmpForward = gssw_graph_trace_back (graph,
-		read.sequence.c_str(),
-		read.sequence.size(),
-		nt_table,
-		mat,
-		gap_open,
-		gap_extension,
-		0, 0);
-
-	std::cout << "align backwards" << std::endl;
-	auto reverseComplement = read.reverseComplement();
-	gssw_graph_fill(graph, reverseComplement.sequence.c_str(), nt_table, mat, gap_open, gap_extension, 5, 5, 15, 2);
-	gssw_graph_mapping* gmpBackwards = gssw_graph_trace_back (graph,
-		reverseComplement.sequence.c_str(),
-		reverseComplement.sequence.size(),
-		nt_table,
-		mat,
-		gap_open,
-		gap_extension,
-		0, 0);
-
-	gssw_graph_mapping* bestMapping;
-	bool reverse = false;
-
-	if (gmpForward->score > gmpBackwards->score)
-	{
-		bestMapping = gmpForward;
-	}
-	else
-	{
-		bestMapping = gmpBackwards;
-		reverse = true;
-	}
-
-	vg::Alignment vgResult = gsswToVgMapping(bestMapping, read.seq_id, reverse);
-
-	gssw_graph_mapping_destroy(gmpForward);
-	gssw_graph_mapping_destroy(gmpBackwards);
-
-	gssw_graph_destroy(graph);
-
-	free(nt_table);
-	free(mat);
-
-	return vgResult;
+	return betterAlignment;
 }
 
 void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg::Alignment>>& fastqAlignmentPairs, std::map<FastQ*, vg::Alignment>& alignments, int threadnum)
@@ -174,7 +103,7 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 		auto fastq = fastqAlignmentPairs[i].first;
 		auto alignment = fastqAlignmentPairs[i].second;
 		auto seedGraph = ExtractSubgraph(graph, alignment, fastq->sequence.size());
-		auto bestMapping = getOptimalPinnedMapping(seedGraph, *fastq);
+		auto bestMapping = getOptimalMapping(seedGraph, *fastq);
 		if (bestMapping.score() > -1)
 		{
 			if (alignments.count(fastq) == 0)

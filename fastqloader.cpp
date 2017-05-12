@@ -26,35 +26,42 @@ std::vector<FastQ> loadFastqFromFile(std::string filename)
 	return result;
 }
 
-FastQ FastQ::reverseComplement() const
+std::string FastQ::reverseComplement(std::string str)
 {
-	FastQ result;
-	for (int i = sequence.size()-1; i >= 0; i--)
+	std::string result;
+	for (int i = str.size()-1; i >= 0; i--)
 	{
-		switch (sequence[i])
+		switch (str[i])
 		{
 			case 'A':
 			case 'a':
-				result.sequence += 'T';
+				result += 'T';
 				break;
 			case 'C':
 			case 'c':
-				result.sequence += 'G';
+				result += 'G';
 				break;
 			case 'T':
 			case 't':
-				result.sequence += 'A';
+				result += 'A';
 				break;
 			case 'G':
 			case 'g':
-				result.sequence += 'C';
+				result += 'C';
 				break;
 			case 'N':
 			case 'n':
-				result.sequence += 'N';
+				result += 'N';
 				break;
 		}
 	}
+	return result;
+}
+
+FastQ FastQ::reverseComplement() const
+{
+	FastQ result;
+	result.sequence = reverseComplement(sequence);
 	result.quality = quality;
 	std::reverse(result.quality.begin(), result.quality.end());
 	return result;
