@@ -190,12 +190,14 @@ private:
 			R[w][0] = 0;
 		}
 		std::vector<LengthType> nodeOrdering;
+		bool hasWrongOrders = false;
 		for (LengthType i = 1; i < nodeSequences.size(); i++)
 		{
 			auto nodeIndex = indexToNode[i];
 			if (i == nodeStart[nodeIndex] && notInOrder[nodeIndex])
 			{
 				nodeOrdering.push_back(i);
+				hasWrongOrders = true;
 			}
 		}
 		for (LengthType i = 1; i < nodeSequences.size(); i++)
@@ -209,6 +211,11 @@ private:
 		assert(nodeOrdering.size() == nodeSequences.size() - 1);
 		for (LengthType j = 1; j < sequence.size(); j++)
 		{
+			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
+			if (hasWrongOrders)
+			{
+				Rhelper = getRHelper(j, M, sequence);
+			}
 			for (LengthType w : nodeOrdering)
 			{
 				auto nodeIndex = indexToNode[w];
@@ -220,7 +227,8 @@ private:
 				}
 				if (w == nodeStart[nodeIndex] && notInOrder[nodeIndex])
 				{
-					auto rr = fullR(w, j, M, sequence, distanceMatrix);
+					assert(hasWrongOrders);
+					auto rr = fullR(w, j, Rhelper, distanceMatrix);
 					R[w][j] = rr.first;
 					Rbacktrace[w][j] = rr.second;
 				}
@@ -272,6 +280,45 @@ private:
 		return std::make_pair(M, backtrace);
 	}
 
+	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<std::vector<ScoreType>>& M, const std::string& sequence) const
+	{
+		std::vector<std::pair<LengthType, ScoreType>> result;
+		for (LengthType v = 1; v < nodeSequences.size(); v++)
+		{
+			ScoreType maxValue = std::numeric_limits<ScoreType>::min();
+			LengthType resultv = -1;
+			auto otherNode = indexToNode[v];
+			if (v == nodeStart[otherNode])
+			{
+				for (size_t neighbori = 0; neighbori < inNeighbors[otherNode].size(); neighbori++)
+				{
+					LengthType u = inNeighbors[otherNode][neighbori];
+					auto scoreHere = M[u][j-1] + matchScore(nodeSequences[v], sequence[j]);
+					if (scoreHere > maxValue)
+					{
+						resultv = v;
+						maxValue = scoreHere;
+					}
+				}
+			}
+			else
+			{
+				LengthType u = v-1;
+				auto scoreHere = M[u][j-1]+matchScore(nodeSequences[v], sequence[j]);
+				if (scoreHere > maxValue)
+				{
+					resultv = v;
+					maxValue = scoreHere;
+				}
+			}
+			assert(maxValue <= 10000);
+			assert(maxValue >= -10000);
+			assert(resultv != -1);
+			result.emplace_back(resultv, maxValue);
+		}
+		return result;
+	}
+
 	//compute R using the recurrence on page 3
 	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<std::vector<ScoreType>>& M, const std::vector<std::vector<ScoreType>>& R, const std::vector<std::vector<MatrixPosition>>& Rbacktrace) const
 	{
@@ -311,36 +358,19 @@ private:
 	}
 
 	//compute R using the slow, full definition on page 3
-	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::vector<ScoreType>>& M, const std::string& sequence, const std::vector<std::vector<LengthType>>& distanceMatrix) const
+	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const std::vector<std::vector<LengthType>>& distanceMatrix) const
 	{
 		MatrixPosition pos;
 		ScoreType maxValue = std::numeric_limits<ScoreType>::min();
-		for (LengthType v = 0; v < nodeSequences.size(); v++)
+		for (auto pair : RHelper)
 		{
+			auto v = pair.first;
 			if (v == w) continue;
-			auto otherNode = indexToNode[v];
-			if (v == nodeStart[otherNode])
+			auto scoreHere = pair.second - gapPenalty(distanceFromSeqToSeq(v, w, distanceMatrix));
+			if (scoreHere > maxValue)
 			{
-				for (size_t neighbori = 0; neighbori < inNeighbors[otherNode].size(); neighbori++)
-				{
-					LengthType u = inNeighbors[otherNode][neighbori];
-					auto scoreHere = M[u][j-1] + matchScore(nodeSequences[v], sequence[j]) - gapPenalty(distanceFromSeqToSeq(v, w, distanceMatrix));
-					if (scoreHere > maxValue)
-					{
-						pos = std::make_pair(v, j-1);
-						maxValue = scoreHere;
-					}
-				}
-			}
-			else
-			{
-				LengthType u = v-1;
-				auto scoreHere = M[u][j-1]+matchScore(nodeSequences[v], sequence[j]) - gapPenalty(distanceFromSeqToSeq(v, w, distanceMatrix));
-				if (scoreHere > maxValue)
-				{
-					pos = std::make_pair(u, j-1);
-					maxValue = scoreHere;
-				}
+				maxValue = scoreHere;
+				pos = std::make_pair(v, j-1);
 			}
 		}
 		assert(maxValue >= -10000);
