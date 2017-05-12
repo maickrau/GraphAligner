@@ -7,7 +7,7 @@ BINDIR=bin
 
 LIBS=-lm -lprotobuf -lz 
 
-DEPS = gssw.h vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h
+DEPS = vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h
 
 _OBJ = GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
