@@ -128,7 +128,7 @@ int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
-		if (ids[vggraph.edge(i).to()] < ids[vggraph.edge(i).from()]) result++;
+		if (ids[vggraph.edge(i).to()] <= ids[vggraph.edge(i).from()]) result++;
 	}
 	return result;
 }

@@ -60,7 +60,7 @@ public:
 		assert(to < inNeighbors.size());
 		assert(from < nodeStart.size());
 		inNeighbors[to].push_back(from);
-		if (from > to)
+		if (from >= to)
 		{
 			notInOrder[to] = true;
 		}
@@ -285,7 +285,7 @@ private:
 			{
 				for (size_t neighbori = 0; neighbori < inNeighbors[otherNode].size(); neighbori++)
 				{
-					LengthType u = inNeighbors[otherNode][neighbori];
+					LengthType u = nodeEnd[inNeighbors[otherNode][neighbori]]-1;
 					auto scoreHere = M[u][j-1] + matchScore(nodeSequences[v], sequence[j]);
 					if (scoreHere > maxValue)
 					{
@@ -316,6 +316,7 @@ private:
 	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<std::vector<ScoreType>>& M, const std::vector<std::vector<ScoreType>>& R, const std::vector<std::vector<MatrixPosition>>& Rbacktrace) const
 	{
 		auto nodeIndex = indexToNode[w];
+		assert(nodeStart[nodeIndex] != w || !notInOrder[nodeIndex]);
 		MatrixPosition pos;
 		ScoreType maxValue = std::numeric_limits<ScoreType>::min();
 		if (nodeStart[nodeIndex] == w)
@@ -323,6 +324,7 @@ private:
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				auto neighborEnd = nodeEnd[inNeighbors[nodeIndex][i]]-1;
+				assert(neighborEnd < w);
 				if (M[neighborEnd][j] - gapPenalty(1) > maxValue)
 				{
 					maxValue = M[neighborEnd][j] - gapPenalty(1);
@@ -353,6 +355,8 @@ private:
 	//compute R using the slow, full definition on page 3
 	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const std::vector<std::vector<LengthType>>& distanceMatrix) const
 	{
+		auto nodeIndex = indexToNode[w];
+		assert(notInOrder[nodeIndex]);
 		MatrixPosition pos;
 		ScoreType maxValue = std::numeric_limits<ScoreType>::min();
 		for (auto pair : RHelper)
