@@ -231,15 +231,15 @@ private:
 					R[w][j] = rr.first;
 					Rbacktrace[w][j] = rr.second;
 				}
+				backtrace[w][j] = Qbacktrace[w];
+				M[w][j] = Q[w][j];
+				if (R[w][j] > M[w][j])
+				{
+					M[w][j] = R[w][j];
+					backtrace[w][j] = Rbacktrace[w][j];
+				}
 				if (w == nodeStart[nodeIndex])
 				{
-					backtrace[w][j] = Qbacktrace[w];
-					M[w][j] = Q[w][j];
-					if (R[w][j] > M[w][j])
-					{
-						M[w][j] = R[w][j];
-						backtrace[w][j] = Rbacktrace[w][j];
-					}
 					for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 					{
 						auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
@@ -253,13 +253,6 @@ private:
 				else
 				{
 					LengthType u = w-1;
-					backtrace[w][j] = Qbacktrace[w];
-					M[w][j] = Q[w][j];
-					if (R[w][j] > M[w][j])
-					{
-						M[w][j] = R[w][j];
-						backtrace[w][j] = Rbacktrace[w][j];
-					}
 					if (M[u][j-1]+matchScore(nodeSequences[w], sequence[j]) > M[w][j])
 					{
 						M[w][j] = M[u][j-1]+matchScore(nodeSequences[w], sequence[j]);
@@ -323,28 +316,29 @@ private:
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
-				auto neighborEnd = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-				assert(neighborEnd < w);
-				if (M[neighborEnd][j] - gapPenalty(1) > maxValue)
+				auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
+				assert(u < w);
+				if (M[u][j] - gapPenalty(1) > maxValue)
 				{
-					maxValue = M[neighborEnd][j] - gapPenalty(1);
-					pos = std::make_pair(neighborEnd, j);
+					maxValue = M[u][j] - gapPenalty(1);
+					pos = std::make_pair(u, j);
 				}
-				if (R[neighborEnd][j] - gapContinuePenalty > maxValue)
+				if (R[u][j] - gapContinuePenalty > maxValue)
 				{
-					maxValue = R[neighborEnd][j] - gapContinuePenalty;
-					pos = Rbacktrace[neighborEnd][j];
+					maxValue = R[u][j] - gapContinuePenalty;
+					pos = Rbacktrace[u][j];
 				}
 			}
 		}
 		else
 		{
-			pos = Rbacktrace[w-1][j];
-			maxValue = R[w-1][j] - gapContinuePenalty;
-			if (M[w-1][j] - gapPenalty(1) > maxValue)
+			auto u = w-1;
+			pos = Rbacktrace[u][j];
+			maxValue = R[u][j] - gapContinuePenalty;
+			if (M[u][j] - gapPenalty(1) > maxValue)
 			{
 				pos = std::make_pair(w-1, j);
-				maxValue = M[w-1][j] - gapPenalty(1);
+				maxValue = M[u][j] - gapPenalty(1);
 			}
 		}
 		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
@@ -356,7 +350,7 @@ private:
 	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const std::vector<std::vector<LengthType>>& distanceMatrix) const
 	{
 		auto nodeIndex = indexToNode[w];
-		assert(notInOrder[nodeIndex]);
+		assert(nodeStart[nodeIndex] == w && notInOrder[nodeIndex]);
 		MatrixPosition pos;
 		ScoreType maxValue = std::numeric_limits<ScoreType>::min();
 		for (auto pair : RHelper)
