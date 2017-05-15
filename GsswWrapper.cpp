@@ -145,7 +145,7 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
-		mfvsgraph.addEdge(vggraph.edge(i).from(), vggraph.edge(i).to());
+		mfvsgraph.addEdge(ids[vggraph.edge(i).from()], ids[vggraph.edge(i).to()]);
 	}
 	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
 	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
@@ -216,7 +216,7 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 		auto alignment = fastqAlignmentPairs[i].second;
 		auto seedGraphUnordered = ExtractSubgraph(graph, alignment, fastq->sequence.size());
 		coutoutput << "thread " << threadnum << " graph size " << seedGraphUnordered.node_size() << " nodes ";
-		coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
+		//coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
 		auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
 		coutoutput << "thread " << threadnum << " graph size " << seedGraph.node_size() << " nodes ";
 		coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
