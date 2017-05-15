@@ -106,7 +106,6 @@ private:
 		vgmapping->set_rank(rank);
 		position->set_node_id(nodeIDs[oldNode]);
 		if (reverse) position->set_is_reverse(true);
-		std::cerr << nodeIDs[oldNode] << " ";
 		for (size_t i = 1; i < trace.size(); i++)
 		{
 			if (indexToNode[trace[i].first] == oldNode) continue;
@@ -118,9 +117,7 @@ private:
 			vgmapping->set_rank(rank);
 			position->set_node_id(nodeIDs[oldNode]);
 			if (reverse) position->set_is_reverse(true);
-			std::cerr << nodeIDs[oldNode] << " ";
 		}
-		std::cerr << "\n";
 		result.set_score(traceWithScore.first);
 		return result;
 	}
@@ -140,16 +137,12 @@ private:
 		}
 		auto score = M[currentPosition.first][currentPosition.second];
 		trace.push_back(currentPosition);
-		std::cerr << currentPosition.first << ", " << currentPosition.second << " ";
-		std::cerr << M[currentPosition.first][currentPosition.second] << std::endl;
 		while (currentPosition.second > 0)
 		{
 			auto newPos = backtrace[currentPosition.first][currentPosition.second];
 			assert(newPos.second < currentPosition.second || (newPos.second == currentPosition.second && newPos.first < currentPosition.first));
 			currentPosition = newPos;
 			trace.push_back(currentPosition);
-			std::cerr << currentPosition.first << ", " << currentPosition.second << " ";
-			std::cerr << M[currentPosition.first][currentPosition.second] << std::endl;
 		}
 		std::reverse(trace.begin(), trace.end());
 		return std::make_pair(score, trace);
@@ -273,8 +266,8 @@ private:
 						backtrace[w][j] = std::make_pair(u, j-1);
 					}
 				}
-				assert(M[w][j] >= -10000);
-				assert(M[w][j] <= 10000);
+				assert(M[w][j] >= -std::numeric_limits<ScoreType>::min() + 100);
+				assert(M[w][j] <= std::numeric_limits<ScoreType>::max() - 100);
 			}
 		}
 		return std::make_pair(M, backtrace);
@@ -311,8 +304,8 @@ private:
 					maxValue = scoreHere;
 				}
 			}
-			assert(maxValue <= 10000);
-			assert(maxValue >= -10000);
+			assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
+			assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
 			assert(resultv != -1);
 			result.emplace_back(resultv, maxValue);
 		}
@@ -352,8 +345,8 @@ private:
 				maxValue = M[w-1][j] - gapPenalty(1);
 			}
 		}
-		assert(maxValue >= -10000);
-		assert(maxValue <= 10000);
+		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
+		assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
 		return std::make_pair(maxValue, pos);
 	}
 
@@ -373,8 +366,8 @@ private:
 				pos = std::make_pair(v, j-1);
 			}
 		}
-		assert(maxValue >= -10000);
-		assert(maxValue <= 10000);
+		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
+		assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
 		return std::make_pair(maxValue, pos);
 	}
 
