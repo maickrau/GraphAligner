@@ -12,6 +12,34 @@
 #include "GraphAligner.h"
 #include "mfvs_graph.h"
 
+class BufferedWriter : std::ostream
+{
+public:
+	class FlushClass {};
+	BufferedWriter(std::ostream& stream) : stream(stream) {};
+	template <typename T>
+	BufferedWriter& operator<<(T obj)
+	{
+		stringstream << obj;
+		return *this;
+	}
+	BufferedWriter& operator<<(FlushClass f)
+	{
+		flush();
+		return *this;
+	}
+	void flush()
+	{
+		stringstream << std::endl;
+		stream << stringstream.str();
+		stringstream.str("");
+	}
+	static FlushClass Flush;
+private:
+	std::ostream& stream;
+	std::stringstream stringstream;
+};
+
 size_t GraphSizeInBp(const vg::Graph& graph)
 {
 	size_t result = 0;
@@ -61,7 +89,6 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 {
 	vg::Alignment betterAlignment;
 	{
-		std::cerr << "forward" << std::endl;
 		GraphAligner<uint32_t, int32_t> forwardAlignment;
 		for (int i = 0; i < graph.node_size(); i++)
 		{
@@ -75,7 +102,6 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 		betterAlignment = forwardAlignment.AlignOneWay(read.seq_id, read.sequence, false);
 	}
 	{
-		std::cerr << "backward" << std::endl;
 		GraphAligner<uint32_t, int32_t> backwardAlignment;
 		for (int i = graph.node_size()-1; i >= 0; i--)
 		{
@@ -109,6 +135,7 @@ int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
 
 vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 {
+	BufferedWriter output { std::cout };
 	mfvs::Graph mfvsgraph { vggraph.node_size() };
 	std::map<int, int> ids;
 	for (int i = 0; i < vggraph.node_size(); i++)
@@ -122,7 +149,7 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 	}
 	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
 	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
-	std::cout << "feedback vertex set size: " << vertexSetvector.size() << std::endl;
+	output << "feedback vertex set size: " << vertexSetvector.size() << BufferedWriter::Flush;
 	vg::Graph graphWithoutVertexset;
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
@@ -180,36 +207,28 @@ void outputGraph(std::string filename, const vg::Graph& graph)
 void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg::Alignment>>& fastqAlignmentPairs, std::map<FastQ*, vg::Alignment>& alignments, int threadnum)
 {
 	std::string msg;
+	BufferedWriter cerroutput {std::cerr};
+	BufferedWriter coutoutput {std::cout};
 	for (size_t i = 0; i < fastqAlignmentPairs.size(); i++)
 	{
-		{
-			std::ostringstream writer;
-			writer << "thread " << threadnum << " " << i << "/" << fastqAlignmentPairs.size() << std::endl;
-			msg = writer.str();
-		}
-		std::cerr << msg;
+		cerroutput << "thread " << threadnum << " " << i << "/" << fastqAlignmentPairs.size() << BufferedWriter::Flush;
 		auto fastq = fastqAlignmentPairs[i].first;
 		auto alignment = fastqAlignmentPairs[i].second;
 		auto seedGraphUnordered = ExtractSubgraph(graph, alignment, fastq->sequence.size());
-		std::cout << "graph size " << seedGraphUnordered.node_size() << " nodes ";
-		std::cout << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << std::endl;
+		coutoutput << "thread " << threadnum << " graph size " << seedGraphUnordered.node_size() << " nodes ";
+		coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
 		auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
-		std::cout << "graph size " << seedGraph.node_size() << " nodes ";
-		std::cout << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << std::endl;
-		std::cout << "align " << fastq->sequence.size() << " bp read to " << GraphSizeInBp(seedGraph) << " bp graph" << std::endl;
-		outputGraph("outgraph.gam", seedGraph);
+		coutoutput << "thread " << threadnum << " graph size " << seedGraph.node_size() << " nodes ";
+		coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
+		coutoutput << "thread " << threadnum << " align " << fastq->sequence.size() << " bp read to " << GraphSizeInBp(seedGraph) << " bp graph" << BufferedWriter::Flush;
+		// outputGraph("outgraph.gam", seedGraph);
 		auto bestMapping = getOptimalMapping(seedGraph, *fastq);
 		if (bestMapping.score() > -1)
 		{
 			if (alignments.count(fastq) == 0)
 			{
+				cerroutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
 				alignments[fastq] = bestMapping;
-				{
-					std::ostringstream writer;
-					writer << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << std::endl;
-					msg = writer.str();
-				}
-				std::cerr << msg;
 				continue;
 			}
 			auto oldScore = alignments[fastq];
@@ -219,12 +238,7 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 			}
 		}
 	}
-	{
-		std::ostringstream writer;
-		writer << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << std::endl;
-		msg = writer.str();
-	}
-	std::cerr << msg;
+	cerroutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
 int main(int argc, char** argv)
