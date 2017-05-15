@@ -20,6 +20,7 @@ std::vector<size_t> topologicalSort(const vg::Graph& vggraph)
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
+		assert(ids[vggraph.edge(i).from()] < graph.size());
 		graph[ids[vggraph.edge(i).from()]].push_back(ids[vggraph.edge(i).to()]);
 	}
 

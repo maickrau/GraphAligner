@@ -10,6 +10,7 @@
 #include "TopologicalSort.h"
 #include "SubgraphFromSeed.h"
 #include "GraphAligner.h"
+#include "mfvs_graph.h"
 
 size_t GraphSizeInBp(const vg::Graph& graph)
 {
@@ -60,6 +61,7 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 {
 	vg::Alignment betterAlignment;
 	{
+		std::cerr << "forward" << std::endl;
 		GraphAligner<uint32_t, int32_t> forwardAlignment;
 		for (int i = 0; i < graph.node_size(); i++)
 		{
@@ -73,8 +75,9 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 		betterAlignment = forwardAlignment.AlignOneWay(read.seq_id, read.sequence, false);
 	}
 	{
+		std::cerr << "backward" << std::endl;
 		GraphAligner<uint32_t, int32_t> backwardAlignment;
-		for (int i = 0; i < graph.node_size(); i++)
+		for (int i = graph.node_size()-1; i >= 0; i--)
 		{
 			backwardAlignment.AddNode(graph.node(i).id(), FastQ::reverseComplement(graph.node(i).sequence()));
 		}
@@ -87,6 +90,91 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 		if (backwards.score() > betterAlignment.score()) betterAlignment = backwards;
 	}
 	return betterAlignment;
+}
+
+int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
+{
+	std::map<int, int> ids;
+	int result = 0;
+	for (int i = 0; i < vggraph.node_size(); i++)
+	{
+		ids[vggraph.node(i).id()] = i;
+	}
+	for (int i = 0; i < vggraph.edge_size(); i++)
+	{
+		if (ids[vggraph.edge(i).to()] < ids[vggraph.edge(i).from()]) result++;
+	}
+	return result;
+}
+
+vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
+{
+	mfvs::Graph mfvsgraph { vggraph.node_size() };
+	std::map<int, int> ids;
+	for (int i = 0; i < vggraph.node_size(); i++)
+	{
+		mfvsgraph.addVertex(i);
+		ids[vggraph.node(i).id()] = i;
+	}
+	for (int i = 0; i < vggraph.edge_size(); i++)
+	{
+		mfvsgraph.addEdge(vggraph.edge(i).from(), vggraph.edge(i).to());
+	}
+	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
+	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
+	std::cout << "feedback vertex set size: " << vertexSetvector.size() << std::endl;
+	vg::Graph graphWithoutVertexset;
+	for (int i = 0; i < vggraph.node_size(); i++)
+	{
+		if (vertexset.count(i) > 0) continue;
+		auto node = graphWithoutVertexset.add_node();
+		node->set_id(vggraph.node(i).id());
+		node->set_sequence(vggraph.node(i).sequence());
+		node->set_name(vggraph.node(i).name());
+	}
+	for (int i = 0; i < vggraph.edge_size(); i++)
+	{
+		if (vertexset.count(ids[vggraph.edge(i).from()]) > 0 || vertexset.count(ids[vggraph.edge(i).to()]) > 0) continue;
+		auto edge = graphWithoutVertexset.add_edge();
+		edge->set_from(vggraph.edge(i).from());
+		edge->set_to(vggraph.edge(i).to());
+		edge->set_from_start(vggraph.edge(i).from_start());
+		edge->set_to_end(vggraph.edge(i).to_end());
+		edge->set_overlap(vggraph.edge(i).overlap());
+	}
+	auto order = topologicalSort(graphWithoutVertexset);
+	vg::Graph resultGraph;
+	for (size_t i = 0; i < order.size(); i++)
+	{
+		auto node = resultGraph.add_node();
+		node->set_id(vggraph.node(order[i]).id());
+		node->set_sequence(vggraph.node(order[i]).sequence());
+		node->set_name(vggraph.node(order[i]).name());
+	}
+	for (size_t i = 0; i < vertexSetvector.size(); i++)
+	{
+		auto node = resultGraph.add_node();
+		node->set_id(vggraph.node(vertexSetvector[i]).id());
+		node->set_sequence(vggraph.node(vertexSetvector[i]).sequence());
+		node->set_name(vggraph.node(vertexSetvector[i]).name());
+	}
+	for (int i = 0; i < vggraph.edge_size(); i++)
+	{
+		auto edge = resultGraph.add_edge();
+		edge->set_from(vggraph.edge(i).from());
+		edge->set_to(vggraph.edge(i).to());
+		edge->set_from_start(vggraph.edge(i).from_start());
+		edge->set_to_end(vggraph.edge(i).to_end());
+		edge->set_overlap(vggraph.edge(i).overlap());
+	}
+	return resultGraph;
+}
+
+void outputGraph(std::string filename, const vg::Graph& graph)
+{
+	std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
+	std::vector<vg::Graph> writeVector {graph};
+	stream::write_buffered(alignmentOut, writeVector, 0);
 }
 
 void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg::Alignment>>& fastqAlignmentPairs, std::map<FastQ*, vg::Alignment>& alignments, int threadnum)
@@ -102,7 +190,14 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 		std::cerr << msg;
 		auto fastq = fastqAlignmentPairs[i].first;
 		auto alignment = fastqAlignmentPairs[i].second;
-		auto seedGraph = ExtractSubgraph(graph, alignment, fastq->sequence.size());
+		auto seedGraphUnordered = ExtractSubgraph(graph, alignment, fastq->sequence.size());
+		std::cout << "graph size " << seedGraphUnordered.node_size() << " nodes ";
+		std::cout << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << std::endl;
+		auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
+		std::cout << "graph size " << seedGraph.node_size() << " nodes ";
+		std::cout << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << std::endl;
+		std::cout << "align " << fastq->sequence.size() << " bp read to " << GraphSizeInBp(seedGraph) << " bp graph" << std::endl;
+		outputGraph("outgraph.gam", seedGraph);
 		auto bestMapping = getOptimalMapping(seedGraph, *fastq);
 		if (bestMapping.score() > -1)
 		{

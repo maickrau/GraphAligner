@@ -9,7 +9,7 @@ LIBS=-lm -lprotobuf -lz
 
 DEPS = vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h
 
-_OBJ = GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o
+_OBJ = GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o mfvs_graph.o mfvs_utils.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
 $(ODIR)/%.o: %.cpp $(DEPS)
