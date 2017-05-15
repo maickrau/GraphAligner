@@ -147,9 +147,15 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 	{
 		mfvsgraph.addEdge(ids[vggraph.edge(i).from()], ids[vggraph.edge(i).to()]);
 	}
+	std::cout<<"Before the removal of MVFS, is the graph acyclic:"<< mfvsgraph.isAcyclic()<<std::endl;
 	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
 	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
 	output << "feedback vertex set size: " << vertexSetvector.size() << BufferedWriter::Flush;
+	for(int i=0; i<vertexSetvector.size(); ++i){
+		std::cout << vertexSetvector[i] << ' ' ;
+		mfvsgraph.deleteVertex(vertexSetvector[i]);
+	}
+	std::cout<<"After the removal of MVFS, is the graph acyclic:"<< mfvsgraph.isAcyclic()<<std::endl;
 	vg::Graph graphWithoutVertexset;
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
