@@ -121,18 +121,18 @@ vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
 int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
 {
 	std::map<int, int> ids;
-	int result = 0;
 	for (int i = 0; i < vggraph.node_size(); i++)
 	{
 		ids[vggraph.node(i).id()] = i;
 	}
+	std::set<int> outOfOrderSet;
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
 		assert(ids.count(vggraph.edge(i).to()) > 0);
 		assert(ids.count(vggraph.edge(i).from()) > 0);
-		if (ids[vggraph.edge(i).to()] <= ids[vggraph.edge(i).from()]) result++;
+		if (ids[vggraph.edge(i).to()] <= ids[vggraph.edge(i).from()]) outOfOrderSet.insert(vggraph.edge(i).to());
 	}
-	return result;
+	return outOfOrderSet.size();
 }
 
 vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
@@ -144,7 +144,9 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 	{
 		mfvsgraph.addVertex(i);
 		ids[vggraph.node(i).id()] = i;
+		output << vggraph.node(i).id() << " ";
 	}
+	output << BufferedWriter::Flush;
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
 		mfvsgraph.addEdge(ids[vggraph.edge(i).from()], ids[vggraph.edge(i).to()]);
@@ -179,19 +181,21 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 	}
 	auto order = topologicalSort(graphWithoutVertexset);
 	vg::Graph resultGraph;
-	for (size_t i = 0; i < order.size(); i++)
-	{
-		auto node = resultGraph.add_node();
-		node->set_id(vggraph.node(order[i]).id());
-		node->set_sequence(vggraph.node(order[i]).sequence());
-		node->set_name(vggraph.node(order[i]).name());
-	}
 	for (size_t i = 0; i < vertexSetvector.size(); i++)
 	{
 		auto node = resultGraph.add_node();
 		node->set_id(vggraph.node(vertexSetvector[i]).id());
 		node->set_sequence(vggraph.node(vertexSetvector[i]).sequence());
 		node->set_name(vggraph.node(vertexSetvector[i]).name());
+		output << node->id() << " ";
+	}
+	for (size_t i = 0; i < order.size(); i++)
+	{
+		auto node = resultGraph.add_node();
+		node->set_id(graphWithoutVertexset.node(order[i]).id());
+		node->set_sequence(graphWithoutVertexset.node(order[i]).sequence());
+		node->set_name(graphWithoutVertexset.node(order[i]).name());
+		output << node->id() << " ";
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
@@ -202,6 +206,15 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 		edge->set_to_end(vggraph.edge(i).to_end());
 		edge->set_overlap(vggraph.edge(i).overlap());
 	}
+	output << BufferedWriter::Flush;
+#ifndef NDEBUG
+	std::set<int> existingNodeIds;
+	for (int i = 0; i < resultGraph.node_size(); i++)
+	{
+		assert(existingNodeIds.count(resultGraph.node(i).id()) == 0);
+		existingNodeIds.insert(resultGraph.node(i).id());
+	}
+#endif
 	assert(resultGraph.node_size() == vggraph.node_size());
 	assert(resultGraph.edge_size() == vggraph.edge_size());
 	return resultGraph;
@@ -225,8 +238,8 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 		auto fastq = fastqAlignmentPairs[i].first;
 		auto alignment = fastqAlignmentPairs[i].second;
 		auto seedGraphUnordered = ExtractSubgraph(graph, alignment, fastq->sequence.size());
-		coutoutput << "thread " << threadnum << " graph size " << seedGraphUnordered.node_size() << " nodes ";
-		//coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
+//		coutoutput << "thread " << threadnum << " graph size " << seedGraphUnordered.node_size() << " nodes ";
+		coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
 		auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
 		coutoutput << "thread " << threadnum << " graph size " << seedGraph.node_size() << " nodes ";
 		coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
@@ -239,6 +252,19 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 			{
 				cerroutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
 				alignments[fastq] = bestMapping;
+				std::vector<vg::Alignment> alignmentvec;
+				alignmentvec.emplace_back(alignments[fastq]);
+				std::string filename;
+				filename = "alignment_";
+				filename += std::to_string(threadnum);
+				filename += "_";
+				filename += fastq->seq_id;
+				filename += ".gam";
+				std::replace(filename.begin(), filename.end(), '/', '_');
+				std::cerr << "write to " << filename << std::endl;
+				std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
+				stream::write_buffered(alignmentOut, alignmentvec, 0);
+				std::cerr << "write finished" << std::endl;
 				continue;
 			}
 			auto oldScore = alignments[fastq];
@@ -246,6 +272,16 @@ void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg:
 			{
 				alignments[fastq] = bestMapping;
 			}
+			std::vector<vg::Alignment> alignmentvec;
+			alignmentvec.emplace_back(alignments[fastq]);
+			std::string filename;
+			filename = "alignment_";
+			filename += std::to_string(threadnum);
+			filename += "_";
+			filename += fastq->seq_id;
+			filename += ".gam";
+			std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
+			stream::write_buffered(alignmentOut, alignmentvec, 0);
 		}
 	}
 	cerroutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
@@ -328,7 +364,16 @@ int main(int argc, char** argv)
 				continue;
 			}
 		}
-		if (bestAlignment != nullptr) alignments.push_back(*bestAlignment);
+		if (bestAlignment != nullptr) 
+		{
+			alignments.push_back(*bestAlignment);
+			std::cerr << "read: " << fastqs[i].seq_id << std::endl;
+			for (int i = 0; i < bestAlignment->path().mapping_size(); i++)
+			{
+				std::cerr << bestAlignment->path().mapping(i).position().node_id() << " ";
+			}
+			std::cerr << std::endl;
+		}
 	}
 
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
