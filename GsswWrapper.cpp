@@ -224,6 +224,23 @@ std::vector<int> getSourceNodes(const vg::Graph& graph)
 	return result;
 }
 
+bool GraphEqual(const vg::Graph& first, const vg::Graph& second)
+{
+	if (first.node_size() != second.node_size()) return false;
+	if (first.edge_size() != second.edge_size()) return false;
+	for (int i = 0; i < first.node_size(); i++)
+	{
+		if (first.node(i).id() != second.node(i).id()) return false;
+		if (first.node(i).sequence() != second.node(i).sequence()) return false;
+	}
+	for (int i = 0; i < first.edge_size(); i++)
+	{
+		if (first.edge(i).from() != second.edge(i).from()) return false;
+		if (first.edge(i).to() != second.edge(i).to()) return false;
+	}
+	return true;
+}
+
 void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum)
 {
 	BufferedWriter cerroutput {std::cerr};
@@ -237,13 +254,24 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		std::vector<std::tuple<int, int, bool, vg::Graph>> components;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
+			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n";
 			auto seedGraphUnordered = ExtractSubgraph(graph, seedhits.at(fastq)[j], fastq->sequence.size());
 			int startpos = 0;
 			int endpos = 0;
 			int score = 0;
 			bool forwards;
 			auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
-			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n";
+			bool alreadyIn = false;
+			for (size_t k = 0; k < components.size(); k++)
+			{
+				if (GraphEqual(seedGraph,std::get<3>(components[k])))
+				{
+					cerroutput << "already exists" << BufferedWriter::Flush;
+					alreadyIn = true;
+					break;
+				}
+			}
+			if (alreadyIn) continue;
 			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << "\n";
 			coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << "\n";
 			coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
