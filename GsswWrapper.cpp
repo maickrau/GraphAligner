@@ -85,39 +85,6 @@ vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
 	return newGraph;
 }
 
-vg::Alignment getOptimalMapping(const vg::Graph& graph, const FastQ& read)
-{
-	vg::Alignment betterAlignment;
-	{
-		GraphAligner<uint32_t, int32_t> forwardAlignment;
-		for (int i = 0; i < graph.node_size(); i++)
-		{
-			forwardAlignment.AddNode(graph.node(i).id(), graph.node(i).sequence());
-		}
-		for (int i = 0; i < graph.edge_size(); i++)
-		{
-			forwardAlignment.AddEdge(graph.edge(i).from(), graph.edge(i).to());
-		}
-		forwardAlignment.Finalize();
-		betterAlignment = forwardAlignment.AlignOneWay(read.seq_id, read.sequence, false);
-	}
-	{
-		GraphAligner<uint32_t, int32_t> backwardAlignment;
-		for (int i = graph.node_size()-1; i >= 0; i--)
-		{
-			backwardAlignment.AddNode(graph.node(i).id(), FastQ::reverseComplement(graph.node(i).sequence()));
-		}
-		for (int i = 0; i < graph.edge_size(); i++)
-		{
-			backwardAlignment.AddEdge(graph.edge(i).to(), graph.edge(i).from());
-		}
-		backwardAlignment.Finalize();
-		auto backwards = backwardAlignment.AlignOneWay(read.seq_id, read.sequence, true);
-		if (backwards.score() > betterAlignment.score()) betterAlignment = backwards;
-	}
-	return betterAlignment;
-}
-
 int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
 {
 	std::map<int, int> ids;
@@ -227,62 +194,177 @@ void outputGraph(std::string filename, const vg::Graph& graph)
 	stream::write_buffered(alignmentOut, writeVector, 0);
 }
 
-void runMappings(const vg::Graph& graph, const std::vector<std::pair<FastQ*, vg::Alignment>>& fastqAlignmentPairs, std::map<FastQ*, vg::Alignment>& alignments, int threadnum)
+std::vector<int> getSinkNodes(const vg::Graph& graph)
 {
-	std::string msg;
+	std::set<int> notSinkNodes;
+	for (int i = 0; i < graph.edge_size(); i++)
+	{
+		notSinkNodes.insert(graph.edge(i).from());
+	}
+	std::vector<int> result;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		if (notSinkNodes.count(graph.node(i).id()) == 0) result.push_back(graph.node(i).id());
+	}
+	return result;
+}
+
+std::vector<int> getSourceNodes(const vg::Graph& graph)
+{
+	std::set<int> notSourceNodes;
+	for (int i = 0; i < graph.edge_size(); i++)
+	{
+		notSourceNodes.insert(graph.edge(i).to());
+	}
+	std::vector<int> result;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		if (notSourceNodes.count(graph.node(i).id()) == 0) result.push_back(graph.node(i).id());
+	}
+	return result;
+}
+
+void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum)
+{
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
-	for (size_t i = 0; i < fastqAlignmentPairs.size(); i++)
+	for (size_t i = 0; i < fastQs.size(); i++)
 	{
-		cerroutput << "thread " << threadnum << " " << i << "/" << fastqAlignmentPairs.size() << BufferedWriter::Flush;
-		auto fastq = fastqAlignmentPairs[i].first;
-		auto alignment = fastqAlignmentPairs[i].second;
-		auto seedGraphUnordered = ExtractSubgraph(graph, alignment, fastq->sequence.size());
-//		coutoutput << "thread " << threadnum << " graph size " << seedGraphUnordered.node_size() << " nodes ";
-		coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << BufferedWriter::Flush;
-		auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
-		coutoutput << "thread " << threadnum << " graph size " << seedGraph.node_size() << " nodes ";
-		coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
-		coutoutput << "thread " << threadnum << " align " << fastq->sequence.size() << " bp read to " << GraphSizeInBp(seedGraph) << " bp graph" << BufferedWriter::Flush;
-		// outputGraph("outgraph.gam", seedGraph);
-		auto bestMapping = getOptimalMapping(seedGraph, *fastq);
-		if (bestMapping.score() > -1)
+		const FastQ* fastq = fastQs[i];
+		cerroutput << "thread " << threadnum << " " << i << "/" << fastQs.size() << "\n";
+		cerroutput << "read size " << fastq->sequence.size() << "bp" << "\n";
+		cerroutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
+		std::vector<std::tuple<int, int, bool, vg::Graph>> components;
+		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
-			if (alignments.count(fastq) == 0)
+			auto seedGraphUnordered = ExtractSubgraph(graph, seedhits.at(fastq)[j], fastq->sequence.size());
+			int startpos = 0;
+			int endpos = 0;
+			int score = 0;
+			bool forwards;
+			auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
+			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n";
+			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << "\n";
+			coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << "\n";
+			coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
 			{
-				cerroutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
-				alignments[fastq] = bestMapping;
-				std::vector<vg::Alignment> alignmentvec;
-				alignmentvec.emplace_back(alignments[fastq]);
-				std::string filename;
-				filename = "alignment_";
-				filename += std::to_string(threadnum);
-				filename += "_";
-				filename += fastq->seq_id;
-				filename += ".gam";
-				std::replace(filename.begin(), filename.end(), '/', '_');
-				std::cerr << "write to " << filename << std::endl;
-				std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
-				stream::write_buffered(alignmentOut, alignmentvec, 0);
-				std::cerr << "write finished" << std::endl;
-				continue;
+				GraphAligner<uint32_t, int32_t> forwardAlignment;
+				for (int i = 0; i < seedGraph.node_size(); i++)
+				{
+					forwardAlignment.AddNode(seedGraph.node(i).id(), seedGraph.node(i).sequence());
+				}
+				for (int i = 0; i < seedGraph.edge_size(); i++)
+				{
+					forwardAlignment.AddEdge(seedGraph.edge(i).from(), seedGraph.edge(i).to());
+				}
+				forwardAlignment.Finalize();
+				auto forward = forwardAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
+				forwards = true;
+				startpos = std::get<1>(forward);
+				endpos = std::get<2>(forward);
+				score = std::get<0>(forward);
 			}
-			auto oldScore = alignments[fastq];
-			if (bestMapping.score() > oldScore.score())
 			{
-				alignments[fastq] = bestMapping;
+				GraphAligner<uint32_t, int32_t> backwardAlignment;
+				for (int i = seedGraph.node_size()-1; i >= 0; i--)
+				{
+					backwardAlignment.AddNode(seedGraph.node(i).id(), FastQ::reverseComplement(seedGraph.node(i).sequence()));
+				}
+				for (int i = 0; i < seedGraph.edge_size(); i++)
+				{
+					backwardAlignment.AddEdge(seedGraph.edge(i).to(), seedGraph.edge(i).from());
+				}
+				backwardAlignment.Finalize();
+				auto backwards = backwardAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
+				if (std::get<0>(backwards) > score)
+				{
+					forwards = false;
+					startpos = std::get<1>(backwards);
+					endpos = std::get<2>(backwards);
+					score = std::get<0>(backwards);
+				}
 			}
-			std::vector<vg::Alignment> alignmentvec;
-			alignmentvec.emplace_back(alignments[fastq]);
-			std::string filename;
-			filename = "alignment_";
-			filename += std::to_string(threadnum);
-			filename += "_";
-			filename += fastq->seq_id;
-			filename += ".gam";
-			std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
-			stream::write_buffered(alignmentOut, alignmentvec, 0);
+			components.emplace_back(startpos, endpos, forwards, seedGraph);
 		}
+		std::sort(components.begin(), components.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right); });
+
+		GraphAligner<uint32_t, int32_t> forwardAlignment;
+		std::vector<std::vector<int>> sources;
+		std::vector<std::vector<int>> sinks;
+		for (int i = 0; i < components.size(); i++)
+		{
+			auto& g = std::get<3>(components[i]);
+			for (int j = 0; j < g.node_size(); j++)
+			{
+				forwardAlignment.AddNode(g.node(j).id(), g.node(j).sequence());
+			}
+			for (int j = 0; j < g.edge_size(); j++)
+			{
+				forwardAlignment.AddEdge(g.edge(j).from(), g.edge(j).to());
+			}
+			sources.emplace_back(getSourceNodes(g));
+			sinks.emplace_back(getSinkNodes(g));
+		}
+		for (size_t i = 0; i < components.size(); i++)
+		{
+			for (size_t j = i+1; j < components.size(); j++)
+			{
+				std::vector<int> nodeIdsFromFirst;
+				if (std::get<2>(components[i]))
+				{
+					nodeIdsFromFirst = sinks[i];
+				}
+				else
+				{
+					nodeIdsFromFirst = sources[i];
+				}
+				std::vector<int> nodeIdsFromSecond;
+				if (std::get<2>(components[j]))
+				{
+					nodeIdsFromSecond = sources[j];
+				}
+				else
+				{
+					nodeIdsFromSecond = sinks[j];
+				}
+				for (auto firstId : nodeIdsFromFirst)
+				{
+					for (auto secondId : nodeIdsFromSecond)
+					{
+						forwardAlignment.AddEdge(firstId, secondId);
+					}
+				}
+			}
+		}
+		forwardAlignment.Finalize();
+
+		cerroutput << "thread " << threadnum << " augmented graph is " << forwardAlignment.SizeInBp() << "bp" << BufferedWriter::Flush;
+
+		auto alignment = forwardAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false);
+		auto reverseComplement = fastQs[i]->reverseComplement();
+		auto backwardsalignment = forwardAlignment.AlignOneWay(reverseComplement.seq_id, reverseComplement.sequence, true);
+		if (alignment.score() > backwardsalignment.score())
+		{
+			alignments.push_back(alignment);
+		}
+		else
+		{
+			alignments.push_back(backwardsalignment);
+		}
+		cerroutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
+		std::vector<vg::Alignment> alignmentvec;
+		alignmentvec.emplace_back(alignments.back());
+		std::string filename;
+		filename = "alignment_";
+		filename += std::to_string(threadnum);
+		filename += "_";
+		filename += fastq->seq_id;
+		filename += ".gam";
+		std::replace(filename.begin(), filename.end(), '/', '_');
+		cerroutput << "write to " << filename << BufferedWriter::Flush;
+		std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
+		stream::write_buffered(alignmentOut, alignmentvec, 0);
+		cerroutput << "write finished" << BufferedWriter::Flush;
 	}
 	cerroutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
@@ -317,27 +399,26 @@ int main(int argc, char** argv)
 	}
 
 	int numThreads = std::stoi(argv[5]);
-	std::vector<std::vector<std::pair<FastQ*, vg::Alignment>>> readAlignmentPairsPerThread;
-	std::vector<std::map<FastQ*, vg::Alignment>> alignmentsPerThread;
-	readAlignmentPairsPerThread.resize(numThreads);
-	alignmentsPerThread.resize(numThreads);
+	std::vector<std::vector<const FastQ*>> readsPerThread;
+	std::map<const FastQ*, std::vector<vg::Alignment>> seedHits;
+	std::vector<std::vector<vg::Alignment>> resultsPerThread;
+	readsPerThread.resize(numThreads);
+	resultsPerThread.resize(numThreads);
 	int currentThread = 0;
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
 		if (seeds.count(fastqs[i].seq_id) == 0) continue;
-		for (size_t j = 0; j < seeds[fastqs[i].seq_id].size(); j++)
-		{
-			readAlignmentPairsPerThread[currentThread].emplace_back(&fastqs[i], seeds[fastqs[i].seq_id][j]);
-			currentThread++;
-			currentThread %= numThreads;
-		}
+		seedHits[&(fastqs[i])].insert(seedHits[&(fastqs[i])].end(), seeds[fastqs[i].seq_id].begin(), seeds[fastqs[i].seq_id].end());
+		readsPerThread[currentThread].push_back(&(fastqs[i]));
+		currentThread++;
+		currentThread %= numThreads;
 	}
 
 	std::vector<std::thread> threads;
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readAlignmentPairsPerThread, &alignmentsPerThread, i]() { runMappings(graph, readAlignmentPairsPerThread[i], alignmentsPerThread[i], i); });
+		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
@@ -347,33 +428,9 @@ int main(int argc, char** argv)
 
 	std::vector<vg::Alignment> alignments;
 
-	for (size_t i = 0; i < fastqs.size(); i++)
+	for (size_t i = 0; i < numThreads; i++)
 	{
-		vg::Alignment* bestAlignment = nullptr;
-		for (int j = 0; j < numThreads; j++)
-		{
-			if (alignmentsPerThread[j].count(&fastqs[i]) == 0) continue;
-			if (bestAlignment == nullptr) 
-			{
-				bestAlignment = &alignmentsPerThread[j][&fastqs[i]];
-				continue;
-			}
-			if (alignmentsPerThread[j][&fastqs[i]].score() > bestAlignment->score())
-			{
-				bestAlignment = &alignmentsPerThread[j][&fastqs[i]];
-				continue;
-			}
-		}
-		if (bestAlignment != nullptr) 
-		{
-			alignments.push_back(*bestAlignment);
-			std::cerr << "read: " << fastqs[i].seq_id << std::endl;
-			for (int i = 0; i < bestAlignment->path().mapping_size(); i++)
-			{
-				std::cerr << bestAlignment->path().mapping(i).position().node_id() << " ";
-			}
-			std::cerr << std::endl;
-		}
+		alignments.insert(alignments.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
 	}
 
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;

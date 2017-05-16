@@ -20,6 +20,8 @@ public:
 		std::vector<MatrixPosition> Rbacktrace;
 		std::vector<MatrixPosition> Qbacktrace;
 		std::vector<std::vector<MatrixPosition>> backtrace;
+		ScoreType localMaximumScore;
+		MatrixPosition localMaximum;
 	};
 
 	GraphAligner() :
@@ -40,6 +42,7 @@ public:
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
 		notInOrder.push_back(false);
+		finalized = false;
 	}
 	
 	void AddNode(int nodeId, std::string sequence)
@@ -90,13 +93,34 @@ public:
 				}
 			}
 		}
+		finalized = true;
 	}
 
 	vg::Alignment AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse) const
 	{
-		auto trace = backtrackWithSquareRootSlices(seq_id, sequence);
+		assert(finalized);
+		auto trace = backtrackWithSquareRootSlices(sequence, false);
 		auto result = traceToAlignment(seq_id, trace, reverse);
 		return result;
+	}
+
+	std::tuple<ScoreType, LengthType, LengthType> GetLocalAlignmentSequencePosition(const std::string& sequence)
+	{
+		assert(finalized);
+		auto trace = backtrackWithSquareRootSlices(sequence, true);
+		LengthType minpos = trace.second[0].second;
+		LengthType maxpos = trace.second[0].second;
+		for (size_t i = 1; i < trace.second.size(); i++)
+		{
+			minpos = std::min(minpos, trace.second[i].second);
+			maxpos = std::max(maxpos, trace.second[i].second);
+		}
+		return std::make_tuple(trace.first, minpos, maxpos);
+	}
+
+	size_t SizeInBp()
+	{
+		return nodeSequences.size();
 	}
 
 private:
@@ -130,6 +154,17 @@ private:
 		}
 		result.set_score(traceWithScore.first);
 		return result;
+	}
+
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtraceLocal(ScoreType score, MatrixPosition start, const std::vector<std::vector<MatrixPosition>>& backtrace) const
+	{
+		std::vector<MatrixPosition> positions;
+		while (start.first > 0 && start.second > 0)
+		{
+			positions.push_back(start);
+			start = backtrace[start.first][start.second];
+		}
+		return std::make_pair(score, positions);
 	}
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const std::vector<std::vector<MatrixPosition>>& backtrace) const
@@ -166,8 +201,10 @@ private:
 		return std::make_pair(score, trace);
 	}
 
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& seq_id, const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, const MatrixSlice& previous, LengthType start, LengthType end) const
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, const MatrixSlice& previous, LengthType start, LengthType end, bool local) const
 	{
+		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
+		MatrixPosition localMaximum = std::make_pair(0, 0);
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
 		std::vector<ScoreType> Q1;
@@ -219,6 +256,9 @@ private:
 		previousM[0] = -gapPenalty(start);
 		for (LengthType j = 1; j < end - start; j++)
 		{
+			currentM[0] = -gapPenalty(start + j);
+			currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+			if (local) currentM[0] = 0;
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
 			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence);
 
@@ -226,7 +266,7 @@ private:
 			{
 				auto nodeIndex = indexToNode[w];
 				currentQ[w] = previousQ[w] - gapContinuePenalty;
-				if (currentM[w] - gapPenalty(1) > currentQ[w])
+				if (previousM[w] - gapPenalty(1) > currentQ[w])
 				{
 					currentQ[w] = previousM[w] - gapPenalty(1);
 					Qbacktrace[w] = std::make_pair(w, j-1 + start);
@@ -278,10 +318,24 @@ private:
 						assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
 					}
 				}
+				if (local)
+				{
+					if (currentM[w] < 0)
+					{
+						currentM[w] = 0;
+						backtrace[w][j] = std::make_pair(0, 0);
+					}
+				}
+				if (currentM[w] > localMaximumScore)
+				{
+					localMaximumScore = currentM[w];
+					localMaximum = std::make_pair(w, j + start);
+				}
 				assert(currentM[w] >= -std::numeric_limits<ScoreType>::min() + 100);
 				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
 				assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
 			}
+
 			std::swap(currentM, previousM);
 			std::swap(currentQ, previousQ);
 			std::swap(currentR, previousR);
@@ -293,13 +347,15 @@ private:
 		result.Rbacktrace.reserve(nodeSequences.size());
 		result.backtrace = backtrace;
 		result.Qbacktrace = Qbacktrace;
+		result.localMaximumScore = localMaximumScore;
+		result.localMaximum = localMaximum;
 		for (LengthType w = 0; w < nodeSequences.size(); w++)
 		{
-			LengthType j = end-start-1;
-			result.M.push_back(currentM[w]);
-			result.Q.push_back(currentQ[w]);
-			result.R.push_back(currentR[w]);
-			result.Rbacktrace.push_back(currentRbacktrace[w]);
+			//use previous instead of current because the last line swapped them
+			result.M.push_back(previousM[w]);
+			result.Q.push_back(previousQ[w]);
+			result.R.push_back(previousR[w]);
+			result.Rbacktrace.push_back(previousRbacktrace[w]);
 		}
 		return result;
 	}
@@ -321,7 +377,7 @@ private:
 		}
 	}
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& seq_id, const std::string& sequence) const
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, bool local) const
 	{
 		std::vector<std::vector<LengthType>> distanceMatrix = getDistanceMatrix();
 		bool hasWrongOrders = false;
@@ -345,8 +401,9 @@ private:
 			}
 		}
 		assert(nodeOrdering.size() == nodeSequences.size() - 1);
-		MatrixSlice lastRow = getFirstSlice(seq_id, sequence, hasWrongOrders, nodeOrdering, distanceMatrix);
-		int sliceSize = sqrt(sequence.size());
+		MatrixSlice lastRow = getFirstSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix);
+		int sliceSize = sequence.size();
+		// int sliceSize = sqrt(sequence.size());
 		std::vector<std::vector<MatrixPosition>> backtraceMatrix;
 		backtraceMatrix.resize(nodeSequences.size());
 		assert(lastRow.backtrace.size() == nodeSequences.size());
@@ -357,21 +414,35 @@ private:
 		}
 		std::vector<ScoreType> lastRowScore;
 		LengthType start = 1;
+		MatrixPosition localMaximum = std::make_pair(0, 0);
+		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
 		while (start < sequence.size())
 		{
 			LengthType end = start + sliceSize;
 			if (end > sequence.size()) end = sequence.size();
-			auto slice = getScoreAndBacktraceMatrixSlice(seq_id, sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end);
+			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end, local);
 			addBacktraceMatrix(backtraceMatrix, slice.backtrace);
 			lastRowScore = slice.M;
 			lastRow = std::move(slice);
 			start = end;
+			if (lastRow.localMaximumScore > localMaximumScore)
+			{
+				localMaximumScore = lastRow.localMaximumScore;
+				localMaximum = lastRow.localMaximum;
+			}
+		}
+		if (local)
+		{
+			assert(localMaximumScore > 0);
+			assert(localMaximum.first != 0 || localMaximum.second != 0);
+			auto localresult = backtraceLocal(localMaximumScore, localMaximum, backtraceMatrix);
+			return localresult;
 		}
 		auto result = backtrace(lastRow.M, backtraceMatrix);
 		return result;
 	}
 
-	MatrixSlice getFirstSlice(const std::string& seq_id, const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix) const
+	MatrixSlice getFirstSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix) const
 	{
 		MatrixSlice result;
 		result.M.resize(nodeSequences.size(), 0);
@@ -564,4 +635,5 @@ private:
 	std::string nodeSequences;
 	ScoreType gapStartPenalty;
 	ScoreType gapContinuePenalty;
+	bool finalized;
 };
