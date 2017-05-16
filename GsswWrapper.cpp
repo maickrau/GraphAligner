@@ -128,6 +128,8 @@ int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
 	}
 	for (int i = 0; i < vggraph.edge_size(); i++)
 	{
+		assert(ids.count(vggraph.edge(i).to()) > 0);
+		assert(ids.count(vggraph.edge(i).from()) > 0);
 		if (ids[vggraph.edge(i).to()] <= ids[vggraph.edge(i).from()]) result++;
 	}
 	return result;
@@ -200,6 +202,8 @@ vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
 		edge->set_to_end(vggraph.edge(i).to_end());
 		edge->set_overlap(vggraph.edge(i).overlap());
 	}
+	assert(resultGraph.node_size() == vggraph.node_size());
+	assert(resultGraph.edge_size() == vggraph.edge_size());
 	return resultGraph;
 }
 
