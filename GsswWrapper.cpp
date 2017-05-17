@@ -13,6 +13,7 @@
 #include "mfvs_graph.h"
 #include "BigraphToDigraph.h"
 
+
 class BufferedWriter : std::ostream
 {
 public:
@@ -40,6 +41,12 @@ private:
 	std::ostream& stream;
 	std::stringstream stringstream;
 };
+
+bool is_file_exist(const char *fileName)
+	{
+	    std::ifstream infile(fileName);
+	    return infile.good();
+	}
 
 size_t GraphSizeInBp(const DirectedGraph& graph)
 {
@@ -341,28 +348,49 @@ int main(int argc, char** argv)
 
 	vg::Graph graph;
 	{
-		std::cout << "load graph from " << argv[1] << std::endl;
-		std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
-		std::vector<vg::Graph> parts;
-		std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
-			parts.push_back(g);
-		};
-		stream::for_each(graphfile, lambda);
-		graph = mergeGraphs(parts);
-		std::cout << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
+		if (is_file_exist(argv[1])){
+			std::cout << "load graph from " << argv[1] << std::endl;
+			std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
+			std::vector<vg::Graph> parts;
+			std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
+				parts.push_back(g);
+			};
+			stream::for_each(graphfile, lambda);
+			graph = mergeGraphs(parts);
+			std::cout << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
+		}
+		else{
+			std::cout << "No graph file exists" << std::endl;
+			std::exit(0);
+		}
 	}
+	std::vector<FastQ> fastqs;
+	if (is_file_exist(argv[2])){
+		fastqs = loadFastqFromFile(argv[2]);
+		std::cout << fastqs.size() << " reads" << std::endl;
+	}
+	else{
+		std::cout << "No fastq file exists" << std::endl;
+		std::exit(0);
+	}
+		
 
-	auto fastqs = loadFastqFromFile(argv[2]);
-	std::cout << fastqs.size() << " reads" << std::endl;
 
 	std::map<std::string, std::vector<vg::Alignment>> seeds;
 	{
+		if (is_file_exist(argv[3])){
 		std::ifstream seedfile { argv[3], std::ios::in | std::ios::binary };
 		std::function<void(vg::Alignment&)> alignmentLambda = [&seeds](vg::Alignment& a) {
 			seeds[a.name()].push_back(a);
 		};
 		stream::for_each(seedfile, alignmentLambda);
+		}
+		else{
+		std::cout << "No seeds file exists" << std::endl;
+		std::exit(0);
 	}
+	}
+	
 
 	int numThreads = std::stoi(argv[5]);
 	std::vector<std::vector<const FastQ*>> readsPerThread;
