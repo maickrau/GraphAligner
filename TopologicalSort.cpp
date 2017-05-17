@@ -29,6 +29,21 @@ std::vector<size_t> topologicalSort(const vg::Graph& vggraph)
 	return sorted;
 }
 
+std::vector<size_t> topologicalSort(const DirectedGraph& digraph)
+{
+	std::vector<std::vector<size_t>> graph;
+	graph.resize(digraph.nodes.size());
+
+	for (size_t i = 0; i < digraph.edges.size(); i++)
+	{
+		graph[digraph.edges[i].fromIndex].push_back(digraph.edges[i].toIndex);
+	}
+
+	vector<size_t> sorted(digraph.nodes.size(), 0);
+	topological_sort_using_DFS_loop(graph, sorted);
+	return sorted;
+}
+
 
 
 void topological_sort_using_DFS(vector<vector<size_t> >& graph, vector<bool>& explored, size_t i, vector<size_t>& sorted, size_t& t)

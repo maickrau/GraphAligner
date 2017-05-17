@@ -1,3 +1,6 @@
+#ifndef FastqLoader_H
+#define FastqLoader_H
+
 #include <string>
 #include <vector>
 
@@ -11,3 +14,5 @@ public:
 };
 
 std::vector<FastQ> loadFastqFromFile(std::string filename);
+
+#endif

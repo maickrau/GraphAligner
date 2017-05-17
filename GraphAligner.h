@@ -1,3 +1,6 @@
+#ifndef GraphAligner_H
+#define GraphAligner_H
+
 //http://biorxiv.org/content/early/2017/04/06/124941
 #include <algorithm>
 #include <string>
@@ -48,6 +51,7 @@ public:
 	void AddNode(int nodeId, std::string sequence)
 	{
 		assert(std::numeric_limits<LengthType>::max() - sequence.size() > nodeSequences.size());
+		assert(nodeLookup.count(nodeId) == 0);
 		nodeLookup[nodeId] = nodeStart.size();
 		nodeIDs.push_back(nodeId);
 		nodeStart.push_back(nodeSequences.size());
@@ -63,7 +67,7 @@ public:
 		assert(nodeSequences.size() == indexToNode.size());
 	}
 	
-	void AddEdge(int node_id_from, int node_id_to)
+	void AddEdgeNodeId(int node_id_from, int node_id_to)
 	{
 		assert(nodeLookup.count(node_id_from) > 0);
 		assert(nodeLookup.count(node_id_to) > 0);
@@ -132,7 +136,15 @@ private:
 		result.set_name(seq_id);
 		auto path = new vg::Path;
 		result.set_allocated_path(path);
+		size_t pos = 0;
 		size_t oldNode = indexToNode[trace[0].first];
+		while (nodeIDs[oldNode] == 0)
+		{
+			pos++;
+			assert(pos < trace.size());
+			oldNode = indexToNode[trace[pos].first];
+			assert(oldNode < nodeIDs.size());
+		}
 		int rank = 0;
 		auto vgmapping = path->add_mapping();
 		auto position = new vg::Position;
@@ -140,10 +152,11 @@ private:
 		vgmapping->set_rank(rank);
 		position->set_node_id(nodeIDs[oldNode]);
 		if (reverse) position->set_is_reverse(true);
-		for (size_t i = 1; i < trace.size(); i++)
+		for (; pos < trace.size(); pos++)
 		{
-			if (indexToNode[trace[i].first] == oldNode) continue;
-			oldNode = indexToNode[trace[i].first];
+			if (indexToNode[trace[pos].first] == oldNode) continue;
+			oldNode = indexToNode[trace[pos].first];
+			if (nodeIDs[oldNode] == 0) break;
 			rank++;
 			vgmapping = path->add_mapping();
 			position = new vg::Position;
@@ -300,9 +313,10 @@ private:
 					for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 					{
 						auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start]) > currentM[w])
+						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
+						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
 						{
-							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start]);
+							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
 							backtrace[w][j] = std::make_pair(u, j-1 + start);
 							assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
 						}
@@ -311,9 +325,10 @@ private:
 				else
 				{
 					LengthType u = w-1;
-					if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start]) > currentM[w])
+					//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
+					if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
 					{
-						currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start]);
+						currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
 						backtrace[w][j] = std::make_pair(u, j-1 + start);
 						assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
 					}
@@ -416,10 +431,11 @@ private:
 		LengthType start = 1;
 		MatrixPosition localMaximum = std::make_pair(0, 0);
 		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
-		while (start < sequence.size())
+		//size+1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
+		while (start < sequence.size()+1)
 		{
 			LengthType end = start + sliceSize;
-			if (end > sequence.size()) end = sequence.size();
+			if (end > sequence.size()+1) end = sequence.size();
 			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end, local);
 			addBacktraceMatrix(backtraceMatrix, slice.backtrace);
 			lastRowScore = slice.M;
@@ -467,8 +483,19 @@ private:
 		return result;
 	}
 
+	std::vector<std::pair<LengthType, ScoreType>> getRHelperZero() const
+	{
+		std::vector<std::pair<LengthType, ScoreType>> result;
+		for (LengthType v = 0; v < nodeSequences.size(); v++)
+		{
+			result.emplace_back(v, 0);
+		}
+		return result;
+	}
+
 	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence) const
 	{
+		if (j == 0) return getRHelperZero();
 		std::vector<std::pair<LengthType, ScoreType>> result;
 		for (LengthType v = 1; v < nodeSequences.size(); v++)
 		{
@@ -480,7 +507,8 @@ private:
 				for (size_t neighbori = 0; neighbori < inNeighbors[otherNode].size(); neighbori++)
 				{
 					LengthType u = nodeEnd[inNeighbors[otherNode][neighbori]]-1;
-					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j]);
+					//j-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
+					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
 					if (scoreHere > maxValue)
 					{
 						resultv = v;
@@ -491,7 +519,7 @@ private:
 			else
 			{
 				LengthType u = v-1;
-				auto scoreHere = previousM[u]+matchScore(nodeSequences[v], sequence[j]);
+				auto scoreHere = previousM[u]+matchScore(nodeSequences[v], sequence[j-1]);
 				if (scoreHere > maxValue)
 				{
 					resultv = v;
@@ -637,3 +665,5 @@ private:
 	ScoreType gapContinuePenalty;
 	bool finalized;
 };
+
+#endif

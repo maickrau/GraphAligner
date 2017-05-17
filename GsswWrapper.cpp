@@ -11,6 +11,7 @@
 #include "SubgraphFromSeed.h"
 #include "GraphAligner.h"
 #include "mfvs_graph.h"
+#include "BigraphToDigraph.h"
 
 class BufferedWriter : std::ostream
 {
@@ -39,6 +40,16 @@ private:
 	std::ostream& stream;
 	std::stringstream stringstream;
 };
+
+size_t GraphSizeInBp(const DirectedGraph& graph)
+{
+	size_t result = 0;
+	for (size_t i = 0; i < graph.nodes.size(); i++)
+	{
+		result += graph.nodes[i].sequence.size();
+	}
+	return result;
+}
 
 size_t GraphSizeInBp(const vg::Graph& graph)
 {
@@ -85,106 +96,47 @@ vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
 	return newGraph;
 }
 
-int numberOfVerticesOutOfOrder(const vg::Graph& vggraph)
+int numberOfVerticesOutOfOrder(const DirectedGraph& digraph)
 {
 	std::map<int, int> ids;
-	for (int i = 0; i < vggraph.node_size(); i++)
-	{
-		ids[vggraph.node(i).id()] = i;
-	}
 	std::set<int> outOfOrderSet;
-	for (int i = 0; i < vggraph.edge_size(); i++)
+	for (size_t i = 0; i < digraph.edges.size(); i++)
 	{
-		assert(ids.count(vggraph.edge(i).to()) > 0);
-		assert(ids.count(vggraph.edge(i).from()) > 0);
-		if (ids[vggraph.edge(i).to()] <= ids[vggraph.edge(i).from()]) outOfOrderSet.insert(vggraph.edge(i).to());
+		if (digraph.edges[i].toIndex <= digraph.edges[i].fromIndex) outOfOrderSet.insert(digraph.edges[i].toIndex);
 	}
 	return outOfOrderSet.size();
 }
 
-vg::Graph OrderByFeedbackVertexset(const vg::Graph& vggraph)
+void OrderByFeedbackVertexset(DirectedGraph& graph)
 {
 	BufferedWriter output { std::cout };
-	mfvs::Graph mfvsgraph { vggraph.node_size() };
-	std::map<int, int> ids;
-	for (int i = 0; i < vggraph.node_size(); i++)
+	mfvs::Graph mfvsgraph { graph.nodes.size() };
+	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
 		mfvsgraph.addVertex(i);
-		ids[vggraph.node(i).id()] = i;
-		output << vggraph.node(i).id() << " ";
 	}
-	output << BufferedWriter::Flush;
-	for (int i = 0; i < vggraph.edge_size(); i++)
+	for (size_t i = 0; i < graph.edges.size(); i++)
 	{
-		mfvsgraph.addEdge(ids[vggraph.edge(i).from()], ids[vggraph.edge(i).to()]);
+		mfvsgraph.addEdge(graph.edges[i].fromIndex, graph.edges[i].toIndex);
 	}
-	std::cout<<"Before the removal of MVFS, is the graph acyclic:"<< mfvsgraph.isAcyclic()<<std::endl;
+	output << "Before the removal of MVFS, is the graph acyclic:" << mfvsgraph.isAcyclic() << "\n";
 	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
 	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
-	output << "feedback vertex set size: " << vertexSetvector.size() << BufferedWriter::Flush;
-	for(int i=0; i<vertexSetvector.size(); ++i){
-		std::cout << vertexSetvector[i] << ' ' ;
-		mfvsgraph.deleteVertex(vertexSetvector[i]);
-	}
-	std::cout<<"After the removal of MVFS, is the graph acyclic:"<< mfvsgraph.isAcyclic()<<std::endl;
-	vg::Graph graphWithoutVertexset;
-	for (int i = 0; i < vggraph.node_size(); i++)
-	{
-		if (vertexset.count(i) > 0) continue;
-		auto node = graphWithoutVertexset.add_node();
-		node->set_id(vggraph.node(i).id());
-		node->set_sequence(vggraph.node(i).sequence());
-		node->set_name(vggraph.node(i).name());
-	}
-	for (int i = 0; i < vggraph.edge_size(); i++)
-	{
-		if (vertexset.count(ids[vggraph.edge(i).from()]) > 0 || vertexset.count(ids[vggraph.edge(i).to()]) > 0) continue;
-		auto edge = graphWithoutVertexset.add_edge();
-		edge->set_from(vggraph.edge(i).from());
-		edge->set_to(vggraph.edge(i).to());
-		edge->set_from_start(vggraph.edge(i).from_start());
-		edge->set_to_end(vggraph.edge(i).to_end());
-		edge->set_overlap(vggraph.edge(i).overlap());
-	}
-	auto order = topologicalSort(graphWithoutVertexset);
-	vg::Graph resultGraph;
+	output << "feedback vertex set size: " << vertexSetvector.size() << "\n";
+	output << "After the removal of MVFS, is the graph acyclic:" << mfvsgraph.isAcyclic() << BufferedWriter::Flush;
+	DirectedGraph graphWithoutVFS { graph };
+	graphWithoutVFS.RemoveNodes(vertexset);
+	std::vector<size_t> indexOrder = topologicalSort(graphWithoutVFS);
+	std::vector<int> nodeIdOrder;
 	for (size_t i = 0; i < vertexSetvector.size(); i++)
 	{
-		auto node = resultGraph.add_node();
-		node->set_id(vggraph.node(vertexSetvector[i]).id());
-		node->set_sequence(vggraph.node(vertexSetvector[i]).sequence());
-		node->set_name(vggraph.node(vertexSetvector[i]).name());
-		output << node->id() << " ";
+		nodeIdOrder.push_back(graph.nodes[vertexSetvector[i]].nodeId);
 	}
-	for (size_t i = 0; i < order.size(); i++)
+	for (size_t i = 0; i < indexOrder.size(); i++)
 	{
-		auto node = resultGraph.add_node();
-		node->set_id(graphWithoutVertexset.node(order[i]).id());
-		node->set_sequence(graphWithoutVertexset.node(order[i]).sequence());
-		node->set_name(graphWithoutVertexset.node(order[i]).name());
-		output << node->id() << " ";
+		nodeIdOrder.push_back(graphWithoutVFS.nodes[indexOrder[i]].nodeId);
 	}
-	for (int i = 0; i < vggraph.edge_size(); i++)
-	{
-		auto edge = resultGraph.add_edge();
-		edge->set_from(vggraph.edge(i).from());
-		edge->set_to(vggraph.edge(i).to());
-		edge->set_from_start(vggraph.edge(i).from_start());
-		edge->set_to_end(vggraph.edge(i).to_end());
-		edge->set_overlap(vggraph.edge(i).overlap());
-	}
-	output << BufferedWriter::Flush;
-#ifndef NDEBUG
-	std::set<int> existingNodeIds;
-	for (int i = 0; i < resultGraph.node_size(); i++)
-	{
-		assert(existingNodeIds.count(resultGraph.node(i).id()) == 0);
-		existingNodeIds.insert(resultGraph.node(i).id());
-	}
-#endif
-	assert(resultGraph.node_size() == vggraph.node_size());
-	assert(resultGraph.edge_size() == vggraph.edge_size());
-	return resultGraph;
+	graph.ReorderByNodeIds(nodeIdOrder);
 }
 
 void outputGraph(std::string filename, const vg::Graph& graph)
@@ -194,51 +146,73 @@ void outputGraph(std::string filename, const vg::Graph& graph)
 	stream::write_buffered(alignmentOut, writeVector, 0);
 }
 
-std::vector<int> getSinkNodes(const vg::Graph& graph)
+std::vector<int> getSinkNodes(const DirectedGraph& graph)
 {
 	std::set<int> notSinkNodes;
-	for (int i = 0; i < graph.edge_size(); i++)
+	for (size_t i = 0; i < graph.edges.size(); i++)
 	{
-		notSinkNodes.insert(graph.edge(i).from());
+		notSinkNodes.insert(graph.nodes[graph.edges[i].fromIndex].nodeId);
 	}
 	std::vector<int> result;
-	for (int i = 0; i < graph.node_size(); i++)
+	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
-		if (notSinkNodes.count(graph.node(i).id()) == 0) result.push_back(graph.node(i).id());
+		if (notSinkNodes.count(graph.nodes[i].nodeId) == 0) result.push_back(graph.nodes[i].nodeId);
 	}
 	return result;
 }
 
-std::vector<int> getSourceNodes(const vg::Graph& graph)
+std::vector<int> getSourceNodes(const DirectedGraph& graph)
 {
 	std::set<int> notSourceNodes;
-	for (int i = 0; i < graph.edge_size(); i++)
+	for (size_t i = 0; i < graph.edges.size(); i++)
 	{
-		notSourceNodes.insert(graph.edge(i).to());
+		notSourceNodes.insert(graph.nodes[graph.edges[i].toIndex].nodeId);
 	}
 	std::vector<int> result;
-	for (int i = 0; i < graph.node_size(); i++)
+	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
-		if (notSourceNodes.count(graph.node(i).id()) == 0) result.push_back(graph.node(i).id());
+		if (notSourceNodes.count(graph.nodes[i].nodeId) == 0) result.push_back(graph.nodes[i].nodeId);
 	}
 	return result;
 }
 
-bool GraphEqual(const vg::Graph& first, const vg::Graph& second)
+bool GraphEqual(const DirectedGraph& first, const DirectedGraph& second)
 {
-	if (first.node_size() != second.node_size()) return false;
-	if (first.edge_size() != second.edge_size()) return false;
-	for (int i = 0; i < first.node_size(); i++)
+	if (first.nodes.size() != second.nodes.size()) return false;
+	if (first.edges.size() != second.edges.size()) return false;
+	for (size_t i = 0; i < first.nodes.size(); i++)
 	{
-		if (first.node(i).id() != second.node(i).id()) return false;
-		if (first.node(i).sequence() != second.node(i).sequence()) return false;
+		if (first.nodes[i].nodeId != second.nodes[i].nodeId) return false;
+		if (first.nodes[i].originalNodeId != second.nodes[i].originalNodeId) return false;
+		if (first.nodes[i].sequence != second.nodes[i].sequence) return false;
+		if (first.nodes[i].rightEnd != second.nodes[i].rightEnd) return false;
 	}
-	for (int i = 0; i < first.edge_size(); i++)
+	for (size_t i = 0; i < first.edges.size(); i++)
 	{
-		if (first.edge(i).from() != second.edge(i).from()) return false;
-		if (first.edge(i).to() != second.edge(i).to()) return false;
+		if (first.edges[i].fromIndex != second.edges[i].fromIndex) return false;
+		if (first.edges[i].toIndex != second.edges[i].toIndex) return false;
 	}
 	return true;
+}
+
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const std::vector<DirectedGraph>& graphs)
+{
+	std::map<int, int> idMapper;
+	for (size_t i = 0; i < graphs.size(); i++)
+	{
+		for (size_t j = 0; j < graphs[i].nodes.size(); j++)
+		{
+			assert(idMapper.count(graphs[i].nodes[j].nodeId) == 0);
+			idMapper[graphs[i].nodes[j].nodeId] = graphs[i].nodes[j].originalNodeId;
+		}
+	}
+	for (int i = 0; i < alignment.path().mapping_size(); i++)
+	{
+		int digraphNodeId = alignment.path().mapping(i).position().node_id();
+		assert(idMapper.count(digraphNodeId) > 0);
+		int originalNodeId = idMapper[digraphNodeId];
+		alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_node_id(originalNodeId);
+	}
 }
 
 void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum)
@@ -251,20 +225,21 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		cerroutput << "thread " << threadnum << " " << i << "/" << fastQs.size() << "\n";
 		cerroutput << "read size " << fastq->sequence.size() << "bp" << "\n";
 		cerroutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
-		std::vector<std::tuple<int, int, bool, vg::Graph>> components;
+		std::vector<std::tuple<int, int, DirectedGraph>> components;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
 			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n";
 			auto seedGraphUnordered = ExtractSubgraph(graph, seedhits.at(fastq)[j], fastq->sequence.size());
+			DirectedGraph seedGraph {seedGraphUnordered};
+			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << "\n";
+			coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << "\n";
 			int startpos = 0;
 			int endpos = 0;
-			int score = 0;
-			bool forwards;
-			auto seedGraph = OrderByFeedbackVertexset(seedGraphUnordered);
+			OrderByFeedbackVertexset(seedGraph);
 			bool alreadyIn = false;
 			for (size_t k = 0; k < components.size(); k++)
 			{
-				if (GraphEqual(seedGraph,std::get<3>(components[k])))
+				if (GraphEqual(seedGraph,std::get<2>(components[k])))
 				{
 					cerroutput << "already exists" << BufferedWriter::Flush;
 					alreadyIn = true;
@@ -272,63 +247,39 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 				}
 			}
 			if (alreadyIn) continue;
-			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << "\n";
-			coutoutput << "out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraphUnordered) << "\n";
 			coutoutput << "out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
+			GraphAligner<uint32_t, int32_t> componentAlignment;
+			for (size_t i = 0; i < seedGraph.nodes.size(); i++)
 			{
-				GraphAligner<uint32_t, int32_t> forwardAlignment;
-				for (int i = 0; i < seedGraph.node_size(); i++)
-				{
-					forwardAlignment.AddNode(seedGraph.node(i).id(), seedGraph.node(i).sequence());
-				}
-				for (int i = 0; i < seedGraph.edge_size(); i++)
-				{
-					forwardAlignment.AddEdge(seedGraph.edge(i).from(), seedGraph.edge(i).to());
-				}
-				forwardAlignment.Finalize();
-				auto forward = forwardAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
-				forwards = true;
-				startpos = std::get<1>(forward);
-				endpos = std::get<2>(forward);
-				score = std::get<0>(forward);
+				componentAlignment.AddNode(seedGraph.nodes[i].nodeId, seedGraph.nodes[i].sequence);
 			}
+			for (size_t i = 0; i < seedGraph.edges.size(); i++)
 			{
-				GraphAligner<uint32_t, int32_t> backwardAlignment;
-				for (int i = seedGraph.node_size()-1; i >= 0; i--)
-				{
-					backwardAlignment.AddNode(seedGraph.node(i).id(), FastQ::reverseComplement(seedGraph.node(i).sequence()));
-				}
-				for (int i = 0; i < seedGraph.edge_size(); i++)
-				{
-					backwardAlignment.AddEdge(seedGraph.edge(i).to(), seedGraph.edge(i).from());
-				}
-				backwardAlignment.Finalize();
-				auto backwards = backwardAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
-				if (std::get<0>(backwards) > score)
-				{
-					forwards = false;
-					startpos = std::get<1>(backwards);
-					endpos = std::get<2>(backwards);
-					score = std::get<0>(backwards);
-				}
+				componentAlignment.AddEdgeNodeId(seedGraph.nodes[seedGraph.edges[i].fromIndex].nodeId, seedGraph.nodes[seedGraph.edges[i].toIndex].nodeId);
 			}
-			components.emplace_back(startpos, endpos, forwards, seedGraph);
+			componentAlignment.Finalize();
+			auto forward = componentAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
+			startpos = std::get<1>(forward);
+			endpos = std::get<2>(forward);
+			components.emplace_back(startpos, endpos, seedGraph);
 		}
 		std::sort(components.begin(), components.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right); });
 
-		GraphAligner<uint32_t, int32_t> forwardAlignment;
+		GraphAligner<uint32_t, int32_t> augmentedGraphAlignment;
 		std::vector<std::vector<int>> sources;
 		std::vector<std::vector<int>> sinks;
-		for (int i = 0; i < components.size(); i++)
+		std::vector<DirectedGraph> componentGraphs;
+		for (size_t i = 0; i < components.size(); i++)
 		{
-			auto& g = std::get<3>(components[i]);
-			for (int j = 0; j < g.node_size(); j++)
+			auto& g = std::get<2>(components[i]);
+			componentGraphs.push_back(g);
+			for (size_t j = 0; j < g.nodes.size(); j++)
 			{
-				forwardAlignment.AddNode(g.node(j).id(), g.node(j).sequence());
+				augmentedGraphAlignment.AddNode(g.nodes[j].nodeId, g.nodes[j].sequence);
 			}
-			for (int j = 0; j < g.edge_size(); j++)
+			for (size_t j = 0; j < g.edges.size(); j++)
 			{
-				forwardAlignment.AddEdge(g.edge(j).from(), g.edge(j).to());
+				augmentedGraphAlignment.AddEdgeNodeId(g.nodes[g.edges[j].fromIndex].nodeId, g.nodes[g.edges[j].toIndex].nodeId);
 			}
 			sources.emplace_back(getSourceNodes(g));
 			sinks.emplace_back(getSinkNodes(g));
@@ -337,48 +288,26 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		{
 			for (size_t j = i+1; j < components.size(); j++)
 			{
-				std::vector<int> nodeIdsFromFirst;
-				if (std::get<2>(components[i]))
-				{
-					nodeIdsFromFirst = sinks[i];
-				}
-				else
-				{
-					nodeIdsFromFirst = sources[i];
-				}
-				std::vector<int> nodeIdsFromSecond;
-				if (std::get<2>(components[j]))
-				{
-					nodeIdsFromSecond = sources[j];
-				}
-				else
-				{
-					nodeIdsFromSecond = sinks[j];
-				}
+				std::vector<int> nodeIdsFromFirst = sinks[i];
+				std::vector<int> nodeIdsFromSecond = sources[j];
 				for (auto firstId : nodeIdsFromFirst)
 				{
 					for (auto secondId : nodeIdsFromSecond)
 					{
-						forwardAlignment.AddEdge(firstId, secondId);
+						augmentedGraphAlignment.AddEdgeNodeId(firstId, secondId);
 					}
 				}
 			}
 		}
-		forwardAlignment.Finalize();
+		augmentedGraphAlignment.Finalize();
 
-		cerroutput << "thread " << threadnum << " augmented graph is " << forwardAlignment.SizeInBp() << "bp" << BufferedWriter::Flush;
+		cerroutput << "thread " << threadnum << " augmented graph is " << augmentedGraphAlignment.SizeInBp() << "bp" << BufferedWriter::Flush;
 
-		auto alignment = forwardAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false);
-		auto reverseComplement = fastQs[i]->reverseComplement();
-		auto backwardsalignment = forwardAlignment.AlignOneWay(reverseComplement.seq_id, reverseComplement.sequence, true);
-		if (alignment.score() > backwardsalignment.score())
-		{
-			alignments.push_back(alignment);
-		}
-		else
-		{
-			alignments.push_back(backwardsalignment);
-		}
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false);
+
+		replaceDigraphNodeIdsWithOriginalNodeIds(alignment, componentGraphs);
+
+		alignments.push_back(alignment);
 		cerroutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
 		std::vector<vg::Alignment> alignmentvec;
 		alignmentvec.emplace_back(alignments.back());
@@ -456,7 +385,7 @@ int main(int argc, char** argv)
 
 	std::vector<vg::Alignment> alignments;
 
-	for (size_t i = 0; i < numThreads; i++)
+	for (int i = 0; i < numThreads; i++)
 	{
 		alignments.insert(alignments.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
 	}
