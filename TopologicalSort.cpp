@@ -36,6 +36,8 @@ std::vector<size_t> topologicalSort(const DirectedGraph& digraph)
 
 	for (size_t i = 0; i < digraph.edges.size(); i++)
 	{
+		assert(digraph.edges[i].fromIndex < graph.size());
+		assert(digraph.edges[i].toIndex < graph.size());
 		graph[digraph.edges[i].fromIndex].push_back(digraph.edges[i].toIndex);
 	}
 
