@@ -202,7 +202,11 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const st
 	{
 		for (size_t j = 0; j < graphs[i].nodes.size(); j++)
 		{
-			assert(idMapper.count(graphs[i].nodes[j].nodeId) == 0);
+			if (idMapper.count(graphs[i].nodes[j].nodeId) > 0 && idMapper[idMapper[graphs[i].nodes[j].nodeId]] != graphs[i].nodes[j].originalNodeId)
+			{
+				std::cerr << "node " << graphs[i].nodes[j].nodeId << " originally inserted as " << idMapper[idMapper[graphs[i].nodes[j].nodeId]] << ", now being inserted as " << graphs[i].nodes[j].originalNodeId << std::endl;
+			}
+			assert(idMapper.count(graphs[i].nodes[j].nodeId) == 0 || idMapper[idMapper[graphs[i].nodes[j].nodeId]] == graphs[i].nodes[j].originalNodeId);
 			idMapper[graphs[i].nodes[j].nodeId] = graphs[i].nodes[j].originalNodeId;
 		}
 	}

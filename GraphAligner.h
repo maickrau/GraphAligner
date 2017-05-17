@@ -50,8 +50,11 @@ public:
 	
 	void AddNode(int nodeId, std::string sequence)
 	{
+		//subgraph extraction might produce different subgraphs with common nodes
+		//don't add duplicate nodes
+		if (nodeLookup.count(nodeId) != 0) return;
+
 		assert(std::numeric_limits<LengthType>::max() - sequence.size() > nodeSequences.size());
-		assert(nodeLookup.count(nodeId) == 0);
 		nodeLookup[nodeId] = nodeStart.size();
 		nodeIDs.push_back(nodeId);
 		nodeStart.push_back(nodeSequences.size());
@@ -77,6 +80,11 @@ public:
 		assert(from >= 0);
 		assert(to < inNeighbors.size());
 		assert(from < nodeStart.size());
+
+		//subgraph extraction might produce different subgraphs with common edges
+		//don't add duplicate edges
+		if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) != inNeighbors[to].end()) return;
+
 		inNeighbors[to].push_back(from);
 		if (from >= to)
 		{
