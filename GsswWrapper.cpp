@@ -225,6 +225,11 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		cerroutput << "thread " << threadnum << " " << i << "/" << fastQs.size() << "\n";
 		cerroutput << "read size " << fastq->sequence.size() << "bp" << "\n";
 		cerroutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
+		if (seedhits.at(fastq).size() == 0)
+		{
+			cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+			continue;
+		}
 		std::vector<std::tuple<int, int, DirectedGraph>> components;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
