@@ -243,15 +243,15 @@ private:
 		MatrixSlice result;
 		std::vector<std::vector<MatrixPosition>> backtrace;
 		std::vector<MatrixPosition> Qbacktrace;
-		M1.resize(nodeSequences.size());
-		Q1.resize(nodeSequences.size());
-		R1.resize(nodeSequences.size());
-		Rbacktrace1.resize(nodeSequences.size());
-		M2.resize(nodeSequences.size());
-		Q2.resize(nodeSequences.size());
-		R2.resize(nodeSequences.size());
-		Rbacktrace2.resize(nodeSequences.size());
-		Qbacktrace.resize(nodeSequences.size());
+		M1.reserve(nodeSequences.size());
+		Q1.reserve(nodeSequences.size());
+		R1.reserve(nodeSequences.size());
+		Rbacktrace1.reserve(nodeSequences.size());
+		M2.reserve(nodeSequences.size());
+		Q2.reserve(nodeSequences.size());
+		R2.reserve(nodeSequences.size());
+		Rbacktrace2.reserve(nodeSequences.size());
+		Qbacktrace.reserve(nodeSequences.size());
 		backtrace.resize(nodeSequences.size());
 		std::vector<ScoreType>& currentM = M1;
 		std::vector<ScoreType>& previousM = M2;
@@ -375,10 +375,10 @@ private:
 		for (LengthType w = 0; w < nodeSequences.size(); w++)
 		{
 			//use previous instead of current because the last line swapped them
-			result.M.push_back(previousM[w]);
-			result.Q.push_back(previousQ[w]);
-			result.R.push_back(previousR[w]);
-			result.Rbacktrace.push_back(previousRbacktrace[w]);
+			result.M.emplace_back(previousM[w]);
+			result.Q.emplace_back(previousQ[w]);
+			result.R.emplace_back(previousR[w]);
+			result.Rbacktrace.emplace_back(previousRbacktrace[w]);
 		}
 		return result;
 	}
@@ -395,7 +395,7 @@ private:
 			assert(w == 0 || addThese[w].size() == addThese[w-1].size());
 			for (LengthType j = 1; j < addThese[w].size(); j++)
 			{
-				backtrace[w].push_back(addThese[w][j]);
+				backtrace[w].emplace_back(addThese[w][j]);
 			}
 		}
 	}
@@ -405,26 +405,24 @@ private:
 		std::vector<std::vector<LengthType>> distanceMatrix = getDistanceMatrix();
 		bool hasWrongOrders = false;
 		std::vector<LengthType> nodeOrdering;
+		std::vector<LengthType> nodeNotOrdering;
 		nodeOrdering.reserve(nodeSequences.size());
 		for (LengthType i = 1; i < nodeSequences.size(); i++)
 		{
 			auto nodeIndex = indexToNode[i];
 			if (i == nodeStart[nodeIndex] && notInOrder[nodeIndex])
 			{
-				nodeOrdering.push_back(i);
+				nodeOrdering.emplace_back(i);
 				hasWrongOrders = true;
 			}
-		}
-		for (LengthType i = 1; i < nodeSequences.size(); i++)
-		{
-			auto nodeIndex = indexToNode[i];
-			if (!(i == nodeStart[nodeIndex] && notInOrder[nodeIndex]))
-			{
-				nodeOrdering.push_back(i);
+			else{
+				nodeNotOrdering.emplace_back(i);
 			}
 		}
+		nodeOrdering.insert(nodeOrdering.end(), nodeNotOrdering.begin(), nodeNotOrdering.end());
+		nodeNotOrdering.clear();
 		assert(nodeOrdering.size() == nodeSequences.size() - 1);
-		MatrixSlice lastRow = getFirstSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix);
+		MatrixSlice lastRow = getFirstSlice(sequence, hasWrongOrders, nodeOrdering);
 		int sliceSize = sequence.size();
 		// int sliceSize = sqrt(sequence.size());
 		std::vector<std::vector<MatrixPosition>> backtraceMatrix;
@@ -433,7 +431,7 @@ private:
 		for (LengthType w = 0; w < nodeSequences.size(); w++)
 		{
 			assert(lastRow.backtrace[w].size() == 1);
-			backtraceMatrix[w].push_back(lastRow.backtrace[w][0]);
+			backtraceMatrix[w].emplace_back(lastRow.backtrace[w][0]);
 		}
 		std::vector<ScoreType> lastRowScore;
 		LengthType start = 1;
@@ -466,7 +464,7 @@ private:
 		return result;
 	}
 
-	MatrixSlice getFirstSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix) const
+	MatrixSlice getFirstSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering) const
 	{
 		MatrixSlice result;
 		result.M.resize(nodeSequences.size(), 0);
