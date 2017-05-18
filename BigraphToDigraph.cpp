@@ -54,10 +54,14 @@ DirectedGraph::DirectedGraph(const vg::Graph& bigraph)
 		edges.emplace_back(fromRight, toRight);
 		edges.emplace_back(toLeft, fromLeft);
 	}
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 }
 
 void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 {
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 	assert(nodeIdOrder.size() == nodes.size());
 	std::vector<size_t> indexOrder;
 	indexOrder.resize(nodes.size(), -1);
@@ -90,6 +94,8 @@ void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 	}
 	assert(newNodes.size() == nodes.size());
 	nodes = newNodes;
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 }
 
 size_t smallerThan(const std::set<int>& set, int comparison)
@@ -104,6 +110,8 @@ size_t smallerThan(const std::set<int>& set, int comparison)
 
 void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 {
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 	size_t nodesBefore = nodes.size();
 	for (size_t i = nodes.size()-1; i >= 0 && i < nodes.size(); i--)
 	{
@@ -123,6 +131,7 @@ void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 	}
 	assert(nodes.size() + nodeIndices.size() == nodesBefore);
 	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 }
 
 bool DirectedGraph::edgesPointToValidNodes()
@@ -131,6 +140,15 @@ bool DirectedGraph::edgesPointToValidNodes()
 	{
 		if (edges[i].fromIndex >= nodes.size()) return false;
 		if (edges[i].toIndex >= nodes.size()) return false;
+	}
+	return true;
+}
+
+bool DirectedGraph::nodeIdsAreValid()
+{
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		if (nodes[i].nodeId / 2 != nodes[i].originalNodeId) return false;
 	}
 	return true;
 }

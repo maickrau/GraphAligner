@@ -29,6 +29,7 @@ public:
 	void RemoveNodes(const std::set<int>& nodeIndices);
 private:
 	bool edgesPointToValidNodes();
+	bool nodeIdsAreValid();
 };
 
 #endif

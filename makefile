@@ -1,6 +1,6 @@
 CC=gcc
 GPP=g++
-CPPFLAGS=-Wall -std=c++14 -msse4.1 -O3 -g -pg
+CPPFLAGS=-Wall -std=c++14 -O3 -g -pg
 
 ODIR=obj
 BINDIR=bin

@@ -222,7 +222,7 @@ private:
 		return std::make_pair(score, trace);
 	}
 
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, const MatrixSlice& previous, LengthType start, LengthType end, bool local) const
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, bool local) const
 	{
 		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
 		MatrixPosition localMaximum = std::make_pair(0, 0);
@@ -247,11 +247,6 @@ private:
 		Q1.reserve(nodeSequences.size());
 		R1.reserve(nodeSequences.size());
 		Rbacktrace1.reserve(nodeSequences.size());
-		M2.reserve(nodeSequences.size());
-		Q2.reserve(nodeSequences.size());
-		R2.reserve(nodeSequences.size());
-		Rbacktrace2.reserve(nodeSequences.size());
-		Qbacktrace.reserve(nodeSequences.size());
 		backtrace.resize(nodeSequences.size());
 		std::vector<ScoreType>& currentM = M1;
 		std::vector<ScoreType>& previousM = M2;
@@ -261,13 +256,13 @@ private:
 		std::vector<ScoreType>& previousR = R2;
 		std::vector<MatrixPosition>& currentRbacktrace = Rbacktrace1;
 		std::vector<MatrixPosition>& previousRbacktrace = Rbacktrace2;
+		previousM = std::move(previous.M);
+		previousQ = std::move(previous.Q);
+		previousR = std::move(previous.R);
+		Qbacktrace = std::move(previous.Qbacktrace);
+		previousRbacktrace = std::move(previous.Rbacktrace);
 		for (LengthType w = 0; w < nodeSequences.size(); w++)
 		{
-			previousM[w] = previous.M[w];
-			previousQ[w] = previous.Q[w];
-			previousR[w] = previous.R[w];
-			Qbacktrace[w] = previous.Qbacktrace[w];
-			previousRbacktrace[w] = previous.Rbacktrace[w];
 			backtrace[w].resize(end-start);
 			backtrace[w][0] = previous.backtrace[w].back();
 		}
@@ -364,22 +359,15 @@ private:
 			std::swap(currentR, previousR);
 			std::swap(currentRbacktrace, previousRbacktrace);
 		}
-		result.M.reserve(nodeSequences.size());
-		result.Q.reserve(nodeSequences.size());
-		result.R.reserve(nodeSequences.size());
-		result.Rbacktrace.reserve(nodeSequences.size());
 		result.backtrace = backtrace;
 		result.Qbacktrace = Qbacktrace;
 		result.localMaximumScore = localMaximumScore;
 		result.localMaximum = localMaximum;
-		for (LengthType w = 0; w < nodeSequences.size(); w++)
-		{
-			//use previous instead of current because the last line swapped them
-			result.M.emplace_back(previousM[w]);
-			result.Q.emplace_back(previousQ[w]);
-			result.R.emplace_back(previousR[w]);
-			result.Rbacktrace.emplace_back(previousRbacktrace[w]);
-		}
+		//use previous instead of current because the last line swapped them
+		result.M = std::move(previousM);
+		result.Q = std::move(previousQ);
+		result.R = std::move(previousR);
+		result.Rbacktrace = std::move(previousRbacktrace);
 		return result;
 	}
 
@@ -503,34 +491,41 @@ private:
 	{
 		if (j == 0) return getRHelperZero();
 		std::vector<std::pair<LengthType, ScoreType>> result;
-		for (LengthType v = 1; v < nodeSequences.size(); v++)
+		for (size_t i = 1; i < nodeStart.size(); i++)
 		{
+			assert(nodeEnd[i] > nodeStart[i]);
+			assert(inNeighbors[i].size() > 0);
 			ScoreType maxValue = std::numeric_limits<ScoreType>::min();
+			ScoreType distancePenaltyAtMaxValue = 0;
 			LengthType resultv = -1;
-			auto otherNode = indexToNode[v];
-			if (v == nodeStart[otherNode])
+			LengthType v = nodeStart[i];
+			for (size_t neighbori = 0; neighbori < inNeighbors[i].size(); neighbori++)
 			{
-				for (size_t neighbori = 0; neighbori < inNeighbors[otherNode].size(); neighbori++)
-				{
-					LengthType u = nodeEnd[inNeighbors[otherNode][neighbori]]-1;
-					//j-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
-					if (scoreHere > maxValue)
-					{
-						resultv = v;
-						maxValue = scoreHere;
-					}
-				}
-			}
-			else
-			{
-				LengthType u = v-1;
-				auto scoreHere = previousM[u]+matchScore(nodeSequences[v], sequence[j-1]);
-				if (scoreHere > maxValue)
+				LengthType u = nodeEnd[inNeighbors[i][neighbori]]-1;
+				assert(u < nodeSequences.size());
+				//j-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
+				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
+				assert(previousM[u] <= std::numeric_limits<ScoreType>::max() - 100);
+				assert(previousM[u] >= -std::numeric_limits<ScoreType>::min() + 100);
+				if (scoreHere - (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty > maxValue - distancePenaltyAtMaxValue)
 				{
 					resultv = v;
 					maxValue = scoreHere;
+					distancePenaltyAtMaxValue = (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty;
 				}
+			}
+			v++;
+			while (v < nodeEnd[i])
+			{
+				LengthType u = v-1;
+				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
+				if (scoreHere - (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty > maxValue - distancePenaltyAtMaxValue)
+				{
+					resultv = v;
+					maxValue = scoreHere;
+					distancePenaltyAtMaxValue = (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty;
+				}
+				v++;
 			}
 			assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
 			assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
