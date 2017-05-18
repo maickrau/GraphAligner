@@ -22,11 +22,14 @@ public:
 		size_t fromIndex;
 		size_t toIndex;
 	};
+	DirectedGraph();
 	DirectedGraph(const vg::Graph& bigraph);
 	std::vector<Node> nodes;
 	std::vector<Edge> edges;
 	void ReorderByNodeIds(const std::vector<int>& nodeIdOrder);
 	void RemoveNodes(const std::set<int>& nodeIndices);
+	void AddSubgraph(const DirectedGraph& subgraph);
+	void ConnectComponents(const std::vector<int>& previousSinks, const std::vector<int>& nextSources);
 private:
 	bool edgesPointToValidNodes();
 };

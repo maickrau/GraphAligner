@@ -89,6 +89,8 @@ public:
 		if (from >= to)
 		{
 			notInOrder[to] = true;
+			// std::cerr << "edge from " << from << " to " << to << std::endl;
+			// std::cerr << "node ids " << node_id_from << " -> " << node_id_to << std::endl;
 		}
 	}
 
@@ -222,7 +224,7 @@ private:
 		return std::make_pair(score, trace);
 	}
 
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, const MatrixSlice& previous, LengthType start, LengthType end, bool local) const
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, bool local) const
 	{
 		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
 		MatrixPosition localMaximum = std::make_pair(0, 0);
@@ -247,11 +249,6 @@ private:
 		Q1.resize(nodeSequences.size());
 		R1.resize(nodeSequences.size());
 		Rbacktrace1.resize(nodeSequences.size());
-		M2.resize(nodeSequences.size());
-		Q2.resize(nodeSequences.size());
-		R2.resize(nodeSequences.size());
-		Rbacktrace2.resize(nodeSequences.size());
-		Qbacktrace.resize(nodeSequences.size());
 		backtrace.resize(nodeSequences.size());
 		std::vector<ScoreType>& currentM = M1;
 		std::vector<ScoreType>& previousM = M2;
@@ -261,13 +258,13 @@ private:
 		std::vector<ScoreType>& previousR = R2;
 		std::vector<MatrixPosition>& currentRbacktrace = Rbacktrace1;
 		std::vector<MatrixPosition>& previousRbacktrace = Rbacktrace2;
+		previousM = std::move(previous.M);
+		previousQ = std::move(previous.Q);
+		previousR = std::move(previous.R);
+		Qbacktrace = std::move(previous.Qbacktrace);
+		previousRbacktrace = std::move(previous.Rbacktrace);
 		for (LengthType w = 0; w < nodeSequences.size(); w++)
 		{
-			previousM[w] = previous.M[w];
-			previousQ[w] = previous.Q[w];
-			previousR[w] = previous.R[w];
-			Qbacktrace[w] = previous.Qbacktrace[w];
-			previousRbacktrace[w] = previous.Rbacktrace[w];
 			backtrace[w].resize(end-start);
 			backtrace[w][0] = previous.backtrace[w].back();
 		}
@@ -364,22 +361,14 @@ private:
 			std::swap(currentR, previousR);
 			std::swap(currentRbacktrace, previousRbacktrace);
 		}
-		result.M.reserve(nodeSequences.size());
-		result.Q.reserve(nodeSequences.size());
-		result.R.reserve(nodeSequences.size());
-		result.Rbacktrace.reserve(nodeSequences.size());
 		result.backtrace = backtrace;
 		result.Qbacktrace = Qbacktrace;
 		result.localMaximumScore = localMaximumScore;
 		result.localMaximum = localMaximum;
-		for (LengthType w = 0; w < nodeSequences.size(); w++)
-		{
-			//use previous instead of current because the last line swapped them
-			result.M.push_back(previousM[w]);
-			result.Q.push_back(previousQ[w]);
-			result.R.push_back(previousR[w]);
-			result.Rbacktrace.push_back(previousRbacktrace[w]);
-		}
+		result.M = std::move(previousM);
+		result.Q = std::move(previousQ);
+		result.R = std::move(previousR);
+		result.Rbacktrace = std::move(previousRbacktrace);
 		return result;
 	}
 
@@ -503,6 +492,7 @@ private:
 
 	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence) const
 	{
+		std::cerr << "getRhelper" << std::endl;
 		if (j == 0) return getRHelperZero();
 		std::vector<std::pair<LengthType, ScoreType>> result;
 		for (LengthType v = 1; v < nodeSequences.size(); v++)
@@ -586,6 +576,7 @@ private:
 	//compute R using the slow, full definition on page 3
 	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const std::vector<std::vector<LengthType>>& distanceMatrix, LengthType start) const
 	{
+		std::cerr << "fullR" << std::endl;
 		assert(j > 0);
 		assert(w > 0);
 		auto nodeIndex = indexToNode[w];
