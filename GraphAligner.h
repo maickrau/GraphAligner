@@ -243,10 +243,10 @@ private:
 		MatrixSlice result;
 		std::vector<std::vector<MatrixPosition>> backtrace;
 		std::vector<MatrixPosition> Qbacktrace;
-		M1.reserve(nodeSequences.size());
-		Q1.reserve(nodeSequences.size());
-		R1.reserve(nodeSequences.size());
-		Rbacktrace1.reserve(nodeSequences.size());
+		M1.resize(nodeSequences.size());
+		Q1.resize(nodeSequences.size());
+		R1.resize(nodeSequences.size());
+		Rbacktrace1.resize(nodeSequences.size());
 		backtrace.resize(nodeSequences.size());
 		std::vector<ScoreType>& currentM = M1;
 		std::vector<ScoreType>& previousM = M2;
