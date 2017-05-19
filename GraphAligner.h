@@ -89,6 +89,8 @@ public:
 		if (from >= to)
 		{
 			notInOrder[to] = true;
+			// std::cerr << "edge from " << from << " to " << to << std::endl;
+			// std::cerr << "node ids " << node_id_from << " -> " << node_id_to << std::endl;
 		}
 	}
 

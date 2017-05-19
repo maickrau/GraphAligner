@@ -16,6 +16,10 @@ toIndex(to)
 {
 }
 
+DirectedGraph::DirectedGraph()
+{
+}
+
 DirectedGraph::DirectedGraph(const vg::Graph& bigraph)
 {
 	std::map<int, std::pair<size_t, size_t>> nodeMapping;
@@ -151,4 +155,55 @@ bool DirectedGraph::nodeIdsAreValid()
 		if (nodes[i].nodeId / 2 != nodes[i].originalNodeId) return false;
 	}
 	return true;
+}
+
+void DirectedGraph::AddSubgraph(const DirectedGraph& subgraph)
+{
+	std::set<int> existingNodes;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		existingNodes.insert(nodes[i].nodeId);
+	}
+	for (size_t i = 0; i < subgraph.nodes.size(); i++)
+	{
+		if (existingNodes.count(subgraph.nodes[i].nodeId) == 0) 
+		{
+			nodes.emplace_back(subgraph.nodes[i]);
+		}
+	}
+	std::map<int, size_t> idToIndex;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		idToIndex[nodes[i].nodeId] = i;
+	}
+	std::set<std::pair<size_t, size_t>> existingEdges;
+	for (size_t i = 0; i < edges.size(); i++)
+	{
+		existingEdges.insert(std::make_pair(edges[i].fromIndex, edges[i].toIndex));
+	}
+	for (size_t i = 0; i < subgraph.edges.size(); i++)
+	{
+		auto newFromIndex = idToIndex[subgraph.nodes[subgraph.edges[i].fromIndex].nodeId];
+		auto newToIndex = idToIndex[subgraph.nodes[subgraph.edges[i].toIndex].nodeId];
+		if (existingEdges.count(std::make_pair(newFromIndex, newToIndex)) == 0)
+		{
+			edges.emplace_back(newFromIndex, newToIndex);
+		}
+	}
+}
+
+void DirectedGraph::ConnectComponents(const std::vector<int>& previousSinksIds, const std::vector<int>& nextSourcesIds)
+{
+	std::map<int, size_t> idToIndex;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		idToIndex[nodes[i].nodeId] = i;
+	}
+	for (size_t i = 0; i < previousSinksIds.size(); i++)
+	{
+		for (size_t j = 0; j < nextSourcesIds.size(); j++)
+		{
+			edges.emplace_back(idToIndex[previousSinksIds[i]], idToIndex[nextSourcesIds[j]]);
+		}
+	}
 }
