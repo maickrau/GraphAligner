@@ -209,12 +209,8 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	{
 		if (idMapper.count(graph.nodes[j].nodeId) > 0 && idMapper[graph.nodes[j].nodeId] != graph.nodes[j].originalNodeId)
 		{
-			if (idMapper.count(graphs[i].nodes[j].nodeId) > 0 && idMapper[graphs[i].nodes[j].nodeId] != graphs[i].nodes[j].originalNodeId)
-			{
-				std::cerr << "node " << graphs[i].nodes[j].nodeId << " originally inserted as " << idMapper[graphs[i].nodes[j].nodeId] << ", now being inserted as " << graphs[i].nodes[j].originalNodeId << std::endl;
-			}
-			assert(idMapper.count(graphs[i].nodes[j].nodeId) == 0 || idMapper[graphs[i].nodes[j].nodeId] == graphs[i].nodes[j].originalNodeId);
-			idMapper[graphs[i].nodes[j].nodeId] = graphs[i].nodes[j].originalNodeId;
+			assert(idMapper.count(graph.nodes[j].nodeId) == 0 || idMapper[graph.nodes[j].nodeId] == graph.nodes[j].originalNodeId);
+			idMapper[graph.nodes[j].nodeId] = graph.nodes[j].originalNodeId;
 		}
 		assert(idMapper.count(graph.nodes[j].nodeId) == 0 || idMapper[graph.nodes[j].nodeId] == graph.nodes[j].originalNodeId);
 		idMapper[graph.nodes[j].nodeId] = graph.nodes[j].originalNodeId;
