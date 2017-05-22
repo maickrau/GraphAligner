@@ -224,7 +224,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum)
+void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int bandwidth)
 {
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
@@ -249,7 +249,6 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << BufferedWriter::Flush;
 			coutoutput << "component out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
 			int startpos = 0;
-			int endpos = 0;
 			OrderByFeedbackVertexset(seedGraph);
 			bool alreadyIn = false;
 			startpos = seedhit.query_position();
@@ -304,7 +303,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		augmentedGraphAlignment.Finalize();
 
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth);
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment, augmentedGraph);
 
@@ -378,6 +377,7 @@ int main(int argc, char** argv)
 	
 
 	int numThreads = std::stoi(argv[5]);
+	int bandwidth = std::stoi(argv[6]);
 	std::vector<std::vector<const FastQ*>> readsPerThread;
 	std::map<const FastQ*, std::vector<vg::Alignment>> seedHits;
 	std::vector<std::vector<vg::Alignment>> resultsPerThread;
@@ -397,7 +397,7 @@ int main(int argc, char** argv)
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i); });
+		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, bandwidth]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, bandwidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
