@@ -239,21 +239,23 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 			continue;
 		}
-		std::vector<std::tuple<int, int, DirectedGraph>> components;
+		std::vector<std::tuple<int, DirectedGraph>> components;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
-			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n";
-			auto seedGraphUnordered = ExtractSubgraph(graph, seedhits.at(fastq)[j], fastq->sequence.size());
+			auto& seedhit = seedhits.at(fastq)[j];
+			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
+			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size());
 			DirectedGraph seedGraph {seedGraphUnordered};
-			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << "\n";
-			coutoutput << "component out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << "\n";
+			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << BufferedWriter::Flush;
+			coutoutput << "component out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
 			int startpos = 0;
 			int endpos = 0;
 			OrderByFeedbackVertexset(seedGraph);
 			bool alreadyIn = false;
+			startpos = seedhit.query_position();
 			for (size_t k = 0; k < components.size(); k++)
 			{
-				if (GraphEqual(seedGraph,std::get<2>(components[k])))
+				if (startpos == std::get<0>(components[k]) && GraphEqual(seedGraph,std::get<1>(components[k])))
 				{
 					cerroutput << "already exists" << BufferedWriter::Flush;
 					alreadyIn = true;
@@ -262,7 +264,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			}
 			if (alreadyIn) continue;
 			coutoutput << "component out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
-			GraphAligner<uint32_t, int32_t> componentAlignment;
+/*			GraphAligner<uint32_t, int32_t> componentAlignment;
 			for (size_t i = 0; i < seedGraph.nodes.size(); i++)
 			{
 				componentAlignment.AddNode(seedGraph.nodes[i].nodeId, seedGraph.nodes[i].sequence);
@@ -270,13 +272,13 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			for (size_t i = 0; i < seedGraph.edges.size(); i++)
 			{
 				componentAlignment.AddEdgeNodeId(seedGraph.nodes[seedGraph.edges[i].fromIndex].nodeId, seedGraph.nodes[seedGraph.edges[i].toIndex].nodeId);
-			}
-			componentAlignment.Finalize();
-			auto forward = componentAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
-			startpos = std::get<1>(forward);
-			endpos = std::get<2>(forward);
-			components.emplace_back(startpos, endpos, seedGraph);
-			coutoutput << "component position: " << startpos << " - " << endpos << BufferedWriter::Flush;
+			}*/
+//			componentAlignment.Finalize();
+//			auto forward = componentAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
+//			startpos = std::get<1>(forward);
+//			endpos = std::get<2>(forward);
+			components.emplace_back(startpos, seedGraph);
+			coutoutput << "component position: " << startpos << " " << BufferedWriter::Flush;
 		}
 		std::sort(components.begin(), components.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right); });
 
@@ -285,9 +287,9 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		std::vector<std::vector<int>> sinks;
 		for (size_t i = 0; i < components.size(); i++)
 		{
-			sources.emplace_back(getSourceNodes(std::get<2>(components[i])));
-			sinks.emplace_back(getSinkNodes(std::get<2>(components[i])));
-			augmentedGraph.AddSubgraph(std::get<2>(components[i]));
+			sources.emplace_back(getSourceNodes(std::get<1>(components[i])));
+			sinks.emplace_back(getSinkNodes(std::get<1>(components[i])));
+			augmentedGraph.AddSubgraph(std::get<1>(components[i]));
 		}
 		for (size_t i = 0; i < components.size(); i++)
 		{
