@@ -23,8 +23,6 @@ public:
 		std::vector<MatrixPosition> Rbacktrace;
 		std::vector<MatrixPosition> Qbacktrace;
 		std::vector<std::vector<MatrixPosition>> backtrace;
-		ScoreType localMaximumScore;
-		MatrixPosition localMaximum;
 	};
 
 	GraphAligner() :
@@ -113,23 +111,9 @@ public:
 	vg::Alignment AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse) const
 	{
 		assert(finalized);
-		auto trace = backtrackWithSquareRootSlices(sequence, false);
+		auto trace = backtrackWithSquareRootSlices(sequence);
 		auto result = traceToAlignment(seq_id, trace, reverse);
 		return result;
-	}
-
-	std::tuple<ScoreType, LengthType, LengthType> GetLocalAlignmentSequencePosition(const std::string& sequence)
-	{
-		assert(finalized);
-		auto trace = backtrackWithSquareRootSlices(sequence, true);
-		LengthType minpos = trace.second[0].second;
-		LengthType maxpos = trace.second[0].second;
-		for (size_t i = 1; i < trace.second.size(); i++)
-		{
-			minpos = std::min(minpos, trace.second[i].second);
-			maxpos = std::max(maxpos, trace.second[i].second);
-		}
-		return std::make_tuple(trace.first, minpos, maxpos);
 	}
 
 	size_t SizeInBp()
@@ -179,17 +163,6 @@ private:
 		return result;
 	}
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtraceLocal(ScoreType score, MatrixPosition start, const std::vector<std::vector<MatrixPosition>>& backtrace) const
-	{
-		std::vector<MatrixPosition> positions;
-		while (start.first > 0 && start.second > 0)
-		{
-			positions.push_back(start);
-			start = backtrace[start.first][start.second];
-		}
-		return std::make_pair(score, positions);
-	}
-
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const std::vector<std::vector<MatrixPosition>>& backtrace) const
 	{
 		assert(backtrace.size() == nodeSequences.size());
@@ -224,10 +197,8 @@ private:
 		return std::make_pair(score, trace);
 	}
 
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, bool local) const
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const std::vector<std::vector<LengthType>>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end) const
 	{
-		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
-		MatrixPosition localMaximum = std::make_pair(0, 0);
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
 		std::vector<ScoreType> Q1;
@@ -276,7 +247,6 @@ private:
 		{
 			currentM[0] = -gapPenalty(start + j);
 			currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-			if (local) currentM[0] = 0;
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
 			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence);
 
@@ -338,19 +308,6 @@ private:
 						assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
 					}
 				}
-				if (local)
-				{
-					if (currentM[w] < 0)
-					{
-						currentM[w] = 0;
-						backtrace[w][j] = std::make_pair(0, 0);
-					}
-				}
-				if (currentM[w] > localMaximumScore)
-				{
-					localMaximumScore = currentM[w];
-					localMaximum = std::make_pair(w, j + start);
-				}
 				assert(currentM[w] >= -std::numeric_limits<ScoreType>::min() + 100);
 				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
 				assert(backtrace[w][j].second < (j + start) || (backtrace[w][j].second == (j + start) && backtrace[w][j].first < w));
@@ -363,8 +320,6 @@ private:
 		}
 		result.backtrace = backtrace;
 		result.Qbacktrace = Qbacktrace;
-		result.localMaximumScore = localMaximumScore;
-		result.localMaximum = localMaximum;
 		//use previous instead of current because the last line swapped them
 		result.M = std::move(previousM);
 		result.Q = std::move(previousQ);
@@ -390,7 +345,7 @@ private:
 		}
 	}
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, bool local) const
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence) const
 	{
 		std::vector<std::vector<LengthType>> distanceMatrix = getDistanceMatrix();
 		bool hasWrongOrders = false;
@@ -412,7 +367,7 @@ private:
 		nodeOrdering.insert(nodeOrdering.end(), nodeNotOrdering.begin(), nodeNotOrdering.end());
 		nodeNotOrdering.clear();
 		assert(nodeOrdering.size() == nodeSequences.size() - 1);
-		MatrixSlice lastRow = getFirstSlice(sequence, hasWrongOrders, nodeOrdering);
+		MatrixSlice lastRow = getFirstSlice();
 		int sliceSize = sequence.size();
 		// int sliceSize = sqrt(sequence.size());
 		std::vector<std::vector<MatrixPosition>> backtraceMatrix;
@@ -425,36 +380,22 @@ private:
 		}
 		std::vector<ScoreType> lastRowScore;
 		LengthType start = 1;
-		MatrixPosition localMaximum = std::make_pair(0, 0);
-		ScoreType localMaximumScore = std::numeric_limits<ScoreType>::min();
 		//size+1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
 		while (start < sequence.size()+1)
 		{
 			LengthType end = start + sliceSize;
 			if (end > sequence.size()+1) end = sequence.size();
-			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end, local);
+			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end);
 			addBacktraceMatrix(backtraceMatrix, slice.backtrace);
 			lastRowScore = slice.M;
 			lastRow = std::move(slice);
 			start = end;
-			if (lastRow.localMaximumScore > localMaximumScore)
-			{
-				localMaximumScore = lastRow.localMaximumScore;
-				localMaximum = lastRow.localMaximum;
-			}
-		}
-		if (local)
-		{
-			assert(localMaximumScore > 0);
-			assert(localMaximum.first != 0 || localMaximum.second != 0);
-			auto localresult = backtraceLocal(localMaximumScore, localMaximum, backtraceMatrix);
-			return localresult;
 		}
 		auto result = backtrace(lastRow.M, backtraceMatrix);
 		return result;
 	}
 
-	MatrixSlice getFirstSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering) const
+	MatrixSlice getFirstSlice() const
 	{
 		MatrixSlice result;
 		result.M.resize(nodeSequences.size(), 0);

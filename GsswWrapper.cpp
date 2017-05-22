@@ -264,19 +264,6 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			}
 			if (alreadyIn) continue;
 			coutoutput << "component out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
-/*			GraphAligner<uint32_t, int32_t> componentAlignment;
-			for (size_t i = 0; i < seedGraph.nodes.size(); i++)
-			{
-				componentAlignment.AddNode(seedGraph.nodes[i].nodeId, seedGraph.nodes[i].sequence);
-			}
-			for (size_t i = 0; i < seedGraph.edges.size(); i++)
-			{
-				componentAlignment.AddEdgeNodeId(seedGraph.nodes[seedGraph.edges[i].fromIndex].nodeId, seedGraph.nodes[seedGraph.edges[i].toIndex].nodeId);
-			}*/
-//			componentAlignment.Finalize();
-//			auto forward = componentAlignment.GetLocalAlignmentSequencePosition(fastq->sequence);
-//			startpos = std::get<1>(forward);
-//			endpos = std::get<2>(forward);
 			components.emplace_back(startpos, seedGraph);
 			coutoutput << "component position: " << startpos << " " << BufferedWriter::Flush;
 		}
