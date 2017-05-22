@@ -40,6 +40,7 @@ public:
 		nodeIDs.push_back(0);
 		nodeStart.push_back(nodeSequences.size());
 		inNeighbors.emplace_back();
+		outNeighbors.emplace_back();
 		nodeSequences.push_back('N');
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
@@ -58,6 +59,7 @@ public:
 		nodeIDs.push_back(nodeId);
 		nodeStart.push_back(nodeSequences.size());
 		inNeighbors.emplace_back();
+		outNeighbors.emplace_back();
 		nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
@@ -67,6 +69,7 @@ public:
 		assert(inNeighbors.size() == nodeEnd.size());
 		assert(nodeEnd.size() == notInOrder.size());
 		assert(nodeSequences.size() == indexToNode.size());
+		assert(inNeighbors.size() == outNeighbors.size());
 	}
 	
 	void AddEdgeNodeId(int node_id_from, int node_id_to)
@@ -85,6 +88,7 @@ public:
 		if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) != inNeighbors[to].end()) return;
 
 		inNeighbors[to].push_back(from);
+		outNeighbors[from].push_back(to);
 		if (from >= to)
 		{
 			notInOrder[to] = true;
@@ -261,6 +265,8 @@ private:
 		std::vector<ScoreType> Q2;
 		std::vector<ScoreType> R1;
 		std::vector<ScoreType> R2;
+		std::vector<LengthType> processableColumns1;
+		std::vector<LengthType> processableColumns2;
 		std::vector<MatrixPosition> Rbacktrace1;
 		std::vector<MatrixPosition> Rbacktrace2;
 		std::vector<bool> insideBand1;
@@ -274,6 +280,8 @@ private:
 		MatrixSlice result;
 		std::vector<std::vector<MatrixPosition>> backtrace;
 		std::vector<MatrixPosition> Qbacktrace;
+		processableColumns1.reserve(nodeSequences.size());
+		processableColumns2.reserve(nodeSequences.size());
 		insideBand1.resize(nodeSequences.size(), false);
 		insideBand2.resize(nodeSequences.size(), false);
 		M1.resize(nodeSequences.size());
@@ -306,8 +314,12 @@ private:
 		previousR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 		currentM[0] = -gapPenalty(start + 1);
 		previousM[0] = -gapPenalty(start);
-		std::vector<LengthType> processableColumns;
-		processableColumns.reserve(nodeSequences.size());
+		std::vector<LengthType>& currentProcessableColumns = processableColumns1;
+		std::vector<LengthType>& previousProcessableColumns = processableColumns2;
+		for (auto w : nodeOrdering)
+		{
+			if (previousInsideBand[w]) previousProcessableColumns.push_back(w);
+		}
 		for (LengthType j = 1; j < end - start; j++)
 		{
 			if (j + start < bandWidth) 
@@ -318,32 +330,41 @@ private:
 			{
 				currentInsideBand[0] = false;
 			}
+			//clear currentInsideBand
+			//because currentProcessableColumns contains the values 2 columns ago, we can use that instead of iterating the entire vector
+			for (auto i : currentProcessableColumns)
+			{
+				currentInsideBand[i] = false;
+			}
+			if (std::find(currentInsideBand.begin()+1, currentInsideBand.end(), true) != currentInsideBand.end())
+			{
+				std::cerr << "j: " << j << std::endl;
+			}
+			assert(std::find(currentInsideBand.begin()+1, currentInsideBand.end(), true) == currentInsideBand.end());
 			int insideBand = 0;
-			for (LengthType i = 1; i < nodeSequences.size(); i++)
+			for (auto i : previousProcessableColumns)
 			{
 				auto nodeIndex = indexToNode[i];
-				if (nodeStart[nodeIndex] == i)
+				if (nodeEnd[nodeIndex]-1 == i)
 				{
-					currentInsideBand[i] = false;
-					for (size_t neighborI = 0; neighborI < inNeighbors[nodeIndex].size(); neighborI++)
+					for (size_t neighborI = 0; neighborI < outNeighbors[nodeIndex].size(); neighborI++)
 					{
-						if (previousInsideBand[nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1])
-						{
-							currentInsideBand[i] = true;
-							break;
-						}
+						currentInsideBand[nodeStart[outNeighbors[nodeIndex][neighborI]]] = true;
 					}
 				}
 				else
 				{
-					currentInsideBand[i] = previousInsideBand[i-1];
+					currentInsideBand[i+1] = true;
 				}
-				if (currentInsideBand[i]) insideBand++;
 			}
-			processableColumns.clear();
+			currentProcessableColumns.clear();
 			for (LengthType w : nodeOrdering)
 			{
-				if (currentInsideBand[w]) processableColumns.push_back(w);
+				if (currentInsideBand[w]) 
+				{
+					currentProcessableColumns.push_back(w);
+					insideBand++;
+				}
 			}
 			std::cerr << "inside band: " << insideBand << std::endl;
 			currentM[0] = -gapPenalty(start + j);
@@ -351,7 +372,7 @@ private:
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
 			if (hasWrongOrders) Rhelper = getRHelper(j, start, previousM, sequence, previousInsideBand);
 
-			for (LengthType w : processableColumns)
+			for (LengthType w : currentProcessableColumns)
 			{
 				if (!currentInsideBand[w]) continue;
 				bool neighborInsideBand = hasInNeighborInsideBand(w, currentInsideBand);
@@ -448,6 +469,7 @@ private:
 			std::swap(currentR, previousR);
 			std::swap(currentRbacktrace, previousRbacktrace);
 			std::swap(currentInsideBand, previousInsideBand);
+			std::swap(currentProcessableColumns, previousProcessableColumns);
 		}
 		result.backtrace = backtrace;
 		result.Qbacktrace = Qbacktrace;
@@ -802,6 +824,7 @@ private:
 	std::map<int, LengthType> nodeLookup;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<LengthType>> inNeighbors;
+	std::vector<std::vector<LengthType>> outNeighbors;
 	std::string nodeSequences;
 	ScoreType gapStartPenalty;
 	ScoreType gapContinuePenalty;
