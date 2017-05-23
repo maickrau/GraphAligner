@@ -240,9 +240,15 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			continue;
 		}
 		std::vector<std::tuple<int, DirectedGraph>> components;
+		std::vector<std::pair<GraphAligner<uint32_t, int32_t>::SeedHit, GraphAligner<uint32_t, int32_t>::SeedHit>> graphAlignerSeedHits;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
 			auto& seedhit = seedhits.at(fastq)[j];
+			//add seed hit to both strands
+			if (seedhit.path().mapping(0).position().node_id() > 0)
+			{
+				graphAlignerSeedHits.emplace_back(GraphAligner<uint32_t, int32_t>::SeedHit(seedhit.query_position(), seedhit.path().mapping(0).position().node_id() * 2), GraphAligner<uint32_t, int32_t>::SeedHit(seedhit.query_position(), seedhit.path().mapping(0).position().node_id() * 2+1));
+			}
 			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
 			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size());
 			DirectedGraph seedGraph {seedGraphUnordered};
@@ -303,7 +309,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		augmentedGraphAlignment.Finalize();
 
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth, graphAlignerSeedHits);
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment, augmentedGraph);
 
