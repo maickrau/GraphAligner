@@ -2,12 +2,20 @@
 #define GraphAligner_H
 
 //http://biorxiv.org/content/early/2017/04/06/124941
+#include <chrono>
 #include <algorithm>
 #include <string>
 #include <vector>
 #include <cassert>
 #include <cmath>
+#include <boost/config.hpp>
+#include <boost/property_map/property_map.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graphviz.hpp>
+#include <boost/graph/johnson_all_pairs_shortest.hpp>
 #include "vg.pb.h"
+
+using namespace boost;
 
 template <typename LengthType, typename ScoreType>
 class GraphAligner
@@ -370,7 +378,7 @@ private:
 			currentM[0] = -gapPenalty(start + j);
 			currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
-			if (hasWrongOrders) Rhelper = getRHelper(j, start, previousM, sequence, previousInsideBand);
+			if (hasWrongOrders) Rhelper = getRHelper(j, start, previousM, sequence, previousInsideBand, previousProcessableColumns);
 
 			for (LengthType w : currentProcessableColumns)
 			{
@@ -501,7 +509,7 @@ private:
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int bandWidth) const
 	{
-		std::vector<std::vector<LengthType>> distanceMatrix = getDistanceMatrix();
+		std::vector<std::vector<LengthType>> distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
 		std::vector<LengthType> nodeOrdering;
 		std::vector<LengthType> nodeNotOrdering;
@@ -600,70 +608,47 @@ private:
 		return result;
 	}
 
-	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, LengthType start, const std::vector<ScoreType>& previousM, const std::string& sequence, const std::vector<bool>& previousInsideBand) const
+	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, LengthType start, const std::vector<ScoreType>& previousM, const std::string& sequence, const std::vector<bool>& previousInsideBand, const std::vector<LengthType>& previousProcessableColumns) const
 	{
 		if (j == 0) return getRHelperZero();
 		if (j == 1 && start == 0) return getRHelperOne();
-		std::vector<std::pair<LengthType, ScoreType>> result;
-		for (size_t i = 1; i < nodeStart.size(); i++)
+		std::vector<std::tuple<LengthType, ScoreType, ScoreType>> bestPerNode;
+		bestPerNode.resize(nodeStart.size(), std::make_tuple(0, std::numeric_limits<ScoreType>::min(), 0));
+		for (auto v : previousProcessableColumns)
 		{
-			assert(nodeEnd[i] > nodeStart[i]);
-			assert(inNeighbors[i].size() > 0);
-			ScoreType maxValue = std::numeric_limits<ScoreType>::min();
-			ScoreType distancePenaltyAtMaxValue = 0;
-			LengthType resultv = -1;
-			LengthType v = nodeStart[i];
-			bool insideBand = false;
-			for (size_t neighbori = 0; neighbori < inNeighbors[i].size(); neighbori++)
+			auto nodeIndex = indexToNode[v];
+			auto currentBest = bestPerNode[nodeIndex];
+			if (nodeStart[nodeIndex] == v)
 			{
-				LengthType u = nodeEnd[inNeighbors[i][neighbori]]-1;
-				if (!previousInsideBand[u]) continue;
-				if (!previousInsideBand[v]) continue;
-				insideBand = true;
-				assert(u < nodeSequences.size());
-				//j-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
-				assert(previousM[u] <= std::numeric_limits<ScoreType>::max() - 100);
-				assert(previousM[u] >= -std::numeric_limits<ScoreType>::min() + 100);
-				if (scoreHere - (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty > maxValue - distancePenaltyAtMaxValue)
+				for (size_t neighbori = 0; neighbori < inNeighbors[nodeIndex].size(); neighbori++)
 				{
-					resultv = v;
-					maxValue = scoreHere;
-					distancePenaltyAtMaxValue = (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty;
+					LengthType u = nodeEnd[inNeighbors[nodeIndex][neighbori]]-1;
+					if (!previousInsideBand[u]) continue;
+					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
+					if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
+					{
+						bestPerNode[nodeIndex] = std::make_tuple(v, scoreHere, (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty);
+					}
 				}
 			}
-			v++;
-			while (v < nodeEnd[i])
+			else
 			{
 				LengthType u = v-1;
-				if (!previousInsideBand[u])
-				{
-					v++;
-					continue;
-				}
-				if (!previousInsideBand[v])
-				{
-					v++;
-					continue;
-				}
-				insideBand = true;
+				if (!previousInsideBand[u]) continue;
 				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
-				if (scoreHere - (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty > maxValue - distancePenaltyAtMaxValue)
+				if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
 				{
-					resultv = v;
-					maxValue = scoreHere;
-					distancePenaltyAtMaxValue = (ScoreType)(nodeEnd[i] - v) * gapContinuePenalty;
+					bestPerNode[nodeIndex] = std::make_tuple(v, scoreHere, (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty);
 				}
-				v++;
 			}
-			if (!insideBand)
+		}
+		std::vector<std::pair<LengthType, ScoreType>> result;
+		for (size_t i = 0; i < bestPerNode.size(); i++)
+		{
+			if (std::get<1>(bestPerNode[i]) != std::numeric_limits<ScoreType>::min())
 			{
-				continue;
+				result.emplace_back(std::get<0>(bestPerNode[i]), std::get<1>(bestPerNode[i]));
 			}
-			assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
-			assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
-			assert(resultv != -1);
-			result.emplace_back(resultv, maxValue);
 		}
 		assert(result.size() >= 1);
 		return result;
@@ -765,47 +750,73 @@ private:
 		return distanceMatrix[startNode][endNode] + nodeStart[startNode] + end - nodeStart[endNode] - start;
 	}
 
-	std::vector<std::vector<LengthType>> getDistanceMatrix() const
+	std::vector<std::vector<LengthType>> getDistanceMatrixBoostJohnson() const
 	{
-		//https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm
+		//http://www.boost.org/doc/libs/1_40_0/libs/graph/example/johnson-eg.cpp
+		auto V = inNeighbors.size();
+		adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>> graph { inNeighbors.size() };
+		for (size_t i = 0; i < inNeighbors.size(); i++)
+		{
+			for (size_t j = 0; j < inNeighbors[i].size(); j++)
+			{
+				boost::add_edge(inNeighbors[i][j], i, graph);
+			}
+		}
+		property_map<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>, edge_weight_t>::type w = get(edge_weight, graph);
+		graph_traits<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>>::edge_iterator e, e_end;
+		boost::tie(e, e_end) = edges(graph);
+		for (size_t i = 0; i < inNeighbors.size(); i++)
+		{
+			for (size_t j = 0; j < inNeighbors[i].size(); j++)
+			{
+				w[*e] = nodeEnd[inNeighbors[i][j]] - nodeStart[inNeighbors[i][j]];
+				++e;
+			}
+		}
+		std::vector<int> d(V, (std::numeric_limits<int>::max)());
+		int** D;
+		D = new int*[inNeighbors.size()];
+		for (size_t i = 0; i < inNeighbors.size(); i++)
+		{
+			D[i] = new int[inNeighbors.size()];
+		}
+		johnson_all_pairs_shortest_paths(graph, D, distance_map(&d[0]));
 		std::vector<std::vector<LengthType>> result;
 		result.resize(inNeighbors.size());
 		for (size_t i = 0; i < inNeighbors.size(); i++)
 		{
-			result[i].resize(inNeighbors.size(), nodeSequences.size()+1);
+			result[i].resize(inNeighbors.size(), std::numeric_limits<LengthType>::max());
+			for (size_t j = 0; j < inNeighbors.size(); j++)
+			{
+				if (D[i][j] == std::numeric_limits<int>::max())
+				{
+					result[i][j] = nodeSequences.size()+1;
+				}
+				else
+				{
+					result[i][j] = D[i][j];
+				}
+			}
 		}
 		for (size_t i = 0; i < inNeighbors.size(); i++)
 		{
-			result[i][i] = 0;
-			for (size_t j = 0; j < inNeighbors[i].size(); j++)
-			{
-				LengthType neighbor = inNeighbors[i][j];
-				LengthType neighborLength = nodeEnd[neighbor] - nodeStart[neighbor];
-				result[neighbor][i] = neighborLength;
-			}
+			delete [] D[i];
 		}
-		//put the distance from self to self as the maximum distance.
-		//this is for calculating the distance from a later point inside the node to an earlier point inside the node
+		delete [] D;
+		//make sure that the distance to itself is not 0, 
+		//we need to do this to make sure that distance calculation from later inside to node to earlier inside the node works correctly
 		for (size_t i = 0; i < inNeighbors.size(); i++)
 		{
 			result[i][i] = nodeSequences.size()+1;
-		}
-		for (size_t k = 0; k < inNeighbors.size(); k++)
-		{
-			for (size_t i = 0; i < inNeighbors.size(); i++)
+			for (size_t j = 0; j < inNeighbors.size(); j++)
 			{
-				for (size_t j = 0; j < inNeighbors.size(); j++)
-				{
-					if (result[i][j] > result[i][k] + result[k][j]) 
-					{
-						result[i][j] = result[i][k] + result[k][j];
-					}
-				}
+				if (j == i) continue;
+				result[i][i] = std::min(result[i][i], result[i][j] + result[j][i]);
 			}
 		}
 		return result;
 	}
-	
+
 	ScoreType gapPenalty(LengthType length) const
 	{
 		if (length == 0) return 0;
