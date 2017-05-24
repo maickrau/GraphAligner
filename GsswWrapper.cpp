@@ -240,14 +240,14 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			continue;
 		}
 		std::vector<std::tuple<int, DirectedGraph>> components;
-		std::vector<std::pair<GraphAligner<uint32_t, int32_t>::SeedHit, GraphAligner<uint32_t, int32_t>::SeedHit>> graphAlignerSeedHits;
+		std::vector<std::pair<int, size_t>> graphAlignerSeedHits;
 		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
 		{
 			auto& seedhit = seedhits.at(fastq)[j];
 			//add seed hit to both strands
 			if (seedhit.path().mapping(0).position().node_id() > 0)
 			{
-				graphAlignerSeedHits.emplace_back(GraphAligner<uint32_t, int32_t>::SeedHit(seedhit.query_position(), seedhit.path().mapping(0).position().node_id() * 2), GraphAligner<uint32_t, int32_t>::SeedHit(seedhit.query_position(), seedhit.path().mapping(0).position().node_id() * 2+1));
+				graphAlignerSeedHits.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position());
 			}
 			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
 			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size());
@@ -291,6 +291,14 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			}
 		}
 		cerroutput << "thread " << threadnum << " augmented graph is " << GraphSizeInBp(augmentedGraph) << "bp" << BufferedWriter::Flush;
+		auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits);
+		std::vector<int> augmentedGraphReachable;
+		for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
+		{
+			augmentedGraphReachable.push_back(augmentedGraphSeedHits[i].nodeId);
+		}
+		augmentedGraph.PruneByReachability(augmentedGraphReachable);
+		cerroutput << "thread " << threadnum << " augmented graph after pruning is " << GraphSizeInBp(augmentedGraph) << "bp" << BufferedWriter::Flush;
 		coutoutput << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << "\n";
 		OrderByFeedbackVertexset(augmentedGraph);
 		coutoutput << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << BufferedWriter::Flush;
@@ -308,8 +316,13 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		}
 		augmentedGraphAlignment.Finalize();
 
+		std::vector<GraphAligner<uint32_t, int32_t>::SeedHit> alignerSeedHits;
+		for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
+		{
+			alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
+		}
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth, graphAlignerSeedHits);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth, alignerSeedHits);
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment, augmentedGraph);
 

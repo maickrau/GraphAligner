@@ -1,6 +1,14 @@
+#include <cassert>
 #include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
+
+DirectedGraph::SeedHit::SeedHit(int nodeId, size_t nodePos, size_t seqPos) : 
+nodeId(nodeId), 
+nodePos(nodePos), 
+seqPos(seqPos) 
+{
+}
 
 DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence) :
 nodeId(nodeId),
@@ -206,4 +214,102 @@ void DirectedGraph::ConnectComponents(const std::vector<int>& previousSinksIds, 
 			edges.emplace_back(idToIndex[previousSinksIds[i]], idToIndex[nextSourcesIds[j]]);
 		}
 	}
+}
+
+size_t longestExactMatch(const std::string& left, size_t leftpos, const std::string& right, size_t rightpos)
+{
+	assert(rightpos < right.size());
+	assert(leftpos < left.size());
+	size_t maxlen = std::min(right.size() - rightpos, left.size() - leftpos);
+	size_t length = 0;
+	while (left[leftpos + length] == right[rightpos + length] && length < maxlen)
+	{
+		length++;
+	}
+	return length;
+}
+
+std::pair<size_t, size_t> DirectedGraph::getLongestExactMatch(const std::string& sequence, size_t seqPos, size_t nodeIndex) const
+{
+	assert(nodeIndex >= 0);
+	assert(nodeIndex < nodes.size());
+	size_t bestPos = 0;
+	size_t longestMatchLen = 0;
+	for (size_t i = 0; i < nodes[nodeIndex].sequence.size(); i++)
+	{
+		auto matchHere = longestExactMatch(sequence, seqPos, nodes[nodeIndex].sequence, i);
+		if (matchHere > longestMatchLen)
+		{
+			longestMatchLen = matchHere;
+			bestPos = i;
+		}
+	}
+	return std::make_pair(bestPos, longestMatchLen);
+}
+
+std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const
+{
+	std::vector<SeedHit> result;
+	for (size_t i = 0; i < hitsOriginalNodeIds.size(); i++)
+	{
+		std::pair<SeedHit, size_t> bestHit {{0, 0, 0}, 0};
+		for (size_t j = 0; j < nodes.size(); j++)
+		{
+			if (nodes[j].originalNodeId == hitsOriginalNodeIds[i].first)
+			{
+				auto hit = getLongestExactMatch(sequence, hitsOriginalNodeIds[i].second, j);
+				if (hit.second > bestHit.second)
+				{
+					bestHit = std::make_pair(SeedHit(nodes[j].nodeId, hit.first, hitsOriginalNodeIds[i].second), hit.second);
+				}
+			}
+		}
+		if (bestHit.second > 0)
+		{
+			result.push_back(bestHit.first);
+		}
+	}
+	return result;
+}
+
+void DirectedGraph::addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current)
+{
+	assert(current < nodes.size());
+	reachable[current] = true;
+	for (size_t i = 0; i < outNeighbors[current].size(); i++)
+	{
+		if (reachable[outNeighbors[current][i]]) continue;
+		addReachable(reachable, outNeighbors, outNeighbors[current][i]);
+	}
+}
+
+void DirectedGraph::PruneByReachability(const std::vector<int>& startNodeIds)
+{
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
+	std::vector<std::vector<size_t>> outNeighbors;
+	outNeighbors.resize(nodes.size());
+	for (size_t i = 0; i < edges.size(); i++)
+	{
+		outNeighbors[edges[i].fromIndex].push_back(edges[i].toIndex);
+	}
+	std::vector<bool> reachable;
+	reachable.resize(nodes.size(), false);
+	std::set<int> start;
+	start.insert(startNodeIds.begin(), startNodeIds.end());
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		if (start.count(nodes[i].nodeId) > 0)
+		{
+			addReachable(reachable, outNeighbors, i);
+		}
+	}
+	std::set<int> removeThese;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		if (!reachable[i]) removeThese.insert(i);
+	}
+	RemoveNodes(removeThese);
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
 }

@@ -8,6 +8,14 @@
 class DirectedGraph
 {
 public:
+	struct SeedHit
+	{
+	public:
+		SeedHit(int nodeId, size_t nodePos, size_t seqPos);
+		int nodeId;
+		size_t nodePos;
+		size_t seqPos;
+	};
 	struct Node
 	{
 		Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence);
@@ -30,7 +38,11 @@ public:
 	void RemoveNodes(const std::set<int>& nodeIndices);
 	void AddSubgraph(const DirectedGraph& subgraph);
 	void ConnectComponents(const std::vector<int>& previousSinks, const std::vector<int>& nextSources);
+	std::vector<SeedHit> GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const;
+	void PruneByReachability(const std::vector<int>& startNodeIds);
 private:
+	void addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current);
+	std::pair<size_t, size_t> getLongestExactMatch(const std::string& sequence, size_t seqPos, size_t nodeIndex) const;
 	bool edgesPointToValidNodes();
 	bool nodeIdsAreValid();
 };

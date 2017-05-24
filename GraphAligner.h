@@ -35,9 +35,10 @@ public:
 	class SeedHit
 	{
 	public:
-		SeedHit(size_t seqPos, int nodeId) : sequencePosition(seqPos), nodeId(nodeId) {};
+		SeedHit(size_t seqPos, int nodeId, size_t nodePos) : sequencePosition(seqPos), nodeId(nodeId), nodePos(nodePos) {};
 		size_t sequencePosition;
 		int nodeId;
+		size_t nodePos;
 	};
 
 	GraphAligner() :
@@ -127,7 +128,7 @@ public:
 		finalized = true;
 	}
 
-	vg::Alignment AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse, int bandWidth, const std::vector<std::pair<SeedHit, SeedHit>>& seedHits) const
+	vg::Alignment AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse, int bandWidth, const std::vector<SeedHit>& seedHits) const
 	{
 		assert(finalized);
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, seedHits);
@@ -143,55 +144,13 @@ public:
 
 private:
 
-	size_t longestExactMatch(const std::string& left, size_t leftpos, size_t nodeSequencesPos, size_t maxlen) const
-	{
-		assert(nodeSequencesPos < nodeSequences.size());
-		assert(nodeSequencesPos + maxlen <= nodeSequences.size());
-		assert(leftpos < left.size());
-		assert(leftpos + maxlen <= left.size());
-		size_t length = 0;
-		while (left[leftpos + length] == nodeSequences[nodeSequencesPos + length] && length < maxlen)
-		{
-			length++;
-		}
-		return length;
-	}
-
-	std::pair<MatrixPosition, LengthType> getLongestExactMatch(const std::string& sequence, size_t seqPos, int nodeId) const
-	{
-		assert(nodeId >= 0);
-		assert(nodeId < nodeStart.size());
-		MatrixPosition bestPos;
-		LengthType longestMatchLen = 0;
-		for (size_t i = nodeStart[nodeId]; i < nodeEnd[nodeId]; i++)
-		{
-			auto matchHere = longestExactMatch(sequence, seqPos, i, std::min(nodeEnd[nodeId]-i, sequence.size()-seqPos));
-			if (matchHere > longestMatchLen)
-			{
-				longestMatchLen = matchHere;
-				bestPos = std::make_pair(i, seqPos);
-			}
-		}
-		return std::make_pair(bestPos, longestMatchLen);
-	}
-
-	std::vector<MatrixPosition> getSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<std::pair<SeedHit, SeedHit>>& seedHits) const
+	std::vector<MatrixPosition> getSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const
 	{
 		std::vector<MatrixPosition> result;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			assert(nodeLookup.count(seedHits[i].first.nodeId) > 0);
-			assert(nodeLookup.count(seedHits[i].second.nodeId) > 0);
-			std::pair<MatrixPosition, LengthType> forwardMatch = getLongestExactMatch(sequence, seedHits[i].first.sequencePosition, nodeLookup.at(seedHits[i].first.nodeId));
-			std::pair<MatrixPosition, LengthType> backwardMatch = getLongestExactMatch(sequence, seedHits[i].second.sequencePosition, nodeLookup.at(seedHits[i].second.nodeId));
-			if (forwardMatch.second > backwardMatch.second)
-			{
-				result.push_back(forwardMatch.first);
-			}
-			else
-			{
-				result.push_back(backwardMatch.first);
-			}
+			assert(nodeLookup.count(seedHits[i].nodeId) > 0);
+			result.emplace_back(nodeStart[nodeLookup.at(seedHits[i].nodeId)] + seedHits[i].nodePos, seedHits[i].sequencePosition);
 		}
 		return result;
 	}
