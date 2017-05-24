@@ -502,113 +502,125 @@ private:
 	}
 
 	template <bool matrixOrder>
-	void expandBandRightwards(Array2D<int, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandDownRight(Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto end = nodeEnd[nodeIndex];
-		while (w != end && bandWidth > 0)
+		while (w != end && j < matrix.sizeColumns())
 		{
-			matrix(w, j) = bandWidth;
+			matrix(w, j) = true;
 			w++;
-			bandWidth--;
-			if (w != end && matrix(w, j) >= bandWidth) return;
+			j++;
+			if (w != end && j < matrix.sizeColumns() && matrix(w, j)) return;
 		}
-		if (w == end && bandWidth > 0)
+		if (j < matrix.sizeColumns())
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
-				expandBandRightwards(matrix, nodeStart[outNeighbors[nodeIndex][i]], j, bandWidth);
+				expandBandDownRight(matrix, nodeStart[outNeighbors[nodeIndex][i]], j);
 			}
 		}
 	}
 
 	template <bool matrixOrder>
-	void expandBandLeftwards(Array2D<int, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandRightwards(std::vector<MatrixPosition>& diagonallyExpandable, Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
+	{
+		auto nodeIndex = indexToNode[w];
+		auto end = nodeEnd[nodeIndex];
+		while (w != end && bandWidth > 0)
+		{
+			matrix(w, j) = true;
+			diagonallyExpandable.emplace_back(w, j);
+			w++;
+			bandWidth--;
+			if (w != end && matrix(w, j)) return;
+		}
+		if (w == end && bandWidth > 0)
+		{
+			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+			{
+				expandBandRightwards(diagonallyExpandable, matrix, nodeStart[outNeighbors[nodeIndex][i]], j, bandWidth);
+			}
+		}
+	}
+
+	template <bool matrixOrder>
+	void expandBandUpLeft(Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j) const
+	{
+		if (j == 0)
+		{
+			matrix(w, j) = true;
+			return;
+		}
+		auto nodeIndex = indexToNode[w];
+		auto start = nodeStart[nodeIndex];
+		while (w != start && j > 0)
+		{
+			matrix(w, j) = true;
+			w--;
+			j--;
+			if (w != start && j > 0 && matrix(w, j)) return;
+		}
+		matrix(w, j) = true;
+		if (w == start && j > 0)
+		{
+			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+			{
+				expandBandUpLeft(matrix, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j-1);
+			}
+		}
+	}
+
+	template <bool matrixOrder>
+	void expandBandLeftwards(std::vector<MatrixPosition>& diagonallyExpandable, Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto start = nodeStart[nodeIndex];
 		while (w != start && bandWidth > 0)
 		{
-			matrix(w, j) = bandWidth;
+			matrix(w, j) = true;
+			diagonallyExpandable.emplace_back(w, j);
 			w--;
 			bandWidth--;
-			if (w != start && matrix(w, j) >= bandWidth) return;
+			if (w != start && matrix(w, j)) return;
 		}
 		if (w == start && bandWidth > 0)
 		{
-			matrix(w, j) = bandWidth;
+			matrix(w, j) = true;
+			diagonallyExpandable.emplace_back(w, j);
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
-				expandBandLeftwards(matrix, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j, bandWidth-1);
+				expandBandLeftwards(diagonallyExpandable, matrix, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j, bandWidth-1);
 			}
 		}
 	}
 
 	Array2D<bool, false> getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
-		Array2D<int, false> forward {nodeSequences.size(), sequenceLength+1, 0};
-		Array2D<int, false> backward {nodeSequences.size(), sequenceLength+1, 0};
+		Array2D<bool, false> forward {nodeSequences.size(), sequenceLength+1, 0};
+		Array2D<bool, false> backward {nodeSequences.size(), sequenceLength+1, 0};
 		Array2D<bool, false> result {nodeSequences.size(), sequenceLength+1, false};
+		std::vector<MatrixPosition> diagonallyExpandable;
 		for (auto pos : seedHits)
 		{
 			std::cerr << "seed hit: " << pos.first << ", " << pos.second << std::endl;
 			forward(pos.first, pos.second) = bandWidth;
 			backward(pos.first, pos.second) = bandWidth;
-			expandBandRightwards(forward, pos.first, pos.second, bandWidth);
-			expandBandRightwards(backward, pos.first, pos.second, bandWidth);
-			expandBandLeftwards(forward, pos.first, pos.second, bandWidth);
-			expandBandLeftwards(backward, pos.first, pos.second, bandWidth);
+			expandBandRightwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
+			expandBandRightwards(diagonallyExpandable, backward, pos.first, pos.second, bandWidth);
+			expandBandLeftwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
+			expandBandLeftwards(diagonallyExpandable, backward, pos.first, pos.second, bandWidth);
 		}
-		for (size_t j = 0; j < sequenceLength+1; j++)
+		for (auto x : diagonallyExpandable)
 		{
-			for (size_t w = 0; w < nodeSequences.size(); w++)
-			{
-				if (forward(w, j) > 0) continue;
-				auto nodeIndex = indexToNode[w];
-				if (nodeStart[nodeIndex] == w)
-				{
-					for (size_t neighbori = 0; neighbori < inNeighbors[nodeIndex].size(); neighbori++)
-					{
-						assert(inNeighbors[nodeIndex][neighbori] < nodeEnd.size());
-						auto u = nodeEnd[inNeighbors[nodeIndex][neighbori]]-1;
-						assert(u < nodeSequences.size());
-						if (forward(u, j-1) > 0) forward(w, j) = 1;
-					}
-				}
-				else
-				{
-					if (forward(w-1, j-1) > 0) forward(w, j) = 1;
-				}
-			}
-		}
-		for (size_t j = sequenceLength; j < sequenceLength+1; j--)
-		{
-			for (size_t w = nodeSequences.size()-1; w < nodeSequences.size(); w--)
-			{
-				if (backward(w, j) > 0) continue;
-				auto nodeIndex = indexToNode[w];
-				if (nodeEnd[nodeIndex]-1 == w)
-				{
-					for (size_t neighbori = 0; neighbori < outNeighbors[nodeIndex].size(); neighbori++)
-					{
-						assert(outNeighbors[nodeIndex][neighbori] < nodeEnd.size());
-						auto u = nodeStart[outNeighbors[nodeIndex][neighbori]];
-						assert(u < nodeSequences.size());
-						if (backward(u, j+1) > 0) backward(w, j) = 1;
-					}
-				}
-				else
-				{
-					if (backward(w+1, j+1) > 0) backward(w, j) = 1;
-				}
-			}
-			result(0, j) = true;
+			expandBandDownRight(forward, x.first, x.second);
+			expandBandUpLeft(backward, x.first, x.second);
 		}
 		for (size_t j = 0; j < sequenceLength+1; j++)
 		{
 			for (size_t w = 1; w < nodeSequences.size(); w++)
 			{
-				result(w, j) = forward(w, j) > 0 || backward(w, j) > 0;
+				result(w, j) = forward(w, j) || backward(w, j);
 			}
 		}
 		return result;
