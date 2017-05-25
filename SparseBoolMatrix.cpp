@@ -28,12 +28,12 @@ bool SparseBoolMatrix::operator()(size_t column, size_t row) const
 	return get(column, row);
 }
 
-std::set<size_t>::const_iterator SparseBoolMatrix::rowStart(size_t row) const
+std::unordered_set<size_t>::const_iterator SparseBoolMatrix::rowStart(size_t row) const
 {
 	return rows[row].begin();
 }
 
-std::set<size_t>::const_iterator SparseBoolMatrix::rowEnd(size_t row) const
+std::unordered_set<size_t>::const_iterator SparseBoolMatrix::rowEnd(size_t row) const
 {
 	return rows[row].end();
 }

@@ -1,7 +1,7 @@
 #ifndef SparseMatrix_h
 #define SparseMatrix_h
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 template <typename T>
@@ -41,7 +41,7 @@ public:
 private:
 	size_t numColumns;
 	size_t numRows;
-	std::vector<std::map<size_t, T>> rows;
+	std::vector<std::unordered_map<size_t, T>> rows;
 };
 
 #endif

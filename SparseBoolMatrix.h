@@ -1,7 +1,7 @@
 #ifndef SparseBoolMatrix_h
 #define SparseBoolMatrix_h
 
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 class SparseBoolMatrix
@@ -12,8 +12,8 @@ public:
 	void set(size_t column, size_t row);
 	void unset(size_t column, size_t row);
 	bool operator()(size_t column, size_t row) const;
-	std::set<size_t>::const_iterator rowStart(size_t row) const;
-	std::set<size_t>::const_iterator rowEnd(size_t row) const;
+	std::unordered_set<size_t>::const_iterator rowStart(size_t row) const;
+	std::unordered_set<size_t>::const_iterator rowEnd(size_t row) const;
 	template<typename Iterator>
 	void addRow(size_t row, Iterator start, Iterator end)
 	{
@@ -25,7 +25,7 @@ public:
 private:
 	size_t numColumns;
 	size_t numRows;
-	std::vector<std::set<size_t>> rows;
+	std::vector<std::unordered_set<size_t>> rows;
 };
 
 #endif
