@@ -15,6 +15,7 @@
 #include <boost/graph/johnson_all_pairs_shortest.hpp>
 #include "vg.pb.h"
 #include "2dArray.h"
+#include "SparseBoolMatrix.h"
 
 using namespace boost;
 
@@ -195,8 +196,8 @@ private:
 		return result;
 	}
 
-	template <bool backtraceOrder, bool bandOrder, bool distanceMatrixOrder>
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const Array2D<MatrixPosition, backtraceOrder>& backtraceMatrix, const Array2D<bool, bandOrder>& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
+	template <bool backtraceOrder, bool distanceMatrixOrder>
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const Array2D<MatrixPosition, backtraceOrder>& backtraceMatrix, const SparseBoolMatrix& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
 	{
 		auto bandLocations = getBandLocations(sequenceLength, seedHits);
 		assert(backtraceMatrix.sizeColumns() == sequenceLength+1);
@@ -325,8 +326,35 @@ private:
 		return result;
 	}
 
-	template<bool distanceMatrixOrder, bool bandOrder, bool backtraceOrder>
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const std::vector<LengthType>& nodeOrdering, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const Array2D<bool, bandOrder>& band, Array2D<MatrixPosition, backtraceOrder>& backtrace) const
+	std::pair<bool, std::vector<LengthType>> getProcessableColumns(const SparseBoolMatrix& matrix, LengthType j) const
+	{
+		std::vector<LengthType> result;
+		std::vector<LengthType> inOrder;
+		bool hasWrongOrders = false;
+		result.reserve(matrix.rowSize(j));
+		inOrder.reserve(matrix.rowSize(j));
+		for (auto iter = matrix.rowStart(j); iter != matrix.rowEnd(j); iter++)
+		{
+			auto w = *iter;
+			if (w == 0) continue;
+			auto nodeIndex = indexToNode[w];
+			if (nodeStart[nodeIndex] == w && notInOrder[nodeIndex])
+			{
+				result.push_back(w);
+				hasWrongOrders = true;
+			}
+			else
+			{
+				inOrder.push_back(w);
+			}
+		}
+		std::sort(inOrder.begin(), inOrder.end());
+		result.insert(result.end(), inOrder.begin(), inOrder.end());
+		return std::make_pair(hasWrongOrders, result);
+	}
+
+	template<bool distanceMatrixOrder, bool backtraceOrder>
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const SparseBoolMatrix& band, Array2D<MatrixPosition, backtraceOrder>& backtrace) const
 	{
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
@@ -334,8 +362,6 @@ private:
 		std::vector<ScoreType> Q2;
 		std::vector<ScoreType> R1;
 		std::vector<ScoreType> R2;
-		std::vector<LengthType> processableColumns1;
-		std::vector<LengthType> processableColumns2;
 		std::vector<MatrixPosition> Rbacktrace1;
 		std::vector<MatrixPosition> Rbacktrace2;
 		assert(previous.M.size() == nodeSequences.size());
@@ -345,8 +371,6 @@ private:
 		assert(previous.Qbacktrace.size() == nodeSequences.size());
 		MatrixSlice result;
 		std::vector<MatrixPosition> Qbacktrace;
-		processableColumns1.reserve(nodeSequences.size());
-		processableColumns2.reserve(nodeSequences.size());
 		M1.resize(nodeSequences.size());
 		Q1.resize(nodeSequences.size());
 		R1.resize(nodeSequences.size());
@@ -368,27 +392,15 @@ private:
 		previousR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 		currentM[0] = -gapPenalty(start + 1);
 		previousM[0] = -gapPenalty(start);
-		std::vector<LengthType>& currentProcessableColumns = processableColumns1;
-		std::vector<LengthType>& previousProcessableColumns = processableColumns2;
-		for (auto w : nodeOrdering)
-		{
-			if (band(w, start)) previousProcessableColumns.push_back(w);
-		}
+		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, start);
 		for (LengthType j = 1; j < end - start; j++)
 		{
-			currentProcessableColumns.clear();
-			int insideBand = 0;
-			for (LengthType w : nodeOrdering)
-			{
-				if (band(w, start+j)) 
-				{
-					currentProcessableColumns.push_back(w);
-					insideBand++;
-				}
-			}
-			std::cerr << "inside band: " << insideBand << std::endl;
-			std::cerr << "current processable columns: " << currentProcessableColumns.size() << std::endl;
+			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, start+j);
+			auto& previousProcessableColumns = previousProcessableColumnsAndOrder.second;
+			auto& currentProcessableColumns = currentProcessableColumnsAndOrder.second;
+			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
 			std::cerr << "previous processable columns: " << previousProcessableColumns.size() << std::endl;
+			std::cerr << "current processable columns: " << currentProcessableColumns.size() << std::endl;
 			currentM[0] = -gapPenalty(start + j);
 			currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
@@ -490,7 +502,7 @@ private:
 			std::swap(currentQ, previousQ);
 			std::swap(currentR, previousR);
 			std::swap(currentRbacktrace, previousRbacktrace);
-			std::swap(currentProcessableColumns, previousProcessableColumns);
+			previousProcessableColumnsAndOrder = std::move(currentProcessableColumnsAndOrder);
 		}
 		result.Qbacktrace = Qbacktrace;
 		//use previous instead of current because the last line swapped them
@@ -501,19 +513,18 @@ private:
 		return result;
 	}
 
-	template <bool matrixOrder>
-	void expandBandDownRight(Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j) const
+	void expandBandDownRight(SparseBoolMatrix& matrix, LengthType w, LengthType j) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto end = nodeEnd[nodeIndex];
-		while (w != end && j < matrix.sizeColumns())
+		while (w != end && j < matrix.sizeRows())
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			w++;
 			j++;
-			if (w != end && j < matrix.sizeColumns() && matrix(w, j)) return;
+			if (w != end && j < matrix.sizeRows() && matrix(w, j)) return;
 		}
-		if (j < matrix.sizeColumns())
+		if (j < matrix.sizeRows())
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
@@ -522,14 +533,13 @@ private:
 		}
 	}
 
-	template <bool matrixOrder>
-	void expandBandRightwards(std::vector<MatrixPosition>& diagonallyExpandable, Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandRightwards(std::vector<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto end = nodeEnd[nodeIndex];
 		while (w != end && bandWidth > 0)
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			diagonallyExpandable.emplace_back(w, j);
 			w++;
 			bandWidth--;
@@ -544,24 +554,23 @@ private:
 		}
 	}
 
-	template <bool matrixOrder>
-	void expandBandUpLeft(Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j) const
+	void expandBandUpLeft(SparseBoolMatrix& matrix, LengthType w, LengthType j) const
 	{
 		if (j == 0)
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			return;
 		}
 		auto nodeIndex = indexToNode[w];
 		auto start = nodeStart[nodeIndex];
 		while (w != start && j > 0)
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			w--;
 			j--;
 			if (w != start && j > 0 && matrix(w, j)) return;
 		}
-		matrix(w, j) = true;
+		matrix.set(w, j);
 		if (w == start && j > 0)
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
@@ -571,14 +580,13 @@ private:
 		}
 	}
 
-	template <bool matrixOrder>
-	void expandBandLeftwards(std::vector<MatrixPosition>& diagonallyExpandable, Array2D<bool, matrixOrder>& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandLeftwards(std::vector<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto start = nodeStart[nodeIndex];
 		while (w != start && bandWidth > 0)
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			diagonallyExpandable.emplace_back(w, j);
 			w--;
 			bandWidth--;
@@ -586,7 +594,7 @@ private:
 		}
 		if (w == start && bandWidth > 0)
 		{
-			matrix(w, j) = true;
+			matrix.set(w, j);
 			diagonallyExpandable.emplace_back(w, j);
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
@@ -595,33 +603,21 @@ private:
 		}
 	}
 
-	Array2D<bool, false> getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
+	SparseBoolMatrix getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
-		Array2D<bool, false> forward {nodeSequences.size(), sequenceLength+1, 0};
-		Array2D<bool, false> backward {nodeSequences.size(), sequenceLength+1, 0};
-		Array2D<bool, false> result {nodeSequences.size(), sequenceLength+1, false};
+		SparseBoolMatrix result {nodeSequences.size(), sequenceLength+1};
 		std::vector<MatrixPosition> diagonallyExpandable;
 		for (auto pos : seedHits)
 		{
 			std::cerr << "seed hit: " << pos.first << ", " << pos.second << std::endl;
-			forward(pos.first, pos.second) = bandWidth;
-			backward(pos.first, pos.second) = bandWidth;
-			expandBandRightwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
-			expandBandRightwards(diagonallyExpandable, backward, pos.first, pos.second, bandWidth);
-			expandBandLeftwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
-			expandBandLeftwards(diagonallyExpandable, backward, pos.first, pos.second, bandWidth);
+			result.set(pos.first, pos.second);
+			expandBandRightwards(diagonallyExpandable, result, pos.first, pos.second, bandWidth);
+			expandBandLeftwards(diagonallyExpandable, result, pos.first, pos.second, bandWidth);
 		}
 		for (auto x : diagonallyExpandable)
 		{
-			expandBandDownRight(forward, x.first, x.second);
-			expandBandUpLeft(backward, x.first, x.second);
-		}
-		for (size_t j = 0; j < sequenceLength+1; j++)
-		{
-			for (size_t w = 1; w < nodeSequences.size(); w++)
-			{
-				result(w, j) = forward(w, j) || backward(w, j);
-			}
+			expandBandDownRight(result, x.first, x.second);
+			expandBandUpLeft(result, x.first, x.second);
 		}
 		return result;
 	}
@@ -631,24 +627,6 @@ private:
 		auto band = getBandedRows(seedHits, bandWidth, sequence.size());
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
-		std::vector<LengthType> nodeOrdering;
-		std::vector<LengthType> nodeNotOrdering;
-		nodeOrdering.reserve(nodeSequences.size());
-		for (LengthType i = 1; i < nodeSequences.size(); i++)
-		{
-			auto nodeIndex = indexToNode[i];
-			if (i == nodeStart[nodeIndex] && notInOrder[nodeIndex])
-			{
-				nodeOrdering.emplace_back(i);
-				hasWrongOrders = true;
-			}
-			else{
-				nodeNotOrdering.emplace_back(i);
-			}
-		}
-		nodeOrdering.insert(nodeOrdering.end(), nodeNotOrdering.begin(), nodeNotOrdering.end());
-		nodeNotOrdering.clear();
-		assert(nodeOrdering.size() == nodeSequences.size() - 1);
 		Array2D<MatrixPosition, true> backtraceMatrix {nodeSequences.size(), sequence.size() + 1, std::make_pair(0, 0)};
 		MatrixSlice lastRow = getFirstSlice(bandWidth, backtraceMatrix);
 		int sliceSize = sequence.size();
@@ -659,7 +637,7 @@ private:
 		{
 			LengthType end = start + sliceSize;
 			if (end > sequence.size()+1) end = sequence.size();
-			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, nodeOrdering, distanceMatrix, lastRow, start-1, end, bandWidth, band, backtraceMatrix);
+			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, distanceMatrix, lastRow, start-1, end, bandWidth, band, backtraceMatrix);
 			lastRowScore = slice.M;
 			lastRow = std::move(slice);
 			start = end;
@@ -712,8 +690,7 @@ private:
 		return result;
 	}
 
-	template <bool bandOrder>
-	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, LengthType start, const std::vector<ScoreType>& previousM, const std::string& sequence, const Array2D<bool, bandOrder>& band, const std::vector<LengthType>& previousProcessableColumns) const
+	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, LengthType start, const std::vector<ScoreType>& previousM, const std::string& sequence, const SparseBoolMatrix& band, const std::vector<LengthType>& previousProcessableColumns) const
 	{
 		if (j == 0) return getRHelperZero();
 		if (j == 1 && start == 0) return getRHelperOne();
@@ -758,8 +735,7 @@ private:
 		return result;
 	}
 
-	template <bool bandOrder>
-	bool hasInNeighborInsideBand(LengthType w, LengthType j, LengthType start, const Array2D<bool, bandOrder>& band) const
+	bool hasInNeighborInsideBand(LengthType w, LengthType j, LengthType start, const SparseBoolMatrix& band) const
 	{
 		auto nodeIndex = indexToNode[w];
 		if (nodeStart[nodeIndex] == w)
@@ -777,8 +753,7 @@ private:
 	}
 
 	//compute R using the recurrence on page 3
-	template <bool bandOrder>
-	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, LengthType start, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const Array2D<bool, bandOrder>& band) const
+	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, LengthType start, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const SparseBoolMatrix& band) const
 	{
 		assert(band(w, start+j));
 		auto nodeIndex = indexToNode[w];
