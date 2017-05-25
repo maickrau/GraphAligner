@@ -246,9 +246,9 @@ private:
 			assert(currentPosition.second < sequenceLength+1);
 			assert(currentPosition.first >= 0);
 			assert(currentPosition.first < nodeSequences.size());
-			auto newPos = backtraceMatrix(currentPosition.first, currentPosition.second);
 			//If we're at the dummy node, we have to stay there
-			assert(currentPosition.first == 0 ? (newPos.first == 0) : true);
+			if (currentPosition.first == 0) break;
+			auto newPos = backtraceMatrix(currentPosition.first, currentPosition.second);
 			assert(newPos.second < currentPosition.second || (newPos.second == currentPosition.second && newPos.first < currentPosition.first));
 			currentPosition = newPos;
 			trace.push_back(currentPosition);
@@ -536,14 +536,14 @@ private:
 		}
 	}
 
-	void expandBandRightwards(std::vector<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandRightwards(std::set<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto end = nodeEnd[nodeIndex];
 		while (w != end && bandWidth > 0)
 		{
 			matrix.set(w, j);
-			diagonallyExpandable.emplace_back(w, j);
+			diagonallyExpandable.emplace(w, j);
 			w++;
 			bandWidth--;
 			if (w != end && matrix(w, j)) return;
@@ -583,14 +583,14 @@ private:
 		}
 	}
 
-	void expandBandLeftwards(std::vector<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
+	void expandBandLeftwards(std::set<MatrixPosition>& diagonallyExpandable, SparseBoolMatrix& matrix, LengthType w, LengthType j, int bandWidth) const
 	{
 		auto nodeIndex = indexToNode[w];
 		auto start = nodeStart[nodeIndex];
 		while (w != start && bandWidth > 0)
 		{
 			matrix.set(w, j);
-			diagonallyExpandable.emplace_back(w, j);
+			diagonallyExpandable.emplace(w, j);
 			w--;
 			bandWidth--;
 			if (w != start && matrix(w, j)) return;
@@ -598,7 +598,7 @@ private:
 		if (w == start && bandWidth > 0)
 		{
 			matrix.set(w, j);
-			diagonallyExpandable.emplace_back(w, j);
+			diagonallyExpandable.emplace(w, j);
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				expandBandLeftwards(diagonallyExpandable, matrix, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j, bandWidth-1);
@@ -609,7 +609,7 @@ private:
 	SparseBoolMatrix getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
 		SparseBoolMatrix result {nodeSequences.size(), sequenceLength+1};
-		std::vector<MatrixPosition> diagonallyExpandable;
+		std::set<MatrixPosition> diagonallyExpandable;
 		for (auto pos : seedHits)
 		{
 			std::cerr << "seed hit: " << pos.first << ", " << pos.second << std::endl;
