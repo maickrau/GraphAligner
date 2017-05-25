@@ -16,6 +16,7 @@
 #include "vg.pb.h"
 #include "2dArray.h"
 #include "SparseBoolMatrix.h"
+#include "SparseMatrix.h"
 
 using namespace boost;
 
@@ -196,12 +197,12 @@ private:
 		return result;
 	}
 
-	template <bool backtraceOrder, bool distanceMatrixOrder>
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const Array2D<MatrixPosition, backtraceOrder>& backtraceMatrix, const SparseBoolMatrix& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
+	template <bool distanceMatrixOrder>
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const SparseBoolMatrix& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
 	{
 		auto bandLocations = getBandLocations(sequenceLength, seedHits);
-		assert(backtraceMatrix.sizeColumns() == sequenceLength+1);
-		assert(backtraceMatrix.sizeRows() == nodeSequences.size());
+		assert(backtraceMatrix.sizeRows() == sequenceLength+1);
+		assert(backtraceMatrix.sizeColumns() == nodeSequences.size());
 		std::vector<MatrixPosition> trace;
 		bool foundStart = false;
 		MatrixPosition currentPosition = std::make_pair(0, sequenceLength);
@@ -353,8 +354,8 @@ private:
 		return std::make_pair(hasWrongOrders, result);
 	}
 
-	template<bool distanceMatrixOrder, bool backtraceOrder>
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const SparseBoolMatrix& band, Array2D<MatrixPosition, backtraceOrder>& backtrace) const
+	template<bool distanceMatrixOrder>
+	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const SparseBoolMatrix& band, SparseMatrix<MatrixPosition>& backtrace) const
 	{
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
@@ -436,10 +437,11 @@ private:
 					}
 				}
 				currentM[w] = std::numeric_limits<ScoreType>::min() + 99;
+				MatrixPosition foundBacktrace;
 				if (band(w, start+j-1))
 				{
-					backtrace(w, j) = Qbacktrace[w];
-					assert(backtrace(w, j).second < (j + start) || (backtrace(w, j).second == (j + start) && backtrace(w, j).first < w));
+					foundBacktrace = Qbacktrace[w];
+					assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 					currentM[w] = currentQ[w];
 				}
 				//allow this only if R has been computed, so only if fullR condition is true or fullR condition is false and has inneighbors inside the band
@@ -448,8 +450,8 @@ private:
 					if (currentR[w] > currentM[w])
 					{
 						currentM[w] = currentR[w];
-						backtrace(w, j) = currentRbacktrace[w];
-						assert(backtrace(w, j).second < (j + start) || (backtrace(w, j).second == (j + start) && backtrace(w, j).first < w));
+						foundBacktrace = currentRbacktrace[w];
+						assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 					}
 				}
 				if (w == nodeStart[nodeIndex])
@@ -462,8 +464,8 @@ private:
 						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
 						{
 							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
-							backtrace(w, j) = std::make_pair(u, j-1 + start);
-							assert(backtrace(w, j).second < (j + start) || (backtrace(w, j).second == (j + start) && backtrace(w, j).first < w));
+							foundBacktrace = std::make_pair(u, j-1 + start);
+							assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 						}
 					}
 				}
@@ -476,8 +478,8 @@ private:
 						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
 						{
 							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
-							backtrace(w, j) = std::make_pair(u, j-1 + start);
-							assert(backtrace(w, j).second < (j + start) || (backtrace(w, j).second == (j + start) && backtrace(w, j).first < w));
+							foundBacktrace = std::make_pair(u, j-1 + start);
+							assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 						}
 					}
 				}
@@ -495,7 +497,8 @@ private:
 				}
 				assert(currentM[w] >= -std::numeric_limits<ScoreType>::min() + 100);
 				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
-				assert(backtrace(w, j).second < (j + start) || (backtrace(w, j).second == (j + start) && backtrace(w, j).first < w));
+				backtrace.set(w, j, foundBacktrace);
+				assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 			}
 
 			std::swap(currentM, previousM);
@@ -627,7 +630,7 @@ private:
 		auto band = getBandedRows(seedHits, bandWidth, sequence.size());
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
-		Array2D<MatrixPosition, true> backtraceMatrix {nodeSequences.size(), sequence.size() + 1, std::make_pair(0, 0)};
+		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};
 		MatrixSlice lastRow = getFirstSlice(bandWidth, backtraceMatrix);
 		int sliceSize = sequence.size();
 		std::vector<ScoreType> lastRowScore;
@@ -646,8 +649,7 @@ private:
 		return result;
 	}
 
-	template <bool backtraceOrder>
-	MatrixSlice getFirstSlice(int bandWidth, Array2D<MatrixPosition, backtraceOrder>& backtrace) const
+	MatrixSlice getFirstSlice(int bandWidth, SparseMatrix<MatrixPosition>& backtrace) const
 	{
 		MatrixSlice result;
 		result.M.resize(nodeSequences.size(), 0);
@@ -657,7 +659,7 @@ private:
 		result.Qbacktrace.reserve(nodeSequences.size());
 		for (LengthType i = 0; i < nodeSequences.size(); i++)
 		{
-			backtrace(i, 0) = std::make_pair(i, 0);
+			backtrace.set(i, 0, std::make_pair(i, 0));
 			result.Qbacktrace.emplace_back(i, 0);
 			result.Rbacktrace.emplace_back(i, 0);
 		}
