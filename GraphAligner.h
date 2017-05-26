@@ -53,7 +53,8 @@ public:
 	gapStartPenalty(1),
 	gapContinuePenalty(1)
 	{
-		//add the dummy node as the first node
+		//add the start dummy node as the first node
+		dummyNodeStart = nodeSequences.size();
 		nodeIDs.push_back(0);
 		nodeStart.push_back(nodeSequences.size());
 		inNeighbors.emplace_back();
@@ -62,7 +63,6 @@ public:
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
 		notInOrder.push_back(false);
-		finalized = false;
 	}
 	
 	void AddNode(int nodeId, std::string sequence)
@@ -116,17 +116,16 @@ public:
 
 	void Finalize()
 	{
-		//add an edge from the dummy node to all nodes without an in-edge
-		for (LengthType i = 0; i < nodeSequences.size(); i++)
-		{
-			if (nodeStart[indexToNode[i]] == i)
-			{
-				if (inNeighbors[indexToNode[i]].size() == 0)
-				{
-					inNeighbors[indexToNode[i]].push_back(0);
-				}
-			}
-		}
+		//add the end dummy node as the last node
+		dummyNodeEnd = nodeSequences.size();
+		nodeIDs.push_back(0);
+		nodeStart.push_back(nodeSequences.size());
+		inNeighbors.emplace_back();
+		outNeighbors.emplace_back();
+		nodeSequences.push_back('N');
+		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
+		nodeEnd.emplace_back(nodeSequences.size());
+		notInOrder.push_back(false);
 		finalized = true;
 	}
 
@@ -135,6 +134,8 @@ public:
 		assert(finalized);
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, seedHits);
 		auto trace = backtrackWithSquareRootSlices(sequence, bandWidth, seedHitsInMatrix);
+		//failed alignment, don't output
+		if (trace.first == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, trace, reverse);
 		return result;
 	}
@@ -145,6 +146,13 @@ public:
 	}
 
 private:
+
+	vg::Alignment emptyAlignment() const
+	{
+		vg::Alignment result;
+		result.set_score(std::numeric_limits<decltype(result.score())>::min());
+		return result;
+	}
 
 	std::vector<MatrixPosition> getSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const
 	{
@@ -166,13 +174,15 @@ private:
 		result.set_allocated_path(path);
 		size_t pos = 0;
 		size_t oldNode = indexToNode[trace[0].first];
-		while (nodeIDs[oldNode] == 0)
+		while (oldNode == dummyNodeStart)
 		{
 			pos++;
+			if (pos == trace.size()) return emptyAlignment();
 			assert(pos < trace.size());
 			oldNode = indexToNode[trace[pos].first];
 			assert(oldNode < nodeIDs.size());
 		}
+		if (oldNode == dummyNodeEnd) return emptyAlignment();
 		int rank = 0;
 		auto vgmapping = path->add_mapping();
 		auto position = new vg::Position;
@@ -182,9 +192,9 @@ private:
 		if (reverse) position->set_is_reverse(true);
 		for (; pos < trace.size(); pos++)
 		{
+			if (indexToNode[trace[pos].first] == dummyNodeEnd) break;
 			if (indexToNode[trace[pos].first] == oldNode) continue;
 			oldNode = indexToNode[trace[pos].first];
-			if (nodeIDs[oldNode] == 0) break;
 			rank++;
 			vgmapping = path->add_mapping();
 			position = new vg::Position;
@@ -337,7 +347,7 @@ private:
 		for (auto iter = matrix.rowStart(j); iter != matrix.rowEnd(j); iter++)
 		{
 			auto w = *iter;
-			if (w == 0) continue;
+			if (w == dummyNodeStart || w == dummyNodeEnd) continue;
 			auto nodeIndex = indexToNode[w];
 			if (nodeStart[nodeIndex] == w && notInOrder[nodeIndex])
 			{
@@ -389,10 +399,14 @@ private:
 		previousR = std::move(previous.R);
 		Qbacktrace = std::move(previous.Qbacktrace);
 		previousRbacktrace = std::move(previous.Rbacktrace);
-		currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		previousR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		currentM[0] = -gapPenalty(start + 1);
-		previousM[0] = -gapPenalty(start);
+		currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+		previousR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+		currentM[dummyNodeStart] = -gapPenalty(start + 1);
+		previousM[dummyNodeStart] = -gapPenalty(start);
+		currentR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+		previousR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+		currentM[dummyNodeEnd] = -gapPenalty(sequence.size() - start - 1);
+		previousM[dummyNodeEnd] = -gapPenalty(sequence.size() - start);
 		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, start);
 		for (LengthType j = 1; j < end - start; j++)
 		{
@@ -402,8 +416,11 @@ private:
 			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
 			std::cerr << "previous processable columns: " << previousProcessableColumns.size() << std::endl;
 			std::cerr << "current processable columns: " << currentProcessableColumns.size() << std::endl;
-			currentM[0] = -gapPenalty(start + j);
-			currentR[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+			currentM[dummyNodeStart] = -gapPenalty(start + j);
+			currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
+			backtrace.set(dummyNodeStart, start+j, std::make_pair(dummyNodeStart, start+j-1));
+			LengthType maxScorePosition = dummyNodeStart;
+			ScoreType maxScore = currentM[dummyNodeStart];
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
 			if (hasWrongOrders) Rhelper = getRHelper(j, start, previousM, sequence, band, previousProcessableColumns);
 
@@ -413,6 +430,7 @@ private:
 				bool neighborInsideBand = hasInNeighborInsideBand(w, j, start, band);
 				auto nodeIndex = indexToNode[w];
 				currentQ[w] = previousQ[w] - gapContinuePenalty;
+				bool rCalculated = false;
 				if (previousM[w] - gapPenalty(1) > currentQ[w])
 				{
 					currentQ[w] = previousM[w] - gapPenalty(1);
@@ -420,32 +438,37 @@ private:
 				}
 				if (w == nodeStart[nodeIndex] && notInOrder[nodeIndex])
 				{
-					assert(hasWrongOrders);
-					auto rr = fullR(w, j, Rhelper, distanceMatrix, start);
-					currentR[w] = rr.first;
-					currentRbacktrace[w] = rr.second;
-					assert(currentRbacktrace[w].second < (j + start) || (currentRbacktrace[w].second == (j + start) && currentRbacktrace[w].first < w));
+					if (std::any_of(Rhelper.begin(), Rhelper.end(), [w](auto& x) { return x.first != w; }))
+					{
+						rCalculated = true;
+						assert(hasWrongOrders);
+						auto rr = fullR(w, j, Rhelper, distanceMatrix, start);
+						currentR[w] = rr.first;
+						currentRbacktrace[w] = rr.second;
+						assert(currentRbacktrace[w].second < (j + start) || (currentRbacktrace[w].second == (j + start) && currentRbacktrace[w].first < w));
+					}
 				}
 				else
 				{
-					if (neighborInsideBand)
+					if (neighborInsideBand && previousProcessableColumns.size() > 2)
 					{
+						rCalculated = true;
 						auto rr = recurrenceR(w, j, start, currentM, currentR, currentRbacktrace, band);
 						currentR[w] = rr.first;
 						currentRbacktrace[w] = rr.second;
 						assert(currentRbacktrace[w].second < (j + start) || (currentRbacktrace[w].second == (j + start) && currentRbacktrace[w].first < w));
 					}
 				}
-				currentM[w] = std::numeric_limits<ScoreType>::min() + 99;
-				MatrixPosition foundBacktrace;
+				//implicitly handle edges from dummy node by initializing M as coming from the dummy node
+				currentM[w] = currentM[dummyNodeStart];
+				MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j);
 				if (band(w, start+j-1))
 				{
 					foundBacktrace = Qbacktrace[w];
 					assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
 					currentM[w] = currentQ[w];
 				}
-				//allow this only if R has been computed, so only if fullR condition is true or fullR condition is false and has inneighbors inside the band
-				if ((w == nodeStart[nodeIndex] && notInOrder[nodeIndex]) || (!(w == nodeStart[nodeIndex] && notInOrder[nodeIndex]) && neighborInsideBand))
+				if (rCalculated)
 				{
 					if (currentR[w] > currentM[w])
 					{
@@ -489,8 +512,8 @@ private:
 					currentQ[w] = currentM[w];
 					Qbacktrace[w] = std::make_pair(w, j + start);
 				}
-				//if we calculated R using the recurrence but previous columns are not inside the band, initialize it as current M
-				if ((!(w == nodeStart[nodeIndex] && notInOrder[nodeIndex]) && !neighborInsideBand))
+				//if R was unavaliable, initialize it as current M
+				if (!rCalculated)
 				{
 					currentR[w] = currentM[w];
 					currentRbacktrace[w] = std::make_pair(w, j + start);
@@ -499,7 +522,15 @@ private:
 				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
 				backtrace.set(w, j, foundBacktrace);
 				assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+				if (currentM[w] > maxScore)
+				{
+					maxScore = currentM[w];
+					maxScorePosition = w;
+				}
 			}
+
+			currentM[dummyNodeEnd] = maxScore - gapPenalty(sequence.size() - j);
+			backtrace.set(dummyNodeEnd, j, std::make_pair(maxScorePosition, j));
 
 			std::swap(currentM, previousM);
 			std::swap(currentQ, previousQ);
@@ -621,6 +652,11 @@ private:
 		{
 			expandBandDownRight(result, x.first, x.second);
 			expandBandUpLeft(result, x.first, x.second);
+		}
+		for (LengthType j = 0; j < sequenceLength+1; j++)
+		{
+			result.set(dummyNodeStart, j);
+			result.set(dummyNodeEnd, j);
 		}
 		return result;
 	}
@@ -829,6 +865,8 @@ private:
 	template <bool distanceMatrixOrder>
 	LengthType distanceFromSeqToSeq(LengthType start, LengthType end, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
 	{
+		if (start == end) return 0;
+		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
 		auto startNode = indexToNode[start];
 		auto endNode = indexToNode[end];
 		if (startNode == endNode && end >= start) return end - start;
@@ -922,6 +960,8 @@ private:
 	std::string nodeSequences;
 	ScoreType gapStartPenalty;
 	ScoreType gapContinuePenalty;
+	LengthType dummyNodeStart = 0;
+	LengthType dummyNodeEnd = 1;
 	bool finalized;
 };
 

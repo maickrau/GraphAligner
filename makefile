@@ -21,7 +21,10 @@ $(BINDIR)/wrapper: $(OBJ)
 $(BINDIR)/ReadIndexToId: $(OBJ)
 	$(GPP) -o $@ ReadIndexToId.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId
+$(BINDIR)/CompareAlignments: $(OBJ)
+	$(GPP) -o $@ CompareAlignments.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments
 
 clean:
 	rm -f $(ODIR)/*

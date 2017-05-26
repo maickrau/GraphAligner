@@ -300,6 +300,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		augmentedGraph.PruneByReachability(augmentedGraphReachable);
 		cerroutput << "thread " << threadnum << " augmented graph after pruning is " << GraphSizeInBp(augmentedGraph) << "bp" << BufferedWriter::Flush;
 		coutoutput << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << "\n";
+		if (augmentedGraph.nodes.size() == 0) continue;
 		OrderByFeedbackVertexset(augmentedGraph);
 		coutoutput << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << BufferedWriter::Flush;
 
@@ -323,6 +324,9 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		}
 
 		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth, alignerSeedHits);
+
+		//failed alignment, don't output
+		if (alignment.score() == std::numeric_limits<decltype(alignment.score())>::min()) continue;
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment, augmentedGraph);
 

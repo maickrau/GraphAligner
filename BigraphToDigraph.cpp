@@ -137,6 +137,7 @@ void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 		if (nodeIndices.count(edges[i].fromIndex) > 0 || nodeIndices.count(edges[i].toIndex) > 0)
 		{
 			edges.erase(edges.begin() + i);
+			continue;
 		}
 		edges[i].fromIndex -= smallerThan(nodeIndices, edges[i].fromIndex);
 		edges[i].toIndex -= smallerThan(nodeIndices, edges[i].toIndex);
@@ -288,26 +289,32 @@ void DirectedGraph::PruneByReachability(const std::vector<int>& startNodeIds)
 	assert(edgesPointToValidNodes());
 	assert(nodeIdsAreValid());
 	std::vector<std::vector<size_t>> outNeighbors;
+	std::vector<std::vector<size_t>> inNeighbors;
 	outNeighbors.resize(nodes.size());
+	inNeighbors.resize(nodes.size());
 	for (size_t i = 0; i < edges.size(); i++)
 	{
 		outNeighbors[edges[i].fromIndex].push_back(edges[i].toIndex);
+		inNeighbors[edges[i].toIndex].push_back(edges[i].fromIndex);
 	}
-	std::vector<bool> reachable;
-	reachable.resize(nodes.size(), false);
+	std::vector<bool> reachableOut;
+	std::vector<bool> reachableIn;
+	reachableOut.resize(nodes.size(), false);
+	reachableIn.resize(nodes.size(), false);
 	std::set<int> start;
 	start.insert(startNodeIds.begin(), startNodeIds.end());
 	for (size_t i = 0; i < nodes.size(); i++)
 	{
 		if (start.count(nodes[i].nodeId) > 0)
 		{
-			addReachable(reachable, outNeighbors, i);
+			addReachable(reachableOut, outNeighbors, i);
+			addReachable(reachableIn, inNeighbors, i);
 		}
 	}
 	std::set<int> removeThese;
 	for (size_t i = 0; i < nodes.size(); i++)
 	{
-		if (!reachable[i]) removeThese.insert(i);
+		if (!reachableOut[i] && !reachableIn[i]) removeThese.insert(i);
 	}
 	RemoveNodes(removeThese);
 	assert(edgesPointToValidNodes());
