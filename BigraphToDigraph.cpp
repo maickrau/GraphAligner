@@ -217,35 +217,41 @@ void DirectedGraph::ConnectComponents(const std::vector<int>& previousSinksIds, 
 	}
 }
 
-size_t longestExactMatch(const std::string& left, size_t leftpos, const std::string& right, size_t rightpos)
+std::tuple<size_t, size_t, size_t> DirectedGraph::localAlignGetMatch(std::string sequence, size_t nodeIndex) const
 {
-	assert(rightpos < right.size());
-	assert(leftpos < left.size());
-	size_t maxlen = std::min(right.size() - rightpos, left.size() - leftpos);
-	size_t length = 0;
-	while (left[leftpos + length] == right[rightpos + length] && length < maxlen)
+	assert(sequence.size() >= 1);
+	assert(nodes[nodeIndex].sequence.size() >= 1);
+	assert(sequence.size() <= 200);
+	assert(nodes[nodeIndex].sequence.size() <= 200);
+	std::vector<std::vector<int>> score;
+	score.resize(sequence.size()+1);
+	score[0].resize(nodes[nodeIndex].sequence.size()+1, 0);
+	size_t maxScore = 0;
+	size_t maxI = 0;
+	size_t maxJ = 0;
+	for (size_t i = 0; i < sequence.size(); i++)
 	{
-		length++;
-	}
-	return length;
-}
-
-std::pair<size_t, size_t> DirectedGraph::getLongestExactMatch(const std::string& sequence, size_t seqPos, size_t nodeIndex) const
-{
-	assert(nodeIndex >= 0);
-	assert(nodeIndex < nodes.size());
-	size_t bestPos = 0;
-	size_t longestMatchLen = 0;
-	for (size_t i = 0; i < nodes[nodeIndex].sequence.size(); i++)
-	{
-		auto matchHere = longestExactMatch(sequence, seqPos, nodes[nodeIndex].sequence, i);
-		if (matchHere > longestMatchLen)
+		score[i+1].resize(nodes[nodeIndex].sequence.size()+1, 0);
+		for (size_t j = 0; j < nodes[nodeIndex].sequence.size(); j++)
 		{
-			longestMatchLen = matchHere;
-			bestPos = i;
+			if (sequence[i] == nodes[nodeIndex].sequence[j])
+			{
+				score[i+1][j+1] = score[i][j]+1;
+			}
+			else
+			{
+				score[i+1][j+1] = score[i][j]-1;
+			}
+			score[i+1][j+1] = std::max(std::max(score[i+1][j+1], 0), std::max(score[i][j+1]-1, score[i+1][j]-1));
+			if (score[i+1][j+1] > maxScore)
+			{
+				maxScore =score[i+1][j+1];
+				maxI = i;
+				maxJ = j;
+			}
 		}
 	}
-	return std::make_pair(bestPos, longestMatchLen);
+	return std::make_tuple(maxJ, maxI, maxScore);
 }
 
 std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const
@@ -258,10 +264,10 @@ std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string
 		{
 			if (nodes[j].originalNodeId == hitsOriginalNodeIds[i].first)
 			{
-				auto hit = getLongestExactMatch(sequence, hitsOriginalNodeIds[i].second, j);
-				if (hit.second > bestHit.second)
+				auto hit = localAlignGetMatch(sequence.substr(hitsOriginalNodeIds[i].second, 200), j);
+				if (std::get<2>(hit) > bestHit.second)
 				{
-					bestHit = std::make_pair(SeedHit(nodes[j].nodeId, hit.first, hitsOriginalNodeIds[i].second), hit.second);
+					bestHit = std::make_pair(SeedHit(nodes[j].nodeId, std::get<0>(hit), std::get<1>(hit)+hitsOriginalNodeIds[i].second), std::get<2>(hit));
 				}
 			}
 		}
