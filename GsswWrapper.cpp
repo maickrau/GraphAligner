@@ -250,7 +250,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 				graphAlignerSeedHits.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position());
 			}
 			cerroutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
-			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size());
+			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size()*2);
 			DirectedGraph seedGraph {seedGraphUnordered};
 			cerroutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << BufferedWriter::Flush;
 			coutoutput << "component out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;

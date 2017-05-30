@@ -946,7 +946,7 @@ private:
 
 	ScoreType matchScore(char graph, char sequence) const
 	{
-		return graph == sequence ? 1 : -4;
+		return graph == sequence ? 1 : -1;
 	}
 
 	std::vector<bool> notInOrder;
