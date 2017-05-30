@@ -367,6 +367,7 @@ private:
 	template<bool distanceMatrixOrder>
 	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const SparseBoolMatrix& band, SparseMatrix<MatrixPosition>& backtrace) const
 	{
+		std::cerr << "start dp matrix" << std::endl;
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
 		std::vector<ScoreType> Q1;
@@ -667,6 +668,7 @@ private:
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int bandWidth, const std::vector<MatrixPosition>& seedHits) const
 	{
 		auto band = getBandedRows(seedHits, bandWidth, sequence.size());
+		std::cerr << "got banded rows" << std::endl;
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
 		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};

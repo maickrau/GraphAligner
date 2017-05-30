@@ -42,7 +42,7 @@ public:
 	void PruneByReachability(const std::vector<int>& startNodeIds);
 private:
 	void addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current);
-	std::tuple<size_t, size_t, size_t> localAlignGetMatch(std::string sequence, size_t nodeIndex) const;
+	std::tuple<size_t, size_t, size_t> getLocalAlignmentSsw(std::string sequence, size_t nodeIndex) const;
 	bool edgesPointToValidNodes();
 	bool nodeIdsAreValid();
 };

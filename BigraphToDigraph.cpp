@@ -1,4 +1,6 @@
+#include <iostream>
 #include <cassert>
+#include "ssw_cpp.h"
 #include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
@@ -217,41 +219,16 @@ void DirectedGraph::ConnectComponents(const std::vector<int>& previousSinksIds, 
 	}
 }
 
-std::tuple<size_t, size_t, size_t> DirectedGraph::localAlignGetMatch(std::string sequence, size_t nodeIndex) const
+std::tuple<size_t, size_t, size_t> DirectedGraph::getLocalAlignmentSsw(std::string sequence, size_t nodeIndex) const
 {
-	assert(sequence.size() >= 1);
-	assert(nodes[nodeIndex].sequence.size() >= 1);
-	assert(sequence.size() <= 200);
-	assert(nodes[nodeIndex].sequence.size() <= 200);
-	std::vector<std::vector<int>> score;
-	score.resize(sequence.size()+1);
-	score[0].resize(nodes[nodeIndex].sequence.size()+1, 0);
-	size_t maxScore = 0;
-	size_t maxI = 0;
-	size_t maxJ = 0;
-	for (size_t i = 0; i < sequence.size(); i++)
-	{
-		score[i+1].resize(nodes[nodeIndex].sequence.size()+1, 0);
-		for (size_t j = 0; j < nodes[nodeIndex].sequence.size(); j++)
-		{
-			if (sequence[i] == nodes[nodeIndex].sequence[j])
-			{
-				score[i+1][j+1] = score[i][j]+1;
-			}
-			else
-			{
-				score[i+1][j+1] = score[i][j]-1;
-			}
-			score[i+1][j+1] = std::max(std::max(score[i+1][j+1], 0), std::max(score[i][j+1]-1, score[i+1][j]-1));
-			if (score[i+1][j+1] > maxScore)
-			{
-				maxScore =score[i+1][j+1];
-				maxI = i;
-				maxJ = j;
-			}
-		}
-	}
-	return std::make_tuple(maxJ, maxI, maxScore);
+	StripedSmithWaterman::Aligner aligner {2, 5, 2, 1};
+	aligner.SetReferenceSequence(sequence.c_str(), sequence.size());
+	StripedSmithWaterman::Filter filter;
+	filter.report_begin_position = true;
+	filter.report_cigar = false;
+	StripedSmithWaterman::Alignment alignment;
+	aligner.Align(nodes[nodeIndex].sequence.c_str(), filter, &alignment);
+	return std::make_tuple(alignment.query_begin, alignment.ref_begin, alignment.sw_score);
 }
 
 std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const
@@ -264,16 +241,14 @@ std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string
 		{
 			if (nodes[j].originalNodeId == hitsOriginalNodeIds[i].first)
 			{
-				auto hit = localAlignGetMatch(sequence.substr(hitsOriginalNodeIds[i].second, 200), j);
-				if (std::get<2>(hit) > bestHit.second)
+				auto hit = getLocalAlignmentSsw(sequence.substr(hitsOriginalNodeIds[i].second, 200), j);
+				bestHit = std::make_pair(SeedHit(nodes[j].nodeId, std::get<0>(hit), std::get<1>(hit)+hitsOriginalNodeIds[i].second), std::get<2>(hit));
+				if (bestHit.second > 0)
 				{
-					bestHit = std::make_pair(SeedHit(nodes[j].nodeId, std::get<0>(hit), std::get<1>(hit)+hitsOriginalNodeIds[i].second), std::get<2>(hit));
+					result.push_back(bestHit.first);
+					std::cerr << "seed hit exact position graph position node position " << bestHit.first.nodeId << " " << bestHit.first.nodePos << " read position " << hitsOriginalNodeIds[i].first << " " << bestHit.first.seqPos << std::endl;
 				}
 			}
-		}
-		if (bestHit.second > 0)
-		{
-			result.push_back(bestHit.first);
 		}
 	}
 	return result;
