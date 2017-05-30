@@ -639,26 +639,29 @@ private:
 
 	SparseBoolMatrix getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
-		SparseBoolMatrix result {nodeSequences.size(), sequenceLength+1};
+		SparseBoolMatrix forward {nodeSequences.size(), sequenceLength+1};
+		SparseBoolMatrix backward {nodeSequences.size(), sequenceLength+1};
 		std::set<MatrixPosition> diagonallyExpandable;
 		for (auto pos : seedHits)
 		{
 			std::cerr << "seed hit: " << pos.first << ", " << pos.second << std::endl;
-			result.set(pos.first, pos.second);
-			expandBandRightwards(diagonallyExpandable, result, pos.first, pos.second, bandWidth);
-			expandBandLeftwards(diagonallyExpandable, result, pos.first, pos.second, bandWidth);
+			forward.set(pos.first, pos.second);
+			expandBandRightwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
+			expandBandLeftwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
+			backward.addRow(pos.second, forward.rowStart(pos.second), forward.rowEnd(pos.second));
 		}
 		for (auto x : diagonallyExpandable)
 		{
-			expandBandDownRight(result, x.first, x.second);
-			expandBandUpLeft(result, x.first, x.second);
+			expandBandDownRight(forward, x.first, x.second);
+			expandBandUpLeft(backward, x.first, x.second);
 		}
 		for (LengthType j = 0; j < sequenceLength+1; j++)
 		{
-			result.set(dummyNodeStart, j);
-			result.set(dummyNodeEnd, j);
+			forward.set(dummyNodeStart, j);
+			forward.addRow(j, backward.rowStart(j), backward.rowEnd(j));
+			forward.set(dummyNodeEnd, j);
 		}
-		return result;
+		return forward;
 	}
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int bandWidth, const std::vector<MatrixPosition>& seedHits) const
