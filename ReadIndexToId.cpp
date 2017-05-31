@@ -27,6 +27,8 @@ int main(int argc, char** argv)
 {
 	auto fastqs = loadFastqFromFile(argv[1]);
 	std::ifstream gremfile {argv[2], std::ios::in};
+	bool reverse = false;
+	if (argc > 4 && strncmp(argv[4], "1", 1) == 0) reverse = true;
 	std::vector<vg::Alignment> output;
 	std::set<std::pair<int, int>> existing;
 	do
@@ -48,7 +50,14 @@ int main(int argc, char** argv)
 		vg::Alignment alignment;
 		vg::Path* path = new vg::Path();
 		alignment.set_name(readname);
-		alignment.set_query_position(readpos);
+		if (reverse)
+		{
+			alignment.set_query_position(fastqs[readid].sequence.size() - readpos - 1);
+		}
+		else
+		{
+			alignment.set_query_position(readpos);
+		}
 		alignment.set_allocated_path(path);
 		auto mapping = path->add_mapping();
 		vg::Position* pos = new vg::Position();

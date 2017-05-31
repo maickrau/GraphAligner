@@ -62,6 +62,7 @@ FastQ FastQ::reverseComplement() const
 {
 	FastQ result;
 	result.sequence = reverseComplement(sequence);
+	result.seq_id = seq_id;
 	result.quality = quality;
 	std::reverse(result.quality.begin(), result.quality.end());
 	return result;
