@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -42,7 +43,7 @@ private:
 	std::stringstream stringstream;
 };
 
-bool is_file_exist(const char *fileName)
+bool is_file_exist(std::string fileName)
 {
 	std::ifstream infile(fileName);
 	return infile.good();
@@ -369,15 +370,14 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-int main(int argc, char** argv)
+std::vector<vg::Alignment> getAlignments(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int bandwidth)
 {
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 	vg::Graph graph;
 	{
-		if (is_file_exist(argv[1])){
-			std::cout << "load graph from " << argv[1] << std::endl;
-			std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
+		if (is_file_exist(graphFile)){
+			std::cout << "load graph from " << graphFile << std::endl;
+			std::ifstream graphfile { graphFile, std::ios::in | std::ios::binary };
 			std::vector<vg::Graph> parts;
 			std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
 				parts.push_back(g);
@@ -392,8 +392,8 @@ int main(int argc, char** argv)
 		}
 	}
 	std::vector<FastQ> fastqs;
-	if (is_file_exist(argv[2])){
-		fastqs = loadFastqFromFile(argv[2]);
+	if (is_file_exist(fastqFile)){
+		fastqs = loadFastqFromFile(fastqFile);
 		std::cout << fastqs.size() << " reads" << std::endl;
 	}
 	else{
@@ -405,8 +405,8 @@ int main(int argc, char** argv)
 
 	std::map<std::string, std::vector<vg::Alignment>> seeds;
 	{
-		if (is_file_exist(argv[3])){
-			std::ifstream seedfile { argv[3], std::ios::in | std::ios::binary };
+		if (is_file_exist(seedFile)){
+			std::ifstream seedfile { seedFile, std::ios::in | std::ios::binary };
 			std::function<void(vg::Alignment&)> alignmentLambda = [&seeds](vg::Alignment& a) {
 				seeds[a.name()].push_back(a);
 			};
@@ -419,8 +419,6 @@ int main(int argc, char** argv)
 	}
 	
 
-	int numThreads = std::stoi(argv[5]);
-	int bandwidth = std::stoi(argv[6]);
 	std::vector<std::vector<const FastQ*>> readsPerThread;
 	std::map<const FastQ*, std::vector<vg::Alignment>> seedHits;
 	std::vector<std::vector<vg::Alignment>> resultsPerThread;
@@ -457,7 +455,60 @@ int main(int argc, char** argv)
 
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
 
-	std::ofstream alignmentOut { argv[4], std::ios::out | std::ios::binary };
+	return alignments;
+}
+
+int main(int argc, char** argv)
+{
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
+	std::string graphFile = "";
+	std::string fastqFile = "";
+	std::string seedFile = "";
+	std::string alignmentFile = "";
+	int numThreads = 0;
+	int bandwidth = 0;
+	int c;
+
+	while ((c = getopt(argc, argv, "g:f:s:a:t:b:")) != -1)
+	{
+		switch(c)
+		{
+			case 'g':
+				graphFile = std::string(optarg);
+				break;
+			case 'f':
+				fastqFile = std::string(optarg);
+				break;
+			case 's':
+				seedFile = std::string(optarg);
+				break;
+			case 'a':
+				alignmentFile = std::string(optarg);
+				break;
+			case 't':
+				numThreads = std::stoi(optarg);
+				break;
+			case 'b':
+				bandwidth = std::stoi(optarg);
+				break;
+		}
+	}
+
+	if (numThreads < 1)
+	{
+		std::cerr << "number of threads must be >= 1" << std::endl;
+		std::exit(0);
+	}
+
+	if (bandwidth < 2)
+	{
+		std::cerr << "bandwidth must be >= 2" << std::endl;
+		std::exit(0);
+	}
+
+	auto alignments = getAlignments(graphFile, fastqFile, seedFile, numThreads, bandwidth);
+
+	std::ofstream alignmentOut { alignmentFile, std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, alignments, 0);
 
 	return 0;
