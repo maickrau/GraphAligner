@@ -246,7 +246,6 @@ std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string
 				if (bestHit.second > 0)
 				{
 					result.push_back(bestHit.first);
-					std::cerr << "seed hit exact position graph position node position " << bestHit.first.nodeId << " " << bestHit.first.nodePos << " read position " << hitsOriginalNodeIds[i].first << " " << bestHit.first.seqPos << std::endl;
 				}
 			}
 		}

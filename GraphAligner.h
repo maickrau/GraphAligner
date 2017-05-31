@@ -35,6 +35,19 @@ template <typename LengthType, typename ScoreType>
 class GraphAligner
 {
 public:
+	class AlignmentResult
+	{
+	public:
+		AlignmentResult(vg::Alignment alignment, int maxDistanceFromBand, bool alignmentFailed) :
+		alignment(alignment),
+		maxDistanceFromBand(maxDistanceFromBand),
+		alignmentFailed(alignmentFailed)
+		{
+		}
+		vg::Alignment alignment;
+		int maxDistanceFromBand;
+		bool alignmentFailed;
+	};
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
 	class MatrixSlice
 	{
@@ -120,8 +133,6 @@ public:
 		if (from >= to)
 		{
 			notInOrder[to] = true;
-			// std::cerr << "edge from " << from << " to " << to << std::endl;
-			// std::cerr << "node ids " << node_id_from << " -> " << node_id_to << std::endl;
 		}
 	}
 
@@ -140,18 +151,14 @@ public:
 		finalized = true;
 	}
 
-	vg::Alignment AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse, int bandWidth, const std::vector<SeedHit>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, bool reverse, int bandWidth, const std::vector<SeedHit>& seedHits) const
 	{
-		printtime("start alignment");
 		assert(finalized);
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, seedHits);
-		printtime("backtract");
 		auto trace = backtrackWithSquareRootSlices(sequence, bandWidth, seedHitsInMatrix);
 		//failed alignment, don't output
-		if (trace.first == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
-		printtime("trace to alignment");
-		auto result = traceToAlignment(seq_id, trace, reverse);
-		printtime("done aligning");
+		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
+		auto result = traceToAlignment(seq_id, std::get<0>(trace), std::get<2>(trace), reverse, std::get<1>(trace));
 		return result;
 	}
 
@@ -162,11 +169,11 @@ public:
 
 private:
 
-	vg::Alignment emptyAlignment() const
+	AlignmentResult emptyAlignment() const
 	{
 		vg::Alignment result;
 		result.set_score(std::numeric_limits<decltype(result.score())>::min());
-		return result;
+		return AlignmentResult { result, 0, true };
 	}
 
 	std::vector<MatrixPosition> getSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const
@@ -180,9 +187,8 @@ private:
 		return result;
 	}
 
-	vg::Alignment traceToAlignment(const std::string& seq_id, const std::pair<ScoreType, std::vector<MatrixPosition>>& traceWithScore, bool reverse) const
+	AlignmentResult traceToAlignment(const std::string& seq_id, ScoreType score, const std::vector<MatrixPosition>& trace, bool reverse, int maxDistanceFromBand) const
 	{
-		auto& trace = traceWithScore.second;
 		vg::Alignment result;
 		result.set_name(seq_id);
 		auto path = new vg::Path;
@@ -218,12 +224,12 @@ private:
 			position->set_node_id(nodeIDs[oldNode]);
 			if (reverse) position->set_is_reverse(true);
 		}
-		result.set_score(traceWithScore.first);
-		return result;
+		result.set_score(score);
+		return AlignmentResult { result, maxDistanceFromBand, false };
 	}
 
 	template <bool distanceMatrixOrder, typename MatrixType>
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
 	{
 		auto bandLocations = getBandLocations(sequenceLength, seedHits);
 		assert(backtraceMatrix.sizeRows() == sequenceLength+1);
@@ -241,13 +247,11 @@ private:
 				currentPosition = candidatePosition;
 				foundStart = true;
 			}
-			// std::cerr << Mslice[candidatePosition.first] << "\t";
 			if (Mslice[candidatePosition.first] > Mslice[currentPosition.first])
 			{
 				currentPosition = candidatePosition;
 			}
 		}
-		// std::cerr << std::endl;
 		assert(band(currentPosition.first, currentPosition.second));
 		auto score = Mslice[currentPosition.first];
 		trace.push_back(currentPosition);
@@ -256,17 +260,12 @@ private:
 		{
 			assert(band(currentPosition.first, currentPosition.second));
 			LengthType minDistance = nodeSequences.size();
-			// std::cerr << "band locations: ";
 			for (size_t i = 0; i < bandLocations[currentPosition.second].size(); i++)
 			{
-				// std::cerr << bandLocations[currentPosition.second][i] << " ";
 				minDistance = std::min(minDistance, distanceFromSeqToSeq(currentPosition.first, bandLocations[currentPosition.second][i], distanceMatrix));
 				minDistance = std::min(minDistance, distanceFromSeqToSeq(bandLocations[currentPosition.second][i], currentPosition.first, distanceMatrix));
 			}
-			// std::cerr << std::endl;
 			maxMinDistance = std::max(maxMinDistance, minDistance);
-			std::cerr << currentPosition.first << ", " << currentPosition.second << std::endl;
-			// std::cerr << "row " << currentPosition.second << " distance from band: " << minDistance << std::endl;
 			assert(currentPosition.second >= 0);
 			assert(currentPosition.second < sequenceLength+1);
 			assert(currentPosition.first >= 0);
@@ -278,9 +277,8 @@ private:
 			currentPosition = newPos;
 			trace.push_back(currentPosition);
 		}
-		std::cerr << "max distance from band: " << maxMinDistance << std::endl;
 		std::reverse(trace.begin(), trace.end());
-		return std::make_pair(score, trace);
+		return std::make_tuple(score, maxMinDistance, trace);
 	}
 
 	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength) const
@@ -383,7 +381,6 @@ private:
 	template<bool distanceMatrixOrder, typename MatrixType>
 	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int bandWidth, const MatrixType& band, SparseMatrix<MatrixPosition>& backtrace) const
 	{
-		std::cerr << "start dp matrix" << std::endl;
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
 		std::vector<ScoreType> Q1;
@@ -427,13 +424,10 @@ private:
 		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, start);
 		for (LengthType j = 1; j < end - start; j++)
 		{
-			std::cerr << "elems: " << band.rowSize(j) << " blocks: " << band.rowSizeBlock(j) << std::endl;
 			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, start+j);
 			auto& previousProcessableColumns = previousProcessableColumnsAndOrder.second;
 			auto& currentProcessableColumns = currentProcessableColumnsAndOrder.second;
 			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
-			std::cerr << "previous processable columns: " << previousProcessableColumns.size() << std::endl;
-			std::cerr << "current processable columns: " << currentProcessableColumns.size() << std::endl;
 			currentM[dummyNodeStart] = -gapPenalty(start + j);
 			currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 			backtrace.set(dummyNodeStart, start+j, std::make_pair(dummyNodeStart, start+j-1));
@@ -661,26 +655,21 @@ private:
 
 	SparseBoolMatrix<SliceRow<LengthType>> getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
-		printtime("init band");
 		SparseBoolMatrix<SliceRow<LengthType>> forward {nodeSequences.size(), sequenceLength+1};
 		SparseBoolMatrix<SliceRow<LengthType>> backward {nodeSequences.size(), sequenceLength+1};
 		std::set<MatrixPosition> diagonallyExpandable;
-		printtime("seed hits");
 		for (auto pos : seedHits)
 		{
-			std::cerr << "seed hit: " << pos.first << ", " << pos.second << std::endl;
 			forward.set(pos.first, pos.second);
 			expandBandRightwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
 			expandBandLeftwards(diagonallyExpandable, forward, pos.first, pos.second, bandWidth);
 			backward.addRow(pos.second, forward.rowStart(pos.second), forward.rowEnd(pos.second));
 		}
-		printtime("diagonal");
 		for (auto x : diagonallyExpandable)
 		{
 			expandBandDownRight(forward, x.first, x.second);
 			expandBandUpLeft(backward, x.first, x.second);
 		}
-		printtime("result");
 		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
 		for (LengthType j = 0; j < sequenceLength+1; j++)
 		{
@@ -694,12 +683,9 @@ private:
 		return result;
 	}
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int bandWidth, const std::vector<MatrixPosition>& seedHits) const
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int bandWidth, const std::vector<MatrixPosition>& seedHits) const
 	{
-		printtime("get banded rows");
 		auto band = getBandedRows(seedHits, bandWidth, sequence.size());
-		printtime("get distance matrix");
-		std::cerr << "got banded rows" << std::endl;
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
 		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};
@@ -708,7 +694,6 @@ private:
 		std::vector<ScoreType> lastRowScore;
 		LengthType start = 1;
 		//size+1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-		printtime("dp");
 		while (start < sequence.size()+1)
 		{
 			LengthType end = start + sliceSize;
@@ -718,9 +703,7 @@ private:
 			lastRow = std::move(slice);
 			start = end;
 		}
-		printtime("backtract");
 		auto result = backtrace(lastRow.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits);
-		printtime("result");
 		return result;
 	}
 
