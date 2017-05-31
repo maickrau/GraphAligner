@@ -43,12 +43,12 @@ vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
 	return newGraph;
 }
 
-std::string introduceErrors(std::string real, double substitutionErrorRate, double indelErrorRate)
+std::string introduceErrors(std::string real, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate)
 {
 	std::string result;
 	for (size_t i = 0; i < real.size(); i++)
 	{
-		if (distribution(generator) < indelErrorRate/2)
+		if (distribution(generator) < deletionErrorRate)
 		{
 		}
 		else
@@ -62,9 +62,13 @@ std::string introduceErrors(std::string real, double substitutionErrorRate, doub
 				result += real[i];
 			}
 		}
-		if (distribution(generator) < indelErrorRate/2)
+		if (distribution(generator) < insertionErrorRate / 10.0)
 		{
-			result += "ATCG"[rand() % 4];
+			int length = rand() % 20;
+			for (int j = 0; j < length; j++)
+			{
+				result += "ATCG"[rand() % 4];
+			}
 		}
 	}
 	return result;
@@ -108,7 +112,7 @@ std::string reverseComplement(std::string str)
 	return result;
 }
 
-std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double indelErrorRate, const std::map<size_t, std::vector<size_t>>& outEdges, const std::map<size_t, std::vector<size_t>>& inEdges)
+std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<size_t>>& outEdges, const std::map<size_t, std::vector<size_t>>& inEdges)
 {
 
 	bool reverse = false;
@@ -130,19 +134,19 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 	}
 	while (realsequence.size() < length)
 	{
-		if (currentNode == 0) return simulateOneRead(g, length, substitutionErrorRate, indelErrorRate, outEdges, inEdges);
+		if (currentNode == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
 		std::cout << g.node(currentNode).id() << "\n";
 		realNodes.push_back(g.node(currentNode).id());
 		if (reverse)
 		{
-			if (inEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, indelErrorRate, outEdges, inEdges);
-			if (inEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, indelErrorRate, outEdges, inEdges);
+			if (inEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
+			if (inEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
 			currentNode = inEdges.at(currentNode)[rand() % inEdges.at(currentNode).size()];
 		}
 		else
 		{
-			if (outEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, indelErrorRate, outEdges, inEdges);
-			if (outEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, indelErrorRate, outEdges, inEdges);
+			if (outEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
+			if (outEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
 			currentNode = outEdges.at(currentNode)[rand() % outEdges.at(currentNode).size()];
 		}
 		if (reverse)
@@ -154,8 +158,9 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 			realsequence += g.node(currentNode).sequence();
 		}
 	}
+	realNodes.push_back(g.node(currentNode).id());
 	realsequence = realsequence.substr(0, length);
-	auto errorSequence = introduceErrors(realsequence, substitutionErrorRate, indelErrorRate);
+	auto errorSequence = introduceErrors(realsequence, substitutionErrorRate, insertionErrorRate, deletionErrorRate);
 
 	vg::Alignment result;
 	result.set_name("read_" + std::to_string(rand()));
@@ -210,7 +215,8 @@ int main(int argc, char** argv)
 	int numReads = std::stoi(argv[4]);
 	int length = std::stoi(argv[5]);
 	double substitution = std::stod(argv[6]);
-	double indels = std::stod(argv[7]);
+	double insertions = std::stod(argv[7]);
+	double deletions = std::stod(argv[9]);
 
 	std::map<int, size_t> ids;
 	for (int i = 0; i < graph.node_size(); i++)
@@ -230,7 +236,7 @@ int main(int argc, char** argv)
 	std::vector<vg::Alignment> seeds;
 	for (int i = 0; i < numReads; i++)
 	{
-		reads.push_back(simulateOneRead(graph, length, substitution, indels, outEdges, inEdges));
+		reads.push_back(simulateOneRead(graph, length, substitution, insertions, deletions, outEdges, inEdges));
 		truth.emplace_back(std::get<0>(reads[i]));
 		seeds.emplace_back(std::get<2>(reads[i]));
 	}
