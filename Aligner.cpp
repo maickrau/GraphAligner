@@ -68,6 +68,63 @@ size_t GraphSizeInBp(const vg::Graph& graph)
 	return result;
 }
 
+// augment base VG graph with alignments by embedding alignment paths
+vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg::Alignment> alignments)
+{
+	vg::Graph augmentedGraph;
+	std::vector<const vg::Node*> allNodes;
+	std::vector<const vg::Edge*> allEdges;
+	
+	for (int j = 0; j < graph.node_size(); j++)
+	{
+		allNodes.push_back(&graph.node(j));
+	}
+	for (int j = 0; j < graph.edge_size(); j++)
+	{
+		allEdges.push_back(&graph.edge(j));
+	}
+	for (size_t i = 0; i < allNodes.size(); i++)
+	{
+		auto node = augmentedGraph.add_node();
+		node->set_id(allNodes[i]->id());
+		node->set_sequence(allNodes[i]->sequence());
+		node->set_name(allNodes[i]->name());
+	}
+	for (size_t i = 0; i < allEdges.size(); i++)
+	{
+		auto edge = augmentedGraph.add_edge();
+		edge->set_from(allEdges[i]->from());
+		edge->set_to(allEdges[i]->to());
+		edge->set_from_start(allEdges[i]->from_start());
+		edge->set_to_end(allEdges[i]->to_end());
+		edge->set_overlap(allEdges[i]->overlap());
+	}
+	
+	for(int k=0; k < alignments.size()-1; k++)
+	{
+		for (int i = 0; i < alignments[k].path().mapping_size()-1; i++)
+		{
+			if (alignments[k].path().mapping(i).position().is_reverse()){
+				auto edge = augmentedGraph.add_edge();
+				edge->set_from(alignments[k].path().mapping(i+1).position().node_id());
+				edge->set_to(alignments[k].path().mapping(i).position().node_id());
+				edge->set_from_start(1);
+				edge->set_to_end(1);
+				edge->set_overlap(0);
+			}else{
+				auto edge = augmentedGraph.add_edge();
+				edge->set_from(alignments[k].path().mapping(i).position().node_id());
+				edge->set_to(alignments[k].path().mapping(i+1).position().node_id());
+				edge->set_from_start(0);
+				edge->set_to_end(0);
+				edge->set_overlap(0);  
+			}
+			i++;
+		}
+	}
+	return augmentedGraph;
+}
+
 vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
 {
 	vg::Graph newGraph;
@@ -369,7 +426,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int bandwidth, std::string alignmentFile)
+void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int bandwidth, std::string alignmentFile, std::string auggraphFile)
 {
 
 	vg::Graph graph;
@@ -456,4 +513,8 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 
 	std::ofstream alignmentOut { alignmentFile, std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, alignments, 0);
+	vg::Graph augmentedGraphAllReads;
+
+	augmentedGraphAllReads = augmentGraphwithAlignment(graph, alignments);
+	outputGraph(auggraphFile, augmentedGraphAllReads);
 }

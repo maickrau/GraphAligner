@@ -11,11 +11,12 @@ int main(int argc, char** argv)
 	std::string fastqFile = "";
 	std::string seedFile = "";
 	std::string alignmentFile = "";
+	std::string auggraphFile = "";
 	int numThreads = 0;
 	int bandwidth = 0;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:s:a:t:b:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:s:a:t:b:A:")) != -1)
 	{
 		switch(c)
 		{
@@ -37,6 +38,8 @@ int main(int argc, char** argv)
 			case 'b':
 				bandwidth = std::stoi(optarg);
 				break;
+			case 'A':
+				auggraphFile = std::string(optarg);
 		}
 	}
 
@@ -52,7 +55,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, seedFile, numThreads, bandwidth, alignmentFile);
+	alignReads(graphFile, fastqFile, seedFile, numThreads, bandwidth, alignmentFile, auggraphFile);
 
 	return 0;
 }
