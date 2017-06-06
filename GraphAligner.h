@@ -57,6 +57,7 @@ public:
 		std::vector<ScoreType> R;
 		std::vector<MatrixPosition> Rbacktrace;
 		std::vector<MatrixPosition> Qbacktrace;
+		std::vector<LengthType> maxScorePositionPerRow;
 	};
 	class SeedHit
 	{
@@ -229,9 +230,8 @@ private:
 	}
 
 	template <bool distanceMatrixOrder, typename MatrixType>
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits) const
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits, const std::vector<LengthType>& maxScorePositionPerRow) const
 	{
-		auto bandLocations = getBandLocations(sequenceLength, seedHits);
 		assert(backtraceMatrix.sizeRows() == sequenceLength+1);
 		assert(backtraceMatrix.sizeColumns() == nodeSequences.size());
 		std::vector<MatrixPosition> trace;
@@ -259,13 +259,11 @@ private:
 		while (currentPosition.second > 0)
 		{
 			assert(band(currentPosition.first, currentPosition.second));
-			LengthType minDistance = nodeSequences.size();
-			for (size_t i = 0; i < bandLocations[currentPosition.second].size(); i++)
+			//the rows 0-100 don't use the dynamic band, don't include them here
+			if (currentPosition.second > 100)
 			{
-				minDistance = std::min(minDistance, distanceFromSeqToSeq(currentPosition.first, bandLocations[currentPosition.second][i], distanceMatrix));
-				minDistance = std::min(minDistance, distanceFromSeqToSeq(bandLocations[currentPosition.second][i], currentPosition.first, distanceMatrix));
+				maxMinDistance = std::max(maxMinDistance, bandDistanceFromSeqToSeq(currentPosition.first, maxScorePositionPerRow[currentPosition.second], distanceMatrix));
 			}
-			maxMinDistance = std::max(maxMinDistance, minDistance);
 			assert(currentPosition.second >= 0);
 			assert(currentPosition.second < sequenceLength+1);
 			assert(currentPosition.first >= 0);
@@ -486,6 +484,8 @@ private:
 		std::vector<ScoreType> R2;
 		std::vector<MatrixPosition> Rbacktrace1;
 		std::vector<MatrixPosition> Rbacktrace2;
+		std::vector<LengthType> maxScorePositionPerRow;
+		maxScorePositionPerRow.resize(end, 0);
 		assert(previous.M.size() == nodeSequences.size());
 		assert(previous.R.size() == nodeSequences.size());
 		assert(previous.Q.size() == nodeSequences.size());
@@ -647,6 +647,7 @@ private:
 			backtrace.set(dummyNodeEnd, j, std::make_pair(maxScorePosition, j));
 
 			previousRowMaximumIndex = maxScorePosition;
+			maxScorePositionPerRow[j] = maxScorePosition;
 
 			std::swap(currentM, previousM);
 			std::swap(currentQ, previousQ);
@@ -660,6 +661,7 @@ private:
 		result.Q = std::move(previousQ);
 		result.R = std::move(previousR);
 		result.Rbacktrace = std::move(previousRbacktrace);
+		result.maxScorePositionPerRow = std::move(maxScorePositionPerRow);
 		return result;
 	}
 
@@ -747,7 +749,7 @@ private:
 			lastRow = std::move(slice);
 			start = end;
 		}
-		auto result = backtrace(lastRow.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits);
+		auto result = backtrace(lastRow.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits, lastRow.maxScorePositionPerRow);
 		return result;
 	}
 
@@ -929,6 +931,52 @@ private:
 		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
 		assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
 		return std::make_pair(maxValue, pos);
+	}
+
+	template <bool distanceMatrixOrder>
+	LengthType bandDistanceFromSeqToSeq(LengthType start, LengthType end, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
+	{
+		if (start == end) return 0;
+		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
+		auto startNode = indexToNode[start];
+		auto endNode = indexToNode[end];
+		if (startNode == endNode) return std::min(end - start, start - end);
+		if (distanceMatrix(startNode, endNode) == nodeEnd[startNode]-nodeStart[startNode])
+		{
+			return nodeEnd[startNode] - start + end - nodeStart[endNode];
+		}
+		if (distanceMatrix(endNode, startNode) == nodeEnd[endNode]-nodeStart[endNode])
+		{
+			return nodeEnd[endNode] - end + start - nodeStart[startNode];
+		}
+		LengthType minDistance = nodeSequences.size();
+		for (size_t i = 0; i < distanceMatrix.sizeRows(); i++)
+		{
+			LengthType distanceFromStartToMid = distanceMatrix(startNode, i) + nodeStart[startNode] - start;
+			if (distanceMatrix(i, startNode) + start - nodeStart[startNode] < distanceFromStartToMid)
+			{
+				distanceFromStartToMid = distanceMatrix(i, startNode) + start - nodeStart[startNode];
+			}
+			LengthType distanceFromMidToEnd = distanceMatrix(i, endNode) + end - nodeStart[endNode];
+			if (distanceMatrix(endNode, i) + nodeStart[endNode] - end < distanceFromMidToEnd)
+			{
+				distanceFromMidToEnd = distanceMatrix(endNode, i) + nodeStart[endNode] - end;
+			}
+			minDistance = std::min(minDistance, distanceFromStartToMid + distanceFromMidToEnd);
+
+			LengthType distanceFromStartToMidEnd = distanceMatrix(startNode, i) + nodeStart[startNode] - start + nodeEnd[i] - nodeStart[i];
+			if (distanceMatrix(i, startNode) - (nodeEnd[i] - nodeStart[i]) + start - nodeStart[startNode] < distanceFromStartToMidEnd)
+			{
+				distanceFromStartToMidEnd = distanceMatrix(i, startNode) - (nodeEnd[i] - nodeStart[i]) + start - nodeStart[startNode];
+			}
+			LengthType distanceFromMidEndToEnd = distanceMatrix(i, endNode) - (nodeEnd[i] - nodeStart[i]) + end - nodeStart[endNode];
+			if (distanceMatrix(endNode, i) + (nodeEnd[i] - nodeStart[i]) + nodeStart[endNode] - end < distanceFromMidToEnd)
+			{
+				distanceFromMidToEnd = distanceMatrix(endNode, i) + (nodeEnd[i] - nodeStart[i]) + nodeStart[endNode] - end;
+			}
+			minDistance = std::min(minDistance, distanceFromStartToMidEnd + distanceFromMidEndToEnd);
+		}
+		return minDistance;
 	}
 
 	template <bool distanceMatrixOrder>
