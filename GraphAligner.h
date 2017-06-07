@@ -159,7 +159,7 @@ public:
 		auto trace = backtrackWithSquareRootSlices(sequence, startBandWidth, dynamicWidth, seedHitsInMatrix);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
-		auto result = traceToAlignment(seq_id, std::get<0>(trace), std::get<2>(trace), reverse, std::get<1>(trace));
+		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), reverse, std::get<1>(trace));
 		return result;
 	}
 
@@ -188,7 +188,7 @@ private:
 		return result;
 	}
 
-	AlignmentResult traceToAlignment(const std::string& seq_id, ScoreType score, const std::vector<MatrixPosition>& trace, bool reverse, int maxDistanceFromBand) const
+	AlignmentResult traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, bool reverse, int maxDistanceFromBand) const
 	{
 		vg::Alignment result;
 		result.set_name(seq_id);
@@ -226,6 +226,7 @@ private:
 			if (reverse) position->set_is_reverse(true);
 		}
 		result.set_score(score);
+		result.set_sequence(sequence);
 		return AlignmentResult { result, maxDistanceFromBand, false };
 	}
 

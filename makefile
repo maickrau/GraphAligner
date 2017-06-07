@@ -33,7 +33,10 @@ $(BINDIR)/SimulateReads: $(OBJ)
 $(BINDIR)/ReverseReads: $(OBJ)
 	$(GPP) -o $@ ReverseReads.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads
+$(BINDIR)/AlignmentSequenceInserter: $(OBJ)
+	$(GPP) -o $@ AlignmentSequenceInserter.cpp $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/AlignmentSequenceInserter
 
 clean:
 	rm -f $(ODIR)/*
