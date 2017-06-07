@@ -69,7 +69,7 @@ size_t GraphSizeInBp(const vg::Graph& graph)
 }
 
 // augment base VG graph with alignments by embedding alignment paths
-vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg::Alignment> alignments)
+vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg::Alignment>& alignments)
 {
 	vg::Graph augmentedGraph;
 	std::vector<const vg::Node*> allNodes;
@@ -100,7 +100,7 @@ vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg
 		edge->set_overlap(allEdges[i]->overlap());
 	}
 	
-	for(int k=0; k < alignments.size()-1; k++)
+	for(int k=0; k < alignments.size(); k++)
 	{
 		for (int i = 0; i < alignments[k].path().mapping_size()-1; i++)
 		{
@@ -119,7 +119,7 @@ vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg
 				edge->set_to_end(0);
 				edge->set_overlap(0);  
 			}
-			i++;
+			// i++;
 		}
 	}
 	return augmentedGraph;
@@ -281,7 +281,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int bandwidth)
+void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth)
 {
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
@@ -364,7 +364,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		GraphAligner<uint32_t, int32_t> augmentedGraphAlignment;
 		for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 		{
-			augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence);
+			augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
 			// std::cerr << "node: " << augmentedGraph.nodes[j].nodeId << std::endl;
 		}
 		for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
@@ -380,7 +380,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
 		}
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, false, bandwidth, alignerSeedHits);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, startBandwidth, dynamicWidth, alignerSeedHits);
 
 		//failed alignment, don't output
 		if (alignment.alignmentFailed)
@@ -396,7 +396,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 
 		coutoutput << "read " << fastq->seq_id << " max distance from band " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
 		coutoutput << "read " << fastq->seq_id << " score " << alignment.alignment.score() << BufferedWriter::Flush;
-		if (alignment.maxDistanceFromBand > bandwidth * 0.66)
+		if (alignment.maxDistanceFromBand > dynamicWidth * 0.66)
 		{
 			cerroutput << "read " << fastq->seq_id << " max distance from band is high: " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
 		}
@@ -426,7 +426,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int bandwidth, std::string alignmentFile, std::string auggraphFile)
+void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int startBandwidth, int dynamicWidth, std::string alignmentFile, std::string auggraphFile)
 {
 
 	vg::Graph graph;
@@ -494,7 +494,7 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, bandwidth]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, bandwidth); });
+		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
@@ -512,9 +512,9 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
 
 	std::ofstream alignmentOut { alignmentFile, std::ios::out | std::ios::binary };
-	stream::write_buffered(alignmentOut, alignments, 0);
 	vg::Graph augmentedGraphAllReads;
-
 	augmentedGraphAllReads = augmentGraphwithAlignment(graph, alignments);
+	stream::write_buffered(alignmentOut, alignments, 0);
+
 	outputGraph(auggraphFile, augmentedGraphAllReads);
 }
