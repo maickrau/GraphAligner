@@ -159,7 +159,7 @@ public:
 	{
 		assert(finalized);
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, seedHits);
-		auto trace = backtrackWithSquareRootSlices(sequence, startBandWidth, dynamicWidth, seedHitsInMatrix);
+		auto trace = getBacktrace(sequence, startBandWidth, dynamicWidth, seedHitsInMatrix);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), std::get<1>(trace));
@@ -274,6 +274,7 @@ private:
 			assert(currentPosition.first < nodeSequences.size());
 			//If we're at the dummy node, we have to stay there
 			if (currentPosition.first == 0) break;
+			assert(backtraceMatrix.exists(currentPosition.first, currentPosition.second));
 			auto newPos = backtraceMatrix(currentPosition.first, currentPosition.second);
 			assert(newPos.second < currentPosition.second || (newPos.second == currentPosition.second && newPos.first < currentPosition.first));
 			currentPosition = newPos;
@@ -314,10 +315,7 @@ private:
 			w--;
 			j--;
 		}
-		if (j > 0) 
-		{
-			result[j].emplace_back(w);
-		}
+		result[j].emplace_back(w);
 		if (w == start && j > 0)
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
@@ -478,7 +476,7 @@ private:
 	}
 
 	template<bool distanceMatrixOrder, typename MatrixType>
-	MatrixSlice getScoreAndBacktraceMatrixSlice(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, LengthType start, LengthType end, int dynamicWidth, MatrixType& band, SparseMatrix<MatrixPosition>& backtrace) const
+	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrix<MatrixPosition>& backtrace) const
 	{
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
@@ -489,7 +487,7 @@ private:
 		std::vector<MatrixPosition> Rbacktrace1;
 		std::vector<MatrixPosition> Rbacktrace2;
 		std::vector<LengthType> maxScorePositionPerRow;
-		maxScorePositionPerRow.resize(end, 0);
+		maxScorePositionPerRow.resize(sequence.size()+1, 0);
 		assert(previous.M.size() == nodeSequences.size());
 		assert(previous.R.size() == nodeSequences.size());
 		assert(previous.Q.size() == nodeSequences.size());
@@ -516,43 +514,44 @@ private:
 		previousRbacktrace = std::move(previous.Rbacktrace);
 		currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 		previousR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		currentM[dummyNodeStart] = -gapPenalty(start + 1);
-		previousM[dummyNodeStart] = -gapPenalty(start);
+		currentM[dummyNodeStart] = -gapPenalty(1);
+		previousM[dummyNodeStart] = 0;
 		currentR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 		previousR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		currentM[dummyNodeEnd] = -gapPenalty(sequence.size() - start - 1);
-		previousM[dummyNodeEnd] = -gapPenalty(sequence.size() - start);
-		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, start);
+		currentM[dummyNodeEnd] = -gapPenalty(sequence.size() - 1);
+		previousM[dummyNodeEnd] = -gapPenalty(sequence.size());
+		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, 0);
 		LengthType previousRowMaximumIndex = 0;
-		for (LengthType j = 1; j < end - start; j++)
+
+		for (LengthType j = 1; j < sequence.size()+1; j++)
 		{
-			if (start + j >= 100)
+			if (j >= 100)
 			{
-				expandBandDynamically(band, previousRowMaximumIndex, start+j, dynamicWidth);
+				expandBandDynamically(band, previousRowMaximumIndex, j, dynamicWidth);
 			}
-			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, start+j);
+			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j);
 			auto& previousProcessableColumns = previousProcessableColumnsAndOrder.second;
 			auto& currentProcessableColumns = currentProcessableColumnsAndOrder.second;
 			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
-			currentM[dummyNodeStart] = -gapPenalty(start + j);
+			currentM[dummyNodeStart] = -gapPenalty(j);
 			currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-			backtrace.set(dummyNodeStart, start+j, std::make_pair(dummyNodeStart, start+j-1));
+			backtrace.set(dummyNodeStart, j, std::make_pair(dummyNodeStart, j-1));
 			LengthType maxScorePosition = dummyNodeStart;
 			ScoreType maxScore = currentM[dummyNodeStart];
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
-			if (hasWrongOrders) Rhelper = getRHelper(j, start, previousM, sequence, band, previousProcessableColumns);
+			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence, band, previousProcessableColumns);
 
 			for (LengthType w : currentProcessableColumns)
 			{
-				assert(band(w, j+start));
-				bool neighborInsideBand = hasInNeighborInsideBand(w, j, start, band);
+				assert(band(w, j));
+				bool neighborInsideBand = hasInNeighborInsideBand(w, j, band);
 				auto nodeIndex = indexToNode[w];
 				currentQ[w] = previousQ[w] - gapContinuePenalty;
 				bool rCalculated = false;
 				if (previousM[w] - gapPenalty(1) > currentQ[w])
 				{
 					currentQ[w] = previousM[w] - gapPenalty(1);
-					Qbacktrace[w] = std::make_pair(w, j-1 + start);
+					Qbacktrace[w] = std::make_pair(w, j-1);
 				}
 				if (w == nodeStart[nodeIndex] && notInOrder[nodeIndex])
 				{
@@ -560,10 +559,10 @@ private:
 					{
 						rCalculated = true;
 						assert(hasWrongOrders);
-						auto rr = fullR(w, j, Rhelper, distanceMatrix, start);
+						auto rr = fullR(w, j, Rhelper, distanceMatrix);
 						currentR[w] = rr.first;
 						currentRbacktrace[w] = rr.second;
-						assert(currentRbacktrace[w].second < (j + start) || (currentRbacktrace[w].second == (j + start) && currentRbacktrace[w].first < w));
+						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
 					}
 				}
 				else
@@ -571,19 +570,19 @@ private:
 					if (neighborInsideBand && previousProcessableColumns.size() > 2)
 					{
 						rCalculated = true;
-						auto rr = recurrenceR(w, j, start, currentM, currentR, currentRbacktrace, band);
+						auto rr = recurrenceR(w, j, currentM, currentR, currentRbacktrace, band);
 						currentR[w] = rr.first;
 						currentRbacktrace[w] = rr.second;
-						assert(currentRbacktrace[w].second < (j + start) || (currentRbacktrace[w].second == (j + start) && currentRbacktrace[w].first < w));
+						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
 					}
 				}
 				//implicitly handle edges from dummy node by initializing M as coming from the dummy node
-				currentM[w] = currentM[dummyNodeStart];
-				MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j);
-				if (band(w, start+j-1))
+				currentM[w] = previousM[dummyNodeStart] + matchScore(nodeSequences[w], sequence[j-1]);
+				MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j-1);
+				if (band(w, j-1) && currentQ[w] > currentM[w])
 				{
 					foundBacktrace = Qbacktrace[w];
-					assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+					assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
 					currentM[w] = currentQ[w];
 				}
 				if (rCalculated)
@@ -592,7 +591,7 @@ private:
 					{
 						currentM[w] = currentR[w];
 						foundBacktrace = currentRbacktrace[w];
-						assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+						assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
 					}
 				}
 				if (w == nodeStart[nodeIndex])
@@ -600,46 +599,46 @@ private:
 					for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 					{
 						auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-						if (!band(u, start+j-1)) continue;
+						if (!band(u, j-1)) continue;
 						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
+						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
 						{
-							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
-							foundBacktrace = std::make_pair(u, j-1 + start);
-							assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]);
+							foundBacktrace = std::make_pair(u, j-1);
+							assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
 						}
 					}
 				}
 				else
 				{
 					LengthType u = w-1;
-					if (band(u, start+j-1))
+					if (band(u, j-1))
 					{
 						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-						if (previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]) > currentM[w])
+						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
 						{
-							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j + start - 1]);
-							foundBacktrace = std::make_pair(u, j-1 + start);
-							assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]);
+							foundBacktrace = std::make_pair(u, j-1);
+							assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
 						}
 					}
 				}
 				//if the previous row was not inside the band, initialize Q as the current M
-				if (!band(w, start+j-1))
+				if (!band(w, j-1))
 				{
 					currentQ[w] = currentM[w];
-					Qbacktrace[w] = std::make_pair(w, j + start);
+					Qbacktrace[w] = std::make_pair(w, j);
 				}
 				//if R was unavaliable, initialize it as current M
 				if (!rCalculated)
 				{
 					currentR[w] = currentM[w];
-					currentRbacktrace[w] = std::make_pair(w, j + start);
+					currentRbacktrace[w] = std::make_pair(w, j);
 				}
 				assert(currentM[w] >= -std::numeric_limits<ScoreType>::min() + 100);
 				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
 				backtrace.set(w, j, foundBacktrace);
-				assert(foundBacktrace.second < (j + start) || (foundBacktrace.second == (j + start) && foundBacktrace.first < w));
+				assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
 				if (currentM[w] > maxScore)
 				{
 					maxScore = currentM[w];
@@ -716,7 +715,7 @@ private:
 	{
 		auto bandLocations = getBandLocations(sequenceLength, seedHits);
 		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
-		for (LengthType j = 0; j < 100; j++)
+		for (LengthType j = 0; j < 100 && j < sequenceLength+1; j++)
 		{
 			for (size_t i = 0; i < bandLocations[j].size(); i++)
 			{
@@ -733,7 +732,7 @@ private:
 		return result;
 	}
 
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrackWithSquareRootSlices(const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<MatrixPosition>& seedHits) const
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> getBacktrace(const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<MatrixPosition>& seedHits) const
 	{
 		auto band = getBandedRows(seedHits, startBandWidth, sequence.size());
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
@@ -741,19 +740,8 @@ private:
 		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};
 		MatrixSlice lastRow = getFirstSlice(backtraceMatrix);
 		int sliceSize = sequence.size();
-		std::vector<ScoreType> lastRowScore;
-		LengthType start = 1;
-		//size+1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-		while (start < sequence.size()+1)
-		{
-			LengthType end = start + sliceSize;
-			if (end > sequence.size()+1) end = sequence.size();
-			auto slice = getScoreAndBacktraceMatrixSlice(sequence, hasWrongOrders, distanceMatrix, lastRow, start-1, end, dynamicWidth, band, backtraceMatrix);
-			lastRowScore = slice.M;
-			lastRow = std::move(slice);
-			start = end;
-		}
-		auto result = backtrace(lastRow.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits, lastRow.maxScorePositionPerRow);
+		auto slice = getScoreAndBacktraceMatrix(sequence, hasWrongOrders, distanceMatrix, lastRow, dynamicWidth, band, backtraceMatrix);
+		auto result = backtrace(slice.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits, slice.maxScorePositionPerRow);
 		return result;
 	}
 
@@ -801,10 +789,10 @@ private:
 	}
 
 	template <typename MatrixType>
-	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, LengthType start, const std::vector<ScoreType>& previousM, const std::string& sequence, const MatrixType& band, const std::vector<LengthType>& previousProcessableColumns) const
+	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence, const MatrixType& band, const std::vector<LengthType>& previousProcessableColumns) const
 	{
 		if (j == 0) return getRHelperZero();
-		if (j == 1 && start == 0) return getRHelperOne();
+		if (j == 1) return getRHelperOne();
 		std::vector<std::tuple<LengthType, ScoreType, ScoreType>> bestPerNode;
 		bestPerNode.resize(nodeStart.size(), std::make_tuple(0, std::numeric_limits<ScoreType>::min() + 99, 0));
 		for (auto v : previousProcessableColumns)
@@ -815,7 +803,7 @@ private:
 				for (size_t neighbori = 0; neighbori < inNeighbors[nodeIndex].size(); neighbori++)
 				{
 					LengthType u = nodeEnd[inNeighbors[nodeIndex][neighbori]]-1;
-					if (!band(u, start+j-1)) continue;
+					if (!band(u, j-1)) continue;
 					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
 					if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
 					{
@@ -826,7 +814,7 @@ private:
 			else
 			{
 				LengthType u = v-1;
-				if (!band(u, start+j-1)) continue;
+				if (!band(u, j-1)) continue;
 				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
 				if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
 				{
@@ -847,28 +835,28 @@ private:
 	}
 
 	template <typename MatrixType>
-	bool hasInNeighborInsideBand(LengthType w, LengthType j, LengthType start, const MatrixType& band) const
+	bool hasInNeighborInsideBand(LengthType w, LengthType j, const MatrixType& band) const
 	{
 		auto nodeIndex = indexToNode[w];
 		if (nodeStart[nodeIndex] == w)
 		{
 			for (size_t neighborI = 0; neighborI < inNeighbors[nodeIndex].size(); neighborI++)
 			{
-				if (band(nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1, j+start)) return true;
+				if (band(nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1, j)) return true;
 			}
 		}
 		else
 		{
-			return band(w-1, start+j);
+			return band(w-1, j);
 		}
 		return false;
 	}
 
 	//compute R using the recurrence on page 3
 	template <typename MatrixType>
-	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, LengthType start, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const MatrixType& band) const
+	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const MatrixType& band) const
 	{
-		assert(band(w, start+j));
+		assert(band(w, j));
 		auto nodeIndex = indexToNode[w];
 		assert(nodeStart[nodeIndex] != w || !notInOrder[nodeIndex]);
 		MatrixPosition pos;
@@ -878,12 +866,12 @@ private:
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-				if (!band(u, start+j)) continue;
+				if (!band(u, j)) continue;
 				assert(u < w);
 				if (currentM[u] - gapPenalty(1) > maxValue)
 				{
 					maxValue = currentM[u] - gapPenalty(1);
-					pos = std::make_pair(u, j + start);
+					pos = std::make_pair(u, j);
 				}
 				if (currentR[u] - gapContinuePenalty > maxValue)
 				{
@@ -895,13 +883,13 @@ private:
 		else
 		{
 			auto u = w-1;
-			if (band(u, start+j))
+			if (band(u, j))
 			{
 				pos = currentRbacktrace[u];
 				maxValue = currentR[u] - gapContinuePenalty;
 				if (currentM[u] - gapPenalty(1) > maxValue)
 				{
-					pos = std::make_pair(u, j + start);
+					pos = std::make_pair(u, j);
 					maxValue = currentM[u] - gapPenalty(1);
 				}
 			}
@@ -913,7 +901,7 @@ private:
 
 	//compute R using the slow, full definition on page 3
 	template <bool distanceMatrixOrder>
-	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, LengthType start) const
+	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
 	{
 		assert(j > 0);
 		assert(w > 0);
@@ -929,7 +917,7 @@ private:
 			if (scoreHere > maxValue)
 			{
 				maxValue = scoreHere;
-				pos = std::make_pair(v, j-1 + start);
+				pos = std::make_pair(v, j-1);
 			}
 		}
 		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
