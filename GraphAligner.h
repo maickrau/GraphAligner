@@ -982,69 +982,290 @@ private:
 		return distanceMatrix(startNode, endNode) + nodeStart[startNode] + end - nodeStart[endNode] - start;
 	}
 
-	Array2D<LengthType, false> getDistanceMatrixBoostJohnson() const
+	void fillDistanceMatrixChain(std::vector<size_t>& chainStart, std::vector<LengthType>& distanceAlongChain, std::vector<std::tuple<LengthType, LengthType, LengthType>>& edges, size_t index) const
 	{
-		//http://www.boost.org/doc/libs/1_40_0/libs/graph/example/johnson-eg.cpp
-		auto V = inNeighbors.size();
-		adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>> graph { inNeighbors.size() };
-		for (size_t i = 0; i < inNeighbors.size(); i++)
+		//starts inside a bubble
+		if (inNeighbors[index].size() == 1 && outNeighbors[index].size() == 1)
 		{
-			for (size_t j = 0; j < inNeighbors[i].size(); j++)
+			auto before = inNeighbors[index][0];
+			auto after = outNeighbors[index][0];
+			if (outNeighbors[before].size() == 2 && inNeighbors[after].size() == 2)
 			{
-				boost::add_edge(inNeighbors[i][j], i, graph);
+				auto first = outNeighbors[before][0];
+				auto second = outNeighbors[before][1];
+				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
+				{
+					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					{
+						if (inNeighbors[first][0] == inNeighbors[second][0] && outNeighbors[first][0] == outNeighbors[second][0])
+						{
+							index = inNeighbors[index][0];
+						}
+					}
+				}
 			}
 		}
+		while (true)
+		{
+			//just a chain
+			if (inNeighbors[index].size() == 1 && outNeighbors[inNeighbors[index][0]].size() == 1)
+			{
+				index = inNeighbors[index][0];
+				continue;
+			}
+			//a simple bubble
+			// if (inNeighbors[index].size() == 2 && inNeighbors[inNeighbors[index][0]].size() == 1 && outNeighbors[inNeighbors[index][0]].size() == 1 && inNeighbors[inNeighbors[index][1]].size() == 1 && outNeighbors[inNeighbors[index][1]].size() == 1 && inNeighbors[inNeighbors[index][0]][0] == inNeighbors[inNeighbors[index][1]][0] && outNeighbors[inNeighbors[inNeighbors[index][0]][0]].size() == 2)
+			if (inNeighbors[index].size() == 2)
+			{
+				auto first = inNeighbors[index][0];
+				auto second = inNeighbors[index][1];
+				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
+				{
+					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					{
+						assert(outNeighbors[first][0] == index);
+						assert(outNeighbors[second][0] == index);
+						if (inNeighbors[first][0] == inNeighbors[second][0])
+						{
+							auto before = inNeighbors[first][0];
+							if (outNeighbors[before].size() == 2)
+							{
+								index = before;
+								continue;
+							}
+						}
+					}
+				}
+				// index = inNeighbors[inNeighbors[index][0]][0];
+				// continue;
+			}
+			break;
+		}
+		auto start = index;
+		assert(chainStart[index] == std::numeric_limits<size_t>::max());
+		distanceAlongChain[index] = 0;
+		chainStart[index] = start;
+		LengthType pathLength = 0;
+		pathLength += nodeEnd[index] - nodeStart[index];
+		std::cout << start << ": " << index << " ";
+
+		while (true)
+		{
+			//just a chain
+			if (outNeighbors[index].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1)
+			{
+				index = outNeighbors[index][0];
+				assert(chainStart[index] == std::numeric_limits<size_t>::max());
+				distanceAlongChain[index] = pathLength;
+				chainStart[index] = start;
+				pathLength += nodeEnd[index] - nodeStart[index];
+				continue;
+			}
+			//a simple bubble
+			// if (outNeighbors[index].size() == 2 && outNeighbors[outNeighbors[index][0]].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1 && outNeighbors[outNeighbors[index][1]].size() == 1 && inNeighbors[outNeighbors[index][1]].size() == 1 && outNeighbors[outNeighbors[index][0]][0] == outNeighbors[outNeighbors[index][1]][0] && inNeighbors[outNeighbors[outNeighbors[index][0]][0]].size() == 2)
+			if (outNeighbors[index].size() == 2)
+			{
+				auto first = outNeighbors[index][0];
+				auto second = outNeighbors[index][1];
+				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
+				{
+					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					{
+						assert(inNeighbors[first][0] == index);
+						assert(inNeighbors[second][0] == index);
+						if (outNeighbors[first][0] == outNeighbors[second][0])
+						{
+							auto after = outNeighbors[first][0];
+							if (inNeighbors[after].size() == 2)
+							{
+								assert(chainStart[first] == std::numeric_limits<size_t>::max());
+								assert(chainStart[second] == std::numeric_limits<size_t>::max());
+								distanceAlongChain[first] = pathLength;
+								distanceAlongChain[second] = pathLength;
+								chainStart[first] = start;
+								chainStart[second] = start;
+								chainStart[after] = start;
+								assert(nodeEnd[first] > nodeStart[first]);
+								assert(nodeEnd[second] > nodeStart[second]);
+								auto increase = std::min(nodeEnd[first] - nodeStart[first], nodeEnd[second] - nodeStart[second]);
+								assert(increase > 0);
+								assert(increase < nodeSequences.size());
+								pathLength += increase;
+								distanceAlongChain[after] = pathLength;
+								pathLength += nodeEnd[after] - nodeStart[after];
+								index = after;
+								continue;
+							}
+						}
+					}
+				}
+				// assert(chainStart[first] == std::numeric_limits<size_t>::max());
+				// assert(chainStart[second] == std::numeric_limits<size_t>::max());
+				// distanceAlongChain[first] = pathLength;
+				// distanceAlongChain[second] = pathLength;
+				// chainStart[first] = start;
+				// chainStart[second] = start;
+				// pathLength += std::min(nodeEnd[first] - nodeStart[first], nodeEnd[second] - nodeStart[second]);
+				// index = outNeighbors[outNeighbors[index][0]][0];
+				// continue;
+			}
+			break;
+		}
+		while (outNeighbors[index].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1)
+		{
+			index = outNeighbors[index][0];
+			assert(chainStart[index] == std::numeric_limits<size_t>::max());
+			distanceAlongChain[index] = pathLength;
+			chainStart[index] = start;
+			pathLength += nodeEnd[index] - nodeStart[index];
+			std::cout << index << " ";
+		}
+		std::cout << std::endl;
+
+		for (size_t i = 0; i < outNeighbors[index].size(); i++)
+		{
+			edges.emplace_back(start, outNeighbors[index][i], pathLength);
+		}
+	}
+
+	//http://www.boost.org/doc/libs/1_40_0/libs/graph/example/johnson-eg.cpp
+	Array2D<LengthType, false> getDistanceMatrixBoostJohnson() const
+	{
+		//g++ can't optimize repeated calls into one call for some reason and it's expensive, so store them like this
+		auto inneighborsSize = inNeighbors.size();
+		auto nodesequencesSizePlusOne = nodeSequences.size() + 1;
+		//Merge chains of nodes into one node, so that boost-johnson has a lower node and edge count
+		std::vector<size_t> chainStart;
+		std::vector<LengthType> distanceOnChain;
+		chainStart.resize(inneighborsSize, std::numeric_limits<size_t>::max());
+		distanceOnChain.resize(inneighborsSize, std::numeric_limits<LengthType>::max());
+		std::vector<std::tuple<LengthType, LengthType, LengthType>> graphedges;
+		Array2D<LengthType, false> distances {inneighborsSize, inneighborsSize, nodesequencesSizePlusOne};
+		for (size_t i = 0; i < inneighborsSize; i++)
+		{
+			if (chainStart[i] == std::numeric_limits<size_t>::max())
+			{
+				fillDistanceMatrixChain(chainStart, distanceOnChain, graphedges, i);
+			}
+		}
+		std::vector<size_t> actualCalculables;
+		std::vector<size_t> helperLookup;
+		helperLookup.resize(inneighborsSize, std::numeric_limits<size_t>::max());
+		for (size_t i = 0; i < inneighborsSize; i++)
+		{
+			assert(chainStart[i] != std::numeric_limits<size_t>::max());
+			assert(distanceOnChain[i] != std::numeric_limits<LengthType>::max());
+			if (chainStart[i] == i) 
+			{
+				helperLookup[i] = actualCalculables.size();
+				actualCalculables.push_back(i);
+			}
+		}
+		auto V = actualCalculables.size();
+		adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>> graph { V };
+
+		for (size_t i = 0; i < graphedges.size(); i++)
+		{
+			boost::add_edge(helperLookup[std::get<0>(graphedges[i])], helperLookup[std::get<1>(graphedges[i])], graph);
+		}
+
 		property_map<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>, edge_weight_t>::type w = get(edge_weight, graph);
 		graph_traits<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>>::edge_iterator e, e_end;
+		int edgeindex = 0;
 		for (boost::tie(e, e_end) = edges(graph); e != e_end; ++e)
 		{
-			auto startIndex = (*e).m_source;
-			w[*e] = nodeEnd[startIndex] - nodeStart[startIndex];
+			w[*e] = std::get<2>(graphedges[edgeindex]);
+			edgeindex++;
 		}
-		std::vector<int> d(V, nodeSequences.size()+1);
+		std::vector<int> d(V, nodesequencesSizePlusOne);
 		int** D;
-		D = new int*[inNeighbors.size()];
-		for (size_t i = 0; i < inNeighbors.size(); i++)
+		D = new int*[V];
+		for (size_t i = 0; i < V; i++)
 		{
-			D[i] = new int[inNeighbors.size()];
-			for (size_t j = 0; j < inNeighbors.size(); j++)
+			D[i] = new int[V];
+			for (size_t j = 0; j < V; j++)
 			{
-				D[i][j] = nodeSequences.size()+1;
+				D[i][j] = nodesequencesSizePlusOne;
 			}
 		}
 		johnson_all_pairs_shortest_paths(graph, D, distance_map(&d[0]));
-		Array2D<LengthType, false> result {inNeighbors.size(), inNeighbors.size(), std::numeric_limits<LengthType>::max()};
-		for (size_t i = 0; i < inNeighbors.size(); i++)
+		for (size_t i = 0; i < V; i++)
 		{
-			for (size_t j = 0; j < inNeighbors.size(); j++)
+			for (size_t j = 0; j < V; j++)
 			{
+				//distances have to be positive
+				assert(D[i][j] > 0 || (i == j && D[i][j] == 0));
+				//distances are either reasonable or infinity
+				assert(D[i][j] <= nodesequencesSizePlusOne || D[i][j] == std::numeric_limits<int>::max());
 				if (D[i][j] == std::numeric_limits<int>::max())
 				{
-					result(i, j) = nodeSequences.size()+1;
-				}
-				else
-				{
-					result(i, j) = D[i][j];
+					D[i][j] = nodesequencesSizePlusOne;
 				}
 			}
 		}
-		for (size_t i = 0; i < inNeighbors.size(); i++)
+		//make sure that the distance to itself is not 0
+		//we need to do this so distance calculation from a later point in the node to an earlier point in the node works correctly
+		for (size_t i = 0; i < V; i++)
+		{
+			D[i][i] = nodesequencesSizePlusOne;
+			for (size_t j = 0; j < V; j++)
+			{
+				if (j == i) continue;
+				D[i][i] = std::min(D[i][i], D[i][j] + D[j][i]);
+			}
+		}
+
+		for (size_t ii = 0; ii < inneighborsSize; ii++)
+		{
+			assert(distanceOnChain[ii] != std::numeric_limits<size_t>::max());
+			assert(helperLookup[chainStart[ii]] != std::numeric_limits<size_t>::max());
+			size_t i = helperLookup[chainStart[ii]];
+			for (size_t jj = 0; jj < inneighborsSize; jj++)
+			{
+				assert(distanceOnChain[jj] != std::numeric_limits<size_t>::max());
+				assert(helperLookup[chainStart[jj]] != std::numeric_limits<size_t>::max());
+				size_t j = helperLookup[chainStart[jj]];
+				if (i == j && distanceOnChain[jj] > distanceOnChain[ii])
+				{
+					distances(ii, jj) = distanceOnChain[jj] - distanceOnChain[ii];
+				}
+				else if (i == j && distanceOnChain[jj] < distanceOnChain[ii])
+				{
+					if (D[i][i] >= nodesequencesSizePlusOne)
+					{
+						distances(ii, jj) = nodesequencesSizePlusOne;
+					}
+					else
+					{
+						distances(ii, jj) = D[i][i] + distanceOnChain[jj] - distanceOnChain[ii];
+					}
+				}
+				else if (i == j)
+				{
+					distances(ii, jj) = D[i][i];
+				}
+				else if (D[i][j] >= nodesequencesSizePlusOne)
+				{
+					distances(ii, jj) = nodesequencesSizePlusOne;
+				}
+				else
+				{
+					assert(distanceOnChain[ii] < D[i][j]);
+					distances(ii, jj) = D[i][j] + distanceOnChain[jj] - distanceOnChain[ii];
+				}
+				assert(distances(ii, jj) <= nodesequencesSizePlusOne * 2);
+				assert(distances(ii, jj) > 0);
+				if (distances(ii, jj) > nodesequencesSizePlusOne) distances(ii, jj) = nodesequencesSizePlusOne;
+			}
+		}
+		for (size_t i = 0; i < V; i++)
 		{
 			delete [] D[i];
 		}
 		delete [] D;
-		//make sure that the distance to itself is not 0
-		//we need to do this so distance calculation from a later point in the node to an earlier point in the node works correctly
-		for (size_t i = 0; i < inNeighbors.size(); i++)
-		{
-			result(i, i) = nodeSequences.size()+1;
-			for (size_t j = 0; j < inNeighbors.size(); j++)
-			{
-				if (j == i) continue;
-				result(i, i) = std::min(result(i, i), result(i, j) + result(j, i));
-			}
-		}
-		return result;
+
+		return distances;
+
 	}
 
 	ScoreType gapPenalty(LengthType length) const
