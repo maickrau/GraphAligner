@@ -1047,7 +1047,6 @@ private:
 		chainStart[index] = start;
 		LengthType pathLength = 0;
 		pathLength += nodeEnd[index] - nodeStart[index];
-		std::cout << start << ": " << index << " ";
 
 		while (true)
 		{
@@ -1118,9 +1117,7 @@ private:
 			distanceAlongChain[index] = pathLength;
 			chainStart[index] = start;
 			pathLength += nodeEnd[index] - nodeStart[index];
-			std::cout << index << " ";
 		}
-		std::cout << std::endl;
 
 		for (size_t i = 0; i < outNeighbors[index].size(); i++)
 		{
@@ -1164,6 +1161,8 @@ private:
 		auto V = actualCalculables.size();
 		adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>> graph { V };
 
+		std::sort(graphedges.begin(), graphedges.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right) || (std::get<0>(left) == std::get<0>(right) && std::get<1>(left) < std::get<1>(right)); });
+
 		for (size_t i = 0; i < graphedges.size(); i++)
 		{
 			boost::add_edge(helperLookup[std::get<0>(graphedges[i])], helperLookup[std::get<1>(graphedges[i])], graph);
@@ -1174,6 +1173,8 @@ private:
 		int edgeindex = 0;
 		for (boost::tie(e, e_end) = edges(graph); e != e_end; ++e)
 		{
+			assert((*e).m_source == helperLookup[std::get<0>(graphedges[edgeindex])]);
+			assert((*e).m_target == helperLookup[std::get<1>(graphedges[edgeindex])]);
 			w[*e] = std::get<2>(graphedges[edgeindex]);
 			edgeindex++;
 		}
