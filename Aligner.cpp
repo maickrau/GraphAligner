@@ -281,7 +281,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth)
+void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth, bool initialFullBand)
 {
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
@@ -380,7 +380,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
 		}
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, startBandwidth, dynamicWidth, alignerSeedHits);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, startBandwidth, dynamicWidth, alignerSeedHits, initialFullBand);
 
 		//failed alignment, don't output
 		if (alignment.alignmentFailed)
@@ -426,7 +426,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int startBandwidth, int dynamicWidth, std::string alignmentFile, std::string auggraphFile)
+void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int startBandwidth, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, bool initialFullBand)
 {
 
 	vg::Graph graph;
@@ -494,7 +494,7 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth); });
+		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth, initialFullBand]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth, initialFullBand); });
 	}
 
 	for (int i = 0; i < numThreads; i++)

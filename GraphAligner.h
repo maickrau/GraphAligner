@@ -155,11 +155,11 @@ public:
 		finalized = true;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<SeedHit>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<SeedHit>& seedHits, bool initialFullBand) const
 	{
 		assert(finalized);
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, seedHits);
-		auto trace = getBacktrace(sequence, startBandWidth, dynamicWidth, seedHitsInMatrix);
+		auto trace = getBacktrace(sequence, startBandWidth, dynamicWidth, seedHitsInMatrix, initialFullBand);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), std::get<1>(trace));
@@ -732,9 +732,30 @@ private:
 		return result;
 	}
 
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>> getBacktrace(const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<MatrixPosition>& seedHits) const
+	SparseBoolMatrix<SliceRow<LengthType>> getFullBand(size_t sequenceLength) const
 	{
-		auto band = getBandedRows(seedHits, startBandWidth, sequence.size());
+		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
+		for (LengthType j = 0; j < 100 && j < sequenceLength+1; j++)
+		{
+			for (size_t i = 0; i < nodeSequences.size(); i++)
+			{
+				result.set(i, j);
+			}
+		}
+		return result;
+	}
+
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> getBacktrace(const std::string& sequence, int startBandWidth, int dynamicWidth, const std::vector<MatrixPosition>& seedHits, bool initialFullBand) const
+	{
+		SparseBoolMatrix<SliceRow<LengthType>> band {1, 1};
+		if (initialFullBand)
+		{
+			band = getFullBand(sequence.size());
+		}
+		else
+		{
+			band = getBandedRows(seedHits, startBandWidth, sequence.size());
+		}
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
 		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};

@@ -16,8 +16,9 @@ int main(int argc, char** argv)
 	int startBandwidth = 0;
 	int dynamicWidth = 0;
 	int c;
+	bool initialFullBand = false;
 
-	while ((c = getopt(argc, argv, "g:f:s:a:t:b:B:A:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:s:a:t:b:B:A:i")) != -1)
 	{
 		switch(c)
 		{
@@ -44,6 +45,10 @@ int main(int argc, char** argv)
 				break;
 			case 'A':
 				auggraphFile = std::string(optarg);
+				break;
+			case 'i':
+				initialFullBand = true;
+				break;
 		}
 	}
 
@@ -53,9 +58,9 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	if (startBandwidth < 2)
+	if (startBandwidth < 2 && !initialFullBand)
 	{
-		std::cerr << "starting bandwidth must be >= 2" << std::endl;
+		std::cerr << "starting bandwidth must be >= 2 or initial full band must be set" << std::endl;
 		std::exit(0);
 	}
 
@@ -65,7 +70,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, seedFile, numThreads, startBandwidth, dynamicWidth, alignmentFile, auggraphFile);
+	alignReads(graphFile, fastqFile, seedFile, numThreads, startBandwidth, dynamicWidth, alignmentFile, auggraphFile, initialFullBand);
 
 	return 0;
 }
