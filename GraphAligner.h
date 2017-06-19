@@ -390,22 +390,19 @@ private:
 		LengthType start = nodeStart[nodeIndex];
 		assert(end > previousMaximumIndex);
 		assert(start <= previousMaximumIndex);
-		for (LengthType w = previousMaximumIndex; w < end && w < previousMaximumIndex + dynamicWidth; w++)
-		{
-			band.set(w, j);
-			assert(w >= nodeStart[nodeIndex] && w < nodeEnd[nodeIndex]);
-		}
-		for (LengthType w = previousMaximumIndex; w >= start && w + dynamicWidth >= previousMaximumIndex; w--)
-		{
-			band.set(w, j);
-			assert(w >= nodeStart[nodeIndex] && w < nodeEnd[nodeIndex]);
-		}
+		LengthType blockStart = start;
+		LengthType blockEnd = end-1; //-1 because block indices are inclusive but node ends exclusive
+		//previousMaximumIndex - dynamicWidth > blockStart, change order to prevent underflow
+		if (previousMaximumIndex > dynamicWidth + blockStart) blockStart = previousMaximumIndex - dynamicWidth;
+		if (previousMaximumIndex + dynamicWidth < blockEnd) blockEnd = previousMaximumIndex + dynamicWidth;
+		band.setBlock(blockStart, blockEnd, j);
 		if (dynamicWidth > end - previousMaximumIndex)
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
 				assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
-				expandDynamicBandForward(band, nodeStart[outNeighbors[nodeIndex][i]], j, dynamicWidth - (end - previousMaximumIndex));
+				if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
+				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - (end - previousMaximumIndex));
 			}
 		}
 		if (dynamicWidth > previousMaximumIndex - start)
@@ -413,65 +410,63 @@ private:
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
-				expandDynamicBandBackward(band, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j, dynamicWidth - (previousMaximumIndex - start));
+				if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
+				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - (previousMaximumIndex - start));
 			}
 		}
 	}
 
 	template <typename MatrixType>
-	void expandDynamicBandBackward(MatrixType& band, LengthType position, LengthType j, LengthType dynamicWidth) const
+	void expandDynamicBandBackward(MatrixType& band, LengthType nodeIndex, LengthType j, LengthType dynamicWidth) const
 	{
-		assert(position < nodeSequences.size());
-		band.set(position, j);
-		auto nodeIndex = indexToNode[position];
+		if (dynamicWidth == 0) return;
+		assert(nodeIndex < nodeStart.size());
+		auto start = nodeStart[nodeIndex];
+		auto end = nodeEnd[nodeIndex];
+		auto blockEnd = end - 1;
+		auto blockStart = start;
+		if (blockEnd - blockStart > dynamicWidth) blockStart = blockEnd - dynamicWidth;
+		band.setBlock(blockStart, blockEnd, j);
 		for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 		{
 			assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
 			if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
-			expandDynamicBandForward(band, nodeStart[outNeighbors[nodeIndex][i]], j, dynamicWidth - 1);
+			expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - 1);
 		}
-		auto start = nodeStart[nodeIndex];
-		for (LengthType w = position; w >= start && w + dynamicWidth >= position; w--)
-		{
-			band.set(w, j);
-			assert(w >= nodeStart[nodeIndex] && w < nodeEnd[nodeIndex]);
-		}
-		if (dynamicWidth > position - start)
+		if (dynamicWidth > end - start)
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
 				if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
-				expandDynamicBandBackward(band, nodeEnd[inNeighbors[nodeIndex][i]]-1, j, dynamicWidth - (nodeEnd[nodeIndex] - nodeStart[nodeIndex]));
+				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - (end - start));
 			}
 		}
 	}
 
 	template <typename MatrixType>
-	void expandDynamicBandForward(MatrixType& band, LengthType position, LengthType j, LengthType dynamicWidth) const
+	void expandDynamicBandForward(MatrixType& band, LengthType nodeIndex, LengthType j, LengthType dynamicWidth) const
 	{
-		assert(position < nodeSequences.size());
-		band.set(position, j);
-		auto nodeIndex = indexToNode[position];
+		if (dynamicWidth == 0) return;
+		assert(nodeIndex < nodeStart.size());
+		auto end = nodeEnd[nodeIndex];
+		auto start = nodeStart[nodeIndex];
+		LengthType blockEnd = end - 1;
+		if (end - start > dynamicWidth) end = start + dynamicWidth;
+		band.setBlock(start, blockEnd, j);
 		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 		{
 			assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
 			if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
-			expandDynamicBandBackward(band, nodeEnd[inNeighbors[nodeIndex][i]]-1, j, dynamicWidth - 1);
+			expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - 1);
 		}
-		auto end = nodeEnd[nodeIndex];
-		for (LengthType w = position; w < end && w < position + dynamicWidth; w++)
-		{
-			band.set(w, j);
-			assert(w >= nodeStart[nodeIndex] && w < nodeEnd[nodeIndex]);
-		}
-		if (dynamicWidth > end - position)
+		if (dynamicWidth > end - start)
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
 				assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
 				if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
-				expandDynamicBandForward(band, nodeStart[outNeighbors[nodeIndex][i]], j, dynamicWidth - (nodeEnd[nodeIndex] - nodeStart[nodeIndex]));
+				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - (nodeEnd[nodeIndex] - nodeStart[nodeIndex]));
 			}
 		}
 	}
@@ -751,10 +746,7 @@ private:
 		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
 		for (LengthType j = 0; j < 100 && j < sequenceLength+1; j++)
 		{
-			for (size_t i = 0; i < nodeSequences.size(); i++)
-			{
-				result.set(i, j);
-			}
+			result.setBlock(0, nodeSequences.size(), j);
 		}
 		return result;
 	}

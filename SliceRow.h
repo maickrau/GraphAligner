@@ -162,9 +162,102 @@ public:
 			++begin;
 		}
 	}
+	void insertBlock(LengthType blockStart, LengthType blockEnd)
+	{
+		assert(blockEnd >= blockStart);
+		assert(ends.size() == starts.size());
+		//right after the final block
+		if (ends.size() > 0 && ends.back() == blockStart-1)
+		{
+			numElems += blockEnd - ends.back();
+			ends.back() = blockEnd;
+			return;
+		}
+		//right before the first block
+		if (ends.size() > 0 && starts[0] == blockEnd+1)
+		{
+			numElems += starts[0] - blockStart;
+			starts[0] = blockStart;
+			return;
+		}
+		//after all blocks, not next to the final block
+		if (ends.size() > 0 && ends.back() < blockStart-1)
+		{
+			starts.push_back(blockStart);
+			ends.push_back(blockEnd);
+			numElems += blockEnd - blockStart + 1;
+			return;
+		}
+		//before all blocks, not next to the first block
+		if (ends.size() > 0 && starts[0] > blockEnd+1)
+		{
+			starts.insert(starts.begin(), blockStart);
+			ends.insert(ends.begin(), blockEnd);
+			numElems += blockEnd - blockStart + 1;
+			return;
+		}
+		//no existing blocks
+		if (ends.size() == 0)
+		{
+			starts.push_back(blockStart);
+			ends.push_back(blockEnd);
+			numElems += blockEnd - blockStart + 1;
+			return;
+		}
+		auto foundEnd = std::lower_bound(ends.begin(), ends.end(), blockEnd);
+		auto foundStart = std::lower_bound(ends.begin(), ends.end(), blockStart);
+		size_t endIndex = foundEnd - ends.begin();
+		size_t startIndex = foundStart - ends.begin();
+		//todo handle the case where the inserted block overlaps an existing block
+		assert(endIndex == startIndex);
+		//right before a block
+		if (startIndex < ends.size() && ends[startIndex] >= blockEnd && starts[startIndex] <= blockEnd+1)
+		{
+			assert(startIndex == 0 || ends[startIndex-1] < blockStart);
+			numElems += starts[startIndex] - blockStart;
+			starts[startIndex] = blockStart;
+			//merge with the previous block
+			if (startIndex > 0 && starts[startIndex] == ends[startIndex-1] + 1)
+			{
+				ends[startIndex-1] = ends[startIndex];
+				ends.erase(ends.begin() + startIndex);
+				starts.erase(starts.begin() + startIndex);
+			}
+			return;
+		}
+		//right after a block
+		if (startIndex > 0 && starts[startIndex-1] <= blockStart && ends[startIndex-1] >= blockStart-1)
+		{
+			assert(startIndex == endIndex);
+			assert(endIndex == ends.size() || starts[endIndex] > blockEnd);
+			numElems += blockEnd - ends[startIndex-1];
+			ends[startIndex-1] = blockEnd;
+			//merge with the next block
+			if (starts[startIndex] == ends[startIndex-1]+1)
+			{
+				ends[startIndex-1] = ends[startIndex];
+				ends.erase(ends.begin() + startIndex);
+				starts.erase(starts.begin() + startIndex);
+			}
+			return;
+		}
+		//between two existing blocks, not touching either
+		if (startIndex > 0 && startIndex < ends.size() && ends[startIndex-1] < blockStart-1 && starts[startIndex] > blockEnd + 1)
+		{
+			assert(startIndex == 0 || ends[startIndex-1] < blockStart-1);
+			assert(startIndex == ends.size()-1 || starts[startIndex+1] > blockEnd+1);
+			starts.insert(starts.begin() + startIndex, blockStart);
+			ends.insert(ends.begin() + startIndex, blockEnd);
+			numElems += blockEnd - blockStart + 1;
+			return;
+		}
+		//TODO handle the rest of the cases. for now only these are needed.
+		assert(false);
+	}
 	size_t getSolidIndex(size_t column) const
 	{
 		if (itemsBefore.size() == 0) calcItemsBefore();
+		assert(itemsBefore.size() == ends.size());
 		auto endIter = std::lower_bound(ends.begin(), ends.end(), column);
 		assert(endIter != ends.end());
 		size_t index = endIter - ends.begin();
@@ -182,6 +275,7 @@ public:
 private:
 	void calcItemsBefore() const
 	{
+		assert(starts.size() == ends.size());
 		LengthType total = 0;
 		itemsBefore.reserve(starts.size());
 		for (size_t i = 0; i < starts.size(); i++)

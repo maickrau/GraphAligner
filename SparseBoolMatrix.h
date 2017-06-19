@@ -25,6 +25,10 @@ public:
 	{
 		rows[row].insert(column);
 	}
+	void setBlock(size_t columnStart, size_t columnEnd, size_t row)
+	{
+		rows[row].insertBlock(columnStart, columnEnd);
+	}
 	void unset(size_t column, size_t row)
 	{
 		rows[row].erase(column);
