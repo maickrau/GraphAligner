@@ -233,8 +233,8 @@ private:
 		return AlignmentResult { result, maxDistanceFromBand, false };
 	}
 
-	template <bool distanceMatrixOrder, typename MatrixType>
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrix<MatrixPosition>& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits, const std::vector<LengthType>& maxScorePositionPerRow) const
+	template <bool distanceMatrixOrder, typename SparseMatrixType, typename MatrixType>
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrixType& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<MatrixPosition>& seedHits, const std::vector<LengthType>& maxScorePositionPerRow) const
 	{
 		assert(backtraceMatrix.sizeRows() == sequenceLength+1);
 		assert(backtraceMatrix.sizeColumns() == nodeSequences.size());
@@ -476,8 +476,8 @@ private:
 		}
 	}
 
-	template<bool distanceMatrixOrder, typename MatrixType>
-	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrix<MatrixPosition>& backtrace) const
+	template<bool distanceMatrixOrder, typename SparseMatrixType, typename MatrixType>
+	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrixType& backtrace) const
 	{
 		std::vector<bool> band1;
 		std::vector<bool> band2;
@@ -772,15 +772,15 @@ private:
 		}
 		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
-		SparseMatrix<MatrixPosition> backtraceMatrix {nodeSequences.size(), sequence.size() + 1};
+		SparseMatrix<MatrixPosition, decltype(band)> backtraceMatrix {nodeSequences.size(), sequence.size() + 1, band};
 		MatrixSlice lastRow = getFirstSlice(backtraceMatrix);
-		int sliceSize = sequence.size();
 		auto slice = getScoreAndBacktraceMatrix(sequence, hasWrongOrders, distanceMatrix, lastRow, dynamicWidth, band, backtraceMatrix);
 		auto result = backtrace(slice.M, backtraceMatrix, band, sequence.size(), distanceMatrix, seedHits, slice.maxScorePositionPerRow);
 		return result;
 	}
 
-	MatrixSlice getFirstSlice(SparseMatrix<MatrixPosition>& backtrace) const
+	template <typename SparseMatrixType>
+	MatrixSlice getFirstSlice(SparseMatrixType& backtrace) const
 	{
 		MatrixSlice result;
 		result.M.resize(nodeSequences.size(), 0);
@@ -790,7 +790,6 @@ private:
 		result.Qbacktrace.reserve(nodeSequences.size());
 		for (LengthType i = 0; i < nodeSequences.size(); i++)
 		{
-			backtrace.set(i, 0, std::make_pair(i, 0));
 			result.Qbacktrace.emplace_back(i, 0);
 			result.Rbacktrace.emplace_back(i, 0);
 		}

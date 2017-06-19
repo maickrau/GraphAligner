@@ -13,6 +13,10 @@ public:
 	{
 		rows.resize(numRows);
 	}
+	size_t getSolidIndex(size_t column, size_t row) const
+	{
+		return rows[row].getSolidIndex(column);
+	}
 	bool get(size_t column, size_t row) const
 	{
 		return rows[row].count(column) > 0;

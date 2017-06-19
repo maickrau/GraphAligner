@@ -162,6 +162,15 @@ public:
 			++begin;
 		}
 	}
+	size_t getSolidIndex(size_t column) const
+	{
+		if (itemsBefore.size() == 0) calcItemsBefore();
+		auto endIter = std::lower_bound(ends.begin(), ends.end(), column);
+		assert(endIter != ends.end());
+		size_t index = endIter - ends.begin();
+		assert(starts[index] <= column);
+		return itemsBefore[index] + column - starts[index];
+	}
 	size_t size() const
 	{
 		return numElems;
@@ -171,8 +180,19 @@ public:
 		return ends.size();
 	}
 private:
+	void calcItemsBefore() const
+	{
+		LengthType total = 0;
+		itemsBefore.reserve(starts.size());
+		for (size_t i = 0; i < starts.size(); i++)
+		{
+			itemsBefore.push_back(total);
+			total += ends[i]-starts[i]+1;
+		}
+	}
 	std::vector<LengthType> ends;
 	std::vector<LengthType> starts;
+	mutable std::vector<LengthType> itemsBefore;
 	size_t numElems;
 };
 

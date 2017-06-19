@@ -4,19 +4,22 @@
 #include <unordered_map>
 #include <vector>
 
-template <typename T>
+template <typename T, typename BandMatrix>
 class SparseMatrix
 {
 public:
-	SparseMatrix(size_t numColumns, size_t numRows) :
+	SparseMatrix(size_t numColumns, size_t numRows, const BandMatrix& band) :
 	numColumns(numColumns),
-	numRows(numRows)
+	numRows(numRows),
+	band(band)
 	{
 		rows.resize(numRows);
 	}
 	void set(size_t column, size_t row, T value)
 	{
-		rows[row][column] = value;
+		if (rows[row].size() == 0) rows[row].resize(band.rowSize(row));
+		auto solidIndex = band.getSolidIndex(column, row);
+		rows[row][solidIndex] = value;
 	}
 	T operator()(size_t column, size_t row) const
 	{
@@ -24,11 +27,16 @@ public:
 	}
 	T get(size_t column, size_t row) const
 	{
-		return rows[row].at(column);
+		auto solidIndex = band.getSolidIndex(column, row);
+		return rows[row][solidIndex];
 	}
 	bool exists(size_t column, size_t row) const
 	{
-		return rows[row].count(column) > 0;
+		//todo fix
+		//this will break on an assertion if it does not exist, 
+		//but this function is only called inside assertions anyway
+		auto solidIndex = band.getSolidIndex(column, row);
+		return solidIndex != -1;
 	}
 	size_t sizeColumns() const
 	{
@@ -39,9 +47,10 @@ public:
 		return numRows;
 	}
 private:
+	const BandMatrix& band;
 	size_t numColumns;
 	size_t numRows;
-	std::vector<std::unordered_map<size_t, T>> rows;
+	std::vector<std::vector<T>> rows;
 };
 
 #endif
