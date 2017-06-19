@@ -351,7 +351,7 @@ private:
 	}
 
 	template <typename MatrixType>
-	std::pair<bool, std::vector<LengthType>> getProcessableColumns(const MatrixType& matrix, LengthType j) const
+	std::pair<bool, std::vector<LengthType>> getProcessableColumns(const MatrixType& matrix, LengthType j, std::vector<bool>& rowBand) const
 	{
 		std::vector<LengthType> result;
 		std::vector<LengthType> inOrder;
@@ -362,6 +362,7 @@ private:
 		{
 			auto w = *iter;
 			if (w == dummyNodeStart || w == dummyNodeEnd) continue;
+			rowBand[w] = true;
 			auto nodeIndex = indexToNode[w];
 			if (nodeStart[nodeIndex] == w && notInOrder[nodeIndex])
 			{
@@ -478,6 +479,10 @@ private:
 	template<bool distanceMatrixOrder, typename MatrixType>
 	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrix<MatrixPosition>& backtrace) const
 	{
+		std::vector<bool> band1;
+		std::vector<bool> band2;
+		band1.resize(nodeSequences.size(), false);
+		band2.resize(nodeSequences.size(), false);
 		std::vector<ScoreType> M1;
 		std::vector<ScoreType> M2;
 		std::vector<ScoreType> Q1;
@@ -507,6 +512,8 @@ private:
 		std::vector<ScoreType>& previousR = R2;
 		std::vector<MatrixPosition>& currentRbacktrace = Rbacktrace1;
 		std::vector<MatrixPosition>& previousRbacktrace = Rbacktrace2;
+		std::vector<bool>& currentBand = band1;
+		std::vector<bool>& previousBand = band2;
 		previousM = std::move(previous.M);
 		previousQ = std::move(previous.Q);
 		previousR = std::move(previous.R);
@@ -520,7 +527,7 @@ private:
 		previousR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
 		currentM[dummyNodeEnd] = -gapPenalty(sequence.size() - 1);
 		previousM[dummyNodeEnd] = -gapPenalty(sequence.size());
-		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, 0);
+		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, 0, previousBand);
 		LengthType previousRowMaximumIndex = 0;
 
 		for (LengthType j = 1; j < sequence.size()+1; j++)
@@ -529,7 +536,7 @@ private:
 			{
 				expandBandDynamically(band, previousRowMaximumIndex, j, dynamicWidth);
 			}
-			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j);
+			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j, currentBand);
 			auto& previousProcessableColumns = previousProcessableColumnsAndOrder.second;
 			auto& currentProcessableColumns = currentProcessableColumnsAndOrder.second;
 			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
@@ -539,12 +546,13 @@ private:
 			LengthType maxScorePosition = dummyNodeStart;
 			ScoreType maxScore = currentM[dummyNodeStart];
 			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
-			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence, band, previousProcessableColumns);
+			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence, previousBand, previousProcessableColumns);
 
 			for (LengthType w : currentProcessableColumns)
 			{
 				assert(band(w, j));
-				bool neighborInsideBand = hasInNeighborInsideBand(w, j, band);
+				assert(currentBand[w]);
+				bool neighborInsideBand = hasInNeighborInsideBand(w, j, currentBand);
 				auto nodeIndex = indexToNode[w];
 				currentQ[w] = previousQ[w] - gapContinuePenalty;
 				bool rCalculated = false;
@@ -570,7 +578,7 @@ private:
 					if (neighborInsideBand && previousProcessableColumns.size() > 2)
 					{
 						rCalculated = true;
-						auto rr = recurrenceR(w, j, currentM, currentR, currentRbacktrace, band);
+						auto rr = recurrenceR(w, j, currentM, currentR, currentRbacktrace, currentBand);
 						currentR[w] = rr.first;
 						currentRbacktrace[w] = rr.second;
 						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
@@ -579,7 +587,7 @@ private:
 				//implicitly handle edges from dummy node by initializing M as coming from the dummy node
 				currentM[w] = previousM[dummyNodeStart] + matchScore(nodeSequences[w], sequence[j-1]);
 				MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j-1);
-				if (band(w, j-1) && currentQ[w] > currentM[w])
+				if (previousBand[w] && currentQ[w] > currentM[w])
 				{
 					foundBacktrace = Qbacktrace[w];
 					assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
@@ -599,7 +607,7 @@ private:
 					for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 					{
 						auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-						if (!band(u, j-1)) continue;
+						if (!previousBand[u]) continue;
 						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
 						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
 						{
@@ -612,7 +620,7 @@ private:
 				else
 				{
 					LengthType u = w-1;
-					if (band(u, j-1))
+					if (previousBand[u])
 					{
 						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
 						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
@@ -624,7 +632,7 @@ private:
 					}
 				}
 				//if the previous row was not inside the band, initialize Q as the current M
-				if (!band(w, j-1))
+				if (!previousBand[w])
 				{
 					currentQ[w] = currentM[w];
 					Qbacktrace[w] = std::make_pair(w, j);
@@ -652,6 +660,12 @@ private:
 			previousRowMaximumIndex = maxScorePosition;
 			maxScorePositionPerRow[j] = maxScorePosition;
 
+			for (auto w : previousProcessableColumns)
+			{
+				previousBand[w] = false;
+			}
+
+			std::swap(currentBand, previousBand);
 			std::swap(currentM, previousM);
 			std::swap(currentQ, previousQ);
 			std::swap(currentR, previousR);
@@ -809,8 +823,7 @@ private:
 		return result;
 	}
 
-	template <typename MatrixType>
-	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence, const MatrixType& band, const std::vector<LengthType>& previousProcessableColumns) const
+	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence, const std::vector<bool>& previousBand, const std::vector<LengthType>& previousProcessableColumns) const
 	{
 		if (j == 0) return getRHelperZero();
 		if (j == 1) return getRHelperOne();
@@ -824,7 +837,7 @@ private:
 				for (size_t neighbori = 0; neighbori < inNeighbors[nodeIndex].size(); neighbori++)
 				{
 					LengthType u = nodeEnd[inNeighbors[nodeIndex][neighbori]]-1;
-					if (!band(u, j-1)) continue;
+					if (!previousBand[u]) continue;
 					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
 					if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
 					{
@@ -835,7 +848,7 @@ private:
 			else
 			{
 				LengthType u = v-1;
-				if (!band(u, j-1)) continue;
+				if (!previousBand[u]) continue;
 				auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
 				if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
 				{
@@ -855,29 +868,27 @@ private:
 		return result;
 	}
 
-	template <typename MatrixType>
-	bool hasInNeighborInsideBand(LengthType w, LengthType j, const MatrixType& band) const
+	bool hasInNeighborInsideBand(LengthType w, LengthType j, const std::vector<bool>& currentBand) const
 	{
 		auto nodeIndex = indexToNode[w];
 		if (nodeStart[nodeIndex] == w)
 		{
 			for (size_t neighborI = 0; neighborI < inNeighbors[nodeIndex].size(); neighborI++)
 			{
-				if (band(nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1, j)) return true;
+				if (currentBand[nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1]) return true;
 			}
 		}
 		else
 		{
-			return band(w-1, j);
+			return currentBand[w-1];
 		}
 		return false;
 	}
 
 	//compute R using the recurrence on page 3
-	template <typename MatrixType>
-	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const MatrixType& band) const
+	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const std::vector<bool>& currentBand) const
 	{
-		assert(band(w, j));
+		assert(currentBand[w]);
 		auto nodeIndex = indexToNode[w];
 		assert(nodeStart[nodeIndex] != w || !notInOrder[nodeIndex]);
 		MatrixPosition pos;
@@ -887,7 +898,7 @@ private:
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
 				auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-				if (!band(u, j)) continue;
+				if (!currentBand[u]) continue;
 				assert(u < w);
 				if (currentM[u] - gapPenalty(1) > maxValue)
 				{
@@ -904,7 +915,7 @@ private:
 		else
 		{
 			auto u = w-1;
-			if (band(u, j))
+			if (currentBand[u])
 			{
 				pos = currentRbacktrace[u];
 				maxValue = currentR[u] - gapContinuePenalty;
