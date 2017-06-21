@@ -3,6 +3,7 @@
 #include <cassert>
 #include "vg.pb.h"
 #include "TopologicalSort.h"
+#include "ThreadReadAssertion.h"
 
 using namespace std;
 void topological_sort_using_DFS_loop(vector<vector<size_t> >& graph, vector<size_t>& sorted);

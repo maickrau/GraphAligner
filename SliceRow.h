@@ -1,6 +1,8 @@
 #ifndef SliceRow_h
 #define SliceRow_h
 
+#include "ThreadReadAssertion.h"
+
 template <typename LengthType>
 class SliceRow
 {

@@ -16,6 +16,7 @@
 #include <google/protobuf/reflection_ops.h>
 #include <google/protobuf/wire_format.h>
 // @@protoc_insertion_point(includes)
+#include "ThreadReadAssertion.h"
 
 namespace vg {
 

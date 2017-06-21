@@ -1,6 +1,7 @@
 #include <functional>
 #include <algorithm>
 #include "vg.pb.h"
+#include "ThreadReadAssertion.h"
 
 
 // Program to find Dijkstra's shortest path using

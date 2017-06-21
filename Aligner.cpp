@@ -12,6 +12,7 @@
 #include "GraphAligner.h"
 #include "mfvs_graph.h"
 #include "BigraphToDigraph.h"
+#include "ThreadReadAssertion.h"
 
 
 class BufferedWriter : std::ostream
@@ -283,11 +284,13 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 
 void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth, bool initialFullBand)
 {
+	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
 	for (size_t i = 0; i < fastQs.size(); i++)
 	{
 		const FastQ* fastq = fastQs[i];
+		assertSetRead(fastq->seq_id);
 		coutoutput << "thread " << threadnum << " " << i << "/" << fastQs.size() << "\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
 		coutoutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
@@ -423,11 +426,13 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		stream::write_buffered(alignmentOut, alignmentvec, 0);
 		coutoutput << "write finished" << BufferedWriter::Flush;
 	}
+	assertSetRead("After all reads");
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
 void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int startBandwidth, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, bool initialFullBand)
 {
+	assertSetRead("Preprocessing");
 
 	vg::Graph graph;
 	{
@@ -492,6 +497,7 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 
 	std::vector<std::thread> threads;
 
+	assertSetRead("Running alignments");
 	for (int i = 0; i < numThreads; i++)
 	{
 		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth, initialFullBand]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth, initialFullBand); });
@@ -501,6 +507,7 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 	{
 		threads[i].join();
 	}
+	assertSetRead("Postprocessing");
 
 	std::vector<vg::Alignment> alignments;
 

@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include <vector>
+#include "ThreadReadAssertion.h"
 
 template <typename T, typename BandMatrix>
 class SparseMatrix

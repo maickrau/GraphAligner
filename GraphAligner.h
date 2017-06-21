@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <string>
 #include <vector>
-#include <cassert>
 #include <cmath>
 #include <boost/config.hpp>
 #include <boost/property_map/property_map.hpp>
@@ -20,6 +19,7 @@
 #include "SliceRow.h"
 #include "SparseBoolMatrix.h"
 #include "SparseMatrix.h"
+#include "ThreadReadAssertion.h"
 
 using namespace boost;
 

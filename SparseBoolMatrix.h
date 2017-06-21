@@ -2,6 +2,7 @@
 #define SparseBoolMatrix_h
 
 #include <vector>
+#include "ThreadReadAssertion.h"
 
 template <typename ContainerType>
 class SparseBoolMatrix
