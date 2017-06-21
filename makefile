@@ -27,6 +27,9 @@ $(BINDIR)/ReadIndexToId: $(OBJ)
 $(BINDIR)/CompareAlignments: $(OBJ)
 	$(GPP) -o $@ CompareAlignments.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
+$(BINDIR)/MergeGraphs: $(OBJ)
+	$(GPP) -o $@ MergeGraphs.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+
 $(BINDIR)/SimulateReads: $(OBJ)
 	$(GPP) -o $@ SimulateReads.cpp $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
@@ -39,7 +42,7 @@ $(BINDIR)/PickSeedHits: $(OBJ)
 $(BINDIR)/AlignmentSequenceInserter: $(OBJ)
 	$(GPP) -o $@ AlignmentSequenceInserter.cpp $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs
 
 clean:
 	rm -f $(ODIR)/*
