@@ -166,6 +166,8 @@ public:
 	}
 	void insertBlock(LengthType blockStart, LengthType blockEnd)
 	{
+		//can't insert after itemsBefore has been initialized
+		assert(itemsBefore.size() == 0);
 		assert(blockEnd >= blockStart);
 		assert(ends.size() == starts.size());
 		//right after the final block
@@ -210,7 +212,74 @@ public:
 		auto foundStart = std::lower_bound(ends.begin(), ends.end(), blockStart);
 		size_t endIndex = foundEnd - ends.begin();
 		size_t startIndex = foundStart - ends.begin();
-		//todo handle the case where the inserted block overlaps multiple existing blocks
+		assert(endIndex >= startIndex);
+		//overlaps one or more existing blocks
+		if (endIndex > startIndex)
+		{
+			if (endIndex < ends.size() && starts[endIndex] <= blockEnd)
+			{
+				assert(ends[endIndex] >= blockEnd);
+				for (size_t i = startIndex; i < endIndex; i++)
+				{
+					//greater but not equal, if they were equal they should have been merged earlier
+					assert(ends[i+1] > starts[i]+1);
+					numElems += ends[i+1] - starts[i] - 1;
+				}
+				starts[endIndex] = starts[startIndex];
+				starts.erase(starts.begin()+startIndex, starts.begin()+endIndex);
+				ends.erase(ends.begin()+startIndex, ends.begin()+endIndex);
+				//pokes past the start of the first overlapping block
+				if (starts[startIndex] > blockStart)
+				{
+					numElems += starts[startIndex] - blockStart;
+					starts[startIndex] = blockStart;
+					//merge
+					if (startIndex > 0 && ends[startIndex-1]+1 == starts[startIndex])
+					{
+						ends[startIndex-1] = ends[startIndex];
+						starts.erase(starts.begin() + startIndex);
+						ends.erase(ends.begin() + startIndex);
+					}
+				}
+				return;
+			}
+			else
+			{
+				for (size_t i = startIndex+1; i < endIndex; i++)
+				{
+					//greater but not equal, if they were equal they should have been merged earlier
+					assert(ends[i] > starts[i-1]+1);
+					numElems += ends[i] - starts[i-1] - 1;
+				}
+				assert(blockEnd > ends[endIndex-1]);
+				assert(endIndex == ends.size() || blockEnd < starts[endIndex]);
+				numElems += blockEnd - ends[endIndex-1];
+				ends[startIndex] = blockEnd;
+				//next to the next block, merge
+				if (endIndex < ends.size() && starts[endIndex] == blockEnd+1)
+				{
+					ends[startIndex] = ends[endIndex];
+					starts.erase(starts.begin() + endIndex);
+					ends.erase(ends.begin() + endIndex);
+				}
+				starts.erase(starts.begin()+startIndex+1, starts.begin()+endIndex);
+				ends.erase(ends.begin()+startIndex+1, ends.begin()+endIndex);
+				//pokes past the start of the first overlapping block
+				if (starts[startIndex] > blockStart)
+				{
+					numElems += starts[startIndex] - blockStart;
+					starts[startIndex] = blockStart;
+					//merge
+					if (startIndex > 0 && ends[startIndex-1]+1 == starts[startIndex])
+					{
+						ends[startIndex-1] = ends[startIndex];
+						starts.erase(starts.begin() + startIndex);
+						ends.erase(ends.begin() + startIndex);
+					}
+				}
+				return;
+			}
+		}
 		//overlaps one existing block
 		if (endIndex == startIndex+1)
 		{
@@ -308,6 +377,8 @@ private:
 		itemsBefore.reserve(starts.size());
 		for (size_t i = 0; i < starts.size(); i++)
 		{
+			//greater but not equal, if they were equal then they should have been merged
+			assert(i == 0 || starts[i] > ends[i-1]+1);
 			itemsBefore.push_back(total);
 			total += ends[i]-starts[i]+1;
 		}
