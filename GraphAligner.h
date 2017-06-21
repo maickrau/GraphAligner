@@ -530,6 +530,10 @@ private:
 			if (j >= 100)
 			{
 				assert(band(previousRowMaximumIndex, j-1));
+				band.set(dummyNodeStart, j);
+				band.set(dummyNodeEnd, j);
+				currentBand[dummyNodeStart] = true;
+				currentBand[dummyNodeEnd] = true;
 				expandBandDynamically(band, previousRowMaximumIndex, j, dynamicWidth);
 			}
 			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j, currentBand);
