@@ -284,22 +284,22 @@ private:
 		return std::make_tuple(score, maxMinDistance, trace);
 	}
 
-	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength) const
+	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength, LengthType maxRow) const
 	{
 		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
 		auto nodeIndex = indexToNode[w];
 		auto end = nodeEnd[nodeIndex];
-		while (w != end && j < sequenceLength+1)
+		while (w != end && j < sequenceLength+1 && j < maxRow)
 		{
 			result[j].emplace_back(w);
 			w++;
 			j++;
 		}
-		if (w == end && j < sequenceLength+1)
+		if (w == end && j < sequenceLength+1 && j < maxRow)
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
-				expandBandForwards(result, nodeStart[outNeighbors[nodeIndex][i]], j, sequenceLength);
+				expandBandForwards(result, nodeStart[outNeighbors[nodeIndex][i]], j, sequenceLength, maxRow);
 			}
 		}
 	}
@@ -325,8 +325,9 @@ private:
 		}
 	}
 
-	std::vector<std::vector<LengthType>> getBandLocations(int sequenceLength, const std::vector<MatrixPosition>& seedHits) const
+	std::vector<std::vector<LengthType>> getBandLocations(int sequenceLength, const std::vector<MatrixPosition>& seedHits, LengthType maxRow) const
 	{
+		if (maxRow > sequenceLength+1) maxRow = sequenceLength+1;
 		std::vector<std::vector<LengthType>> forwardResult;
 		std::vector<std::vector<LengthType>> backwardResult;
 		backwardResult.resize(sequenceLength+1);
@@ -335,12 +336,12 @@ private:
 		forwardResult[0].emplace_back(0);
 		for (auto hit : seedHits)
 		{
-			expandBandForwards(forwardResult, hit.first, hit.second, sequenceLength);
+			if (hit.second < maxRow) expandBandForwards(forwardResult, hit.first, hit.second, sequenceLength, maxRow);
 			expandBandBackwards(backwardResult, hit.first, hit.second, sequenceLength);
 		}
 		std::vector<std::vector<LengthType>> result;
 		result.resize(sequenceLength+1);
-		for (size_t j = 0; j < sequenceLength+1; j++)
+		for (size_t j = 0; j < maxRow; j++)
 		{
 			std::set<LengthType> rowResult;
 			rowResult.insert(forwardResult[j].begin(), forwardResult[j].end());
@@ -383,7 +384,6 @@ private:
 	void expandBandDynamically(MatrixType& band, LengthType previousMaximumIndex, LengthType j, LengthType dynamicWidth) const
 	{
 		assert(j < band.sizeRows());
-		assert(band(previousMaximumIndex, j-1));
 		assert(previousMaximumIndex < nodeSequences.size());
 		auto nodeIndex = indexToNode[previousMaximumIndex];
 		LengthType end = nodeEnd[nodeIndex];
@@ -529,6 +529,7 @@ private:
 		{
 			if (j >= 100)
 			{
+				assert(band(previousRowMaximumIndex, j-1));
 				expandBandDynamically(band, previousRowMaximumIndex, j, dynamicWidth);
 			}
 			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j, currentBand);
@@ -677,60 +678,15 @@ private:
 		return result;
 	}
 
-	template <typename MatrixType>
-	void expandBandRightwards(MatrixType& matrix, LengthType w, LengthType j, int bandWidth) const
-	{
-		auto nodeIndex = indexToNode[w];
-		auto end = nodeEnd[nodeIndex];
-		while (w != end && bandWidth > 0)
-		{
-			matrix.set(w, j);
-			w++;
-			bandWidth--;
-			if (w != end && matrix(w, j)) return;
-		}
-		if (w == end && bandWidth > 0)
-		{
-			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
-			{
-				expandBandRightwards(matrix, nodeStart[outNeighbors[nodeIndex][i]], j, bandWidth);
-			}
-		}
-	}
-
-	template <typename MatrixType>
-	void expandBandLeftwards(MatrixType& matrix, LengthType w, LengthType j, int bandWidth) const
-	{
-		auto nodeIndex = indexToNode[w];
-		auto start = nodeStart[nodeIndex];
-		while (w != start && bandWidth > 0)
-		{
-			matrix.set(w, j);
-			w--;
-			bandWidth--;
-			if (w != start && matrix(w, j)) return;
-		}
-		if (w == start && bandWidth > 0)
-		{
-			matrix.set(w, j);
-			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
-			{
-				expandBandLeftwards(matrix, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j, bandWidth-1);
-			}
-		}
-	}
-
 	SparseBoolMatrix<SliceRow<LengthType>> getBandedRows(const std::vector<MatrixPosition>& seedHits, int bandWidth, size_t sequenceLength) const
 	{
-		auto bandLocations = getBandLocations(sequenceLength, seedHits);
+		auto bandLocations = getBandLocations(sequenceLength, seedHits, 100);
 		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
 		for (LengthType j = 0; j < 100 && j < sequenceLength+1; j++)
 		{
 			for (size_t i = 0; i < bandLocations[j].size(); i++)
 			{
-				result.set(bandLocations[j][i], j);
-				expandBandRightwards(result, bandLocations[j][i], j, bandWidth);
-				expandBandLeftwards(result, bandLocations[j][i], j, bandWidth);
+				expandBandDynamically(result, bandLocations[j][i], j, bandWidth);
 			}
 		}
 		for (LengthType j = 0; j < sequenceLength+1; j++)

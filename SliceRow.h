@@ -208,12 +208,37 @@ public:
 		auto foundStart = std::lower_bound(ends.begin(), ends.end(), blockStart);
 		size_t endIndex = foundEnd - ends.begin();
 		size_t startIndex = foundStart - ends.begin();
-		//todo handle the case where the inserted block overlaps an existing block
+		//todo handle the case where the inserted block overlaps multiple existing blocks
+		//overlaps one existing block
+		if (endIndex == startIndex+1)
+		{
+			//only overlaps the block, and doesn't extend before it
+			assert(starts[startIndex] <= blockStart);
+			//only overlaps exactly one block
+			assert(endIndex == ends.size() || starts[endIndex] > blockEnd);
+			assert(blockEnd > ends[startIndex]);
+			numElems += blockEnd - ends[startIndex];
+			ends[startIndex] = blockEnd;
+			//merge with next block
+			if (endIndex < ends.size() && ends[startIndex]+1 == starts[endIndex])
+			{
+				starts[endIndex] = starts[startIndex];
+				starts.erase(starts.begin() + startIndex);
+				ends.erase(ends.begin() + startIndex);
+			}
+			return;
+		}
 		assert(endIndex == startIndex);
+		//already exists, don't need to do anything
+		if (startIndex < ends.size() && starts[startIndex] <= blockStart && ends[startIndex] >= blockEnd)
+		{
+			return;
+		}
 		//right before a block
 		if (startIndex < ends.size() && ends[startIndex] >= blockEnd && starts[startIndex] <= blockEnd+1)
 		{
 			assert(startIndex == 0 || ends[startIndex-1] < blockStart);
+			assert(blockStart <= starts[startIndex]);
 			numElems += starts[startIndex] - blockStart;
 			starts[startIndex] = blockStart;
 			//merge with the previous block
@@ -230,6 +255,7 @@ public:
 		{
 			assert(startIndex == endIndex);
 			assert(endIndex == ends.size() || starts[endIndex] > blockEnd);
+			assert(blockEnd >= ends[startIndex-1]);
 			numElems += blockEnd - ends[startIndex-1];
 			ends[startIndex-1] = blockEnd;
 			//merge with the next block
