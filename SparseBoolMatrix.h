@@ -67,6 +67,15 @@ public:
 	{
 		return rows[row].numBlocks();
 	}
+	size_t totalOnes() const
+	{
+		size_t result = 0;
+		for (size_t i = 0; i < rows.size(); i++)
+		{
+			result += rows[i].size();
+		}
+		return result;
+	}
 private:
 	size_t numColumns;
 	size_t numRows;

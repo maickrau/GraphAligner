@@ -1,3 +1,4 @@
+#include <mutex>
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -282,16 +283,24 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*>& fastQs, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth, bool initialFullBand)
+void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth, bool initialFullBand)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
 	BufferedWriter coutoutput {std::cout};
-	for (size_t i = 0; i < fastQs.size(); i++)
+	while (true)
 	{
-		const FastQ* fastq = fastQs[i];
+		const FastQ* fastq;
+		size_t fastqSize;
+		{
+			std::lock_guard<std::mutex> lock {fastqMutex};
+			if (fastQs.size() == 0) break;
+			fastq = fastQs.back();
+			fastQs.pop_back();
+			fastqSize = fastQs.size();
+		}
 		assertSetRead(fastq->seq_id);
-		coutoutput << "thread " << threadnum << " " << i << "/" << fastQs.size() << "\n";
+		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
 		coutoutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
 		if (seedhits.at(fastq).size() == 0)
@@ -309,7 +318,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			{
 				graphAlignerSeedHits.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position());
 			}
-			coutoutput << "thread " << threadnum << " read " << i << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
+			coutoutput << "thread " << threadnum << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
 			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size()*2);
 			DirectedGraph seedGraph {seedGraphUnordered};
 			coutoutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << BufferedWriter::Flush;
@@ -383,7 +392,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 			alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
 		}
 
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastQs[i]->seq_id, fastQs[i]->sequence, startBandwidth, dynamicWidth, alignerSeedHits, initialFullBand);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, startBandwidth, dynamicWidth, alignerSeedHits, initialFullBand);
 
 		//failed alignment, don't output
 		if (alignment.alignmentFailed)
@@ -411,7 +420,7 @@ void runComponentMappings(const vg::Graph& graph, const std::vector<const FastQ*
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, augmentedGraph);
 
 		alignments.push_back(alignment.alignment);
-		coutoutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << BufferedWriter::Flush;
+		coutoutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << " with " << alignment.cellsProcessed << " cells" << BufferedWriter::Flush;
 		std::vector<vg::Alignment> alignmentvec;
 		alignmentvec.emplace_back(alignments.back());
 		std::string filename;
@@ -480,27 +489,25 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 	}
 	
 
-	std::vector<std::vector<const FastQ*>> readsPerThread;
+	std::vector<const FastQ*> readPointers;
 	std::map<const FastQ*, std::vector<vg::Alignment>> seedHits;
 	std::vector<std::vector<vg::Alignment>> resultsPerThread;
-	readsPerThread.resize(numThreads);
 	resultsPerThread.resize(numThreads);
-	int currentThread = 0;
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
 		if (seeds.count(fastqs[i].seq_id) == 0) continue;
 		seedHits[&(fastqs[i])].insert(seedHits[&(fastqs[i])].end(), seeds[fastqs[i].seq_id].begin(), seeds[fastqs[i].seq_id].end());
-		readsPerThread[currentThread].push_back(&(fastqs[i]));
-		currentThread++;
-		currentThread %= numThreads;
+		readPointers.push_back(&(fastqs[i]));
 	}
 
 	std::vector<std::thread> threads;
 
 	assertSetRead("Running alignments");
+	std::mutex readMutex;
+
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readsPerThread, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth, initialFullBand]() { runComponentMappings(graph, readsPerThread[i], seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth, initialFullBand); });
+		threads.emplace_back([&graph, &readPointers, &readMutex, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth, initialFullBand]() { runComponentMappings(graph, readPointers, readMutex, seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth, initialFullBand); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
