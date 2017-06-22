@@ -53,6 +53,19 @@ public:
 	{
 		return numRows;
 	}
+	size_t getSolidBlockStartIndex(size_t blockStart, size_t blockEnd, size_t row) const
+	{
+		assert(blockEnd >= blockStart);
+		auto solidIndex = band.getSolidIndex(blockStart, row);
+		assert(band.getSolidIndex(blockEnd, row) == solidIndex + (blockEnd - blockStart));
+		return solidIndex;
+	}
+	void setSolidIndex(size_t solidIndex, size_t row, T value)
+	{
+		assert(row < rows.size());
+		assert(solidIndex < rows[row].size());
+		rows[row][solidIndex] = value;
+	}
 private:
 	const BandMatrix& band;
 	size_t numColumns;
