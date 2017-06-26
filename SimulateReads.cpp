@@ -112,13 +112,12 @@ std::string reverseComplement(std::string str)
 	return result;
 }
 
-std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<size_t>>& outEdges, const std::map<size_t, std::vector<size_t>>& inEdges)
+std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesRight, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesLeft)
 {
-
 	bool reverse = false;
 	if (distribution(generator) < 0.5) reverse = true;
 
-	std::vector<int> realNodes;
+	std::vector<std::pair<int, bool>> realNodes;
 
 	int currentNode = rand() % g.node_size();
 	int startNode = g.node(currentNode).id();
@@ -134,20 +133,23 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 	}
 	while (realsequence.size() < length)
 	{
-		if (currentNode == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
-		std::cout << g.node(currentNode).id() << "\n";
-		realNodes.push_back(g.node(currentNode).id());
+		if (currentNode == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+		realNodes.emplace_back(g.node(currentNode).id(), reverse);
 		if (reverse)
 		{
-			if (inEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
-			if (inEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
-			currentNode = inEdges.at(currentNode)[rand() % inEdges.at(currentNode).size()];
+			if (outEdgesLeft.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesLeft.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			auto pickedIndex = rand() % outEdgesLeft.at(currentNode).size();
+			reverse = outEdgesLeft.at(currentNode)[pickedIndex].second;
+			currentNode = outEdgesLeft.at(currentNode)[pickedIndex].first;
 		}
 		else
 		{
-			if (outEdges.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
-			if (outEdges.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdges, inEdges);
-			currentNode = outEdges.at(currentNode)[rand() % outEdges.at(currentNode).size()];
+			if (outEdgesRight.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesRight.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			auto pickedIndex = rand() % outEdgesRight.at(currentNode).size();
+			reverse = outEdgesRight.at(currentNode)[pickedIndex].second;
+			currentNode = outEdgesRight.at(currentNode)[pickedIndex].first;
 		}
 		if (reverse)
 		{
@@ -158,7 +160,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 			realsequence += g.node(currentNode).sequence();
 		}
 	}
-	realNodes.push_back(g.node(currentNode).id());
+	realNodes.emplace_back(g.node(currentNode).id(), reverse);
 	realsequence = realsequence.substr(0, length);
 	auto errorSequence = introduceErrors(realsequence, substitutionErrorRate, insertionErrorRate, deletionErrorRate);
 
@@ -172,8 +174,8 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 		auto mapping = path->add_mapping();
 		auto position = new vg::Position;
 		mapping->set_allocated_position(position);
-		position->set_node_id(realNodes[i]);
-		position->set_is_reverse(reverse);
+		position->set_node_id(realNodes[i].first);
+		position->set_is_reverse(realNodes[i].second);
 		if (i == 0) position->set_offset(startPos);
 	}
 
@@ -223,12 +225,30 @@ int main(int argc, char** argv)
 	{
 		ids[graph.node(i).id()] = i;
 	}
-	std::map<size_t, std::vector<size_t>> outEdges;
-	std::map<size_t, std::vector<size_t>> inEdges;
+	std::map<size_t, std::vector<std::pair<size_t, bool>>> outEdgesRight;
+	std::map<size_t, std::vector<std::pair<size_t, bool>>> outEdgesLeft;
 	for (int i = 0; i < graph.edge_size(); i++)
 	{
-		outEdges[ids[graph.edge(i).from()]].push_back(ids[graph.edge(i).to()]);
-		inEdges[ids[graph.edge(i).to()]].push_back(ids[graph.edge(i).from()]);
+		if (graph.edge(i).from_start())
+		{
+			bool direction = graph.edge(i).to_end();
+			outEdgesLeft[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+		}
+		else
+		{
+			bool direction = graph.edge(i).to_end();
+			outEdgesRight[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+		}
+		if (graph.edge(i).to_end())
+		{
+			bool direction = graph.edge(i).from_start();
+			outEdgesRight[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+		}
+		else
+		{
+			bool direction = graph.edge(i).from_start();
+			outEdgesLeft[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+		}
 	}
 
 	std::vector<std::tuple<vg::Alignment, std::string, vg::Alignment>> reads;
@@ -236,7 +256,7 @@ int main(int argc, char** argv)
 	std::vector<vg::Alignment> seeds;
 	for (int i = 0; i < numReads; i++)
 	{
-		reads.push_back(simulateOneRead(graph, length, substitution, insertions, deletions, outEdges, inEdges));
+		reads.push_back(simulateOneRead(graph, length, substitution, insertions, deletions, outEdgesRight, outEdgesLeft));
 		truth.emplace_back(std::get<0>(reads[i]));
 		seeds.emplace_back(std::get<2>(reads[i]));
 	}
