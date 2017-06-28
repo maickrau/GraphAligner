@@ -9,7 +9,6 @@
 #include "stream.hpp"
 #include "fastqloader.h"
 #include "TopologicalSort.h"
-#include "SubgraphFromSeed.h"
 #include "GraphAligner.h"
 #include "mfvs_graph.h"
 #include "BigraphToDigraph.h"
@@ -279,7 +278,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, const std::map<const FastQ*, std::vector<vg::Alignment>>& seedhits, std::vector<vg::Alignment>& alignments, int threadnum, int startBandwidth, int dynamicWidth, bool initialFullBand)
+void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -298,72 +297,8 @@ void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fas
 		assertSetRead(fastq->seq_id);
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
-		coutoutput << "components: " << seedhits.at(fastq).size() << BufferedWriter::Flush;
-		if (seedhits.at(fastq).size() == 0)
-		{
-			cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-			continue;
-		}
-		std::vector<std::tuple<int, DirectedGraph>> components;
-		std::vector<std::pair<int, size_t>> graphAlignerSeedHits;
-		for (size_t j = 0; j < seedhits.at(fastq).size(); j++)
-		{
-			auto& seedhit = seedhits.at(fastq)[j];
-			//add seed hit to both strands
-			if (seedhit.path().mapping(0).position().node_id() > 0)
-			{
-				graphAlignerSeedHits.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position());
-			}
-			coutoutput << "thread " << threadnum << " component " << j << "/" << seedhits.at(fastq).size() << "\n" << BufferedWriter::Flush;
-			auto seedGraphUnordered = ExtractSubgraph(graph, seedhit, fastq->sequence.size()*2);
-			DirectedGraph seedGraph {seedGraphUnordered};
-			coutoutput << "component size " << GraphSizeInBp(seedGraph) << "bp" << BufferedWriter::Flush;
-			coutoutput << "component out of order before sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
-			int startpos = 0;
-			OrderByFeedbackVertexset(seedGraph);
-			bool alreadyIn = false;
-			startpos = seedhit.query_position();
-			for (size_t k = 0; k < components.size(); k++)
-			{
-				if (startpos == std::get<0>(components[k]) && GraphEqual(seedGraph,std::get<1>(components[k])))
-				{
-					coutoutput << "already exists" << BufferedWriter::Flush;
-					alreadyIn = true;
-					break;
-				}
-			}
-			if (alreadyIn) continue;
-			coutoutput << "component out of order after sorting: " << numberOfVerticesOutOfOrder(seedGraph) << BufferedWriter::Flush;
-			components.emplace_back(startpos, seedGraph);
-			coutoutput << "component position: " << startpos << " " << BufferedWriter::Flush;
-		}
-		std::sort(components.begin(), components.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right); });
 
-		DirectedGraph augmentedGraph;
-		std::vector<std::vector<int>> sources;
-		std::vector<std::vector<int>> sinks;
-		for (size_t i = 0; i < components.size(); i++)
-		{
-			sources.emplace_back(getSourceNodes(std::get<1>(components[i])));
-			sinks.emplace_back(getSinkNodes(std::get<1>(components[i])));
-			augmentedGraph.AddSubgraph(std::get<1>(components[i]));
-		}
-		for (size_t i = 0; i < components.size(); i++)
-		{
-			for (size_t j = i+1; j < components.size(); j++)
-			{
-				augmentedGraph.ConnectComponents(sinks[i], sources[j]);
-			}
-		}
-		coutoutput << "thread " << threadnum << " augmented graph is " << GraphSizeInBp(augmentedGraph) << "bp" << BufferedWriter::Flush;
-		auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits);
-		std::vector<int> augmentedGraphReachable;
-		for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
-		{
-			augmentedGraphReachable.push_back(augmentedGraphSeedHits[i].nodeId);
-		}
-		augmentedGraph.PruneByReachability(augmentedGraphReachable);
-		coutoutput << "thread " << threadnum << " augmented graph after pruning is " << GraphSizeInBp(augmentedGraph) << "bp" << BufferedWriter::Flush;
+		DirectedGraph augmentedGraph {graph};
 		coutoutput << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << "\n";
 		if (augmentedGraph.nodes.size() == 0) continue;
 		OrderByFeedbackVertexset(augmentedGraph);
@@ -382,13 +317,7 @@ void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fas
 		}
 		augmentedGraphAlignment.Finalize();
 
-		std::vector<GraphAligner<uint32_t, int32_t>::SeedHit> alignerSeedHits;
-		for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
-		{
-			alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
-		}
-
-		auto alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, startBandwidth, dynamicWidth, alignerSeedHits, initialFullBand);
+		auto alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth);
 
 		//failed alignment, don't output
 		if (alignment.alignmentFailed)
@@ -435,7 +364,7 @@ void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fas
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, std::string seedFile, int numThreads, int startBandwidth, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, bool initialFullBand)
+void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile)
 {
 	assertSetRead("Preprocessing");
 
@@ -467,32 +396,11 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 		std::exit(0);
 	}
 
-
-
-	std::map<std::string, std::vector<vg::Alignment>> seeds;
-	{
-		if (is_file_exist(seedFile)){
-			std::ifstream seedfile { seedFile, std::ios::in | std::ios::binary };
-			std::function<void(vg::Alignment&)> alignmentLambda = [&seeds](vg::Alignment& a) {
-				seeds[a.name()].push_back(a);
-			};
-			stream::for_each(seedfile, alignmentLambda);
-		}
-		else{
-			std::cerr << "No seeds file exists" << std::endl;
-			std::exit(0);
-		}
-	}
-	
-
 	std::vector<const FastQ*> readPointers;
-	std::map<const FastQ*, std::vector<vg::Alignment>> seedHits;
 	std::vector<std::vector<vg::Alignment>> resultsPerThread;
 	resultsPerThread.resize(numThreads);
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
-		if (seeds.count(fastqs[i].seq_id) == 0) continue;
-		seedHits[&(fastqs[i])].insert(seedHits[&(fastqs[i])].end(), seeds[fastqs[i].seq_id].begin(), seeds[fastqs[i].seq_id].end());
 		readPointers.push_back(&(fastqs[i]));
 	}
 
@@ -503,7 +411,7 @@ void alignReads(std::string graphFile, std::string fastqFile, std::string seedFi
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readPointers, &readMutex, &seedHits, &resultsPerThread, i, startBandwidth, dynamicWidth, initialFullBand]() { runComponentMappings(graph, readPointers, readMutex, seedHits, resultsPerThread[i], i, startBandwidth, dynamicWidth, initialFullBand); });
+		threads.emplace_back([&graph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth]() { runComponentMappings(graph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
