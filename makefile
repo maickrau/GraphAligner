@@ -45,7 +45,10 @@ $(BINDIR)/AlignmentSequenceInserter: $(OBJ)
 $(BINDIR)/OrderProtobufs: $(OBJ)
 	$(GPP) -o $@ OrderProtobufs.cpp $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(ODIR)/TopologicalSort.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/OrderProtobufs
+$(BINDIR)/SupportedSubgraph: $(OBJ)
+	$(GPP) -o $@ SupportedSubgraph.cpp $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(ODIR)/TopologicalSort.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/OrderProtobufs $(BINDIR)/SupportedSubgraph
 
 clean:
 	rm -f $(ODIR)/*
