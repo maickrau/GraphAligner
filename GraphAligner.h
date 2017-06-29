@@ -34,7 +34,10 @@ void printtime(const char* msg)
 template <typename LengthType, typename ScoreType>
 class GraphAligner
 {
+private:
+	const int DYNAMIC_ROW_START = 100;
 public:
+
 	class AlignmentResult
 	{
 	public:
@@ -246,8 +249,8 @@ private:
 		while (currentPosition.second > 0)
 		{
 			assert(band(currentPosition.first, currentPosition.second));
-			//the rows 0-100 don't use the dynamic band, don't include them here
-			if (currentPosition.second > 100)
+			//the rows 0-DYNAMIC_ROW_START don't use the dynamic band, don't include them here
+			if (currentPosition.second > DYNAMIC_ROW_START)
 			{
 				maxMinDistance = std::max(maxMinDistance, bandDistanceFromSeqToSeq(currentPosition.first, maxScorePositionPerRow[currentPosition.second], distanceMatrix));
 			}
@@ -533,7 +536,7 @@ private:
 
 		for (LengthType j = 1; j < sequence.size()+1; j++)
 		{
-			if (j >= 100)
+			if (j >= DYNAMIC_ROW_START)
 			{
 				assert(band(previousRowMaximumIndex, j-1));
 				band.set(dummyNodeStart, j);
@@ -760,7 +763,7 @@ private:
 	SparseBoolMatrix<SliceRow<LengthType>> getFullBand(size_t sequenceLength) const
 	{
 		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
-		for (LengthType j = 0; j < 100 && j < sequenceLength+1; j++)
+		for (LengthType j = 0; j < DYNAMIC_ROW_START && j < sequenceLength+1; j++)
 		{
 			result.setBlock(0, nodeSequences.size(), j);
 		}
