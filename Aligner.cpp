@@ -278,7 +278,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth)
+void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<uint32_t, int32_t>& augmentedGraphAlignment, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -297,25 +297,6 @@ void runComponentMappings(const vg::Graph& graph, std::vector<const FastQ*>& fas
 		assertSetRead(fastq->seq_id);
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
-
-		DirectedGraph augmentedGraph {graph};
-		coutoutput << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << "\n";
-		if (augmentedGraph.nodes.size() == 0) continue;
-		OrderByFeedbackVertexset(augmentedGraph);
-		coutoutput << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << BufferedWriter::Flush;
-
-		GraphAligner<uint32_t, int32_t> augmentedGraphAlignment;
-		for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
-		{
-			augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
-			// std::cerr << "node: " << augmentedGraph.nodes[j].nodeId << std::endl;
-		}
-		for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
-		{
-			augmentedGraphAlignment.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
-			// std::cerr << "edge: " << augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId << " -> " << augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId << std::endl;
-		}
-		augmentedGraphAlignment.Finalize();
 
 		auto alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth);
 
@@ -409,9 +390,32 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	assertSetRead("Running alignments");
 	std::mutex readMutex;
 
+	DirectedGraph augmentedGraph {graph};
+	std::cout << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
+	if (augmentedGraph.nodes.size() == 0)
+	{
+		std::cerr << "No nodes in the graph" << std::endl;
+		std::abort();
+	}
+	OrderByFeedbackVertexset(augmentedGraph);
+	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
+
+	GraphAligner<uint32_t, int32_t> augmentedGraphAlignment;
+	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
+	{
+		augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
+			// std::cerr << "node: " << augmentedGraph.nodes[j].nodeId << std::endl;
+	}
+	for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
+	{
+		augmentedGraphAlignment.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
+			// std::cerr << "edge: " << augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId << " -> " << augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId << std::endl;
+	}
+	augmentedGraphAlignment.Finalize();
+
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&graph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth]() { runComponentMappings(graph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth); });
+		threads.emplace_back([&augmentedGraph, &augmentedGraphAlignment, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth]() { runComponentMappings(augmentedGraph, augmentedGraphAlignment, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
