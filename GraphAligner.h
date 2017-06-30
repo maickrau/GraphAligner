@@ -74,7 +74,9 @@ public:
 	inNeighbors(),
 	nodeSequences(),
 	gapStartPenalty(1),
-	gapContinuePenalty(1)
+	gapContinuePenalty(1),
+	distanceMatrix(1, 1, 1),
+	finalized(false)
 	{
 		//add the start dummy node as the first node
 		dummyNodeStart = nodeSequences.size();
@@ -91,6 +93,7 @@ public:
 	
 	void AddNode(int nodeId, std::string sequence, bool reverseNode)
 	{
+		assert(!finalized);
 		//subgraph extraction might produce different subgraphs with common nodes
 		//don't add duplicate nodes
 		if (nodeLookup.count(nodeId) != 0) return;
@@ -116,6 +119,7 @@ public:
 	
 	void AddEdgeNodeId(int node_id_from, int node_id_to)
 	{
+		assert(!finalized);
 		assert(nodeLookup.count(node_id_from) > 0);
 		assert(nodeLookup.count(node_id_to) > 0);
 		auto from = nodeLookup[node_id_from];
@@ -150,6 +154,7 @@ public:
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
 		notInOrder.push_back(false);
+		distanceMatrix = getDistanceMatrixBoostJohnson();
 		finalized = true;
 	}
 
@@ -219,8 +224,8 @@ private:
 		return AlignmentResult { result, maxDistanceFromBand, false, cellsProcessed };
 	}
 
-	template <bool distanceMatrixOrder, typename SparseMatrixType, typename MatrixType>
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrixType& backtraceMatrix, const MatrixType& band, int sequenceLength, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, const std::vector<LengthType>& maxScorePositionPerRow) const
+	template <typename SparseMatrixType, typename MatrixType>
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>> backtrace(const std::vector<ScoreType>& Mslice, const SparseMatrixType& backtraceMatrix, const MatrixType& band, int sequenceLength, const std::vector<LengthType>& maxScorePositionPerRow) const
 	{
 		assert(backtraceMatrix.sizeRows() == sequenceLength+1);
 		assert(backtraceMatrix.sizeColumns() == nodeSequences.size());
@@ -252,7 +257,7 @@ private:
 			//the rows 0-DYNAMIC_ROW_START don't use the dynamic band, don't include them here
 			if (currentPosition.second > DYNAMIC_ROW_START)
 			{
-				maxMinDistance = std::max(maxMinDistance, bandDistanceFromSeqToSeq(currentPosition.first, maxScorePositionPerRow[currentPosition.second], distanceMatrix));
+				maxMinDistance = std::max(maxMinDistance, bandDistanceFromSeqToSeq(currentPosition.first, maxScorePositionPerRow[currentPosition.second]));
 			}
 			assert(currentPosition.second >= 0);
 			assert(currentPosition.second < sequenceLength+1);
@@ -480,8 +485,8 @@ private:
 		}
 	}
 
-	template<bool distanceMatrixOrder, typename SparseMatrixType, typename MatrixType>
-	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrixType& backtrace) const
+	template<typename SparseMatrixType, typename MatrixType>
+	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrixType& backtrace) const
 	{
 		std::vector<bool> band1;
 		std::vector<bool> band2;
@@ -640,7 +645,7 @@ private:
 					{
 						rCalculated = true;
 						assert(hasWrongOrders);
-						auto rr = fullR(w, j, Rhelper, distanceMatrix);
+						auto rr = fullR(w, j, Rhelper);
 						currentR[w] = rr.first;
 						currentRbacktrace[w] = rr.second;
 						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
@@ -773,12 +778,11 @@ private:
 	std::tuple<ScoreType, int, std::vector<MatrixPosition>, size_t> getBacktrace(const std::string& sequence, int dynamicWidth) const
 	{
 		SparseBoolMatrix<SliceRow<LengthType>> band = getFullBand(sequence.size());
-		auto distanceMatrix = getDistanceMatrixBoostJohnson();
 		bool hasWrongOrders = false;
 		SparseMatrix<MatrixPosition, decltype(band)> backtraceMatrix {nodeSequences.size(), sequence.size() + 1, band};
 		MatrixSlice lastRow = getFirstSlice(backtraceMatrix);
-		auto slice = getScoreAndBacktraceMatrix(sequence, hasWrongOrders, distanceMatrix, lastRow, dynamicWidth, band, backtraceMatrix);
-		auto backtraceresult = backtrace(slice.M, backtraceMatrix, band, sequence.size(), distanceMatrix, slice.maxScorePositionPerRow);
+		auto slice = getScoreAndBacktraceMatrix(sequence, hasWrongOrders, lastRow, dynamicWidth, band, backtraceMatrix);
+		auto backtraceresult = backtrace(slice.M, backtraceMatrix, band, sequence.size(), slice.maxScorePositionPerRow);
 		return std::make_tuple(std::get<0>(backtraceresult), std::get<1>(backtraceresult), std::get<2>(backtraceresult), slice.cellsProcessed);
 	}
 
@@ -937,8 +941,7 @@ private:
 	}
 
 	//compute R using the slow, full definition on page 3
-	template <bool distanceMatrixOrder>
-	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
+	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper) const
 	{
 		assert(j > 0);
 		assert(w > 0);
@@ -950,7 +953,7 @@ private:
 		{
 			auto v = pair.first;
 			if (v == w) continue;
-			auto scoreHere = pair.second - gapPenalty(distanceFromSeqToSeq(v, w, distanceMatrix));
+			auto scoreHere = pair.second - gapPenalty(distanceFromSeqToSeq(v, w));
 			if (scoreHere > maxValue)
 			{
 				maxValue = scoreHere;
@@ -962,8 +965,7 @@ private:
 		return std::make_pair(maxValue, pos);
 	}
 
-	template <bool distanceMatrixOrder>
-	LengthType bandDistanceFromSeqToSeq(LengthType start, LengthType end, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
+	LengthType bandDistanceFromSeqToSeq(LengthType start, LengthType end) const
 	{
 		if (start == end) return 0;
 		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
@@ -1008,8 +1010,7 @@ private:
 		return minDistance;
 	}
 
-	template <bool distanceMatrixOrder>
-	LengthType distanceFromSeqToSeq(LengthType start, LengthType end, const Array2D<LengthType, distanceMatrixOrder>& distanceMatrix) const
+	LengthType distanceFromSeqToSeq(LengthType start, LengthType end) const
 	{
 		if (start == end) return 0;
 		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
@@ -1327,6 +1328,7 @@ private:
 	std::vector<std::vector<LengthType>> outNeighbors;
 	std::vector<bool> reverse;
 	std::string nodeSequences;
+	Array2D<LengthType, false> distanceMatrix;
 	ScoreType gapStartPenalty;
 	ScoreType gapContinuePenalty;
 	LengthType dummyNodeStart = 0;

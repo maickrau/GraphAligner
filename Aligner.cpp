@@ -404,12 +404,10 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
 		augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
-			// std::cerr << "node: " << augmentedGraph.nodes[j].nodeId << std::endl;
 	}
 	for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
 	{
 		augmentedGraphAlignment.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
-			// std::cerr << "edge: " << augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId << " -> " << augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId << std::endl;
 	}
 	augmentedGraphAlignment.Finalize();
 
