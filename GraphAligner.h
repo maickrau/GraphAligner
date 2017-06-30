@@ -155,6 +155,19 @@ public:
 		nodeEnd.emplace_back(nodeSequences.size());
 		notInOrder.push_back(false);
 		distanceMatrix = getDistanceMatrixBoostJohnson();
+		needsSpecialHandling.resize(nodeSequences.size(), false);
+		for (size_t i = 0; i < inNeighbors.size(); i++)
+		{
+			if (inNeighbors[i].size() != 1)
+			{
+				needsSpecialHandling[nodeStart[i]] = true;
+				continue;
+			}
+			if (nodeEnd[inNeighbors[i][0]] != nodeStart[i])
+			{
+				needsSpecialHandling[nodeStart[i]] = true;
+			}
+		}
 		finalized = true;
 	}
 
@@ -350,12 +363,12 @@ private:
 		{
 			LengthType start = i;
 			assert(inOrder[start] < nodeSequences.size()+1);
-			if (inOrder[start] == inOrder[start-1]+1 && indexToNode[inOrder[start]] == indexToNode[inOrder[start-1]] && rowBand[inOrder[start]] && previousRowBand[inOrder[start]])
+			if (inOrder[start] == inOrder[start-1]+1 && !needsSpecialHandling[inOrder[start]] && rowBand[inOrder[start]] && previousRowBand[inOrder[start]])
 			{
 				auto nodeIndex = indexToNode[inOrder[start-1]];
 				auto end = nodeEnd[nodeIndex];
 				auto w = inOrder[i];
-				while (i < inOrder.size()-1 && w < end-1 && w == inOrder[i-1]+1 && rowBand[w] && previousRowBand[w])
+				while (i < inOrder.size()-1 && w == inOrder[i-1]+1 && rowBand[w] && previousRowBand[w] && !needsSpecialHandling[w])
 				{
 					i++;
 					w = inOrder[i];
@@ -367,7 +380,6 @@ private:
 					assert(inOrder[i] < nodeSequences.size()+1);
 					assert(inOrder[i] == inOrder[start] + (i - start));
 					assert(inOrder[start] < nodeSequences.size()+1);
-					assert(indexToNode[inOrder[start]] == indexToNode[inOrder[i]]);
 					result.emplace_back(inOrder[start], 0);
 					result.emplace_back(inOrder[start]+1, inOrder[i]);
 				}
@@ -577,9 +589,8 @@ private:
 				if (pair.second != 0)
 				{
 					assert(pair.second >= pair.first);
-					assert(nodeStart[indexToNode[pair.first]] < pair.first);
+					assert(nodeStart[indexToNode[pair.first]] <= pair.first);
 					assert(nodeEnd[indexToNode[pair.second]] > pair.second);
-					assert(indexToNode[pair.first] == indexToNode[pair.second]);
 					auto backtraceSolidBlockStart = backtrace.getSolidBlockStartIndex(pair.first, pair.second, j);
 					for (LengthType w = pair.first; w <= pair.second; w++)
 					{
@@ -1327,6 +1338,7 @@ private:
 	std::vector<std::vector<LengthType>> inNeighbors;
 	std::vector<std::vector<LengthType>> outNeighbors;
 	std::vector<bool> reverse;
+	std::vector<bool> needsSpecialHandling;
 	std::string nodeSequences;
 	Array2D<LengthType, false> distanceMatrix;
 	ScoreType gapStartPenalty;
