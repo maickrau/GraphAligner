@@ -337,10 +337,13 @@ private:
 		bool hasWrongOrders = false;
 		result.reserve(matrix.rowSize(j));
 		inOrder.reserve(matrix.rowSize(j));
+		LengthType lastNode = dummyNodeStart;
 		for (auto iter = matrix.rowStart(j); iter != matrix.rowEnd(j); ++iter)
 		{
 			auto w = *iter;
 			if (w == dummyNodeStart || w == dummyNodeEnd) continue;
+			assert(w > lastNode);
+			lastNode = w;
 			assert(w < nodeSequences.size()+1);
 			rowBand[w] = true;
 			auto nodeIndex = indexToNode[w];
@@ -356,7 +359,6 @@ private:
 			}
 		}
 		if (inOrder.size() == 0) return std::make_pair(hasWrongOrders, result);
-		std::sort(inOrder.begin(), inOrder.end());
 		result.emplace_back(inOrder[0], 0);
 		LengthType i = 1;
 		while (i < inOrder.size())
