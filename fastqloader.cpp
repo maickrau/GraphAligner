@@ -2,7 +2,7 @@
 #include <fstream>
 #include "fastqloader.h"
 
-std::vector<FastQ> loadFastqFromFile(std::string filename)
+std::vector<FastQ> loadFastqFastqFromFile(std::string filename)
 {
 	std::ifstream file {filename};
 	std::vector<FastQ> result;
@@ -26,6 +26,49 @@ std::vector<FastQ> loadFastqFromFile(std::string filename)
 	return result;
 }
 
+std::vector<FastQ> loadFastqFastaFromFile(std::string filename)
+{
+	std::ifstream file {filename};
+	std::vector<FastQ> result;
+	std::string line;
+	std::getline(file, line);
+	do
+	{
+		if (line[0] != '>')
+		{
+			std::getline(file, line);
+			continue;
+		}
+		FastQ newread;
+		if (line.back() == '\r') line.pop_back();
+		newread.seq_id = line.substr(1);
+		newread.sequence = "";
+		do
+		{
+			std::getline(file, line);
+			if (!file.good()) break;
+			if (line[0] == '>') break;
+			if (line.back() == '\r') line.pop_back();
+			newread.sequence += line;
+		} while (file.good());
+		for (size_t i = 0; i < newread.sequence.size(); i++)
+		{
+			newread.quality += '!';
+		}
+		result.push_back(newread);
+	} while (file.good());
+	return result;
+}
+
+std::vector<FastQ> loadFastqFromFile(std::string filename)
+{
+	if (filename.substr(filename.size()-6) == ".fastq") return loadFastqFastqFromFile(filename);
+	if (filename.substr(filename.size()-3) == ".fq") return loadFastqFastqFromFile(filename);
+	if (filename.substr(filename.size()-6) == ".fasta") return loadFastqFastaFromFile(filename);
+	if (filename.substr(filename.size()-3) == ".fa") return loadFastqFastaFromFile(filename);
+	return std::vector<FastQ>{};
+}
+
 std::string FastQ::reverseComplement(std::string str)
 {
 	std::string result;
@@ -35,24 +78,24 @@ std::string FastQ::reverseComplement(std::string str)
 		{
 			case 'A':
 			case 'a':
-				result += 'T';
-				break;
+			result += 'T';
+			break;
 			case 'C':
 			case 'c':
-				result += 'G';
-				break;
+			result += 'G';
+			break;
 			case 'T':
 			case 't':
-				result += 'A';
-				break;
+			result += 'A';
+			break;
 			case 'G':
 			case 'g':
-				result += 'C';
-				break;
+			result += 'C';
+			break;
 			case 'N':
 			case 'n':
-				result += 'N';
-				break;
+			result += 'N';
+			break;
 		}
 	}
 	return result;
