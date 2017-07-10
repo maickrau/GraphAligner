@@ -11,11 +11,15 @@ int main(int argc, char** argv)
 	std::string fastqFile = "";
 	std::string alignmentFile = "";
 	std::string auggraphFile = "";
+	std::string seedFile = "";
+	int startBandwidth = 0;
 	int numThreads = 0;
 	int dynamicWidth = 0;
+	int dynamicRowStart = 100;
 	int c;
+	bool initialFullBand = false;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:")) != -1)
 	{
 		switch(c)
 		{
@@ -37,6 +41,18 @@ int main(int argc, char** argv)
 			case 'A':
 				auggraphFile = std::string(optarg);
 				break;
+			case 'b':
+				startBandwidth = std::stoi(optarg);
+				break;
+			case 'i':
+				initialFullBand = true;
+				break;
+			case 's':
+				seedFile = std::string(optarg);
+				break;
+			case 'd':
+				dynamicRowStart = std::stoi(optarg);
+				break;
 		}
 	}
 
@@ -52,7 +68,13 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile);
+	if (!initialFullBand && (seedFile == "" || startBandwidth == 0))
+	{
+		std::cerr << "either initial full band or seed file and start bandwidth must be set" << std::endl;
+		std::exit(0);
+	}
+
+	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth);
 
 	return 0;
 }
