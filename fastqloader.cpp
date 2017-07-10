@@ -46,7 +46,6 @@ std::vector<FastQ> loadFastqFastaFromFile(std::string filename)
 		do
 		{
 			std::getline(file, line);
-			if (!file.good()) break;
 			if (line[0] == '>') break;
 			if (line.back() == '\r') line.pop_back();
 			newread.sequence += line;
