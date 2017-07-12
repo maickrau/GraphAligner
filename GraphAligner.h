@@ -775,12 +775,14 @@ private:
 
 					assert(scoreStart >= previousSlice[w].scoreEnd - 1);
 					assert(scoreStart <= previousSlice[w].scoreEnd + 1);
+#ifndef NDEBUG
 					auto wcvp = WordConfiguration<Word>::popcount(VP);
 					auto wcvn = WordConfiguration<Word>::popcount(VN);
 					assert(scoreEnd == previousSlice[w].scoreEnd + wcvp - wcvn);
 					auto wcvpExceptFirst = WordConfiguration<Word>::popcount(VP & ~((Word)1));
 					auto wcvnExceptFirst = WordConfiguration<Word>::popcount(VN & ~((Word)1));
 					assert(scoreEnd == scoreStart + wcvpExceptFirst - wcvnExceptFirst);
+#endif
 					assert(scoreStart >= 0);
 					assert(scoreEnd >= 0);
 					assert(scoreEnd <= j + WordConfiguration<Word>::WordSize);
