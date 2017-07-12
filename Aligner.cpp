@@ -278,7 +278,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<uint32_t, int32_t>& augmentedGraphAlignment, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<uint32_t, int32_t, uint64_t>& augmentedGraphAlignment, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -307,7 +307,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligne
 		else
 		{
 			auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits->at(fastq));
-			std::vector<GraphAligner<uint32_t, int32_t>::SeedHit> alignerSeedHits;
+			std::vector<std::remove_reference<decltype(augmentedGraphAlignment)>::type::SeedHit> alignerSeedHits;
 			for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
 			{
 				alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
@@ -445,7 +445,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	OrderByFeedbackVertexset(augmentedGraph);
 	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
-	GraphAligner<uint32_t, int32_t> augmentedGraphAlignment;
+	GraphAligner<uint32_t, int32_t, uint64_t> augmentedGraphAlignment;
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
 		augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);

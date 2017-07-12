@@ -15,7 +15,7 @@ int main(int argc, char** argv)
 	int startBandwidth = 0;
 	int numThreads = 0;
 	int dynamicWidth = 0;
-	int dynamicRowStart = 100;
+	int dynamicRowStart = 64;
 	int c;
 	bool initialFullBand = false;
 
@@ -54,6 +54,12 @@ int main(int argc, char** argv)
 				dynamicRowStart = std::stoi(optarg);
 				break;
 		}
+	}
+
+	if (dynamicRowStart % 64 != 0)
+	{
+		std::cerr << "dynamic row start has to be a multiple of 64" << std::endl;
+		std::exit(0);
 	}
 
 	if (numThreads < 1)

@@ -15,7 +15,6 @@
 #include <boost/container/flat_set.hpp>
 #include <unordered_set>
 #include "vg.pb.h"
-#include "2dArray.h"
 #include "SliceRow.h"
 #include "SparseBoolMatrix.h"
 #include "SparseMatrix.h"
@@ -31,9 +30,70 @@ void printtime(const char* msg)
 	time = newtime;
 }
 
-template <typename LengthType, typename ScoreType>
+template <typename Word>
+class WordConfiguration
+{
+};
+
+template <>
+class WordConfiguration<uint64_t>
+{
+public:
+	static constexpr uint64_t AllZeros = 0x0000000000000000;
+	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
+	static constexpr int WordSize = 64;
+	static int popcount(uint64_t x)
+	{
+		//https://en.wikipedia.org/wiki/Hamming_weight
+	    x = (x & 0x5555555555555555) + ((x >>  1) & 0x5555555555555555); //put count of each  2 bits into those  2 bits 
+	    x = (x & 0x3333333333333333) + ((x >>  2) & 0x3333333333333333); //put count of each  4 bits into those  4 bits 
+	    x = (x & 0x0F0F0F0F0F0F0F0F) + ((x >>  4) & 0x0F0F0F0F0F0F0F0F); //put count of each  8 bits into those  8 bits 
+	    x = (x & 0x00FF00FF00FF00FF) + ((x >>  8) & 0x00FF00FF00FF00FF); //put count of each 16 bits into those 16 bits 
+	    x = (x & 0x0000FFFF0000FFFF) + ((x >> 16) & 0x0000FFFF0000FFFF); //put count of each 32 bits into those 32 bits 
+	    x = (x & 0x00000000FFFFFFFF) + ((x >> 32) & 0x00000000FFFFFFFF); //put count of each 64 bits into those 64 bits 
+	    return x;
+	}
+};
+
+template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
+private:
+	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	class MatrixSlice
+	{
+	public:
+		std::vector<ScoreType> minScorePerWordSlice;
+		LengthType finalMinScoreColumn;
+		ScoreType finalMinScore;
+		size_t cellsProcessed;
+	};
+	class WordSlice
+	{
+	public:
+		WordSlice() :
+		VP(WordConfiguration<Word>::AllZeros),
+		VN(WordConfiguration<Word>::AllZeros),
+		scoreStart(0),
+		scoreEnd(0),
+		scoreBeforeStart(0),
+		hout(0)
+		{}
+		WordSlice(Word VP, Word VN, ScoreType scoreStart, ScoreType scoreEnd, ScoreType scoreBeforeStart) :
+		VP(VP),
+		VN(VN),
+		scoreStart(scoreStart),
+		scoreEnd(scoreEnd),
+		scoreBeforeStart(scoreBeforeStart),
+		hout(0)
+		{}
+		Word VP;
+		Word VN;
+		ScoreType scoreStart;
+		ScoreType scoreEnd;
+		ScoreType scoreBeforeStart;
+		int hout;
+	};
 public:
 	class SeedHit
 	{
@@ -61,18 +121,6 @@ public:
 		bool alignmentFailed;
 		size_t cellsProcessed;
 	};
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
-	class MatrixSlice
-	{
-	public:
-		std::vector<ScoreType> M;
-		std::vector<ScoreType> Q;
-		std::vector<ScoreType> R;
-		std::vector<MatrixPosition> Rbacktrace;
-		std::vector<MatrixPosition> Qbacktrace;
-		std::vector<LengthType> maxScorePositionPerRow;
-		size_t cellsProcessed;
-	};
 
 	GraphAligner() :
 	nodeStart(),
@@ -83,7 +131,6 @@ public:
 	nodeSequences(),
 	gapStartPenalty(1),
 	gapContinuePenalty(1),
-	distanceMatrix(1, 1, 1),
 	finalized(false)
 	{
 		//add the start dummy node as the first node
@@ -145,6 +192,8 @@ public:
 		outNeighbors[from].push_back(to);
 		if (from >= to)
 		{
+			//todo fix for cyclic graphs
+			assert(false);
 			notInOrder[to] = true;
 		}
 	}
@@ -162,20 +211,15 @@ public:
 		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 		nodeEnd.emplace_back(nodeSequences.size());
 		notInOrder.push_back(false);
-		distanceMatrix = getDistanceMatrixBoostJohnson();
-		needsSpecialHandling.resize(nodeSequences.size(), false);
-		for (size_t i = 0; i < inNeighbors.size(); i++)
-		{
-			if (inNeighbors[i].size() != 1)
-			{
-				needsSpecialHandling[nodeStart[i]] = true;
-				continue;
-			}
-			if (nodeEnd[inNeighbors[i][0]] != nodeStart[i])
-			{
-				needsSpecialHandling[nodeStart[i]] = true;
-			}
-		}
+		assert(nodeSequences.size() >= nodeStart.size());
+		assert(nodeEnd.size() == nodeStart.size());
+		assert(notInOrder.size() == nodeStart.size());
+		assert(inNeighbors.size() == nodeStart.size());
+		assert(outNeighbors.size() == nodeStart.size());
+		assert(notInOrder.size() == nodeStart.size());
+		assert(reverse.size() == nodeStart.size());
+		assert(nodeIDs.size() == nodeStart.size());
+		assert(indexToNode.size() == nodeSequences.size());
 		finalized = true;
 	}
 
@@ -208,22 +252,31 @@ public:
 
 private:
 
-	SparseBoolMatrix<SliceRow<LengthType>> getSeededStartBand(const std::vector<SeedHit>& originalSeedHits, int dynamicRowStart, int startBandwidth, const std::string& sequence) const
+	std::vector<std::vector<bool>> getFullBand(size_t sequenceSize, LengthType dynamicRowStart) const
+	{
+		std::vector<std::vector<bool>> result;
+		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
+		for (size_t i = 0; i < dynamicRowStart/WordConfiguration<Word>::WordSize; i++)
+		{
+			result[i].resize(nodeStart.size(), true);
+		}
+		return result;
+	}
+
+	std::vector<std::vector<bool>> getSeededStartBand(const std::vector<SeedHit>& originalSeedHits, int dynamicRowStart, int startBandwidth, const std::string& sequence) const
 	{
 		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, originalSeedHits);
 		auto bandLocations = getBandLocations(sequence.size(), seedHitsInMatrix, dynamicRowStart);
-		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequence.size()+1};
-		for (LengthType j = 0; j < dynamicRowStart && j < sequence.size()+1; j++)
+		std::vector<std::vector<bool>> result;
+		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
+		for (LengthType j = 0; j < dynamicRowStart && j < sequence.size()+1; j += WordConfiguration<Word>::WordSize)
 		{
+			auto index = j/WordConfiguration<Word>::WordSize;
+			result[index].resize(nodeStart.size(), false);
 			for (size_t i = 0; i < bandLocations[j].size(); i++)
 			{
-				expandBandDynamically(result, bandLocations[j][i], j, startBandwidth);
+				expandBandDynamically(result[index], bandLocations[j][i], startBandwidth);
 			}
-		}
-		for (LengthType j = 0; j < sequence.size()+1; j++)
-		{
-			result.set(dummyNodeStart, j);
-			result.set(dummyNodeEnd, j);
 		}
 		return result;
 	}
@@ -406,994 +459,375 @@ private:
 		}
 	}
 
-	template <typename MatrixType>
-	std::pair<bool, std::vector<std::pair<LengthType, LengthType>>> getProcessableColumns(const MatrixType& matrix, LengthType j, std::vector<bool>& rowBand, const std::vector<bool>& previousRowBand) const
+	void expandBandDynamically(std::vector<bool>& band, LengthType previousMinimumIndex, LengthType dynamicWidth) const
 	{
-		std::vector<std::pair<LengthType, LengthType>> result;
-		std::vector<LengthType> inOrder;
-		bool hasWrongOrders = false;
-		result.reserve(matrix.rowSize(j));
-		inOrder.reserve(matrix.rowSize(j));
-		LengthType lastNode = dummyNodeStart;
-		for (auto iter = matrix.rowStart(j); iter != matrix.rowEnd(j); ++iter)
-		{
-			auto w = *iter;
-			if (w == dummyNodeStart || w == dummyNodeEnd) continue;
-			assert(w > lastNode);
-			lastNode = w;
-			assert(w < nodeSequences.size()+1);
-			rowBand[w] = true;
-			auto nodeIndex = indexToNode[w];
-			if (nodeStart[nodeIndex] == w && notInOrder[nodeIndex])
-			{
-				assert(w < nodeSequences.size()+1);
-				result.emplace_back(w, 0);
-				hasWrongOrders = true;
-			}
-			else
-			{
-				inOrder.push_back(w);
-			}
-		}
-		if (inOrder.size() == 0) return std::make_pair(hasWrongOrders, result);
-		result.emplace_back(inOrder[0], 0);
-		LengthType i = 1;
-		while (i < inOrder.size())
-		{
-			LengthType start = i;
-			assert(inOrder[start] < nodeSequences.size()+1);
-			if (inOrder[start] == inOrder[start-1]+1 && !needsSpecialHandling[inOrder[start]] && rowBand[inOrder[start]] && previousRowBand[inOrder[start]])
-			{
-				auto nodeIndex = indexToNode[inOrder[start-1]];
-				auto end = nodeEnd[nodeIndex];
-				auto w = inOrder[i];
-				while (i < inOrder.size()-1 && w == inOrder[i-1]+1 && rowBand[w] && previousRowBand[w] && !needsSpecialHandling[w])
-				{
-					i++;
-					w = inOrder[i];
-				}
-				if (i > start+1)
-				{
-					i--;
-					assert(i < inOrder.size());
-					assert(inOrder[i] < nodeSequences.size()+1);
-					assert(inOrder[i] == inOrder[start] + (i - start));
-					assert(inOrder[start] < nodeSequences.size()+1);
-					result.emplace_back(inOrder[start], 0);
-					result.emplace_back(inOrder[start]+1, inOrder[i]);
-				}
-				else if (i == start+1)
-				{
-					i--;
-					assert(inOrder[start] < nodeSequences.size()+1);
-					result.emplace_back(inOrder[start], 0);
-				}
-				else
-				{
-					assert(i == start);
-					assert(inOrder[start] < nodeSequences.size()+1);
-					result.emplace_back(inOrder[start], 0);
-				}
-			}
-			else
-			{
-				assert(inOrder[start] < nodeSequences.size()+1);
-				result.emplace_back(inOrder[start], 0);
-			}
-			i++;
-		}
-		return std::make_pair(hasWrongOrders, result);
-	}
-
-	template <typename MatrixType>
-	void expandBandDynamically(MatrixType& band, LengthType previousMaximumIndex, LengthType j, LengthType dynamicWidth) const
-	{
-		assert(j < band.sizeRows());
-		assert(previousMaximumIndex < nodeSequences.size());
-		auto nodeIndex = indexToNode[previousMaximumIndex];
-		LengthType end = nodeEnd[nodeIndex];
+		assert(previousMinimumIndex < nodeSequences.size());
+		auto nodeIndex = indexToNode[previousMinimumIndex];
+		band[nodeIndex] = true;
 		LengthType start = nodeStart[nodeIndex];
-		assert(end > previousMaximumIndex);
-		assert(start <= previousMaximumIndex);
-		LengthType blockStart = start;
-		LengthType blockEnd = end-1; //-1 because block indices are inclusive but node ends exclusive
-		//previousMaximumIndex - dynamicWidth > blockStart, change order to prevent underflow
-		if (previousMaximumIndex > dynamicWidth + blockStart) blockStart = previousMaximumIndex - dynamicWidth;
-		if (previousMaximumIndex + dynamicWidth < blockEnd) blockEnd = previousMaximumIndex + dynamicWidth;
-		band.setBlock(blockStart, blockEnd, j);
-		if (dynamicWidth > end - previousMaximumIndex)
-		{
-			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
-			{
-				assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
-				if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
-				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - (end - previousMaximumIndex));
-			}
-		}
-		if (dynamicWidth > previousMaximumIndex - start)
+		LengthType end = nodeEnd[nodeIndex];
+		if (dynamicWidth > previousMinimumIndex - start)
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
-				assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
-				if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
-				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - (previousMaximumIndex - start));
+				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - (previousMinimumIndex - start));
+			}
+		}
+		if (dynamicWidth > end - previousMinimumIndex)
+		{
+			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+			{
+				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - (end - previousMinimumIndex));
 			}
 		}
 	}
 
-	template <typename MatrixType>
-	void expandDynamicBandBackward(MatrixType& band, LengthType nodeIndex, LengthType j, LengthType dynamicWidth) const
+	void expandDynamicBandBackward(std::vector<bool>& band, LengthType nodeIndex, LengthType dynamicWidth) const
 	{
 		if (dynamicWidth == 0) return;
 		assert(nodeIndex < nodeStart.size());
-		auto start = nodeStart[nodeIndex];
-		auto end = nodeEnd[nodeIndex];
-		auto blockEnd = end - 1;
-		auto blockStart = start;
-		if (blockEnd - blockStart > dynamicWidth) blockStart = blockEnd - dynamicWidth;
-		band.setBlock(blockStart, blockEnd, j);
+		//todo fix: currently only the first path that reaches the node is considered
+		//this means that it might not reach some nodes with distance < dynamicwidth
+		if (band[nodeIndex]) return;
+		band[nodeIndex] = true;
 		for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 		{
-			assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
-			if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
-			expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - 1);
+			expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - 1);
 		}
-		if (dynamicWidth > end - start)
+		auto nodeSize = nodeEnd[nodeIndex] - nodeStart[nodeIndex];
+		if (dynamicWidth > nodeSize)
 		{
 			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 			{
-				assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
-				if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
-				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - (end - start));
+				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
 			}
 		}
 	}
 
 	template <typename MatrixType>
-	void expandDynamicBandForward(MatrixType& band, LengthType nodeIndex, LengthType j, LengthType dynamicWidth) const
+	void expandDynamicBandForward(MatrixType& band, LengthType nodeIndex, LengthType dynamicWidth) const
 	{
 		if (dynamicWidth == 0) return;
 		assert(nodeIndex < nodeStart.size());
-		auto end = nodeEnd[nodeIndex];
-		auto start = nodeStart[nodeIndex];
-		LengthType blockEnd = end - 1;
-		if (end - start > dynamicWidth) end = start + dynamicWidth;
-		band.setBlock(start, blockEnd, j);
+		//todo fix: currently only the first path that reaches the node is considered
+		//this means that it might not reach some nodes with distance < dynamicwidth if there's multiple paths and it arbitrarily picks the longest one first
+		if (band[nodeIndex]) return;
+		band[nodeIndex] = true;
 		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 		{
-			assert(nodeEnd[inNeighbors[nodeIndex][i]]-1 < nodeSequences.size());
-			if (band(nodeEnd[inNeighbors[nodeIndex][i]]-1, j)) continue;
-			expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], j, dynamicWidth - 1);
+			expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - 1);
 		}
-		if (dynamicWidth > end - start)
+		auto nodeSize = nodeEnd[nodeIndex] - nodeStart[nodeIndex];
+		if (dynamicWidth > nodeSize)
 		{
 			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
 			{
-				assert(nodeStart[outNeighbors[nodeIndex][i]] < nodeSequences.size());
-				if (band(nodeStart[outNeighbors[nodeIndex][i]], j)) continue;
-				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], j, dynamicWidth - (nodeEnd[nodeIndex] - nodeStart[nodeIndex]));
+				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
 			}
 		}
 	}
 
-	template<typename SparseMatrixType, typename MatrixType>
-	MatrixSlice getScoreAndBacktraceMatrix(const std::string& sequence, bool hasWrongOrders, MatrixSlice& previous, int dynamicWidth, MatrixType& band, SparseMatrixType& backtrace, LengthType dynamicRowStart) const
+	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
 	{
-		std::vector<bool> band1;
-		std::vector<bool> band2;
-		band1.resize(nodeSequences.size(), false);
-		band2.resize(nodeSequences.size(), false);
-		std::vector<ScoreType> M1;
-		std::vector<ScoreType> M2;
-		std::vector<ScoreType> Q1;
-		std::vector<ScoreType> Q2;
-		std::vector<ScoreType> R1;
-		std::vector<ScoreType> R2;
-		std::vector<MatrixPosition> Rbacktrace1;
-		std::vector<MatrixPosition> Rbacktrace2;
-		std::vector<LengthType> maxScorePositionPerRow;
-		maxScorePositionPerRow.resize(sequence.size()+1, 0);
-		assert(previous.M.size() == nodeSequences.size());
-		assert(previous.R.size() == nodeSequences.size());
-		assert(previous.Q.size() == nodeSequences.size());
-		assert(previous.Rbacktrace.size() == nodeSequences.size());
-		assert(previous.Qbacktrace.size() == nodeSequences.size());
-		MatrixSlice result;
-		std::vector<MatrixPosition> Qbacktrace;
-		M1.resize(nodeSequences.size());
-		Q1.resize(nodeSequences.size());
-		R1.resize(nodeSequences.size());
-		Rbacktrace1.resize(nodeSequences.size());
-		std::vector<ScoreType>& currentM = M1;
-		std::vector<ScoreType>& previousM = M2;
-		std::vector<ScoreType>& currentQ = Q1;
-		std::vector<ScoreType>& previousQ = Q2;
-		std::vector<ScoreType>& currentR = R1;
-		std::vector<ScoreType>& previousR = R2;
-		std::vector<MatrixPosition>& currentRbacktrace = Rbacktrace1;
-		std::vector<MatrixPosition>& previousRbacktrace = Rbacktrace2;
-		std::vector<bool>& currentBand = band1;
-		std::vector<bool>& previousBand = band2;
-		previousM = std::move(previous.M);
-		previousQ = std::move(previous.Q);
-		previousR = std::move(previous.R);
-		Qbacktrace = std::move(previous.Qbacktrace);
-		previousRbacktrace = std::move(previous.Rbacktrace);
-		currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		previousR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		currentM[dummyNodeStart] = -gapPenalty(1);
-		previousM[dummyNodeStart] = 0;
-		currentR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		previousR[dummyNodeEnd] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		currentM[dummyNodeEnd] = -gapPenalty(sequence.size() - 1);
-		previousM[dummyNodeEnd] = -gapPenalty(sequence.size());
-		auto previousProcessableColumnsAndOrder = getProcessableColumns(band, 0, previousBand, currentBand);
-		LengthType previousRowMaximumIndex = 0;
-
-		for (LengthType j = 1; j < sequence.size()+1; j++)
+		//currently O(w), O(log^2 w) is possible
+		//todo figure out the details and implement
+		//todo is O(log w) possible? an expected O(log w), worst case O(w) seems possible
+		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
+		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
+		ScoreType leftScore = left.scoreStart;
+		WordSlice merged;
+		merged.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
+		merged.VP = WordConfiguration<Word>::AllZeros;
+		merged.VN = WordConfiguration<Word>::AllZeros;
+		ScoreType rightScore = right.scoreStart;
+		merged.scoreStart = std::min(rightScore, leftScore);
+		assert(merged.scoreStart >= merged.scoreBeforeStart - 1);
+		assert(merged.scoreStart <= merged.scoreBeforeStart + 1);
+		if (merged.scoreStart == merged.scoreBeforeStart - 1)
 		{
-			if (j >= dynamicRowStart)
-			{
-				assert(band(previousRowMaximumIndex, j-1));
-				band.set(dummyNodeStart, j);
-				band.set(dummyNodeEnd, j);
-				currentBand[dummyNodeStart] = true;
-				currentBand[dummyNodeEnd] = true;
-				expandBandDynamically(band, previousRowMaximumIndex, j, dynamicWidth);
-			}
-			auto currentProcessableColumnsAndOrder = getProcessableColumns(band, j, currentBand, previousBand);
-			auto& previousProcessableColumns = previousProcessableColumnsAndOrder.second;
-			auto& currentProcessableColumns = currentProcessableColumnsAndOrder.second;
-			bool hasWrongOrders = currentProcessableColumnsAndOrder.first;
-			currentM[dummyNodeStart] = -gapPenalty(j);
-			currentR[dummyNodeStart] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-			backtrace.set(dummyNodeStart, j, std::make_pair(dummyNodeStart, j-1));
-			LengthType maxScorePosition = dummyNodeStart;
-			ScoreType maxScore = currentM[dummyNodeStart];
-			std::vector<std::pair<LengthType, ScoreType>> Rhelper;
-			if (hasWrongOrders) Rhelper = getRHelper(j, previousM, sequence, previousBand, previousProcessableColumns);
-
-			for (auto pair : currentProcessableColumns)
-			{
-				if (pair.first == dummyNodeStart)
-				{
-					assert(pair.second == 0);
-					continue;
-				}
-				if (pair.first == dummyNodeEnd)
-				{
-					assert(pair.second == 0);
-					continue;
-				}
-				if (pair.second != 0)
-				{
-					assert(pair.second >= pair.first);
-					assert(nodeStart[indexToNode[pair.first]] <= pair.first);
-					assert(nodeEnd[indexToNode[pair.second]] > pair.second);
-					auto backtraceSolidBlockStart = backtrace.getSolidBlockStartIndex(pair.first, pair.second, j);
-					for (LengthType w = pair.first; w <= pair.second; w++)
-					{
-						assert(currentBand[w-1]);
-						assert(previousBand[w-1]);
-						assert(currentBand[w]);
-						assert(previousBand[w]);
-						currentQ[w] = previousQ[w]-gapContinuePenalty;
-						if (previousM[w]-gapStartPenalty > currentQ[w])
-						{
-							currentQ[w] = previousM[w]-gapStartPenalty;
-							Qbacktrace[w] = std::make_pair(w, j-1);
-						}
-						currentR[w] = currentR[w-1]-gapContinuePenalty;
-						currentRbacktrace[w] = currentRbacktrace[w-1];
-						if (currentM[w-1]-gapStartPenalty > currentR[w])
-						{
-							currentR[w] = currentM[w-1]-gapStartPenalty;
-							currentRbacktrace[w] = std::make_pair(w-1, j);
-						}
-						//implicitly handle edges from dummy node by initializing M as coming from the dummy node
-						currentM[w] = previousM[dummyNodeStart] + matchScore(nodeSequences[w], sequence[j-1]);
-						MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j-1);
-						if (currentQ[w] > currentM[w])
-						{
-							currentM[w] = currentQ[w];
-							foundBacktrace = Qbacktrace[w];
-						}
-						if (currentR[w] > currentM[w])
-						{
-							currentM[w] = currentR[w];
-							foundBacktrace = currentRbacktrace[w];
-						}
-						if (previousM[w-1] + matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
-						{
-							currentM[w] = previousM[w-1] + matchScore(nodeSequences[w], sequence[j - 1]);
-							foundBacktrace = std::make_pair(w-1, j-1);
-						}
-						backtrace.setSolidIndex(backtraceSolidBlockStart + (w-pair.first), j, foundBacktrace);
-						if (currentM[w] > maxScore)
-						{
-							maxScore = currentM[w];
-							maxScorePosition = w;
-						}
-					}
-					continue;
-				}
-				LengthType w = pair.first;
-				assert(band(w, j));
-				assert(currentBand[w]);
-				bool neighborInsideBand = hasInNeighborInsideBand(w, j, currentBand);
-				auto nodeIndex = indexToNode[w];
-				currentQ[w] = previousQ[w] - gapContinuePenalty;
-				bool rCalculated = false;
-				if (previousM[w] - gapPenalty(1) > currentQ[w])
-				{
-					currentQ[w] = previousM[w] - gapPenalty(1);
-					Qbacktrace[w] = std::make_pair(w, j-1);
-				}
-				if (w == nodeStart[nodeIndex] && notInOrder[nodeIndex])
-				{
-					if (std::any_of(Rhelper.begin(), Rhelper.end(), [w](auto& x) { return x.first != w; }))
-					{
-						rCalculated = true;
-						assert(hasWrongOrders);
-						auto rr = fullR(w, j, Rhelper);
-						currentR[w] = rr.first;
-						currentRbacktrace[w] = rr.second;
-						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
-					}
-				}
-				else
-				{
-					if (neighborInsideBand && previousProcessableColumns.size() > 2)
-					{
-						rCalculated = true;
-						auto rr = recurrenceR(w, j, currentM, currentR, currentRbacktrace, currentBand);
-						currentR[w] = rr.first;
-						currentRbacktrace[w] = rr.second;
-						assert(currentRbacktrace[w].second < j || (currentRbacktrace[w].second == j && currentRbacktrace[w].first < w));
-					}
-				}
-				//implicitly handle edges from dummy node by initializing M as coming from the dummy node
-				currentM[w] = previousM[dummyNodeStart] + matchScore(nodeSequences[w], sequence[j-1]);
-				MatrixPosition foundBacktrace = std::make_pair(dummyNodeStart, j-1);
-				if (previousBand[w] && currentQ[w] > currentM[w])
-				{
-					foundBacktrace = Qbacktrace[w];
-					assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
-					currentM[w] = currentQ[w];
-				}
-				if (rCalculated)
-				{
-					if (currentR[w] > currentM[w])
-					{
-						currentM[w] = currentR[w];
-						foundBacktrace = currentRbacktrace[w];
-						assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
-					}
-				}
-				if (w == nodeStart[nodeIndex])
-				{
-					for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
-					{
-						auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-						if (!previousBand[u]) continue;
-						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
-						{
-							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]);
-							foundBacktrace = std::make_pair(u, j-1);
-							assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
-						}
-					}
-				}
-				else
-				{
-					LengthType u = w-1;
-					if (previousBand[u])
-					{
-						//-1 because the rows in the DP matrix are one-based, eg. M[w][1] is the _first_ nucleotide of the read (sequence[0])
-						if (previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]) > currentM[w])
-						{
-							currentM[w] = previousM[u]+matchScore(nodeSequences[w], sequence[j - 1]);
-							foundBacktrace = std::make_pair(u, j-1);
-							assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
-						}
-					}
-				}
-				//if the previous row was not inside the band, initialize Q as the current M
-				if (!previousBand[w])
-				{
-					currentQ[w] = currentM[w];
-					Qbacktrace[w] = std::make_pair(w, j);
-				}
-				//if R was unavaliable, initialize it as current M
-				if (!rCalculated)
-				{
-					currentR[w] = currentM[w];
-					currentRbacktrace[w] = std::make_pair(w, j);
-				}
-				assert(currentM[w] >= -std::numeric_limits<ScoreType>::min() + 100);
-				assert(currentM[w] <= std::numeric_limits<ScoreType>::max() - 100);
-				backtrace.set(w, j, foundBacktrace);
-				assert(foundBacktrace.second < j || (foundBacktrace.second == j && foundBacktrace.first < w));
-				if (currentM[w] > maxScore)
-				{
-					maxScore = currentM[w];
-					maxScorePosition = w;
-				}
-			}
-
-			currentM[dummyNodeEnd] = maxScore - gapPenalty(sequence.size() - j);
-			backtrace.set(dummyNodeEnd, j, std::make_pair(maxScorePosition, j));
-
-			previousRowMaximumIndex = maxScorePosition;
-			maxScorePositionPerRow[j] = maxScorePosition;
-
-			for (auto pair : previousProcessableColumns)
-			{
-				previousBand[pair.first] = false;
-				for (size_t w = pair.first; w <= pair.second; w++)
-				{
-					previousBand[w] = false;
-				}
-			}
-
-			std::swap(currentBand, previousBand);
-			std::swap(currentM, previousM);
-			std::swap(currentQ, previousQ);
-			std::swap(currentR, previousR);
-			std::swap(currentRbacktrace, previousRbacktrace);
-			previousProcessableColumnsAndOrder = std::move(currentProcessableColumnsAndOrder);
+			merged.VN |= 1;
 		}
-		result.cellsProcessed = band.totalOnes();
-		result.Qbacktrace = Qbacktrace;
-		//use previous instead of current because the last line swapped them
-		result.M = std::move(previousM);
-		result.Q = std::move(previousQ);
-		result.R = std::move(previousR);
-		result.Rbacktrace = std::move(previousRbacktrace);
-		result.maxScorePositionPerRow = std::move(maxScorePositionPerRow);
+		else if (merged.scoreStart == merged.scoreBeforeStart + 1)
+		{
+			merged.VP |= 1;
+		}
+		ScoreType previousScore = merged.scoreStart;
+		for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
+		{
+			Word mask = ((Word)1) << j;
+			if (left.VP & mask) leftScore++;
+			if (left.VN & mask) leftScore--;
+			if (right.VP & mask) rightScore++;
+			if (right.VN & mask) rightScore--;
+			ScoreType betterScore = std::min(leftScore, rightScore);
+			if (betterScore == previousScore+1) merged.VP |= mask;
+			if (betterScore == previousScore-1) merged.VN |= mask;
+			assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
+			assert(betterScore >= previousScore-1);
+			assert(betterScore <= previousScore+1);
+			previousScore = betterScore;
+		}
+		merged.scoreEnd = previousScore;
+		assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
+		assert(merged.scoreEnd <= left.scoreEnd);
+		assert(merged.scoreEnd <= right.scoreEnd);
+		assert(merged.scoreStart <= left.scoreStart);
+		assert(merged.scoreStart <= right.scoreStart);
+		return merged;
+	}
+
+	WordSlice getPreviousSlice(size_t nodeIndex, const std::vector<WordSlice>& previousSlice, const std::vector<WordSlice>& currentSlice, const std::vector<bool>& band) const
+	{
+		auto start = nodeStart[nodeIndex];
+		WordSlice result;
+		bool foundOne = false;
+		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+		{
+			if (!band[inNeighbors[nodeIndex][i]]) continue;
+			if (!foundOne)
+			{
+				result = currentSlice[nodeEnd[inNeighbors[nodeIndex][i]]-1];
+				foundOne = true;
+			}
+			else
+			{
+				result = mergeTwoSlices(result, currentSlice[nodeEnd[inNeighbors[nodeIndex][i]]-1]);
+			}
+		}
+		assert(foundOne);
 		return result;
 	}
 
-	SparseBoolMatrix<SliceRow<LengthType>> getFullBand(size_t sequenceLength, LengthType dynamicRowStart) const
+	WordSlice getSourceSlice(size_t nodeIndex, const std::vector<WordSlice>& previousSlice) const
 	{
-		SparseBoolMatrix<SliceRow<LengthType>> result {nodeSequences.size(), sequenceLength+1};
-		for (LengthType j = 0; j < dynamicRowStart && j < sequenceLength+1; j++)
+		auto start = nodeStart[nodeIndex];
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousSlice[start].scoreEnd+1, previousSlice[start].scoreEnd+WordConfiguration<Word>::WordSize, previousSlice[start].scoreEnd };
+	}
+
+	bool isSource(size_t nodeIndex, const std::vector<bool>& band) const
+	{
+		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
 		{
-			result.setBlock(0, nodeSequences.size(), j);
+			if (band[inNeighbors[nodeIndex][i]]) return false;
 		}
-		return result;
+		return true;
 	}
 
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>, size_t> getBacktrace(const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, SparseBoolMatrix<SliceRow<LengthType>>& band) const
-	{
-		bool hasWrongOrders = false;
-		SparseMatrix<MatrixPosition, decltype(band)> backtraceMatrix {nodeSequences.size(), sequence.size() + 1, band};
-		MatrixSlice lastRow = getFirstSlice(backtraceMatrix);
-		auto slice = getScoreAndBacktraceMatrix(sequence, hasWrongOrders, lastRow, dynamicWidth, band, backtraceMatrix, dynamicRowStart);
-		auto backtraceresult = backtrace(slice.M, backtraceMatrix, band, sequence.size(), slice.maxScorePositionPerRow, dynamicRowStart);
-		return std::make_tuple(std::get<0>(backtraceresult), std::get<1>(backtraceresult), std::get<2>(backtraceresult), slice.cellsProcessed);
-	}
-
-	template <typename SparseMatrixType>
-	MatrixSlice getFirstSlice(SparseMatrixType& backtrace) const
+	MatrixSlice getBitvectorSliceScoresAndFinalPosition(std::string sequence, int dynamicWidth, std::vector<std::vector<bool>>& startBand, LengthType dynamicRowStart) const
 	{
 		MatrixSlice result;
-		result.M.resize(nodeSequences.size(), 0);
-		result.R.resize(nodeSequences.size(), 0);
-		result.Q.resize(nodeSequences.size(), 0);
-		result.Rbacktrace.reserve(nodeSequences.size());
-		result.Qbacktrace.reserve(nodeSequences.size());
-		for (LengthType i = 0; i < nodeSequences.size(); i++)
-		{
-			result.Qbacktrace.emplace_back(i, 0);
-			result.Rbacktrace.emplace_back(i, 0);
-		}
-		result.R[0] = std::numeric_limits<ScoreType>::min() + gapContinuePenalty + 100;
-		assert(result.M.size() == nodeSequences.size());
-		assert(result.R.size() == nodeSequences.size());
-		assert(result.Q.size() == nodeSequences.size());
-		assert(result.Rbacktrace.size() == nodeSequences.size());
-		assert(result.Qbacktrace.size() == nodeSequences.size());
-		return result;
-	}
+		result.cellsProcessed = 0;
+		result.finalMinScore = 0;
+		result.finalMinScoreColumn = 0;
 
-	std::vector<std::pair<LengthType, ScoreType>> getRHelperZero() const
-	{
-		std::vector<std::pair<LengthType, ScoreType>> result;
-		for (LengthType v = 0; v < nodeSequences.size(); v++)
-		{
-			result.emplace_back(v, 0);
-		}
-		return result;
-	}
+		std::vector<WordSlice> slice1;
+		std::vector<WordSlice> slice2;
+		slice1.resize(nodeSequences.size());
+		slice2.resize(nodeSequences.size());
 
-	std::vector<std::pair<LengthType, ScoreType>> getRHelperOne() const
-	{
-		std::vector<std::pair<LengthType, ScoreType>> result;
-		for (LengthType v = 0; v < nodeSequences.size(); v++)
+		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+		for (int i = 0; i < padding; i++)
 		{
-			result.emplace_back(v, 0);
+			sequence += 'N';
 		}
-		return result;
-	}
 
-	std::vector<std::pair<LengthType, ScoreType>> getRHelper(LengthType j, const std::vector<ScoreType>& previousM, const std::string& sequence, const std::vector<bool>& previousBand, const std::vector<std::pair<LengthType, LengthType>>& previousProcessableColumns) const
-	{
-		if (j == 0) return getRHelperZero();
-		if (j == 1) return getRHelperOne();
-		std::vector<std::tuple<LengthType, ScoreType, ScoreType>> bestPerNode;
-		bestPerNode.resize(nodeStart.size(), std::make_tuple(0, std::numeric_limits<ScoreType>::min() + 99, 0));
-		for (auto pair : previousProcessableColumns)
+		std::vector<WordSlice>& currentSlice = slice1;
+		std::vector<WordSlice>& previousSlice = slice2;
+
+		LengthType previousMinimumIndex;
+		std::vector<bool> band;
+
+		for (size_t j = 0; j < sequence.size(); j += WordConfiguration<Word>::WordSize)
 		{
-			for (size_t v = pair.first; v <= pair.second; v++)
+			ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
+			LengthType currentMinimumIndex = 0;
+			//preprocessed bitvectors for character equality
+			Word BA = WordConfiguration<Word>::AllZeros;
+			Word BT = WordConfiguration<Word>::AllZeros;
+			Word BC = WordConfiguration<Word>::AllZeros;
+			Word BG = WordConfiguration<Word>::AllZeros;
+			for (int i = 0; i < WordConfiguration<Word>::WordSize && j+i < sequence.size(); i++)
 			{
-				auto nodeIndex = indexToNode[v];
-				if (nodeStart[nodeIndex] == v)
+				Word mask = ((Word)1) << i;
+				switch(sequence[j+i])
 				{
-					for (size_t neighbori = 0; neighbori < inNeighbors[nodeIndex].size(); neighbori++)
+					case 'A':
+					case 'a':
+					BA |= mask;
+					break;
+					case 'T':
+					case 't':
+					BT |= mask;
+					break;
+					case 'C':
+					case 'c':
+					BC |= mask;
+					break;
+					case 'G':
+					case 'g':
+					BG |= mask;
+					break;
+					case 'N':
+					case 'n':
+					BA |= mask;
+					BC |= mask;
+					BT |= mask;
+					BG |= mask;
+					break;
+				}
+			}
+			size_t slice = j / WordConfiguration<Word>::WordSize;
+			std::vector<bool>& currentBand = band;
+			if (startBand.size() > slice)
+			{
+				currentBand = startBand[slice];
+			}
+			else
+			{
+				band.assign(band.size(), false);
+				expandBandDynamically(band, previousMinimumIndex, dynamicWidth);
+			}
+			for (size_t i = 0; i < nodeStart.size(); i++)
+			{
+				if (!currentBand[i]) continue;
+				WordSlice previous;
+				LengthType start = nodeStart[i];
+				if (isSource(i, currentBand))
+				{
+					previous = getSourceSlice(i, previousSlice);
+					currentSlice[start] = previous;
+					if (currentSlice[start].scoreEnd < currentMinimumScore)
 					{
-						LengthType u = nodeEnd[inNeighbors[nodeIndex][neighbori]]-1;
-						if (!previousBand[u]) continue;
-						auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
-						if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
-						{
-							bestPerNode[nodeIndex] = std::make_tuple(v, scoreHere, (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty);
-						}
+						currentMinimumScore = currentSlice[start].scoreEnd;
+						currentMinimumIndex = start;
 					}
+					start++;
 				}
 				else
 				{
-					LengthType u = v-1;
-					if (!previousBand[u]) continue;
-					auto scoreHere = previousM[u] + matchScore(nodeSequences[v], sequence[j-1]);
-					if (scoreHere - (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty > std::get<1>(bestPerNode[nodeIndex]) - std::get<2>(bestPerNode[nodeIndex]))
+					previous = getPreviousSlice(i, previousSlice, currentSlice, band);
+				}
+				ScoreType scoreStart = previous.scoreStart;
+				ScoreType scoreEnd = previous.scoreEnd;
+				Word VP = previous.VP;
+				Word VN = previous.VN;
+
+				for (LengthType w = start; w < nodeEnd[i]; w++)
+				{
+					if (w == 233926)
 					{
-						bestPerNode[nodeIndex] = std::make_tuple(v, scoreHere, (ScoreType)(nodeEnd[nodeIndex] - v) * gapContinuePenalty);
+						int a = 1;
 					}
-				}
-			}
-		}
-		std::vector<std::pair<LengthType, ScoreType>> result;
-		for (size_t i = 0; i < bestPerNode.size(); i++)
-		{
-			if (std::get<1>(bestPerNode[i]) > std::numeric_limits<ScoreType>::min() + 100)
-			{
-				result.emplace_back(std::get<0>(bestPerNode[i]), std::get<1>(bestPerNode[i]));
-			}
-		}
-		assert(result.size() >= 1);
-		return result;
-	}
-
-	bool hasInNeighborInsideBand(LengthType w, LengthType j, const std::vector<bool>& currentBand) const
-	{
-		auto nodeIndex = indexToNode[w];
-		if (nodeStart[nodeIndex] == w)
-		{
-			for (size_t neighborI = 0; neighborI < inNeighbors[nodeIndex].size(); neighborI++)
-			{
-				if (currentBand[nodeEnd[inNeighbors[nodeIndex][neighborI]] - 1]) return true;
-			}
-		}
-		else
-		{
-			return currentBand[w-1];
-		}
-		return false;
-	}
-
-	//compute R using the recurrence on page 3
-	std::pair<ScoreType, MatrixPosition> recurrenceR(LengthType w, LengthType j, const std::vector<ScoreType>& currentM, const std::vector<ScoreType>& currentR, const std::vector<MatrixPosition>& currentRbacktrace, const std::vector<bool>& currentBand) const
-	{
-		assert(currentBand[w]);
-		auto nodeIndex = indexToNode[w];
-		assert(nodeStart[nodeIndex] != w || !notInOrder[nodeIndex]);
-		MatrixPosition pos;
-		ScoreType maxValue = std::numeric_limits<ScoreType>::min() + 99;
-		if (nodeStart[nodeIndex] == w)
-		{
-			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
-			{
-				auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
-				if (!currentBand[u]) continue;
-				assert(u < w);
-				if (currentM[u] - gapPenalty(1) > maxValue)
-				{
-					maxValue = currentM[u] - gapPenalty(1);
-					pos = std::make_pair(u, j);
-				}
-				if (currentR[u] - gapContinuePenalty > maxValue)
-				{
-					maxValue = currentR[u] - gapContinuePenalty;
-					pos = currentRbacktrace[u];
-				}
-			}
-		}
-		else
-		{
-			auto u = w-1;
-			if (currentBand[u])
-			{
-				pos = currentRbacktrace[u];
-				maxValue = currentR[u] - gapContinuePenalty;
-				if (currentM[u] - gapPenalty(1) > maxValue)
-				{
-					pos = std::make_pair(u, j);
-					maxValue = currentM[u] - gapPenalty(1);
-				}
-			}
-		}
-		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
-		assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
-		return std::make_pair(maxValue, pos);
-	}
-
-	//compute R using the slow, full definition on page 3
-	std::pair<ScoreType, MatrixPosition> fullR(LengthType w, LengthType j, const std::vector<std::pair<LengthType, ScoreType>>& RHelper) const
-	{
-		assert(j > 0);
-		assert(w > 0);
-		auto nodeIndex = indexToNode[w];
-		assert(nodeStart[nodeIndex] == w && notInOrder[nodeIndex]);
-		MatrixPosition pos;
-		ScoreType maxValue = std::numeric_limits<ScoreType>::min() + 99;
-		for (auto pair : RHelper)
-		{
-			auto v = pair.first;
-			if (v == w) continue;
-			auto scoreHere = pair.second - gapPenalty(distanceFromSeqToSeq(v, w));
-			if (scoreHere > maxValue)
-			{
-				maxValue = scoreHere;
-				pos = std::make_pair(v, j-1);
-			}
-		}
-		assert(maxValue >= -std::numeric_limits<ScoreType>::min() + 100);
-		assert(maxValue <= std::numeric_limits<ScoreType>::max() - 100);
-		return std::make_pair(maxValue, pos);
-	}
-
-	LengthType bandDistanceFromSeqToSeq(LengthType start, LengthType end) const
-	{
-		if (start == end) return 0;
-		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
-		auto startNode = indexToNode[start];
-		auto endNode = indexToNode[end];
-		if (startNode == endNode) return std::min(end - start, start - end);
-		if (distanceMatrix(startNode, endNode) == nodeEnd[startNode]-nodeStart[startNode])
-		{
-			return nodeEnd[startNode] - start + end - nodeStart[endNode];
-		}
-		if (distanceMatrix(endNode, startNode) == nodeEnd[endNode]-nodeStart[endNode])
-		{
-			return nodeEnd[endNode] - end + start - nodeStart[startNode];
-		}
-		LengthType minDistance = nodeSequences.size();
-		for (size_t i = 0; i < distanceMatrix.sizeRows(); i++)
-		{
-			LengthType distanceFromStartToMid = distanceMatrix(startNode, i) + nodeStart[startNode] - start;
-			if (distanceMatrix(i, startNode) + start - nodeStart[startNode] < distanceFromStartToMid)
-			{
-				distanceFromStartToMid = distanceMatrix(i, startNode) + start - nodeStart[startNode];
-			}
-			LengthType distanceFromMidToEnd = distanceMatrix(i, endNode) + end - nodeStart[endNode];
-			if (distanceMatrix(endNode, i) + nodeStart[endNode] - end < distanceFromMidToEnd)
-			{
-				distanceFromMidToEnd = distanceMatrix(endNode, i) + nodeStart[endNode] - end;
-			}
-			minDistance = std::min(minDistance, distanceFromStartToMid + distanceFromMidToEnd);
-
-			LengthType distanceFromStartToMidEnd = distanceMatrix(startNode, i) + nodeStart[startNode] - start + nodeEnd[i] - nodeStart[i];
-			if (distanceMatrix(i, startNode) - (nodeEnd[i] - nodeStart[i]) + start - nodeStart[startNode] < distanceFromStartToMidEnd)
-			{
-				distanceFromStartToMidEnd = distanceMatrix(i, startNode) - (nodeEnd[i] - nodeStart[i]) + start - nodeStart[startNode];
-			}
-			LengthType distanceFromMidEndToEnd = distanceMatrix(i, endNode) - (nodeEnd[i] - nodeStart[i]) + end - nodeStart[endNode];
-			if (distanceMatrix(endNode, i) + (nodeEnd[i] - nodeStart[i]) + nodeStart[endNode] - end < distanceFromMidToEnd)
-			{
-				distanceFromMidToEnd = distanceMatrix(endNode, i) + (nodeEnd[i] - nodeStart[i]) + nodeStart[endNode] - end;
-			}
-			minDistance = std::min(minDistance, distanceFromStartToMidEnd + distanceFromMidEndToEnd);
-		}
-		return minDistance;
-	}
-
-	LengthType distanceFromSeqToSeq(LengthType start, LengthType end) const
-	{
-		if (start == end) return 0;
-		if (start == dummyNodeStart || start == dummyNodeEnd || end == dummyNodeStart || end == dummyNodeEnd) return 1;
-		auto startNode = indexToNode[start];
-		auto endNode = indexToNode[end];
-		if (startNode == endNode && end >= start) return end - start;
-		return distanceMatrix(startNode, endNode) + nodeStart[startNode] + end - nodeStart[endNode] - start;
-	}
-
-	void fillDistanceMatrixChain(std::vector<size_t>& chainStart, std::vector<LengthType>& distanceAlongChain, std::vector<std::tuple<LengthType, LengthType, LengthType>>& edges, size_t index) const
-	{
-		//starts inside a bubble
-		if (inNeighbors[index].size() == 1 && outNeighbors[index].size() == 1)
-		{
-			auto before = inNeighbors[index][0];
-			auto after = outNeighbors[index][0];
-			if (outNeighbors[before].size() == 2 && inNeighbors[after].size() == 2)
-			{
-				auto first = outNeighbors[before][0];
-				auto second = outNeighbors[before][1];
-				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
-				{
-					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					Word Eq;
+					switch(nodeSequences[w])
 					{
-						if (inNeighbors[first][0] == inNeighbors[second][0] && outNeighbors[first][0] == outNeighbors[second][0])
-						{
-							index = inNeighbors[index][0];
-						}
+						case 'A':
+							Eq = BA;
+							break;
+						case 'T':
+							Eq = BT;
+							break;
+						case 'C':
+							Eq = BC;
+							break;
+						case 'G':
+							Eq = BG;
+							break;
+						default:
+							assert(false);
+							break;
 					}
-				}
-			}
-		}
-		while (true)
-		{
-			//just a chain
-			if (inNeighbors[index].size() == 1 && outNeighbors[inNeighbors[index][0]].size() == 1)
-			{
-				index = inNeighbors[index][0];
-				continue;
-			}
-			//a simple bubble
-			// if (inNeighbors[index].size() == 2 && inNeighbors[inNeighbors[index][0]].size() == 1 && outNeighbors[inNeighbors[index][0]].size() == 1 && inNeighbors[inNeighbors[index][1]].size() == 1 && outNeighbors[inNeighbors[index][1]].size() == 1 && inNeighbors[inNeighbors[index][0]][0] == inNeighbors[inNeighbors[index][1]][0] && outNeighbors[inNeighbors[inNeighbors[index][0]][0]].size() == 2)
-			if (inNeighbors[index].size() == 2)
-			{
-				auto first = inNeighbors[index][0];
-				auto second = inNeighbors[index][1];
-				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
-				{
-					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
+					//pages 405 and 408
+					int hin = previousSlice[w].hout;
+					if (j == 0) hin = 0;
+					Word Xv = Eq | VN;
+					//between 7 and 8
+					if (hin < 0) Eq |= 1;
+					Word Xh = (((Eq & VP) + VP) ^ VP) | Eq;
+					Word Ph = VN | ~(Xh | VP);
+					Word Mh = VP & Xh;
+					if (Ph & ((Word)1))
 					{
-						assert(outNeighbors[first][0] == index);
-						assert(outNeighbors[second][0] == index);
-						if (inNeighbors[first][0] == inNeighbors[second][0])
-						{
-							auto before = inNeighbors[first][0];
-							if (outNeighbors[before].size() == 2)
-							{
-								index = before;
-								continue;
-							}
-						}
+						scoreStart += 1;
 					}
-				}
-				// index = inNeighbors[inNeighbors[index][0]][0];
-				// continue;
-			}
-			break;
-		}
-		auto start = index;
-		assert(chainStart[index] == std::numeric_limits<size_t>::max());
-		distanceAlongChain[index] = 0;
-		chainStart[index] = start;
-		LengthType pathLength = 0;
-		pathLength += nodeEnd[index] - nodeStart[index];
-
-		while (true)
-		{
-			//just a chain
-			if (outNeighbors[index].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1)
-			{
-				index = outNeighbors[index][0];
-				assert(chainStart[index] == std::numeric_limits<size_t>::max());
-				distanceAlongChain[index] = pathLength;
-				chainStart[index] = start;
-				pathLength += nodeEnd[index] - nodeStart[index];
-				continue;
-			}
-			//a simple bubble
-			// if (outNeighbors[index].size() == 2 && outNeighbors[outNeighbors[index][0]].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1 && outNeighbors[outNeighbors[index][1]].size() == 1 && inNeighbors[outNeighbors[index][1]].size() == 1 && outNeighbors[outNeighbors[index][0]][0] == outNeighbors[outNeighbors[index][1]][0] && inNeighbors[outNeighbors[outNeighbors[index][0]][0]].size() == 2)
-			if (outNeighbors[index].size() == 2)
-			{
-				auto first = outNeighbors[index][0];
-				auto second = outNeighbors[index][1];
-				if (inNeighbors[first].size() == 1 && outNeighbors[first].size() == 1)
-				{
-					if (inNeighbors[second].size() == 1 && outNeighbors[second].size() == 1)
+					else if (Mh & ((Word)1))
 					{
-						assert(inNeighbors[first][0] == index);
-						assert(inNeighbors[second][0] == index);
-						if (outNeighbors[first][0] == outNeighbors[second][0])
-						{
-							auto after = outNeighbors[first][0];
-							if (inNeighbors[after].size() == 2)
-							{
-								assert(chainStart[first] == std::numeric_limits<size_t>::max());
-								assert(chainStart[second] == std::numeric_limits<size_t>::max());
-								distanceAlongChain[first] = pathLength;
-								distanceAlongChain[second] = pathLength;
-								chainStart[first] = start;
-								chainStart[second] = start;
-								chainStart[after] = start;
-								assert(nodeEnd[first] > nodeStart[first]);
-								assert(nodeEnd[second] > nodeStart[second]);
-								auto increase = std::min(nodeEnd[first] - nodeStart[first], nodeEnd[second] - nodeStart[second]);
-								assert(increase > 0);
-								assert(increase < nodeSequences.size());
-								pathLength += increase;
-								distanceAlongChain[after] = pathLength;
-								pathLength += nodeEnd[after] - nodeStart[after];
-								index = after;
-								continue;
-							}
-						}
+						scoreStart -= 1;
 					}
-				}
-				// assert(chainStart[first] == std::numeric_limits<size_t>::max());
-				// assert(chainStart[second] == std::numeric_limits<size_t>::max());
-				// distanceAlongChain[first] = pathLength;
-				// distanceAlongChain[second] = pathLength;
-				// chainStart[first] = start;
-				// chainStart[second] = start;
-				// pathLength += std::min(nodeEnd[first] - nodeStart[first], nodeEnd[second] - nodeStart[second]);
-				// index = outNeighbors[outNeighbors[index][0]][0];
-				// continue;
-			}
-			break;
-		}
-		while (outNeighbors[index].size() == 1 && inNeighbors[outNeighbors[index][0]].size() == 1)
-		{
-			index = outNeighbors[index][0];
-			assert(chainStart[index] == std::numeric_limits<size_t>::max());
-			distanceAlongChain[index] = pathLength;
-			chainStart[index] = start;
-			pathLength += nodeEnd[index] - nodeStart[index];
-		}
-
-		for (size_t i = 0; i < outNeighbors[index].size(); i++)
-		{
-			edges.emplace_back(start, outNeighbors[index][i], pathLength);
-		}
-	}
-
-	//http://www.boost.org/doc/libs/1_40_0/libs/graph/example/johnson-eg.cpp
-	Array2D<LengthType, false> getDistanceMatrixBoostJohnson() const
-	{
-		//g++ can't optimize repeated calls into one call for some reason and it's expensive, so store them like this
-		auto inneighborsSize = inNeighbors.size();
-		auto nodesequencesSizePlusOne = nodeSequences.size() + 1;
-		//Merge chains of nodes into one node, so that boost-johnson has a lower node and edge count
-		std::vector<size_t> chainStart;
-		std::vector<LengthType> distanceOnChain;
-		chainStart.resize(inneighborsSize, std::numeric_limits<size_t>::max());
-		distanceOnChain.resize(inneighborsSize, std::numeric_limits<LengthType>::max());
-		std::vector<std::tuple<LengthType, LengthType, LengthType>> graphedges;
-		Array2D<LengthType, false> distances {inneighborsSize, inneighborsSize, nodesequencesSizePlusOne};
-		for (size_t i = 0; i < inneighborsSize; i++)
-		{
-			if (chainStart[i] == std::numeric_limits<size_t>::max())
-			{
-				fillDistanceMatrixChain(chainStart, distanceOnChain, graphedges, i);
-			}
-		}
-		std::vector<size_t> actualCalculables;
-		std::vector<size_t> helperLookup;
-		helperLookup.resize(inneighborsSize, std::numeric_limits<size_t>::max());
-		for (size_t i = 0; i < inneighborsSize; i++)
-		{
-			assert(chainStart[i] != std::numeric_limits<size_t>::max());
-			assert(distanceOnChain[i] != std::numeric_limits<LengthType>::max());
-			if (chainStart[i] == i) 
-			{
-				helperLookup[i] = actualCalculables.size();
-				actualCalculables.push_back(i);
-			}
-		}
-		auto V = actualCalculables.size();
-		adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>> graph { V };
-
-		std::sort(graphedges.begin(), graphedges.end(), [](auto& left, auto& right) { return std::get<0>(left) < std::get<0>(right) || (std::get<0>(left) == std::get<0>(right) && std::get<1>(left) < std::get<1>(right)); });
-
-		for (size_t i = 0; i < graphedges.size(); i++)
-		{
-			boost::add_edge(helperLookup[std::get<0>(graphedges[i])], helperLookup[std::get<1>(graphedges[i])], graph);
-		}
-
-		property_map<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>, edge_weight_t>::type w = get(edge_weight, graph);
-		graph_traits<adjacency_list<vecS, vecS, directedS, no_property, property<edge_weight_t, int, property<edge_weight2_t, int>>>>::edge_iterator e, e_end;
-		int edgeindex = 0;
-		for (boost::tie(e, e_end) = edges(graph); e != e_end; ++e)
-		{
-			assert((*e).m_source == helperLookup[std::get<0>(graphedges[edgeindex])]);
-			assert((*e).m_target == helperLookup[std::get<1>(graphedges[edgeindex])]);
-			w[*e] = std::get<2>(graphedges[edgeindex]);
-			edgeindex++;
-		}
-		std::vector<int> d(V, nodesequencesSizePlusOne);
-		int** D;
-		D = new int*[V];
-		for (size_t i = 0; i < V; i++)
-		{
-			D[i] = new int[V];
-			for (size_t j = 0; j < V; j++)
-			{
-				D[i][j] = nodesequencesSizePlusOne;
-			}
-		}
-		johnson_all_pairs_shortest_paths(graph, D, distance_map(&d[0]));
-		for (size_t i = 0; i < V; i++)
-		{
-			for (size_t j = 0; j < V; j++)
-			{
-				//distances have to be positive
-				assert(D[i][j] > 0 || (i == j && D[i][j] == 0));
-				//distances are either reasonable or infinity
-				assert(D[i][j] <= nodesequencesSizePlusOne || D[i][j] == std::numeric_limits<int>::max());
-				if (D[i][j] == std::numeric_limits<int>::max())
-				{
-					D[i][j] = nodesequencesSizePlusOne;
-				}
-			}
-		}
-		//make sure that the distance to itself is not 0
-		//we need to do this so distance calculation from a later point in the node to an earlier point in the node works correctly
-		for (size_t i = 0; i < V; i++)
-		{
-			D[i][i] = nodesequencesSizePlusOne;
-			for (size_t j = 0; j < V; j++)
-			{
-				if (j == i) continue;
-				D[i][i] = std::min(D[i][i], D[i][j] + D[j][i]);
-			}
-		}
-
-		for (size_t ii = 0; ii < inneighborsSize; ii++)
-		{
-			assert(distanceOnChain[ii] != std::numeric_limits<size_t>::max());
-			assert(helperLookup[chainStart[ii]] != std::numeric_limits<size_t>::max());
-			size_t i = helperLookup[chainStart[ii]];
-			for (size_t jj = 0; jj < inneighborsSize; jj++)
-			{
-				assert(distanceOnChain[jj] != std::numeric_limits<size_t>::max());
-				assert(helperLookup[chainStart[jj]] != std::numeric_limits<size_t>::max());
-				size_t j = helperLookup[chainStart[jj]];
-				if (i == j && distanceOnChain[jj] > distanceOnChain[ii])
-				{
-					distances(ii, jj) = distanceOnChain[jj] - distanceOnChain[ii];
-				}
-				else if (i == j && distanceOnChain[jj] < distanceOnChain[ii])
-				{
-					if (D[i][i] >= nodesequencesSizePlusOne)
+					Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
+					if (Ph & lastBitMask)
 					{
-						distances(ii, jj) = nodesequencesSizePlusOne;
+						scoreEnd += 1;
+						currentSlice[w].hout = 1;
+					}
+					else if (Mh & lastBitMask)
+					{
+						scoreEnd -= 1;
+						currentSlice[w].hout = -1;
 					}
 					else
 					{
-						distances(ii, jj) = D[i][i] + distanceOnChain[jj] - distanceOnChain[ii];
+						currentSlice[w].hout = 0;
+					}
+					Ph <<= 1;
+					Mh <<= 1;
+					//between 16 and 17
+					if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
+					VP = Mh | ~(Xv | Ph);
+					VN = Ph & Xv;
+
+					assert(scoreStart >= previousSlice[w].scoreEnd - 1);
+					assert(scoreStart <= previousSlice[w].scoreEnd + 1);
+					auto wcvp = WordConfiguration<Word>::popcount(VP);
+					auto wcvn = WordConfiguration<Word>::popcount(VN);
+					assert(scoreEnd == previousSlice[w].scoreEnd + wcvp - wcvn);
+					auto wcvpExceptFirst = WordConfiguration<Word>::popcount(VP & ~((Word)1));
+					auto wcvnExceptFirst = WordConfiguration<Word>::popcount(VN & ~((Word)1));
+					assert(scoreEnd == scoreStart + wcvpExceptFirst - wcvnExceptFirst);
+					assert(scoreStart >= 0);
+					assert(scoreEnd >= 0);
+					assert(scoreEnd <= j + WordConfiguration<Word>::WordSize);
+					assert(scoreStart <= j + 1);
+					assert(scoreStart <= scoreEnd + WordConfiguration<Word>::WordSize);
+					assert(scoreEnd <= scoreStart + WordConfiguration<Word>::WordSize);
+					assert(j == 0 || (VP & 1) == 0 || scoreStart == previousSlice[w].scoreEnd+1);
+					assert(j == 0 || (VN & 1) == 0 || scoreStart == previousSlice[w].scoreEnd-1);
+					assert((VP & VN) == WordConfiguration<Word>::AllZeros);
+					currentSlice[w].scoreStart = scoreStart;
+					currentSlice[w].scoreEnd = scoreEnd;
+					currentSlice[w].VP = VP;
+					currentSlice[w].VN = VN;
+					currentSlice[w].scoreBeforeStart = scoreStart;
+					if (currentSlice[w].VP & 1) currentSlice[w].scoreBeforeStart -= 1;
+					if (currentSlice[w].VN & 1) currentSlice[w].scoreBeforeStart += 1;
+					assert(currentSlice[w].scoreBeforeStart == previousSlice[w].scoreEnd);
+					assert(currentSlice[w].scoreBeforeStart >= 0);
+					assert(currentSlice[w].scoreBeforeStart <= j);
+					if (scoreEnd < currentMinimumScore)
+					{
+						currentMinimumScore = scoreEnd;
+						currentMinimumIndex = w;
 					}
 				}
-				else if (i == j)
-				{
-					distances(ii, jj) = D[i][i];
-				}
-				else if (D[i][j] >= nodesequencesSizePlusOne)
-				{
-					distances(ii, jj) = nodesequencesSizePlusOne;
-				}
-				else
-				{
-					assert(distanceOnChain[ii] < D[i][j]);
-					distances(ii, jj) = D[i][j] + distanceOnChain[jj] - distanceOnChain[ii];
-				}
-				assert(distances(ii, jj) <= nodesequencesSizePlusOne * 2);
-				assert(distances(ii, jj) > 0);
-				if (distances(ii, jj) > nodesequencesSizePlusOne) distances(ii, jj) = nodesequencesSizePlusOne;
+				result.cellsProcessed += (nodeEnd[i] - nodeStart[i]) * WordConfiguration<Word>::WordSize;
 			}
+			std::swap(currentSlice, previousSlice);
+			previousMinimumIndex = currentMinimumIndex;
+			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
 		}
-		for (size_t i = 0; i < V; i++)
-		{
-			delete [] D[i];
-		}
-		delete [] D;
+		result.finalMinScoreColumn = previousMinimumIndex - padding;
+		result.finalMinScore = result.minScorePerWordSlice.back() - padding;
+		return result;
+	}
 
-		return distances;
-
+	std::tuple<ScoreType, int, std::vector<MatrixPosition>, size_t> getBacktrace(const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, std::vector<std::vector<bool>>& startBand) const
+	{
+		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, dynamicWidth, startBand, dynamicRowStart);
+		return std::make_tuple(slice.finalMinScore, 0, std::vector<MatrixPosition>{ std::make_pair(slice.finalMinScoreColumn, 0) }, slice.cellsProcessed);
+		//todo fix
+		// auto backtraceresult = backtrace(slice.M, backtraceMatrix, startBand, sequence.size(), slice.maxScorePositionPerRow, dynamicRowStart);
+		// return std::make_tuple(std::get<0>(backtraceresult), std::get<1>(backtraceresult), std::get<2>(backtraceresult), slice.cellsProcessed);
 	}
 
 	ScoreType gapPenalty(LengthType length) const
@@ -1416,9 +850,7 @@ private:
 	std::vector<std::vector<LengthType>> inNeighbors;
 	std::vector<std::vector<LengthType>> outNeighbors;
 	std::vector<bool> reverse;
-	std::vector<bool> needsSpecialHandling;
 	std::string nodeSequences;
-	Array2D<LengthType, false> distanceMatrix;
 	ScoreType gapStartPenalty;
 	ScoreType gapContinuePenalty;
 	LengthType dummyNodeStart = 0;
