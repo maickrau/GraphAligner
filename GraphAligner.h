@@ -714,10 +714,6 @@ private:
 
 				for (LengthType w = start; w < nodeEnd[i]; w++)
 				{
-					if (w == 233926)
-					{
-						int a = 1;
-					}
 					Word Eq;
 					switch(nodeSequences[w])
 					{
