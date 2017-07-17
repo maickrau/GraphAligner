@@ -507,23 +507,33 @@ private:
 		}
 	}
 
+	class IndexWithScore
+	{
+	public:
+		IndexWithScore(LengthType index, ScoreType score) :
+		index(index),
+		score(score)
+		{}
+		LengthType index;
+		ScoreType score;
+		bool operator>(const IndexWithScore& other) const
+		{
+			return score > other.score;
+		}
+	};
+
 	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth, const std::vector<ScoreType>& nodeMinScores) const
 	{
 		assert(dynamicWidth < nodeSequences.size());
 		assert(currentBand.size() == previousBand.size());
 		assert(currentBand.size() == nodeStart.size());
-		std::vector<ScoreType> nodeEndScores;
-		nodeEndScores.resize(nodeStart.size(), std::numeric_limits<ScoreType>::max());
-		auto nodeComparer = [&nodeMinScores](size_t left, size_t right) { return nodeMinScores[left] > nodeMinScores[right]; };
-		auto endComparer = [&nodeEndScores](size_t left, size_t right) { return nodeEndScores[left] > nodeEndScores[right]; };
-		std::priority_queue<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)>> nodeQueue { nodeComparer };
-		std::priority_queue<size_t, std::vector<size_t>, std::function<bool(size_t, size_t)>> endQueue { endComparer };
+		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> nodeQueue;
+		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> endQueue;
 		for (size_t i = 0; i < nodeStart.size(); i++)
 		{
 			if (!previousBand[i]) continue;
-			nodeEndScores[i] = previousSlice[nodeEnd[i]-1].scoreEnd;
-			nodeQueue.push(i);
-			endQueue.push(i);
+			nodeQueue.emplace(i, nodeMinScores[i]);
+			endQueue.emplace(i, previousSlice[nodeEnd[i]-1].scoreEnd);
 		}
 		LengthType currentWidth = 0;
 		while (currentWidth < dynamicWidth)
@@ -533,16 +543,14 @@ private:
 			{
 				auto nextNode = endQueue.top();
 				endQueue.pop();
-				for (size_t i = 0; i < outNeighbors[nextNode].size(); i++)
+				for (size_t i = 0; i < outNeighbors[nextNode.index].size(); i++)
 				{
-					auto neighbor = outNeighbors[nextNode][i];
+					auto neighbor = outNeighbors[nextNode.index][i];
 					if (!currentBand[neighbor])
 					{
-						assert(nodeEndScores[neighbor] == std::numeric_limits<ScoreType>::max());
-						nodeEndScores[neighbor] = nodeEndScores[nextNode] + nodeEnd[neighbor] - nodeStart[neighbor];
 						currentBand[neighbor] = true;
 						currentWidth += nodeEnd[neighbor] - nodeStart[neighbor];
-						endQueue.push(neighbor);
+						endQueue.emplace(neighbor, nextNode.score + nodeEnd[neighbor] - nodeStart[neighbor]);
 					}
 				}
 				continue;
@@ -551,50 +559,37 @@ private:
 			{
 				auto nextNode = nodeQueue.top();
 				nodeQueue.pop();
-				if (!currentBand[nextNode])
+				if (!currentBand[nextNode.index])
 				{
-					currentBand[nextNode] = true;
-					currentWidth += nodeEnd[nextNode] - nodeStart[nextNode];
+					currentBand[nextNode.index] = true;
+					currentWidth += nodeEnd[nextNode.index] - nodeStart[nextNode.index];
 				}
 				continue;
 			}
 			auto nodeBest = nodeQueue.top();
 			auto endBest = endQueue.top();
-			if (nodeMinScores[nodeBest] <= nodeEndScores[endBest])
+			if (nodeBest.score <= endBest.score)
 			{
 				nodeQueue.pop();
-				assert(previousBand[nodeBest]);
-				if (!currentBand[nodeBest])
+				assert(previousBand[nodeBest.index]);
+				if (!currentBand[nodeBest.index])
 				{
-					currentBand[nodeBest] = true;
-					currentWidth += nodeEnd[nodeBest] - nodeStart[nodeBest];
-				}
-				else
-				{
-					assert(std::any_of(inNeighbors[nodeBest].begin(), inNeighbors[nodeBest].end(), [&nodeEndScores, &nodeMinScores, nodeBest](size_t index) { return nodeEndScores[index] < nodeMinScores[nodeBest]; }));
+					currentBand[nodeBest.index] = true;
+					currentWidth += nodeEnd[nodeBest.index] - nodeStart[nodeBest.index];
 				}
 			}
 			else
 			{
 				endQueue.pop();
-				assert(currentBand[endBest]);
-				for (size_t i = 0; i < outNeighbors[endBest].size(); i++)
+				assert(currentBand[endBest.index]);
+				for (size_t i = 0; i < outNeighbors[endBest.index].size(); i++)
 				{
-					auto neighbor = outNeighbors[endBest][i];
+					auto neighbor = outNeighbors[endBest.index][i];
 					if (!currentBand[neighbor])
 					{
-						if (previousBand[neighbor])
-						{
-							// assert(nodeEndScores[neighbor] <= nodeEndScores[endBest] + nodeEnd[neighbor] - nodeStart[neighbor]);
-						}
-						else
-						{
-							assert(nodeEndScores[neighbor] == std::numeric_limits<ScoreType>::max());
-							nodeEndScores[neighbor] = nodeEndScores[endBest] + nodeEnd[neighbor] - nodeStart[neighbor];
-						}
 						currentBand[neighbor] = true;
 						currentWidth += nodeEnd[neighbor] - nodeStart[neighbor];
-						endQueue.push(neighbor);
+						endQueue.emplace(neighbor, endBest.score + nodeEnd[neighbor] - nodeStart[neighbor]);
 					}
 				}
 			}
