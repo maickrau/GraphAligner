@@ -507,14 +507,12 @@ private:
 		}
 	}
 
-	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth) const
+	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth, const std::vector<ScoreType>& nodeMinScores) const
 	{
 		assert(dynamicWidth < nodeSequences.size());
-		std::vector<ScoreType> nodeMinScores;
-		std::vector<ScoreType> nodeEndScores;
 		assert(currentBand.size() == previousBand.size());
 		assert(currentBand.size() == nodeStart.size());
-		nodeMinScores.resize(nodeStart.size(), std::numeric_limits<ScoreType>::max());
+		std::vector<ScoreType> nodeEndScores;
 		nodeEndScores.resize(nodeStart.size(), std::numeric_limits<ScoreType>::max());
 		auto nodeComparer = [&nodeMinScores](size_t left, size_t right) { return nodeMinScores[left] > nodeMinScores[right]; };
 		auto endComparer = [&nodeEndScores](size_t left, size_t right) { return nodeEndScores[left] > nodeEndScores[right]; };
@@ -523,10 +521,6 @@ private:
 		for (size_t i = 0; i < nodeStart.size(); i++)
 		{
 			if (!previousBand[i]) continue;
-			for (LengthType w = nodeStart[i]; w < nodeEnd[i]; w++)
-			{
-				nodeMinScores[i] = std::min(nodeMinScores[i], previousSlice[w].scoreEnd);
-			}
 			nodeEndScores[i] = previousSlice[nodeEnd[i]-1].scoreEnd;
 			nodeQueue.push(i);
 			endQueue.push(i);
@@ -905,6 +899,9 @@ private:
 		std::vector<WordSlice>& currentSlice = slice1;
 		std::vector<WordSlice>& previousSlice = slice2;
 
+		std::vector<ScoreType> nodeMinScores;
+		nodeMinScores.resize(nodeStart.size(), std::numeric_limits<ScoreType>::max());
+
 		LengthType previousMinimumIndex;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
@@ -962,10 +959,11 @@ private:
 			{
 				std::swap(currentBand, previousBand);
 				currentBand.assign(currentBand.size(), false);
-				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth);
+				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
 			}
 			for (size_t i = 0; i < nodeStart.size(); i++)
 			{
+				nodeMinScores[i] = std::numeric_limits<ScoreType>::max();
 				if (!currentBand[i]) continue;
 				LengthType start = nodeStart[i];
 				if (isSource(i, currentBand))
@@ -976,6 +974,7 @@ private:
 						currentMinimumScore = currentSlice[start].scoreEnd;
 						currentMinimumIndex = start;
 					}
+					nodeMinScores[i] = std::min(nodeMinScores[i], currentSlice[start].scoreEnd);
 					start++;
 				}
 				else
@@ -991,6 +990,7 @@ private:
 						currentMinimumScore = currentSlice[start].scoreEnd;
 						currentMinimumIndex = start;
 					}
+					nodeMinScores[i] = std::min(nodeMinScores[i], currentSlice[start].scoreEnd);
 					start++;
 				}
 
@@ -1022,7 +1022,6 @@ private:
 						forceFirstHorizontalPositive = true;
 					}
 
-
 					currentSlice[w] = getNextSlice(Eq, currentSlice[w-1], hin, forceFirstHorizontalPositive);
 
 					if (previousBand[i] && currentSlice[w].scoreBeforeStart > previousSlice[w].scoreEnd)
@@ -1044,10 +1043,14 @@ private:
 
 					assert(!previousBand[i] || currentSlice[w].scoreBeforeStart <= previousSlice[w].scoreEnd);
 					assert(currentSlice[w].scoreBeforeStart >= 0);
-					if (currentSlice[w].scoreEnd < currentMinimumScore)
+					if (currentSlice[w].scoreEnd < nodeMinScores[i])
 					{
-						currentMinimumScore = currentSlice[w].scoreEnd;
-						currentMinimumIndex = w;
+						nodeMinScores[i] = currentSlice[w].scoreEnd;
+						if (currentSlice[w].scoreEnd < currentMinimumScore)
+						{
+							currentMinimumScore = currentSlice[w].scoreEnd;
+							currentMinimumIndex = w;
+						}
 					}
 				}
 				result.cellsProcessed += (nodeEnd[i] - nodeStart[i]) * WordConfiguration<Word>::WordSize;
