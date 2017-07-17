@@ -693,12 +693,12 @@ private:
 		{
 			Word mask = ((Word)1) << j;
 			if (left.VP & mask) leftScore++;
-			if (left.VN & mask) leftScore--;
-			if (right.VP & mask) rightScore++;
+			else if (left.VN & mask) leftScore--;
 			if (right.VN & mask) rightScore--;
+			else if (right.VP & mask) rightScore++;
 			ScoreType betterScore = std::min(leftScore, rightScore);
 			if (betterScore == previousScore+1) merged.VP |= mask;
-			if (betterScore == previousScore-1) merged.VN |= mask;
+			else if (betterScore == previousScore-1) merged.VN |= mask;
 			assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
 			assert(betterScore >= previousScore-1);
 			assert(betterScore <= previousScore+1);
