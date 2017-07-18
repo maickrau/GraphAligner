@@ -132,7 +132,8 @@ public:
 	nodeSequences(),
 	gapStartPenalty(1),
 	gapContinuePenalty(1),
-	finalized(false)
+	finalized(false),
+	firstInOrder(0)
 	{
 		//add the start dummy node as the first node
 		dummyNodeStart = nodeSequences.size();
@@ -193,8 +194,6 @@ public:
 		outNeighbors[from].push_back(to);
 		if (from >= to)
 		{
-			//todo fix for cyclic graphs
-			assert(false);
 			notInOrder[to] = true;
 		}
 	}
@@ -228,6 +227,13 @@ public:
 			if (inNeighbors[i].size() >= 2) specialNodes++;
 		}
 		std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
+		firstInOrder = 0;
+		for (size_t i = 1; i < notInOrder.size(); i++)
+		{
+			if (notInOrder[i]) firstInOrder = i+1;
+			//all not-in-order nodes have to be at the start
+			assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
+		}
 	}
 
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart) const
@@ -272,6 +278,16 @@ private:
 
 	std::vector<MatrixPosition> backtrace(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice) const
 	{
+		//first try the faster way
+		auto result = backtraceInner(endPosition, sequence, minScorePerWordSlice, false);
+		//if that breaks then do the full backtrace
+		if (result.size() == 0) result = backtraceInner(endPosition, sequence, minScorePerWordSlice, true);
+		assert(result.size() != 0);
+		return result;
+	}
+
+	std::vector<MatrixPosition> backtraceInner(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice, bool fullBacktrace) const
+	{
 		ScoreType scoreAtEnd = minScorePerWordSlice.back();
 		ScoreType currentDistance = 0;
 		std::vector<ExpandoCell> visitedExpandos;
@@ -283,10 +299,17 @@ private:
 		{
 			if (currentDistanceQueue.size() == 0)
 			{
+				if (currentDistancePlusOneQueue.size() == 0)
+				{
+					return std::vector<MatrixPosition> {};
+				}
 				assert(currentDistancePlusOneQueue.size() > 0);
 				std::swap(currentDistanceQueue, currentDistancePlusOneQueue);
 				currentDistance++;
-				assert(currentDistance <= scoreAtEnd);
+				if (currentDistance > scoreAtEnd)
+				{
+					return std::vector<MatrixPosition> {};
+				}
 			}
 			auto current = currentDistanceQueue.back();
 			currentDistanceQueue.pop_back();
@@ -299,8 +322,15 @@ private:
 			}
 			auto sliceIndex = (j-1) / WordConfiguration<Word>::WordSize;
 			assert(sliceIndex < minScorePerWordSlice.size());
-			// ScoreType maxDistanceHere = scoreAtEnd;
-			ScoreType maxDistanceHere = scoreAtEnd - minScorePerWordSlice[sliceIndex];
+			ScoreType maxDistanceHere;
+			if (fullBacktrace)
+			{
+				maxDistanceHere = scoreAtEnd;
+			}
+			else
+			{
+				maxDistanceHere = scoreAtEnd - minScorePerWordSlice[sliceIndex];
+			}
 			if (currentDistance > maxDistanceHere) continue;
 			if (visitedCells.get(w, j)) continue;
 			visitedCells.set(w, j);
@@ -727,18 +757,7 @@ private:
 			if (!foundOne)
 			{
 				previous = currentSlice[nodeEnd[neighbor]-1];
-				if (previousBand[neighbor])
-				{
-					forceFirstHorizontalPositive = false;
-					assert(previous.scoreBeforeStart <= previousSlice[nodeEnd[neighbor]-1].scoreEnd);
-				}
-				else
-				{
-					forceFirstHorizontalPositive = true;
-					previous.scoreBeforeStart = previous.scoreStart+1;
-					previous.VP &= ~((Word)1);
-					previous.VN |= 1;
-				}
+				forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				foundOne = true;
 			}
 			else
@@ -746,21 +765,11 @@ private:
 				auto competitor = currentSlice[nodeEnd[neighbor]-1];
 				if (competitor.scoreBeforeStart < previous.scoreBeforeStart)
 				{
-					forceFirstHorizontalPositive = previousBand[neighbor];
+					forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				}
 				else if (competitor.scoreBeforeStart == previous.scoreBeforeStart)
 				{
-					if (previousBand[neighbor]) forceFirstHorizontalPositive = false;
-				}
-				if (previousBand[neighbor])
-				{
-					assert(competitor.scoreBeforeStart <= previousSlice[nodeEnd[neighbor]-1].scoreEnd);
-				}
-				else
-				{
-					competitor.scoreBeforeStart = competitor.scoreStart+1;
-					competitor.VP &= ~((Word)1);
-					competitor.VN |= 1;
+					forceFirstHorizontalPositive = forceFirstHorizontalPositive & firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				}
 				previous = mergeTwoSlices(previous, competitor);
 			}
@@ -768,6 +777,11 @@ private:
 		assert(foundOne);
 		auto result = getNextSlice(Eq, previous, hin, forceFirstHorizontalPositive);
 		return result;
+	}
+
+	WordSlice getSourceSliceWithoutBefore(size_t row) const
+	{
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, row+1, row+WordConfiguration<Word>::WordSize, row };
 	}
 
 	WordSlice getSourceSliceFromColumn(size_t column, const std::vector<WordSlice>& previousSlice) const
@@ -878,6 +892,156 @@ private:
 		return slice;
 	}
 
+	class NodeCalculationResult
+	{
+	public:
+		ScoreType minScore;
+		LengthType minScoreIndex;
+		size_t cellsProcessed;
+	};
+
+	bool firstZeroForced(const std::vector<bool>& previousBand, LengthType neighborNodeIndex, LengthType neighborColumn, Word currentEq, const std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice) const
+	{
+		if (previousBand[neighborNodeIndex])
+		{
+			if (currentSlice[neighborColumn].scoreStart < previousSlice[neighborColumn].scoreEnd)
+			{
+				return true;
+			}
+			if (currentSlice[neighborColumn].scoreStart == previousSlice[neighborColumn].scoreEnd && !(currentEq & 1))
+			{
+				return true;
+			}
+			return false;
+		}
+		else
+		{
+			return true;
+		}
+		assert(false);
+	}
+
+	NodeCalculationResult calculateNode(size_t i, size_t j, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, bool forceSource) const
+	{
+		NodeCalculationResult result;
+		result.minScore = std::numeric_limits<ScoreType>::max();
+		result.minScoreIndex = 0;
+		result.cellsProcessed = 0;
+
+		LengthType start = nodeStart[i];
+		if (forceSource || isSource(i, currentBand))
+		{
+			if (previousBand[i])
+			{
+				currentSlice[start] = getSourceSlice(i, previousSlice);
+			}
+			else
+			{
+				currentSlice[start] = getSourceSliceWithoutBefore(j);
+			}
+			if (currentSlice[start].scoreEnd < result.minScore)
+			{
+				result.minScore = currentSlice[start].scoreEnd;
+				result.minScoreIndex = start;
+			}
+			start++;
+		}
+		else
+		{
+			Word Eq = getEq(BA, BT, BC, BG, nodeStart[i]);
+			currentSlice[start] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand);
+			if (previousBand[i] && currentSlice[start].scoreBeforeStart > previousSlice[start].scoreEnd)
+			{
+				currentSlice[start] = mergeTwoSlices(getSourceSliceFromColumn(start, previousSlice), currentSlice[start]);
+			}
+			if (currentSlice[start].scoreEnd < result.minScore)
+			{
+				result.minScore = currentSlice[start].scoreEnd;
+				result.minScoreIndex = start;
+			}
+			start++;
+		}
+
+		assert(start == nodeStart[i]+1);
+
+		for (LengthType w = start; w < nodeEnd[i]; w++)
+		{
+			Word Eq = getEq(BA, BT, BC, BG, w);
+			int hin = 0;
+			if (previousBand[i]) hin = previousSlice[w].hout;
+			bool forceFirstHorizontalPositive = firstZeroForced(previousBand, i, w-1, Eq, currentSlice, previousSlice);
+
+			currentSlice[w] = getNextSlice(Eq, currentSlice[w-1], hin, forceFirstHorizontalPositive);
+
+			if (previousBand[i] && currentSlice[w].scoreBeforeStart > previousSlice[w].scoreEnd)
+			{
+				currentSlice[w] = mergeTwoSlices(getSourceSliceFromColumn(w, previousSlice), currentSlice[w]);
+			}
+			if (currentSlice[w].scoreBeforeStart > j)
+			{
+				currentSlice[w] = mergeTwoSlices(getSourceSliceWithoutBefore(j), currentSlice[w]);
+			}
+
+#ifndef NDEBUG
+			auto wcvp = WordConfiguration<Word>::popcount(currentSlice[w].VP);
+			auto wcvn = WordConfiguration<Word>::popcount(currentSlice[w].VN);
+			assert(currentSlice[w].scoreEnd == currentSlice[w].scoreBeforeStart + wcvp - wcvn);
+#endif
+			assert(previousBand[i] || currentSlice[w].scoreBeforeStart == j || currentSlice[w].scoreStart == currentSlice[w-1].scoreStart + 1);
+			assert(currentSlice[w].scoreStart >= 0);
+			assert(currentSlice[w].scoreEnd >= 0);
+			assert(currentSlice[w].scoreStart <= currentSlice[w].scoreEnd + WordConfiguration<Word>::WordSize);
+			assert(currentSlice[w].scoreEnd <= currentSlice[w].scoreStart + WordConfiguration<Word>::WordSize);
+			assert((currentSlice[w].VP & currentSlice[w].VN) == WordConfiguration<Word>::AllZeros);
+
+			assert(!previousBand[i] || currentSlice[w].scoreBeforeStart <= previousSlice[w].scoreEnd);
+			assert(currentSlice[w].scoreBeforeStart >= 0);
+			if (currentSlice[w].scoreEnd < result.minScore)
+			{
+				result.minScore = currentSlice[w].scoreEnd;
+				result.minScoreIndex = w;
+			}
+		}
+		result.cellsProcessed = (nodeEnd[i] - nodeStart[i]) * WordConfiguration<Word>::WordSize;
+		return result;
+	}
+
+	void calculateDoublesliceBackwardsRec(size_t i, size_t j, size_t start, Word BA, Word BT, Word BC, Word BG, LengthType sizeLeft, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	{
+		assert(sizeLeft > 0);
+		bool forceSource = true;
+		if (nodeEnd[i]-nodeStart[i] < sizeLeft)
+		{
+			sizeLeft -= nodeEnd[i]-nodeStart[i];
+			for (size_t neighbori = 0; neighbori < inNeighbors[i].size(); neighbori++)
+			{
+				//todo what happens when two cycles are with 2*w of eachothers?
+				//the slice calculation may overwrite a previous correct value with a new wrong value
+				//let's assume the cycles are far enough from each others
+				//cycling over itself is fine
+				assert(inNeighbors[i][neighbori] == start || !notInOrder[inNeighbors[i][neighbori]]);
+				auto neighbor = inNeighbors[i][neighbori];
+				if (!currentBand[neighbor]) continue;
+				calculateDoublesliceBackwardsRec(neighbor, j, start, BA, BT, BC, BG, sizeLeft, currentSlice, previousSlice, currentBand, previousBand);
+				forceSource = false;
+			}
+		}
+		calculateNode(i, j, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, forceSource);
+	}
+
+	void calculateDoublesliceBackwards(size_t j, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	{
+		if (firstInOrder == 0) return;
+		for (size_t i = firstInOrder-1; i > 0; i--)
+		{
+			std::set<size_t> currentCalculables;
+			std::vector<size_t> currentCalculableOrder;
+			assert(notInOrder[i]);
+			if (!currentBand[i]) continue;
+			calculateDoublesliceBackwardsRec(i, j, i, BA, BT, BC, BG, WordConfiguration<Word>::WordSize*2, currentSlice, previousSlice, currentBand, previousBand);
+		}
+	}
+
 	MatrixSlice getBitvectorSliceScoresAndFinalPosition(const std::string& sequence, int dynamicWidth, std::vector<std::vector<bool>>& startBand, LengthType dynamicRowStart) const
 	{
 		MatrixSlice result;
@@ -956,99 +1120,32 @@ private:
 				currentBand.assign(currentBand.size(), false);
 				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
 			}
-			for (size_t i = 0; i < nodeStart.size(); i++)
+			calculateDoublesliceBackwards(j, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
+			for (size_t i = firstInOrder; i < nodeStart.size(); i++)
 			{
 				nodeMinScores[i] = std::numeric_limits<ScoreType>::max();
 				if (!currentBand[i]) continue;
-				LengthType start = nodeStart[i];
-				if (isSource(i, currentBand))
+				auto nodeCalc = calculateNode(i, j, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, false);
+				nodeMinScores[i] = nodeCalc.minScore;
+				if (nodeCalc.minScore < currentMinimumScore)
 				{
-					currentSlice[start] = getSourceSlice(i, previousSlice);
-					if (currentSlice[start].scoreEnd < currentMinimumScore)
-					{
-						currentMinimumScore = currentSlice[start].scoreEnd;
-						currentMinimumIndex = start;
-					}
-					nodeMinScores[i] = std::min(nodeMinScores[i], currentSlice[start].scoreEnd);
-					start++;
+					currentMinimumScore = nodeCalc.minScore;
+					currentMinimumIndex = nodeCalc.minScoreIndex;
 				}
-				else
+				result.cellsProcessed += nodeCalc.cellsProcessed;
+			}
+			for (size_t i = 0; i < firstInOrder; i++)
+			{
+				nodeMinScores[i] = std::numeric_limits<ScoreType>::max();
+				if (!currentBand[i]) continue;
+				auto nodeCalc = calculateNode(i, j, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, false);
+				nodeMinScores[i] = nodeCalc.minScore;
+				if (nodeCalc.minScore < currentMinimumScore)
 				{
-					Word Eq = getEq(BA, BT, BC, BG, nodeStart[i]);
-					currentSlice[start] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand);
-					if (previousBand[i] && currentSlice[start].scoreBeforeStart > previousSlice[start].scoreEnd)
-					{
-						currentSlice[start] = mergeTwoSlices(getSourceSliceFromColumn(start, previousSlice), currentSlice[start]);
-					}
-					if (currentSlice[start].scoreEnd < currentMinimumScore)
-					{
-						currentMinimumScore = currentSlice[start].scoreEnd;
-						currentMinimumIndex = start;
-					}
-					nodeMinScores[i] = std::min(nodeMinScores[i], currentSlice[start].scoreEnd);
-					start++;
+					currentMinimumScore = nodeCalc.minScore;
+					currentMinimumIndex = nodeCalc.minScoreIndex;
 				}
-
-				assert(start == nodeStart[i]+1);
-
-				for (LengthType w = start; w < nodeEnd[i]; w++)
-				{
-					Word Eq = getEq(BA, BT, BC, BG, w);
-					int hin = 0;
-					if (j > 0 && previousBand[i]) hin = previousSlice[w].hout;
-					//first horizontal must be positive if:
-					//-cell above was not in band, and the special case for the first column
-					//-or cell above was in band, but has a higher score than the left cell
-					bool forceFirstHorizontalPositive;
-					if (previousBand[i])
-					{
-						forceFirstHorizontalPositive = false;
-						if (currentSlice[w-1].scoreStart < previousSlice[w-1].scoreEnd)
-						{
-							forceFirstHorizontalPositive = true;
-						}
-						if (currentSlice[w-1].scoreStart == previousSlice[w-1].scoreEnd && nodeSequences[w] != sequence[j])
-						{
-							forceFirstHorizontalPositive = true;
-						}
-					}
-					else
-					{
-						forceFirstHorizontalPositive = true;
-					}
-
-					currentSlice[w] = getNextSlice(Eq, currentSlice[w-1], hin, forceFirstHorizontalPositive);
-
-					if (previousBand[i] && currentSlice[w].scoreBeforeStart > previousSlice[w].scoreEnd)
-					{
-						currentSlice[w] = mergeTwoSlices(getSourceSliceFromColumn(w, previousSlice), currentSlice[w]);
-					}
-
-#ifndef NDEBUG
-					auto wcvp = WordConfiguration<Word>::popcount(currentSlice[w].VP);
-					auto wcvn = WordConfiguration<Word>::popcount(currentSlice[w].VN);
-					assert(currentSlice[w].scoreEnd == currentSlice[w].scoreBeforeStart + wcvp - wcvn);
-#endif
-					assert(j == 0 || previousBand[i] || w == start || currentSlice[w].scoreStart == currentSlice[w-1].scoreStart + 1);
-					assert(currentSlice[w].scoreStart >= 0);
-					assert(currentSlice[w].scoreEnd >= 0);
-					assert(currentSlice[w].scoreStart <= currentSlice[w].scoreEnd + WordConfiguration<Word>::WordSize);
-					assert(currentSlice[w].scoreEnd <= currentSlice[w].scoreStart + WordConfiguration<Word>::WordSize);
-					assert((currentSlice[w].VP & currentSlice[w].VN) == WordConfiguration<Word>::AllZeros);
-
-					assert(!previousBand[i] || currentSlice[w].scoreBeforeStart <= previousSlice[w].scoreEnd);
-					assert(currentSlice[w].scoreBeforeStart >= 0);
-					if (currentSlice[w].scoreEnd < nodeMinScores[i])
-					{
-						nodeMinScores[i] = currentSlice[w].scoreEnd;
-						if (currentSlice[w].scoreEnd < currentMinimumScore)
-						{
-							currentMinimumScore = currentSlice[w].scoreEnd;
-							currentMinimumIndex = w;
-						}
-					}
-				}
-				result.cellsProcessed += (nodeEnd[i] - nodeStart[i]) * WordConfiguration<Word>::WordSize;
+				result.cellsProcessed += nodeCalc.cellsProcessed;
 			}
 			std::swap(currentSlice, previousSlice);
 			previousMinimumIndex = currentMinimumIndex;
@@ -1071,6 +1168,11 @@ private:
 		for (int i = 0; i < padding; i++)
 		{
 			assert(backtraceresult.back().second >= sequence.size() - padding);
+			backtraceresult.pop_back();
+		}
+		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
+		if (backtraceresult.back().second == sequence.size() - padding && nodeSequences[backtraceresult.back().first] != sequence[backtraceresult.back().second])
+		{
 			backtraceresult.pop_back();
 		}
 		assert(backtraceresult.back().second == sequence.size() - padding - 1);
@@ -1103,6 +1205,7 @@ private:
 	LengthType dummyNodeStart = 0;
 	LengthType dummyNodeEnd = 1;
 	bool finalized;
+	size_t firstInOrder = 0;
 };
 
 #endif
