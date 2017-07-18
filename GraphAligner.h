@@ -288,7 +288,7 @@ private:
 
 	std::vector<MatrixPosition> backtraceInner(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice, bool fullBacktrace) const
 	{
-		ScoreType scoreAtEnd = minScorePerWordSlice.back();
+		ScoreType scoreAtEnd = minScorePerWordSlice.back()+1;
 		ScoreType currentDistance = 0;
 		std::vector<ExpandoCell> visitedExpandos;
 		std::vector<ExpandoCell> currentDistanceQueue;
