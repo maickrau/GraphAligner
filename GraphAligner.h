@@ -46,13 +46,10 @@ public:
 	static int popcount(uint64_t x)
 	{
 		//https://en.wikipedia.org/wiki/Hamming_weight
-	    x = (x & 0x5555555555555555) + ((x >>  1) & 0x5555555555555555); //put count of each  2 bits into those  2 bits 
-	    x = (x & 0x3333333333333333) + ((x >>  2) & 0x3333333333333333); //put count of each  4 bits into those  4 bits 
-	    x = (x & 0x0F0F0F0F0F0F0F0F) + ((x >>  4) & 0x0F0F0F0F0F0F0F0F); //put count of each  8 bits into those  8 bits 
-	    x = (x & 0x00FF00FF00FF00FF) + ((x >>  8) & 0x00FF00FF00FF00FF); //put count of each 16 bits into those 16 bits 
-	    x = (x & 0x0000FFFF0000FFFF) + ((x >> 16) & 0x0000FFFF0000FFFF); //put count of each 32 bits into those 32 bits 
-	    x = (x & 0x00000000FFFFFFFF) + ((x >> 32) & 0x00000000FFFFFFFF); //put count of each 64 bits into those 64 bits 
-	    return x;
+		x -= (x >> 1) & 0x5555555555555555;
+		x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
+		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
+		return (x * 0x0101010101010101) >> 56;
 	}
 };
 
@@ -747,6 +744,17 @@ private:
 		const uint64_t fencemask1 = 0x0055005500550055;
 		const uint64_t fencemask2 = 0x5500550055005500;
 		const uint64_t signmask = 0x8080808080808080;
+		uint64_t VPcommon = ~(leftVP & rightVP);
+		uint64_t VNcommon = ~(leftVN & rightVN);
+		leftVP &= VPcommon;
+		leftVN &= VNcommon;
+		rightVP &= VPcommon;
+		rightVN &= VNcommon;
+		//left is lower everywhere
+		if (scoreDifference > WordConfiguration<Word>::popcount(rightVN) + WordConfiguration<Word>::popcount(leftVP))
+		{
+			return std::make_pair(0xFFFFFFFFFFFFFFFF, 0x0000000000000000);
+		}
 		assert(scoreDifference >= 0);
 		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(bytePopcounts(leftVP), 0), bytePrefixSums(bytePopcounts(leftVN), 0));
 		uint64_t byteVPVNSumRight = byteVPVNSum(bytePrefixSums(bytePopcounts(rightVP), scoreDifference), bytePrefixSums(bytePopcounts(rightVN), 0));
