@@ -759,19 +759,24 @@ private:
 		//difference now contains the prefix sum difference (left-right) at each byte
 		uint64_t resultLeftSmallerThanRight = 0;
 		uint64_t resultRightSmallerThanLeft = 0;
+		const uint64_t LSBmask1 = 0x0101010101010101 & chunkmask1;
+		const uint64_t LSBmask2 = 0x0101010101010101 & chunkmask2;
 		for (int bit = 0; bit < 8; bit++)
 		{
-			uint64_t bitmask = 0x0101010101010101 << bit;
 			uint64_t difference1 = (difference & chunkmask1) | fencemask1;
 			uint64_t difference2 = (difference & chunkmask2) | fencemask2;
-			difference1 += (leftVP & bitmask & chunkmask1) >> bit;
-			difference1 -= (leftVN & bitmask & chunkmask1) >> bit;
-			difference1 -= (rightVP & bitmask & chunkmask1) >> bit;
-			difference1 += (rightVN & bitmask & chunkmask1) >> bit;
-			difference2 += (leftVP & bitmask & chunkmask2) >> bit;
-			difference2 -= (leftVN & bitmask & chunkmask2) >> bit;
-			difference2 -= (rightVP & bitmask & chunkmask2) >> bit;
-			difference2 += (rightVN & bitmask & chunkmask2) >> bit;
+			difference1 += (leftVP & LSBmask1);
+			difference1 -= (leftVN & LSBmask1);
+			difference1 -= (rightVP & LSBmask1);
+			difference1 += (rightVN & LSBmask1);
+			difference2 += (leftVP & LSBmask2);
+			difference2 -= (leftVN & LSBmask2);
+			difference2 -= (rightVP & LSBmask2);
+			difference2 += (rightVN & LSBmask2);
+			leftVN >>= 1;
+			leftVP >>= 1;
+			rightVN >>= 1;
+			rightVP >>= 1;
 			difference = (difference1 & chunkmask1) | (difference2 & chunkmask2);
 			//difference now contains the prefix sums difference (left-right) at each byte at (bit)'th bit
 			//left < right when the prefix sum difference is negative (sign bit is set)
@@ -789,6 +794,9 @@ private:
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
+#ifndef NDEBUG
+		auto correctValue = mergeTwoSlicesCellByCell(left, right);
+#endif
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
 		WordSlice result;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
@@ -806,10 +814,6 @@ private:
 		// std::cerr << "leftSmaller      " << wordToStr(leftSmaller) << std::endl;
 		// std::cerr << "rightSmaller     " << wordToStr(rightSmaller) << std::endl;
 		// std::cerr << "mask             " << wordToStr(mask) << std::endl;
-		uint64_t leftLow = ~left.VN;
-		uint64_t leftHigh = left.VP;
-		uint64_t rightLow = ~right.VN;
-		uint64_t rightHigh = right.VP;
 		// std::cerr << "leftHigh(pre)    " << wordToStr(leftHigh) << std::endl;
 		// std::cerr << "leftLow(pre)     " << wordToStr(leftLow) << std::endl;
 		// std::cerr << "rightHigh(pre)   " << wordToStr(rightHigh) << std::endl;
@@ -822,30 +826,27 @@ private:
 		}
 		// std::cerr << "leftReduction    " << wordToStr(leftReduction) << std::endl;
 		// std::cerr << "rightReduction   " << wordToStr(rightReduction) << std::endl;
-		assert((leftReduction & rightHigh) == leftReduction);
-		assert((rightReduction & leftHigh) == rightReduction);
-		assert((leftReduction & leftLow) == 0);
-		assert((rightReduction & rightLow) == 0);
-		leftLow |= leftReduction;
-		rightLow |= rightReduction;
+		assert((leftReduction & right.VP) == leftReduction);
+		assert((rightReduction & left.VP) == rightReduction);
+		assert((leftReduction & left.VN) == leftReduction);
+		assert((rightReduction & right.VN) == rightReduction);
+		left.VN &= ~leftReduction;
+		right.VN &= ~rightReduction;
 		// std::cerr << "leftHigh(post)   " << wordToStr(leftHigh) << std::endl;
 		// std::cerr << "leftLow(post)    " << wordToStr(leftLow) << std::endl;
 		// std::cerr << "rightHigh(post)  " << wordToStr(rightHigh) << std::endl;
 		// std::cerr << "rightLow(post)   " << wordToStr(rightLow) << std::endl;
-		uint64_t resultLow = (leftLow & ~mask) | (rightLow & mask);
-		uint64_t resultHigh = (leftHigh & ~mask) | (rightHigh & mask);
+		result.VN = (left.VN & ~mask) | (right.VN & mask);
+		result.VP = (left.VP & ~mask) | (right.VP & mask);
 		// std::cerr << "resultHigh       " << wordToStr(resultHigh) << std::endl;
 		// std::cerr << "resultLow        " << wordToStr(resultLow) << std::endl;
-		assert((resultHigh & ~resultLow) == 0);
-		result.VP = resultHigh;
-		result.VN = ~resultLow;
+		assert((result.VP & result.VN) == 0);
 		// std::cerr << "resultVP         " << wordToStr(result.VP) << std::endl;
 		// std::cerr << "resultVN         " << wordToStr(result.VN) << std::endl;
 		result.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
 		result.scoreStart = std::min(left.scoreStart, right.scoreStart);
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
 #ifndef NDEBUG
-		auto correctValue = mergeTwoSlicesCellByCell(left, right);
 		// std::cerr << "correctVP        " << wordToStr(correctValue.VP) << std::endl;
 		// std::cerr << "correctVN        " << wordToStr(correctValue.VN) << std::endl;
 		assert(result.VP == correctValue.VP);
