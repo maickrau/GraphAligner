@@ -475,11 +475,27 @@ private:
 		vgmapping->set_rank(rank);
 		position->set_node_id(nodeIDs[oldNode]);
 		position->set_is_reverse(reverse[oldNode]);
+		position->set_offset(trace[pos].first - nodeStart[oldNode]);
+		MatrixPosition btNodeStart = trace[pos];
+		MatrixPosition btNodeEnd = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
 			if (indexToNode[trace[pos].first] == dummyNodeEnd) break;
-			if (indexToNode[trace[pos].first] == oldNode) continue;
+			if (indexToNode[trace[pos].first] == oldNode)
+			{
+				btNodeEnd = trace[pos];
+				continue;
+			}
+			assert(indexToNode[btNodeEnd.first] == indexToNode[btNodeStart.first]);
+			assert(btNodeEnd.second >= btNodeStart.second);
+			assert(btNodeEnd.first >= btNodeStart.first);
+			auto edit = vgmapping->add_edit();
+			edit->set_from_length(btNodeEnd.first - btNodeStart.first + 1);
+			edit->set_to_length(btNodeEnd.second - btNodeStart.second + 1);
+			edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second + 1));
 			oldNode = indexToNode[trace[pos].first];
+			btNodeStart = trace[pos];
+			btNodeEnd = trace[pos];
 			rank++;
 			vgmapping = path->add_mapping();
 			position = new vg::Position;
@@ -488,6 +504,10 @@ private:
 			position->set_node_id(nodeIDs[oldNode]);
 			position->set_is_reverse(reverse[oldNode]);
 		}
+		auto edit = vgmapping->add_edit();
+		edit->set_from_length(btNodeEnd.first - btNodeStart.first);
+		edit->set_to_length(btNodeEnd.second - btNodeStart.second);
+		edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second));
 		result.set_score(score);
 		result.set_sequence(sequence);
 		return AlignmentResult { result, maxDistanceFromBand, false, cellsProcessed };
