@@ -822,7 +822,7 @@ private:
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
-#ifndef NDEBUG
+#ifdef EXTRAASSERTIONS
 		auto correctValue = mergeTwoSlicesCellByCell(left, right);
 #endif
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
@@ -853,7 +853,7 @@ private:
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 		assert(result.scoreStart == result.scoreBeforeStart + (result.VP & 1) - (result.VN & 1));
-#ifndef NDEBUG
+#ifdef EXTRAASSERTIONS
 		assert(result.VP == correctValue.VP);
 		assert(result.VN == correctValue.VN);
 		assert(result.scoreBeforeStart == correctValue.scoreBeforeStart);
