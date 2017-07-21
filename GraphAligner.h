@@ -829,54 +829,31 @@ private:
 		WordSlice result;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
-		// std::cerr << "left.scoreBeforeStart " << left.scoreBeforeStart << std::endl;
-		// std::cerr << "right.scoreBeforeStart " << right.scoreBeforeStart << std::endl;
 		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
 		auto leftSmaller = masks.first;
 		auto rightSmaller = masks.second;
 		auto mask = (rightSmaller | ((leftSmaller | rightSmaller) - (rightSmaller << 1))) & ~leftSmaller;
-		// std::cerr << "left.VP          " << wordToStr(left.VP) << std::endl;
-		// std::cerr << "left.VN          " << wordToStr(left.VN) << std::endl;
-		// std::cerr << "right.VP         " << wordToStr(right.VP) << std::endl;
-		// std::cerr << "right.VN         " << wordToStr(right.VN) << std::endl;
-		// std::cerr << "leftSmaller      " << wordToStr(leftSmaller) << std::endl;
-		// std::cerr << "rightSmaller     " << wordToStr(rightSmaller) << std::endl;
-		// std::cerr << "mask             " << wordToStr(mask) << std::endl;
-		// std::cerr << "leftHigh(pre)    " << wordToStr(leftHigh) << std::endl;
-		// std::cerr << "leftLow(pre)     " << wordToStr(leftLow) << std::endl;
-		// std::cerr << "rightHigh(pre)   " << wordToStr(rightHigh) << std::endl;
-		// std::cerr << "rightLow(pre)    " << wordToStr(rightLow) << std::endl;
 		uint64_t leftReduction = leftSmaller & (rightSmaller << 1);
 		uint64_t rightReduction = rightSmaller & (leftSmaller << 1);
 		if ((rightSmaller & 1) && left.scoreBeforeStart < right.scoreBeforeStart)
 		{
 			rightReduction |= 1;
 		}
-		// std::cerr << "leftReduction    " << wordToStr(leftReduction) << std::endl;
-		// std::cerr << "rightReduction   " << wordToStr(rightReduction) << std::endl;
 		assert((leftReduction & right.VP) == leftReduction);
 		assert((rightReduction & left.VP) == rightReduction);
 		assert((leftReduction & left.VN) == leftReduction);
 		assert((rightReduction & right.VN) == rightReduction);
 		left.VN &= ~leftReduction;
 		right.VN &= ~rightReduction;
-		// std::cerr << "leftHigh(post)   " << wordToStr(leftHigh) << std::endl;
-		// std::cerr << "leftLow(post)    " << wordToStr(leftLow) << std::endl;
-		// std::cerr << "rightHigh(post)  " << wordToStr(rightHigh) << std::endl;
-		// std::cerr << "rightLow(post)   " << wordToStr(rightLow) << std::endl;
 		result.VN = (left.VN & ~mask) | (right.VN & mask);
 		result.VP = (left.VP & ~mask) | (right.VP & mask);
-		// std::cerr << "resultHigh       " << wordToStr(resultHigh) << std::endl;
-		// std::cerr << "resultLow        " << wordToStr(resultLow) << std::endl;
 		assert((result.VP & result.VN) == 0);
-		// std::cerr << "resultVP         " << wordToStr(result.VP) << std::endl;
-		// std::cerr << "resultVN         " << wordToStr(result.VN) << std::endl;
 		result.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
 		result.scoreStart = std::min(left.scoreStart, right.scoreStart);
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
+		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
+		assert(result.scoreStart == result.scoreBeforeStart + (result.VP & 1) - (result.VN & 1));
 #ifndef NDEBUG
-		// std::cerr << "correctVP        " << wordToStr(correctValue.VP) << std::endl;
-		// std::cerr << "correctVN        " << wordToStr(correctValue.VN) << std::endl;
 		assert(result.VP == correctValue.VP);
 		assert(result.VN == correctValue.VN);
 		assert(result.scoreBeforeStart == correctValue.scoreBeforeStart);
