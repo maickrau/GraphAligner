@@ -39,9 +39,18 @@ template <>
 class WordConfiguration<uint64_t>
 {
 public:
+	static constexpr int WordSize = 64;
+	static constexpr int ChunkBits = 8;
 	static constexpr uint64_t AllZeros = 0x0000000000000000;
 	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
-	static constexpr int WordSize = 64;
+	static constexpr uint64_t ChunkMask1 = 0xFF00FF00FF00FF00;
+	static constexpr uint64_t ChunkMask2 = 0x00FF00FF00FF00FF;
+	static constexpr uint64_t FenceMask1 = 0x0055005500550055;
+	static constexpr uint64_t FenceMask2 = 0x5500550055005500;
+	static constexpr uint64_t SignMask = 0x8080808080808080;
+	static constexpr uint64_t PrefixSumMultiplierMask = 0x0101010101010101;
+	static constexpr uint64_t LSBMask = 0x0101010101010101;
+
 	static int popcount(uint64_t x)
 	{
 		//https://en.wikipedia.org/wiki/Hamming_weight
@@ -592,12 +601,12 @@ private:
 		value <<= 8;
 		assert(addition >= 0);
 		value += addition;
-		return value * 0x0101010101010101;
+		return value * WordConfiguration<Word>::PrefixSumMultiplierMask;
 	}
 
 	uint64_t byteVPVNSum(uint64_t prefixSumVP, uint64_t prefixSumVN) const
 	{
-		uint64_t result = 0x8080808080808080;
+		uint64_t result = WordConfiguration<Word>::SignMask;
 		assert((prefixSumVP & result) == 0);
 		assert((prefixSumVN & result) == 0);
 		result += prefixSumVP;
@@ -625,12 +634,12 @@ private:
 	std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference) const
 	{
 		//do the addition in chunks to prevent calculations from interfering with the other bytes
-		const uint64_t chunkmask1 = 0xFF00FF00FF00FF00;
-		const uint64_t chunkmask2 = 0x00FF00FF00FF00FF;
+		const uint64_t chunkmask1 = WordConfiguration<Word>::ChunkMask1;0xFF00FF00FF00FF00;
+		const uint64_t chunkmask2 = WordConfiguration<Word>::ChunkMask2;0x00FF00FF00FF00FF;
 		//the fences make sure that when moving positive<->negative the other bytes are not effected
-		const uint64_t fencemask1 = 0x0055005500550055;
-		const uint64_t fencemask2 = 0x5500550055005500;
-		const uint64_t signmask = 0x8080808080808080;
+		const uint64_t fencemask1 = WordConfiguration<Word>::FenceMask1;0x0055005500550055;
+		const uint64_t fencemask2 = WordConfiguration<Word>::FenceMask2;0x5500550055005500;
+		const uint64_t signmask = WordConfiguration<Word>::SignMask;0x8080808080808080;
 		uint64_t VPcommon = ~(leftVP & rightVP);
 		uint64_t VNcommon = ~(leftVN & rightVN);
 		leftVP &= VPcommon;
@@ -640,7 +649,7 @@ private:
 		//left is lower everywhere
 		if (scoreDifference > WordConfiguration<Word>::popcount(rightVN) + WordConfiguration<Word>::popcount(leftVP))
 		{
-			return std::make_pair(0xFFFFFFFFFFFFFFFF, 0x0000000000000000);
+			return std::make_pair(WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros);
 		}
 		assert(scoreDifference >= 0);
 		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(bytePopcounts(leftVP), 0), bytePrefixSums(bytePopcounts(leftVN), 0));
@@ -654,9 +663,9 @@ private:
 		//difference now contains the prefix sum difference (left-right) at each byte
 		uint64_t resultLeftSmallerThanRight = 0;
 		uint64_t resultRightSmallerThanLeft = 0;
-		const uint64_t LSBmask1 = 0x0101010101010101 & chunkmask1;
-		const uint64_t LSBmask2 = 0x0101010101010101 & chunkmask2;
-		for (int bit = 0; bit < 8; bit++)
+		const uint64_t LSBmask1 = WordConfiguration<Word>::LSBMask & chunkmask1;
+		const uint64_t LSBmask2 = WordConfiguration<Word>::LSBMask & chunkmask2;
+		for (int bit = 0; bit < WordConfiguration<Word>::ChunkBits; bit++)
 		{
 			uint64_t difference1 = (difference & chunkmask1) | fencemask1;
 			uint64_t difference2 = (difference & chunkmask2) | fencemask2;
@@ -676,11 +685,11 @@ private:
 			//difference now contains the prefix sums difference (left-right) at each byte at (bit)'th bit
 			//left < right when the prefix sum difference is negative (sign bit is set)
 			uint64_t negative = (difference & signmask);
-			resultLeftSmallerThanRight |= negative >> (7 - bit);
+			resultLeftSmallerThanRight |= negative >> (WordConfiguration<Word>::ChunkBits - 1 - bit);
 			//Test equality to zero. If it's zero, substracting one will make the sign bit 0, otherwise 1
-			uint64_t notEqualToZero = ((difference | signmask) - 0x0101010101010101) & signmask;
+			uint64_t notEqualToZero = ((difference | signmask) - WordConfiguration<Word>::LSBMask) & signmask;
 			//right > left when the prefix sum difference is positive (not zero and not negative)
-			resultRightSmallerThanLeft |= (notEqualToZero & ~negative) >> (7 - bit);
+			resultRightSmallerThanLeft |= (notEqualToZero & ~negative) >> (WordConfiguration<Word>::ChunkBits - 1 - bit);
 		}
 		return std::make_pair(resultLeftSmallerThanRight, resultRightSmallerThanLeft);
 	}
@@ -796,23 +805,23 @@ private:
 		switch(graph.nodeSequences[w])
 		{
 			case 'A':
-				return BA;
-				break;
+			return BA;
+			break;
 			case 'T':
-				return BT;
-				break;
+			return BT;
+			break;
 			case 'C':
-				return BC;
-				break;
+			return BC;
+			break;
 			case 'G':
-				return BG;
-				break;
+			return BG;
+			break;
 			case '-':
-				assert(false);
-				break;
+			assert(false);
+			break;
 			default:
-				assert(false);
-				break;
+			assert(false);
+			break;
 		}
 		assert(false);
 		return 0;
