@@ -40,15 +40,26 @@ class WordConfiguration<uint64_t>
 {
 public:
 	static constexpr int WordSize = 64;
+	//number of bits per chunk
+	//prefix sum differences are calculated in chunks of log w bits
 	static constexpr int ChunkBits = 8;
 	static constexpr uint64_t AllZeros = 0x0000000000000000;
 	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
+	//used for calculating the prefix sum differences.
+	//this should be 1 for every other chunk and 0 for every other
 	static constexpr uint64_t ChunkMask1 = 0xFF00FF00FF00FF00;
+	//this should be 0 for every other chunk and 1 for every other (basically !ChunkMask1)
 	static constexpr uint64_t ChunkMask2 = 0x00FF00FF00FF00FF;
+	//this should have 0101.. for the area in ChunkMask2 and 0 in ChunkMask1
 	static constexpr uint64_t FenceMask1 = 0x0055005500550055;
+	//this should have 0101.. for the area in ChunkMask1 and 0 in ChunkMask2
 	static constexpr uint64_t FenceMask2 = 0x5500550055005500;
+	//positions of the sign bits for each chunk
 	static constexpr uint64_t SignMask = 0x8080808080808080;
-	static constexpr uint64_t PrefixSumMultiplierMask = 0x0101010101010101;
+	//constant for multiplying the chunk popcounts into prefix sums
+	//this should be 1 at the start of each chunk
+	static constexpr uint64_t PrefixSumMultiplierConstant = 0x0101010101010101;
+	//positions of the least significant bits for each chunk
 	static constexpr uint64_t LSBMask = 0x0101010101010101;
 
 	static int popcount(uint64_t x)
@@ -58,6 +69,15 @@ public:
 		x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
 		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
 		return (x * 0x0101010101010101) >> 56;
+	}
+
+	static uint64_t ChunkPopcounts(uint64_t value)
+	{
+		uint64_t x = value;
+		x -= (x >> 1) & 0x5555555555555555;
+		x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
+		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
+		return x;
 	}
 };
 
@@ -587,21 +607,12 @@ private:
 		}
 	}
 
-	uint64_t bytePopcounts(uint64_t value) const
-	{
-		uint64_t x = value;
-		x -= (x >> 1) & 0x5555555555555555;
-		x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
-		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
-		return x;
-	}
-
 	uint64_t bytePrefixSums(uint64_t value, int addition) const
 	{
-		value <<= 8;
+		value <<= WordConfiguration<Word>::ChunkBits;
 		assert(addition >= 0);
 		value += addition;
-		return value * WordConfiguration<Word>::PrefixSumMultiplierMask;
+		return value * WordConfiguration<Word>::PrefixSumMultiplierConstant;
 	}
 
 	uint64_t byteVPVNSum(uint64_t prefixSumVP, uint64_t prefixSumVN) const
@@ -611,23 +622,6 @@ private:
 		assert((prefixSumVN & result) == 0);
 		result += prefixSumVP;
 		result -= prefixSumVN;
-		return result;
-	}
-
-	std::string wordToStr(uint64_t value) const
-	{
-		std::string result;
-		for (int i = 63; i >= 0; i--)
-		{
-			if (value & (((uint64_t)1) << i))
-			{
-				result += "1";
-			}
-			else
-			{
-				result += "0";
-			}
-		}
 		return result;
 	}
 
@@ -652,8 +646,8 @@ private:
 			return std::make_pair(WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros);
 		}
 		assert(scoreDifference >= 0);
-		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(bytePopcounts(leftVP), 0), bytePrefixSums(bytePopcounts(leftVN), 0));
-		uint64_t byteVPVNSumRight = byteVPVNSum(bytePrefixSums(bytePopcounts(rightVP), scoreDifference), bytePrefixSums(bytePopcounts(rightVN), 0));
+		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP), 0), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN), 0));
+		uint64_t byteVPVNSumRight = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP), scoreDifference), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN), 0));
 		uint64_t left = (byteVPVNSumLeft & chunkmask1) | fencemask1;
 		uint64_t right = (byteVPVNSumRight & chunkmask1);
 		uint64_t difference = (left - right) & chunkmask1;
