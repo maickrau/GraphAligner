@@ -628,12 +628,12 @@ private:
 	std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference) const
 	{
 		//do the addition in chunks to prevent calculations from interfering with the other bytes
-		const uint64_t chunkmask1 = WordConfiguration<Word>::ChunkMask1;0xFF00FF00FF00FF00;
-		const uint64_t chunkmask2 = WordConfiguration<Word>::ChunkMask2;0x00FF00FF00FF00FF;
+		const uint64_t chunkmask1 = WordConfiguration<Word>::ChunkMask1;
+		const uint64_t chunkmask2 = WordConfiguration<Word>::ChunkMask2;
 		//the fences make sure that when moving positive<->negative the other bytes are not effected
-		const uint64_t fencemask1 = WordConfiguration<Word>::FenceMask1;0x0055005500550055;
-		const uint64_t fencemask2 = WordConfiguration<Word>::FenceMask2;0x5500550055005500;
-		const uint64_t signmask = WordConfiguration<Word>::SignMask;0x8080808080808080;
+		const uint64_t fencemask1 = WordConfiguration<Word>::FenceMask1;
+		const uint64_t fencemask2 = WordConfiguration<Word>::FenceMask2;
+		const uint64_t signmask = WordConfiguration<Word>::SignMask;
 		uint64_t VPcommon = ~(leftVP & rightVP);
 		uint64_t VNcommon = ~(leftVN & rightVN);
 		leftVP &= VPcommon;
