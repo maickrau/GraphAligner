@@ -1,7 +1,6 @@
 #ifndef GraphAligner_H
 #define GraphAligner_H
 
-//http://biorxiv.org/content/early/2017/04/06/124941
 #include <chrono>
 #include <algorithm>
 #include <string>
@@ -15,10 +14,10 @@
 #include <boost/container/flat_set.hpp>
 #include <unordered_set>
 #include <queue>
-#include "vg.pb.h"
 #include "SliceRow.h"
 #include "SparseBoolMatrix.h"
-#include "SparseMatrix.h"
+#include "AlignmentGraph.h"
+#include "vg.pb.h"
 #include "ThreadReadAssertion.h"
 
 using namespace boost;
@@ -93,14 +92,6 @@ private:
 		int hout;
 	};
 public:
-	class SeedHit
-	{
-	public:
-		SeedHit(size_t seqPos, int nodeId, size_t nodePos) : sequencePosition(seqPos), nodeId(nodeId), nodePos(nodePos) {};
-		size_t sequencePosition;
-		int nodeId;
-		size_t nodePos;
-	};
 	class AlignmentResult
 	{
 	public:
@@ -120,122 +111,14 @@ public:
 		size_t cellsProcessed;
 	};
 
-	GraphAligner() :
-	nodeStart(),
-	indexToNode(),
-	nodeLookup(),
-	nodeIDs(),
-	inNeighbors(),
-	nodeSequences(),
-	gapStartPenalty(1),
-	gapContinuePenalty(1),
-	finalized(false),
-	firstInOrder(0)
+	GraphAligner(const AlignmentGraph& graph) :
+	graph(graph)
 	{
-		//add the start dummy node as the first node
-		dummyNodeStart = nodeSequences.size();
-		nodeIDs.push_back(0);
-		nodeStart.push_back(nodeSequences.size());
-		inNeighbors.emplace_back();
-		outNeighbors.emplace_back();
-		reverse.push_back(false);
-		nodeSequences.push_back('-');
-		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
-		nodeEnd.emplace_back(nodeSequences.size());
-		notInOrder.push_back(false);
 	}
 	
-	void AddNode(int nodeId, std::string sequence, bool reverseNode)
-	{
-		assert(!finalized);
-		//subgraph extraction might produce different subgraphs with common nodes
-		//don't add duplicate nodes
-		if (nodeLookup.count(nodeId) != 0) return;
-
-		assert(std::numeric_limits<LengthType>::max() - sequence.size() > nodeSequences.size());
-		nodeLookup[nodeId] = nodeStart.size();
-		nodeIDs.push_back(nodeId);
-		nodeStart.push_back(nodeSequences.size());
-		inNeighbors.emplace_back();
-		outNeighbors.emplace_back();
-		reverse.push_back(reverseNode);
-		nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
-		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
-		nodeEnd.emplace_back(nodeSequences.size());
-		notInOrder.push_back(false);
-		assert(nodeIDs.size() == nodeStart.size());
-		assert(nodeStart.size() == inNeighbors.size());
-		assert(inNeighbors.size() == nodeEnd.size());
-		assert(nodeEnd.size() == notInOrder.size());
-		assert(nodeSequences.size() == indexToNode.size());
-		assert(inNeighbors.size() == outNeighbors.size());
-	}
-	
-	void AddEdgeNodeId(int node_id_from, int node_id_to)
-	{
-		assert(!finalized);
-		assert(nodeLookup.count(node_id_from) > 0);
-		assert(nodeLookup.count(node_id_to) > 0);
-		auto from = nodeLookup[node_id_from];
-		auto to = nodeLookup[node_id_to];
-		assert(to >= 0);
-		assert(from >= 0);
-		assert(to < inNeighbors.size());
-		assert(from < nodeStart.size());
-
-		//subgraph extraction might produce different subgraphs with common edges
-		//don't add duplicate edges
-		if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) != inNeighbors[to].end()) return;
-
-		inNeighbors[to].push_back(from);
-		outNeighbors[from].push_back(to);
-		if (from >= to)
-		{
-			notInOrder[to] = true;
-		}
-	}
-
-	void Finalize()
-	{
-		//add the end dummy node as the last node
-		dummyNodeEnd = nodeSequences.size();
-		nodeIDs.push_back(0);
-		nodeStart.push_back(nodeSequences.size());
-		reverse.push_back(false);
-		inNeighbors.emplace_back();
-		outNeighbors.emplace_back();
-		nodeSequences.push_back('-');
-		indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
-		nodeEnd.emplace_back(nodeSequences.size());
-		notInOrder.push_back(false);
-		assert(nodeSequences.size() >= nodeStart.size());
-		assert(nodeEnd.size() == nodeStart.size());
-		assert(notInOrder.size() == nodeStart.size());
-		assert(inNeighbors.size() == nodeStart.size());
-		assert(outNeighbors.size() == nodeStart.size());
-		assert(notInOrder.size() == nodeStart.size());
-		assert(reverse.size() == nodeStart.size());
-		assert(nodeIDs.size() == nodeStart.size());
-		assert(indexToNode.size() == nodeSequences.size());
-		finalized = true;
-		int specialNodes = 0;
-		for (size_t i = 0; i < inNeighbors.size(); i++)
-		{
-			if (inNeighbors[i].size() >= 2) specialNodes++;
-		}
-		std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
-		firstInOrder = 0;
-		for (size_t i = 1; i < notInOrder.size(); i++)
-		{
-			if (notInOrder[i]) firstInOrder = i+1;
-			//all not-in-order nodes have to be at the start
-			assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
-		}
-	}
-
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart) const
 	{
-		assert(finalized);
+		assert(graph.finalized);
 		auto band = getFullBand(sequence.size(), dynamicRowStart);
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
@@ -244,20 +127,15 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<SeedHit>& seedHits, int startBandwidth) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<AlignmentGraph::SeedHit>& seedHits, int startBandwidth) const
 	{
-		assert(finalized);
+		assert(graph.finalized);
 		auto band = getSeededStartBand(seedHits, dynamicRowStart, startBandwidth, sequence);
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), std::get<1>(trace), std::get<3>(trace));
 		return result;
-	}
-
-	size_t SizeInBp()
-	{
-		return nodeSequences.size();
 	}
 
 private:
@@ -291,7 +169,7 @@ private:
 		std::vector<ExpandoCell> currentDistanceQueue;
 		std::vector<ExpandoCell> currentDistancePlusOneQueue;
 		currentDistanceQueue.emplace_back(endPosition.first, endPosition.second, 0);
-		SparseBoolMatrix<SliceRow<LengthType>> visitedCells {nodeSequences.size(), sequence.size()+1};
+		SparseBoolMatrix<SliceRow<LengthType>> visitedCells {graph.nodeSequences.size(), sequence.size()+1};
 		while (true)
 		{
 			if (currentDistanceQueue.size() == 0)
@@ -332,16 +210,16 @@ private:
 			if (visitedCells.get(w, j)) continue;
 			visitedCells.set(w, j);
 			visitedExpandos.push_back(current);
-			auto nodeIndex = indexToNode[w];
+			auto nodeIndex = graph.indexToNode[w];
 			auto backtraceIndexToCurrent = visitedExpandos.size()-1;
 			currentDistancePlusOneQueue.emplace_back(w, j-1, backtraceIndexToCurrent);
-			if (w == nodeStart[nodeIndex])
+			if (w == graph.nodeStart[nodeIndex])
 			{
-				for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+				for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 				{
-					auto u = nodeEnd[inNeighbors[nodeIndex][i]]-1;
+					auto u = graph.nodeEnd[graph.inNeighbors[nodeIndex][i]]-1;
 					currentDistancePlusOneQueue.emplace_back(u, j, backtraceIndexToCurrent);
-					if (sequence[j-1] == 'N' || nodeSequences[w] == sequence[j-1])
+					if (sequence[j-1] == 'N' || graph.nodeSequences[w] == sequence[j-1])
 					{
 						currentDistanceQueue.emplace_back(u, j-1, backtraceIndexToCurrent);
 					}
@@ -355,7 +233,7 @@ private:
 			{
 				auto u = w-1;
 				currentDistancePlusOneQueue.emplace_back(u, j, backtraceIndexToCurrent);
-				if (sequence[j-1] == 'N' || nodeSequences[w] == sequence[j-1])
+				if (sequence[j-1] == 'N' || graph.nodeSequences[w] == sequence[j-1])
 				{
 					currentDistanceQueue.emplace_back(u, j-1, backtraceIndexToCurrent);
 				}
@@ -384,21 +262,21 @@ private:
 		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
 		for (size_t i = 0; i < dynamicRowStart/WordConfiguration<Word>::WordSize; i++)
 		{
-			result[i].resize(nodeStart.size(), true);
+			result[i].resize(graph.nodeStart.size(), true);
 		}
 		return result;
 	}
 
-	std::vector<std::vector<bool>> getSeededStartBand(const std::vector<SeedHit>& originalSeedHits, int dynamicRowStart, int startBandwidth, const std::string& sequence) const
+	std::vector<std::vector<bool>> getSeededStartBand(const std::vector<AlignmentGraph::SeedHit>& originalSeedHits, int dynamicRowStart, int startBandwidth, const std::string& sequence) const
 	{
-		auto seedHitsInMatrix = getSeedHitPositionsInMatrix(sequence, originalSeedHits);
+		auto seedHitsInMatrix = graph.GetSeedHitPositionsInMatrix(sequence, originalSeedHits);
 		auto bandLocations = getBandLocations(sequence.size(), seedHitsInMatrix, dynamicRowStart);
 		std::vector<std::vector<bool>> result;
 		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
 		for (LengthType j = 0; j < dynamicRowStart && j < sequence.size()+1; j += WordConfiguration<Word>::WordSize)
 		{
 			auto index = j/WordConfiguration<Word>::WordSize;
-			result[index].resize(nodeStart.size(), false);
+			result[index].resize(graph.nodeStart.size(), false);
 			for (size_t i = 0; i < bandLocations[j].size(); i++)
 			{
 				expandBandDynamically(result[index], bandLocations[j][i], startBandwidth);
@@ -433,17 +311,6 @@ private:
 		return result;
 	}
 
-	std::vector<MatrixPosition> getSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const
-	{
-		std::vector<MatrixPosition> result;
-		for (size_t i = 0; i < seedHits.size(); i++)
-		{
-			assert(nodeLookup.count(seedHits[i].nodeId) > 0);
-			result.emplace_back(nodeStart[nodeLookup.at(seedHits[i].nodeId)] + seedHits[i].nodePos, seedHits[i].sequencePosition);
-		}
-		return result;
-	}
-
 	AlignmentResult emptyAlignment() const
 	{
 		vg::Alignment result;
@@ -458,42 +325,42 @@ private:
 		auto path = new vg::Path;
 		result.set_allocated_path(path);
 		size_t pos = 0;
-		size_t oldNode = indexToNode[trace[0].first];
-		while (oldNode == dummyNodeStart)
+		size_t oldNode = graph.indexToNode[trace[0].first];
+		while (oldNode == graph.dummyNodeStart)
 		{
 			pos++;
 			if (pos == trace.size()) return emptyAlignment();
 			assert(pos < trace.size());
-			oldNode = indexToNode[trace[pos].first];
-			assert(oldNode < nodeIDs.size());
+			oldNode = graph.indexToNode[trace[pos].first];
+			assert(oldNode < graph.nodeIDs.size());
 		}
-		if (oldNode == dummyNodeEnd) return emptyAlignment();
+		if (oldNode == graph.dummyNodeEnd) return emptyAlignment();
 		int rank = 0;
 		auto vgmapping = path->add_mapping();
 		auto position = new vg::Position;
 		vgmapping->set_allocated_position(position);
 		vgmapping->set_rank(rank);
-		position->set_node_id(nodeIDs[oldNode]);
-		position->set_is_reverse(reverse[oldNode]);
-		position->set_offset(trace[pos].first - nodeStart[oldNode]);
+		position->set_node_id(graph.nodeIDs[oldNode]);
+		position->set_is_reverse(graph.reverse[oldNode]);
+		position->set_offset(trace[pos].first - graph.nodeStart[oldNode]);
 		MatrixPosition btNodeStart = trace[pos];
 		MatrixPosition btNodeEnd = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
-			if (indexToNode[trace[pos].first] == dummyNodeEnd) break;
-			if (indexToNode[trace[pos].first] == oldNode)
+			if (graph.indexToNode[trace[pos].first] == graph.dummyNodeEnd) break;
+			if (graph.indexToNode[trace[pos].first] == oldNode)
 			{
 				btNodeEnd = trace[pos];
 				continue;
 			}
-			assert(indexToNode[btNodeEnd.first] == indexToNode[btNodeStart.first]);
+			assert(graph.indexToNode[btNodeEnd.first] == graph.indexToNode[btNodeStart.first]);
 			assert(btNodeEnd.second >= btNodeStart.second);
 			assert(btNodeEnd.first >= btNodeStart.first);
 			auto edit = vgmapping->add_edit();
 			edit->set_from_length(btNodeEnd.first - btNodeStart.first + 1);
 			edit->set_to_length(btNodeEnd.second - btNodeStart.second + 1);
 			edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second + 1));
-			oldNode = indexToNode[trace[pos].first];
+			oldNode = graph.indexToNode[trace[pos].first];
 			btNodeStart = trace[pos];
 			btNodeEnd = trace[pos];
 			rank++;
@@ -501,8 +368,8 @@ private:
 			position = new vg::Position;
 			vgmapping->set_allocated_position(position);
 			vgmapping->set_rank(rank);
-			position->set_node_id(nodeIDs[oldNode]);
-			position->set_is_reverse(reverse[oldNode]);
+			position->set_node_id(graph.nodeIDs[oldNode]);
+			position->set_is_reverse(graph.reverse[oldNode]);
 		}
 		auto edit = vgmapping->add_edit();
 		edit->set_from_length(btNodeEnd.first - btNodeStart.first);
@@ -516,8 +383,8 @@ private:
 	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength, LengthType maxRow) const
 	{
 		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
-		auto nodeIndex = indexToNode[w];
-		auto end = nodeEnd[nodeIndex];
+		auto nodeIndex = graph.indexToNode[w];
+		auto end = graph.nodeEnd[nodeIndex];
 		while (w != end && j < sequenceLength+1 && j < maxRow)
 		{
 			result[j].emplace_back(w);
@@ -526,9 +393,9 @@ private:
 		}
 		if (w == end && j < sequenceLength+1 && j < maxRow)
 		{
-			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
 			{
-				expandBandForwards(result, nodeStart[outNeighbors[nodeIndex][i]], j, sequenceLength, maxRow);
+				expandBandForwards(result, graph.nodeStart[graph.outNeighbors[nodeIndex][i]], j, sequenceLength, maxRow);
 			}
 		}
 	}
@@ -536,8 +403,8 @@ private:
 	void expandBandBackwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength) const
 	{
 		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
-		auto nodeIndex = indexToNode[w];
-		auto start = nodeStart[nodeIndex];
+		auto nodeIndex = graph.indexToNode[w];
+		auto start = graph.nodeStart[nodeIndex];
 		while (w != start && j > 0)
 		{
 			result[j].emplace_back(w);
@@ -547,9 +414,9 @@ private:
 		result[j].emplace_back(w);
 		if (w == start && j > 0)
 		{
-			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 			{
-				expandBandBackwards(result, nodeEnd[inNeighbors[nodeIndex][i]] - 1, j-1, sequenceLength);
+				expandBandBackwards(result, graph.nodeEnd[graph.inNeighbors[nodeIndex][i]] - 1, j-1, sequenceLength);
 			}
 		}
 	}
@@ -571,16 +438,16 @@ private:
 
 	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth, const std::vector<ScoreType>& nodeMinScores) const
 	{
-		assert(dynamicWidth < nodeSequences.size());
+		assert(dynamicWidth < graph.nodeSequences.size());
 		assert(currentBand.size() == previousBand.size());
-		assert(currentBand.size() == nodeStart.size());
+		assert(currentBand.size() == graph.nodeStart.size());
 		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> nodeQueue;
 		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> endQueue;
-		for (size_t i = 0; i < nodeStart.size(); i++)
+		for (size_t i = 0; i < graph.nodeStart.size(); i++)
 		{
 			if (!previousBand[i]) continue;
 			nodeQueue.emplace(i, nodeMinScores[i]);
-			endQueue.emplace(i, previousSlice[nodeEnd[i]-1].scoreEnd);
+			endQueue.emplace(i, previousSlice[graph.nodeEnd[i]-1].scoreEnd);
 		}
 		LengthType currentWidth = 0;
 		while (currentWidth < dynamicWidth)
@@ -590,14 +457,14 @@ private:
 			{
 				auto nextNode = endQueue.top();
 				endQueue.pop();
-				for (size_t i = 0; i < outNeighbors[nextNode.index].size(); i++)
+				for (size_t i = 0; i < graph.outNeighbors[nextNode.index].size(); i++)
 				{
-					auto neighbor = outNeighbors[nextNode.index][i];
+					auto neighbor = graph.outNeighbors[nextNode.index][i];
 					if (!currentBand[neighbor])
 					{
 						currentBand[neighbor] = true;
-						currentWidth += nodeEnd[neighbor] - nodeStart[neighbor];
-						endQueue.emplace(neighbor, nextNode.score + nodeEnd[neighbor] - nodeStart[neighbor]);
+						currentWidth += graph.nodeEnd[neighbor] - graph.nodeStart[neighbor];
+						endQueue.emplace(neighbor, nextNode.score + graph.nodeEnd[neighbor] - graph.nodeStart[neighbor]);
 					}
 				}
 				continue;
@@ -609,7 +476,7 @@ private:
 				if (!currentBand[nextNode.index])
 				{
 					currentBand[nextNode.index] = true;
-					currentWidth += nodeEnd[nextNode.index] - nodeStart[nextNode.index];
+					currentWidth += graph.nodeEnd[nextNode.index] - graph.nodeStart[nextNode.index];
 				}
 				continue;
 			}
@@ -622,21 +489,21 @@ private:
 				if (!currentBand[nodeBest.index])
 				{
 					currentBand[nodeBest.index] = true;
-					currentWidth += nodeEnd[nodeBest.index] - nodeStart[nodeBest.index];
+					currentWidth += graph.nodeEnd[nodeBest.index] - graph.nodeStart[nodeBest.index];
 				}
 			}
 			else
 			{
 				endQueue.pop();
 				assert(currentBand[endBest.index]);
-				for (size_t i = 0; i < outNeighbors[endBest.index].size(); i++)
+				for (size_t i = 0; i < graph.outNeighbors[endBest.index].size(); i++)
 				{
-					auto neighbor = outNeighbors[endBest.index][i];
+					auto neighbor = graph.outNeighbors[endBest.index][i];
 					if (!currentBand[neighbor])
 					{
 						currentBand[neighbor] = true;
-						currentWidth += nodeEnd[neighbor] - nodeStart[neighbor];
-						endQueue.emplace(neighbor, endBest.score + nodeEnd[neighbor] - nodeStart[neighbor]);
+						currentWidth += graph.nodeEnd[neighbor] - graph.nodeStart[neighbor];
+						endQueue.emplace(neighbor, endBest.score + graph.nodeEnd[neighbor] - graph.nodeStart[neighbor]);
 					}
 				}
 			}
@@ -645,23 +512,23 @@ private:
 
 	void expandBandDynamically(std::vector<bool>& band, LengthType previousMinimumIndex, LengthType dynamicWidth) const
 	{
-		assert(previousMinimumIndex < nodeSequences.size());
-		auto nodeIndex = indexToNode[previousMinimumIndex];
+		assert(previousMinimumIndex < graph.nodeSequences.size());
+		auto nodeIndex = graph.indexToNode[previousMinimumIndex];
 		band[nodeIndex] = true;
-		LengthType start = nodeStart[nodeIndex];
-		LengthType end = nodeEnd[nodeIndex];
+		LengthType start = graph.nodeStart[nodeIndex];
+		LengthType end = graph.nodeEnd[nodeIndex];
 		if (dynamicWidth > previousMinimumIndex - start)
 		{
-			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 			{
-				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - (previousMinimumIndex - start));
+				expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - (previousMinimumIndex - start));
 			}
 		}
 		if (dynamicWidth > end - previousMinimumIndex)
 		{
-			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
 			{
-				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - (end - previousMinimumIndex));
+				expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - (end - previousMinimumIndex));
 			}
 		}
 	}
@@ -669,21 +536,21 @@ private:
 	void expandDynamicBandBackward(std::vector<bool>& band, LengthType nodeIndex, LengthType dynamicWidth) const
 	{
 		if (dynamicWidth == 0) return;
-		assert(nodeIndex < nodeStart.size());
+		assert(nodeIndex < graph.nodeStart.size());
 		//todo fix: currently only the first path that reaches the node is considered
 		//this means that it might not reach some nodes with distance < dynamicwidth
 		if (band[nodeIndex]) return;
 		band[nodeIndex] = true;
-		for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+		for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
 		{
-			expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - 1);
+			expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - 1);
 		}
-		auto nodeSize = nodeEnd[nodeIndex] - nodeStart[nodeIndex];
+		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
 		if (dynamicWidth > nodeSize)
 		{
-			for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 			{
-				expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
+				expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
 			}
 		}
 	}
@@ -692,21 +559,21 @@ private:
 	void expandDynamicBandForward(MatrixType& band, LengthType nodeIndex, LengthType dynamicWidth) const
 	{
 		if (dynamicWidth == 0) return;
-		assert(nodeIndex < nodeStart.size());
+		assert(nodeIndex < graph.nodeStart.size());
 		//todo fix: currently only the first path that reaches the node is considered
 		//this means that it might not reach some nodes with distance < dynamicwidth if there's multiple paths and it arbitrarily picks the longest one first
 		if (band[nodeIndex]) return;
 		band[nodeIndex] = true;
-		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 		{
-			expandDynamicBandBackward(band, inNeighbors[nodeIndex][i], dynamicWidth - 1);
+			expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - 1);
 		}
-		auto nodeSize = nodeEnd[nodeIndex] - nodeStart[nodeIndex];
+		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
 		if (dynamicWidth > nodeSize)
 		{
-			for (size_t i = 0; i < outNeighbors[nodeIndex].size(); i++)
+			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
 			{
-				expandDynamicBandForward(band, outNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
+				expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
 			}
 		}
 	}
@@ -863,82 +730,33 @@ private:
 		return result;
 	}
 
-	WordSlice mergeTwoSlicesCellByCell(WordSlice left, WordSlice right) const
-	{
-		//currently O(w), O(log^2 w) is possible
-		//todo figure out the details and implement
-		//todo is O(log w) possible?
-		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
-		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
-		ScoreType leftScore = left.scoreStart;
-		WordSlice merged;
-		merged.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
-		merged.VP = WordConfiguration<Word>::AllZeros;
-		merged.VN = WordConfiguration<Word>::AllZeros;
-		ScoreType rightScore = right.scoreStart;
-		merged.scoreStart = std::min(rightScore, leftScore);
-		assert(merged.scoreStart >= merged.scoreBeforeStart - 1);
-		assert(merged.scoreStart <= merged.scoreBeforeStart + 1);
-		if (merged.scoreStart == merged.scoreBeforeStart - 1)
-		{
-			merged.VN |= 1;
-		}
-		else if (merged.scoreStart == merged.scoreBeforeStart + 1)
-		{
-			merged.VP |= 1;
-		}
-		ScoreType previousScore = merged.scoreStart;
-		for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
-		{
-			Word mask = ((Word)1) << j;
-			if (left.VP & mask) leftScore++;
-			else if (left.VN & mask) leftScore--;
-			if (right.VN & mask) rightScore--;
-			else if (right.VP & mask) rightScore++;
-			ScoreType betterScore = std::min(leftScore, rightScore);
-			if (betterScore == previousScore+1) merged.VP |= mask;
-			else if (betterScore == previousScore-1) merged.VN |= mask;
-			assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
-			assert(betterScore >= previousScore-1);
-			assert(betterScore <= previousScore+1);
-			previousScore = betterScore;
-		}
-		merged.scoreEnd = previousScore;
-		assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
-		assert(merged.scoreEnd <= left.scoreEnd);
-		assert(merged.scoreEnd <= right.scoreEnd);
-		assert(merged.scoreStart <= left.scoreStart);
-		assert(merged.scoreStart <= right.scoreStart);
-		return merged;
-	}
-
 	WordSlice getNodeStartSlice(Word Eq, size_t nodeIndex, const std::vector<WordSlice>& previousSlice, const std::vector<WordSlice>& currentSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
 		WordSlice previous;
 		bool foundOne = false;
 		bool forceFirstHorizontalPositive = false;
 		int hin = 0;
-		if (previousBand[nodeIndex]) hin = previousSlice[nodeStart[nodeIndex]].hout;
-		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+		if (previousBand[nodeIndex]) hin = previousSlice[graph.nodeStart[nodeIndex]].hout;
+		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 		{
-			auto neighbor = inNeighbors[nodeIndex][i];
+			auto neighbor = graph.inNeighbors[nodeIndex][i];
 			if (!currentBand[neighbor]) continue;
 			if (!foundOne)
 			{
-				previous = currentSlice[nodeEnd[neighbor]-1];
-				forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
+				previous = currentSlice[graph.nodeEnd[neighbor]-1];
+				forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, graph.nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				foundOne = true;
 			}
 			else
 			{
-				auto competitor = currentSlice[nodeEnd[neighbor]-1];
+				auto competitor = currentSlice[graph.nodeEnd[neighbor]-1];
 				if (competitor.scoreBeforeStart < previous.scoreBeforeStart)
 				{
-					forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
+					forceFirstHorizontalPositive = firstZeroForced(previousBand, neighbor, graph.nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				}
 				else if (competitor.scoreBeforeStart == previous.scoreBeforeStart)
 				{
-					forceFirstHorizontalPositive = forceFirstHorizontalPositive & firstZeroForced(previousBand, neighbor, nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
+					forceFirstHorizontalPositive = forceFirstHorizontalPositive & firstZeroForced(previousBand, neighbor, graph.nodeEnd[neighbor]-1, Eq, currentSlice, previousSlice);
 				}
 				previous = mergeTwoSlices(previous, competitor);
 			}
@@ -960,22 +778,22 @@ private:
 
 	WordSlice getSourceSlice(size_t nodeIndex, const std::vector<WordSlice>& previousSlice) const
 	{
-		auto start = nodeStart[nodeIndex];
+		auto start = graph.nodeStart[nodeIndex];
 		return getSourceSliceFromColumn(start, previousSlice);
 	}
 
 	bool isSource(size_t nodeIndex, const std::vector<bool>& band) const
 	{
-		for (size_t i = 0; i < inNeighbors[nodeIndex].size(); i++)
+		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
 		{
-			if (band[inNeighbors[nodeIndex][i]]) return false;
+			if (band[graph.inNeighbors[nodeIndex][i]]) return false;
 		}
 		return true;
 	}
 
 	Word getEq(Word BA, Word BT, Word BC, Word BG, LengthType w) const
 	{
-		switch(nodeSequences[w])
+		switch(graph.nodeSequences[w])
 		{
 			case 'A':
 				return BA;
@@ -1097,7 +915,7 @@ private:
 		result.minScoreIndex = 0;
 		result.cellsProcessed = 0;
 
-		LengthType start = nodeStart[i];
+		LengthType start = graph.nodeStart[i];
 		if (forceSource || isSource(i, currentBand))
 		{
 			if (previousBand[i])
@@ -1117,7 +935,7 @@ private:
 		}
 		else
 		{
-			Word Eq = getEq(BA, BT, BC, BG, nodeStart[i]);
+			Word Eq = getEq(BA, BT, BC, BG, graph.nodeStart[i]);
 			currentSlice[start] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand);
 			if (previousBand[i] && currentSlice[start].scoreBeforeStart > previousSlice[start].scoreEnd)
 			{
@@ -1131,9 +949,9 @@ private:
 			start++;
 		}
 
-		assert(start == nodeStart[i]+1);
+		assert(start == graph.nodeStart[i]+1);
 
-		for (LengthType w = start; w < nodeEnd[i]; w++)
+		for (LengthType w = start; w < graph.nodeEnd[i]; w++)
 		{
 			Word Eq = getEq(BA, BT, BC, BG, w);
 			int hin = 0;
@@ -1171,7 +989,7 @@ private:
 				result.minScoreIndex = w;
 			}
 		}
-		result.cellsProcessed = (nodeEnd[i] - nodeStart[i]) * WordConfiguration<Word>::WordSize;
+		result.cellsProcessed = (graph.nodeEnd[i] - graph.nodeStart[i]) * WordConfiguration<Word>::WordSize;
 		return result;
 	}
 
@@ -1179,17 +997,17 @@ private:
 	{
 		assert(sizeLeft > 0);
 		bool forceSource = true;
-		if (nodeEnd[i]-nodeStart[i] < sizeLeft)
+		if (graph.nodeEnd[i]-graph.nodeStart[i] < sizeLeft)
 		{
-			sizeLeft -= nodeEnd[i]-nodeStart[i];
-			for (size_t neighbori = 0; neighbori < inNeighbors[i].size(); neighbori++)
+			sizeLeft -= graph.nodeEnd[i]-graph.nodeStart[i];
+			for (size_t neighbori = 0; neighbori < graph.inNeighbors[i].size(); neighbori++)
 			{
 				//todo what happens when two cycles are with 2*w of eachothers?
 				//the slice calculation may overwrite a previous correct value with a new wrong value
 				//let's assume the cycles are far enough from each others
 				//cycling over itself is fine
-				assert(inNeighbors[i][neighbori] == start || !notInOrder[inNeighbors[i][neighbori]]);
-				auto neighbor = inNeighbors[i][neighbori];
+				assert(graph.inNeighbors[i][neighbori] == start || !graph.notInOrder[graph.inNeighbors[i][neighbori]]);
+				auto neighbor = graph.inNeighbors[i][neighbori];
 				if (!currentBand[neighbor]) continue;
 				calculateDoublesliceBackwardsRec(neighbor, j, start, BA, BT, BC, BG, sizeLeft, currentSlice, previousSlice, currentBand, previousBand);
 				forceSource = false;
@@ -1200,12 +1018,12 @@ private:
 
 	void calculateDoublesliceBackwards(size_t j, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
-		if (firstInOrder == 0) return;
-		for (size_t i = firstInOrder-1; i > 0; i--)
+		if (graph.firstInOrder == 0) return;
+		for (size_t i = graph.firstInOrder-1; i > 0; i--)
 		{
 			std::set<size_t> currentCalculables;
 			std::vector<size_t> currentCalculableOrder;
-			assert(notInOrder[i]);
+			assert(graph.notInOrder[i]);
 			if (!currentBand[i]) continue;
 			calculateDoublesliceBackwardsRec(i, j, i, BA, BT, BC, BG, WordConfiguration<Word>::WordSize*2, currentSlice, previousSlice, currentBand, previousBand);
 		}
@@ -1221,21 +1039,21 @@ private:
 
 		std::vector<WordSlice> slice1;
 		std::vector<WordSlice> slice2;
-		slice1.resize(nodeSequences.size());
-		slice2.resize(nodeSequences.size());
+		slice1.resize(graph.nodeSequences.size());
+		slice2.resize(graph.nodeSequences.size());
 
 		std::vector<WordSlice>& currentSlice = slice1;
 		std::vector<WordSlice>& previousSlice = slice2;
 
 		std::vector<ScoreType> nodeMinScores;
-		nodeMinScores.resize(nodeStart.size(), std::numeric_limits<ScoreType>::max());
+		nodeMinScores.resize(graph.nodeStart.size(), std::numeric_limits<ScoreType>::max());
 
 		LengthType previousMinimumIndex;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 		assert(startBand.size() > 0);
-		assert(startBand[0].size() == nodeStart.size());
-		currentBand.resize(nodeStart.size());
+		assert(startBand[0].size() == graph.nodeStart.size());
+		currentBand.resize(graph.nodeStart.size());
 		previousBand = startBand[0];
 
 		for (size_t j = 0; j < sequence.size(); j += WordConfiguration<Word>::WordSize)
@@ -1290,7 +1108,7 @@ private:
 				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
 			}
 			calculateDoublesliceBackwards(j, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
-			for (size_t i = firstInOrder; i < nodeStart.size(); i++)
+			for (size_t i = graph.firstInOrder; i < graph.nodeStart.size(); i++)
 			{
 				nodeMinScores[i] = std::numeric_limits<ScoreType>::max();
 				if (!currentBand[i]) continue;
@@ -1303,7 +1121,7 @@ private:
 				}
 				result.cellsProcessed += nodeCalc.cellsProcessed;
 			}
-			for (size_t i = 0; i < firstInOrder; i++)
+			for (size_t i = 0; i < graph.firstInOrder; i++)
 			{
 				nodeMinScores[i] = std::numeric_limits<ScoreType>::max();
 				if (!currentBand[i]) continue;
@@ -1340,7 +1158,7 @@ private:
 			backtraceresult.pop_back();
 		}
 		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
-		if (backtraceresult.back().second == sequence.size() - padding && nodeSequences[backtraceresult.back().first] != sequence[backtraceresult.back().second])
+		if (backtraceresult.back().second == sequence.size() - padding && graph.nodeSequences[backtraceresult.back().first] != sequence[backtraceresult.back().second])
 		{
 			backtraceresult.pop_back();
 		}
@@ -1348,33 +1166,8 @@ private:
 		return std::make_tuple(slice.finalMinScore, 0, backtraceresult, slice.cellsProcessed);
 	}
 
-	ScoreType gapPenalty(LengthType length) const
-	{
-		if (length == 0) return 0;
-		return gapStartPenalty + gapContinuePenalty * (length - 1);
-	}
 
-	ScoreType matchScore(char graph, char sequence) const
-	{
-		return graph == sequence ? 1 : -1;
-	}
-
-	std::vector<bool> notInOrder;
-	std::vector<LengthType> nodeStart;
-	std::vector<LengthType> nodeEnd;
-	std::vector<LengthType> indexToNode;
-	std::map<int, LengthType> nodeLookup;
-	std::vector<int> nodeIDs;
-	std::vector<std::vector<LengthType>> inNeighbors;
-	std::vector<std::vector<LengthType>> outNeighbors;
-	std::vector<bool> reverse;
-	std::string nodeSequences;
-	ScoreType gapStartPenalty;
-	ScoreType gapContinuePenalty;
-	LengthType dummyNodeStart = 0;
-	LengthType dummyNodeEnd = 1;
-	bool finalized;
-	size_t firstInOrder = 0;
+	const AlignmentGraph& graph;
 };
 
 #endif

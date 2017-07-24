@@ -278,7 +278,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<uint32_t, int32_t, uint64_t>& augmentedGraphAlignment, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<size_t, int32_t, uint64_t>& graphAligner, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -298,21 +298,21 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligne
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
 
-		decltype(augmentedGraphAlignment.AlignOneWay("", "", 0, 0)) alignment;
+		decltype(graphAligner.AlignOneWay("", "", 0, 0)) alignment;
 
 		if (graphAlignerSeedHits == nullptr)
 		{
-			alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
+			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
 		}
 		else
 		{
 			auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits->at(fastq));
-			std::vector<std::remove_reference<decltype(augmentedGraphAlignment)>::type::SeedHit> alignerSeedHits;
+			std::vector<std::remove_reference<decltype(alignmentGraph)>::type::SeedHit> alignerSeedHits;
 			for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
 			{
 				alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
 			}
-			alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
+			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
 		}
 
 		//failed alignment, don't output
@@ -445,20 +445,21 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	OrderByFeedbackVertexset(augmentedGraph);
 	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
-	GraphAligner<uint32_t, int32_t, uint64_t> augmentedGraphAlignment;
+	AlignmentGraph alignmentGraph;
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
-		augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
+		alignmentGraph.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
 	}
 	for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
 	{
-		augmentedGraphAlignment.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
+		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
-	augmentedGraphAlignment.Finalize();
+	alignmentGraph.Finalize();
+	GraphAligner<size_t, int32_t, uint64_t> aligner { alignmentGraph };
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&augmentedGraph, &augmentedGraphAlignment, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, augmentedGraphAlignment, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
+		threads.emplace_back([&augmentedGraph, &aligner, &alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, aligner, alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
