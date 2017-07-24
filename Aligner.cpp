@@ -258,6 +258,7 @@ bool GraphEqual(const DirectedGraph& first, const DirectedGraph& second)
 
 void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const DirectedGraph& graph)
 {
+	//todo optimization: 10% time inclusive 4% exclusive. build idmapper only once.
 	std::map<int, int> idMapper;
 	for (size_t j = 0; j < graph.nodes.size(); j++)
 	{

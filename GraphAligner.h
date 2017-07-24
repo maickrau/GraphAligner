@@ -571,6 +571,7 @@ private:
 
 	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth, const std::vector<ScoreType>& nodeMinScores) const
 	{
+		//todo optimization: 18% inclusive 17% exclusive. can this be improved?
 		assert(dynamicWidth < nodeSequences.size());
 		assert(currentBand.size() == previousBand.size());
 		assert(currentBand.size() == nodeStart.size());
@@ -820,6 +821,7 @@ private:
 
 	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
 	{
+		//optimization: 11% time inclusive 9% exclusive. can this be improved?
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
 #ifdef EXTRAASSERTIONS
@@ -914,6 +916,7 @@ private:
 
 	WordSlice getNodeStartSlice(Word Eq, size_t nodeIndex, const std::vector<WordSlice>& previousSlice, const std::vector<WordSlice>& currentSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
+		//todo optimization: 10% time inclusive 4% exclusive. can this be improved?
 		WordSlice previous;
 		bool foundOne = false;
 		bool forceFirstHorizontalPositive = false;
@@ -1002,6 +1005,7 @@ private:
 
 	WordSlice getNextSlice(Word Eq, WordSlice slice, int hin, bool forceFirstHorizontalPositive) const
 	{
+		//optimization: 13% of time. probably can't be improved easily.
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
 		Word Xv = Eq | slice.VN;
@@ -1092,6 +1096,7 @@ private:
 
 	NodeCalculationResult calculateNode(size_t i, size_t j, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, bool forceSource) const
 	{
+		//todo optimization: 42% inclusive 15% exclusive. can this be improved?
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreIndex = 0;
@@ -1213,6 +1218,7 @@ private:
 
 	MatrixSlice getBitvectorSliceScoresAndFinalPosition(const std::string& sequence, int dynamicWidth, std::vector<std::vector<bool>>& startBand, LengthType dynamicRowStart) const
 	{
+		//todo optimization: 82% inclusive 17% exclusive. can this be improved?
 		MatrixSlice result;
 		result.cellsProcessed = 0;
 		result.finalMinScore = 0;
