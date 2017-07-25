@@ -282,15 +282,10 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 			continue;
 		}
 
-		coutoutput << "read " << fastq->seq_id << " max distance from band " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
 		coutoutput << "read " << fastq->seq_id << " score " << alignment.alignment.score() << BufferedWriter::Flush;
-		if (alignment.maxDistanceFromBand > dynamicWidth * 0.66)
+		if (alignment.alignment.score() > fastq->sequence.size() * 0.25)
 		{
-			cerroutput << "read " << fastq->seq_id << " max distance from band is high: " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
-		}
-		if (alignment.alignment.score() < fastq->sequence.size() * 0.7)
-		{
-			cerroutput << "read " << fastq->seq_id << " score is low: " << alignment.alignment.score() << BufferedWriter::Flush;
+			cerroutput << "read " << fastq->seq_id << " score is poor: " << alignment.alignment.score() << BufferedWriter::Flush;
 		}
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, augmentedGraph, newIdToOriginalIdMapper);

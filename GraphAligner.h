@@ -127,15 +127,13 @@ public:
 		AlignmentResult()
 		{
 		}
-		AlignmentResult(vg::Alignment alignment, int maxDistanceFromBand, bool alignmentFailed, size_t cellsProcessed) :
+		AlignmentResult(vg::Alignment alignment, bool alignmentFailed, size_t cellsProcessed) :
 		alignment(alignment),
-		maxDistanceFromBand(maxDistanceFromBand),
 		alignmentFailed(alignmentFailed),
 		cellsProcessed(cellsProcessed)
 		{
 		}
 		vg::Alignment alignment;
-		int maxDistanceFromBand;
 		bool alignmentFailed;
 		size_t cellsProcessed;
 	};
@@ -152,7 +150,7 @@ public:
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
-		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), std::get<1>(trace), std::get<3>(trace));
+		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
 		return result;
 	}
 
@@ -163,7 +161,7 @@ public:
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
-		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<2>(trace), std::get<1>(trace), std::get<3>(trace));
+		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
 		return result;
 	}
 
@@ -344,10 +342,10 @@ private:
 	{
 		vg::Alignment result;
 		result.set_score(std::numeric_limits<decltype(result.score())>::min());
-		return AlignmentResult { result, 0, true, 0 };
+		return AlignmentResult { result, true, 0 };
 	}
 
-	AlignmentResult traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, int maxDistanceFromBand, size_t cellsProcessed) const
+	AlignmentResult traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed) const
 	{
 		vg::Alignment result;
 		result.set_name(seq_id);
@@ -406,7 +404,7 @@ private:
 		edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second));
 		result.set_score(score);
 		result.set_sequence(sequence);
-		return AlignmentResult { result, maxDistanceFromBand, false, cellsProcessed };
+		return AlignmentResult { result, false, cellsProcessed };
 	}
 
 	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength, LengthType maxRow) const
@@ -996,7 +994,7 @@ private:
 		return result;
 	}
 
-	void calculateDoublesliceBackwardsRec(size_t i, size_t j, size_t start, Word BA, Word BT, Word BC, Word BG, LengthType sizeLeft, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	void calculateDoublesliceBackwardsRec(size_t i, size_t j, Word BA, Word BT, Word BC, Word BG, LengthType sizeLeft, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
 		assert(sizeLeft > 0);
 		bool forceSource = true;
@@ -1005,14 +1003,9 @@ private:
 			sizeLeft -= graph.nodeEnd[i]-graph.nodeStart[i];
 			for (size_t neighbori = 0; neighbori < graph.inNeighbors[i].size(); neighbori++)
 			{
-				//todo what happens when two cycles are with 2*w of eachothers?
-				//the slice calculation may overwrite a previous correct value with a new wrong value
-				//let's assume the cycles are far enough from each others
-				//cycling over itself is fine
-				assert(graph.inNeighbors[i][neighbori] == start || !graph.notInOrder[graph.inNeighbors[i][neighbori]]);
 				auto neighbor = graph.inNeighbors[i][neighbori];
 				if (!currentBand[neighbor]) continue;
-				calculateDoublesliceBackwardsRec(neighbor, j, start, BA, BT, BC, BG, sizeLeft, currentSlice, previousSlice, currentBand, previousBand);
+				calculateDoublesliceBackwardsRec(neighbor, j, BA, BT, BC, BG, sizeLeft, currentSlice, previousSlice, currentBand, previousBand);
 				forceSource = false;
 			}
 		}
@@ -1022,13 +1015,21 @@ private:
 	void calculateDoublesliceBackwards(size_t j, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
 		if (graph.firstInOrder == 0) return;
-		for (size_t i = graph.firstInOrder-1; i > 0; i--)
+		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
+		//store the correct values here and then merge them at the end
+		std::vector<WordSlice> correctEndValues;
+		correctEndValues.resize(graph.firstInOrder);
+		for (size_t i = 1; i < graph.firstInOrder; i++)
 		{
-			std::set<size_t> currentCalculables;
-			std::vector<size_t> currentCalculableOrder;
 			assert(graph.notInOrder[i]);
 			if (!currentBand[i]) continue;
-			calculateDoublesliceBackwardsRec(i, j, i, BA, BT, BC, BG, WordConfiguration<Word>::WordSize*2, currentSlice, previousSlice, currentBand, previousBand);
+			calculateDoublesliceBackwardsRec(i, j, BA, BT, BC, BG, WordConfiguration<Word>::WordSize*2, currentSlice, previousSlice, currentBand, previousBand);
+			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
+		}
+		for (size_t i = 1; i < graph.firstInOrder; i++)
+		{
+			if (!currentBand[i]) continue;
+			currentSlice[graph.nodeEnd[i]-1] = correctEndValues[i];
 		}
 	}
 
@@ -1146,7 +1147,7 @@ private:
 		return result;
 	}
 
-	std::tuple<ScoreType, int, std::vector<MatrixPosition>, size_t> getBacktrace(std::string sequence, int dynamicWidth, LengthType dynamicRowStart, std::vector<std::vector<bool>>& startBand) const
+	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktrace(std::string sequence, int dynamicWidth, LengthType dynamicRowStart, std::vector<std::vector<bool>>& startBand) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 		for (int i = 0; i < padding; i++)
@@ -1154,6 +1155,7 @@ private:
 			sequence += 'N';
 		}
 		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, dynamicWidth, startBand, dynamicRowStart);
+		std::cerr << "score: " << slice.minScorePerWordSlice.back() << std::endl;
 		auto backtraceresult = backtrace(std::make_pair(slice.finalMinScoreColumn, sequence.size()), sequence, slice.minScorePerWordSlice);
 		for (int i = 0; i < padding; i++)
 		{
@@ -1166,7 +1168,7 @@ private:
 			backtraceresult.pop_back();
 		}
 		assert(backtraceresult.back().second == sequence.size() - padding - 1);
-		return std::make_tuple(slice.finalMinScore, 0, backtraceresult, slice.cellsProcessed);
+		return std::make_tuple(slice.finalMinScore, backtraceresult, slice.cellsProcessed);
 	}
 
 
