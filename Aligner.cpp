@@ -5,6 +5,7 @@
 #include <functional>
 #include <algorithm>
 #include <thread>
+#include "CommonUtils.h"
 #include "vg.pb.h"
 #include "stream.hpp"
 #include "fastqloader.h"
@@ -122,41 +123,6 @@ vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg
 	return augmentedGraph;
 }
 
-vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
-{
-	vg::Graph newGraph;
-	std::vector<const vg::Node*> allNodes;
-	std::vector<const vg::Edge*> allEdges;
-	for (size_t i = 0; i < parts.size(); i++)
-	{
-		for (int j = 0; j < parts[i].node_size(); j++)
-		{
-			allNodes.push_back(&parts[i].node(j));
-		}
-		for (int j = 0; j < parts[i].edge_size(); j++)
-		{
-			allEdges.push_back(&parts[i].edge(j));
-		}
-	}
-	for (size_t i = 0; i < allNodes.size(); i++)
-	{
-		auto node = newGraph.add_node();
-		node->set_id(allNodes[i]->id());
-		node->set_sequence(allNodes[i]->sequence());
-		node->set_name(allNodes[i]->name());
-	}
-	for (size_t i = 0; i < allEdges.size(); i++)
-	{
-		auto edge = newGraph.add_edge();
-		edge->set_from(allEdges[i]->from());
-		edge->set_to(allEdges[i]->to());
-		edge->set_from_start(allEdges[i]->from_start());
-		edge->set_to_end(allEdges[i]->to_end());
-		edge->set_overlap(allEdges[i]->overlap());
-	}
-	return newGraph;
-}
-
 int numberOfVerticesOutOfOrder(const DirectedGraph& digraph)
 {
 	std::map<int, int> ids;
@@ -256,30 +222,18 @@ bool GraphEqual(const DirectedGraph& first, const DirectedGraph& second)
 	return true;
 }
 
-void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const DirectedGraph& graph)
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const DirectedGraph& graph, const std::map<int, int>& idMapper)
 {
-	//todo optimization: 10% time inclusive 4% exclusive. build idmapper only once.
-	std::map<int, int> idMapper;
-	for (size_t j = 0; j < graph.nodes.size(); j++)
-	{
-		if (idMapper.count(graph.nodes[j].nodeId) > 0 && idMapper[graph.nodes[j].nodeId] != graph.nodes[j].originalNodeId)
-		{
-			assert(idMapper.count(graph.nodes[j].nodeId) == 0 || idMapper[graph.nodes[j].nodeId] == graph.nodes[j].originalNodeId);
-			idMapper[graph.nodes[j].nodeId] = graph.nodes[j].originalNodeId;
-		}
-		assert(idMapper.count(graph.nodes[j].nodeId) == 0 || idMapper[graph.nodes[j].nodeId] == graph.nodes[j].originalNodeId);
-		idMapper[graph.nodes[j].nodeId] = graph.nodes[j].originalNodeId;
-	}
 	for (int i = 0; i < alignment.path().mapping_size(); i++)
 	{
 		int digraphNodeId = alignment.path().mapping(i).position().node_id();
 		assert(idMapper.count(digraphNodeId) > 0);
-		int originalNodeId = idMapper[digraphNodeId];
+		int originalNodeId = idMapper.at(digraphNodeId);
 		alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_node_id(originalNodeId);
 	}
 }
 
-void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligner<uint32_t, int32_t, uint64_t>& augmentedGraphAlignment, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<int, int>& newIdToOriginalIdMapper, const GraphAligner<size_t, int32_t, uint64_t>& graphAligner, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -299,21 +253,21 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligne
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
 
-		decltype(augmentedGraphAlignment.AlignOneWay("", "", 0, 0)) alignment;
+		decltype(graphAligner.AlignOneWay("", "", 0, 0)) alignment;
 
 		if (graphAlignerSeedHits == nullptr)
 		{
-			alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
+			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
 		}
 		else
 		{
 			auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits->at(fastq));
-			std::vector<std::remove_reference<decltype(augmentedGraphAlignment)>::type::SeedHit> alignerSeedHits;
+			std::vector<std::remove_reference<decltype(alignmentGraph)>::type::SeedHit> alignerSeedHits;
 			for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
 			{
 				alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
 			}
-			alignment = augmentedGraphAlignment.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
+			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
 		}
 
 		//failed alignment, don't output
@@ -328,18 +282,13 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const GraphAligne
 			continue;
 		}
 
-		coutoutput << "read " << fastq->seq_id << " max distance from band " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
 		coutoutput << "read " << fastq->seq_id << " score " << alignment.alignment.score() << BufferedWriter::Flush;
-		if (alignment.maxDistanceFromBand > dynamicWidth * 0.66)
+		if (alignment.alignment.score() > fastq->sequence.size() * 0.25)
 		{
-			cerroutput << "read " << fastq->seq_id << " max distance from band is high: " << alignment.maxDistanceFromBand << BufferedWriter::Flush;
-		}
-		if (alignment.alignment.score() < fastq->sequence.size() * 0.7)
-		{
-			cerroutput << "read " << fastq->seq_id << " score is low: " << alignment.alignment.score() << BufferedWriter::Flush;
+			cerroutput << "read " << fastq->seq_id << " score is poor: " << alignment.alignment.score() << BufferedWriter::Flush;
 		}
 
-		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, augmentedGraph);
+		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, augmentedGraph, newIdToOriginalIdMapper);
 
 		alignments.push_back(alignment.alignment);
 		coutoutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << " with " << alignment.cellsProcessed << " cells" << BufferedWriter::Flush;
@@ -365,24 +314,15 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 {
 	assertSetRead("Preprocessing");
 
-	vg::Graph graph;
-	{
-		if (is_file_exist(graphFile)){
-			std::cout << "load graph from " << graphFile << std::endl;
-			std::ifstream graphfile { graphFile, std::ios::in | std::ios::binary };
-			std::vector<vg::Graph> parts;
-			std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
-				parts.push_back(g);
-			};
-			stream::for_each(graphfile, lambda);
-			graph = mergeGraphs(parts);
-			std::cout << "graph is " << GraphSizeInBp(graph) << " bp large" << std::endl;
-		}
-		else{
-			std::cerr << "No graph file exists" << std::endl;
-			std::exit(0);
-		}
+	if (is_file_exist(graphFile)){
+		std::cout << "load graph from " << graphFile << std::endl;
 	}
+	else{
+		std::cerr << "No graph file exists" << std::endl;
+		std::exit(0);
+	}
+	vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
+
 	std::vector<FastQ> fastqs;
 	if (is_file_exist(fastqFile)){
 		fastqs = loadFastqFromFile(fastqFile);
@@ -446,20 +386,33 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	OrderByFeedbackVertexset(augmentedGraph);
 	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
-	GraphAligner<uint32_t, int32_t, uint64_t> augmentedGraphAlignment;
+	AlignmentGraph alignmentGraph;
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
-		augmentedGraphAlignment.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
+		alignmentGraph.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);
 	}
 	for (size_t j = 0; j < augmentedGraph.edges.size(); j++)
 	{
-		augmentedGraphAlignment.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
+		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
-	augmentedGraphAlignment.Finalize();
+	alignmentGraph.Finalize();
+	GraphAligner<size_t, int32_t, uint64_t> aligner { alignmentGraph };
+
+	std::map<int, int> idMapper;
+	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
+	{
+		if (idMapper.count(augmentedGraph.nodes[j].nodeId) > 0 && idMapper[augmentedGraph.nodes[j].nodeId] != augmentedGraph.nodes[j].originalNodeId)
+		{
+			assert(idMapper.count(augmentedGraph.nodes[j].nodeId) == 0 || idMapper[augmentedGraph.nodes[j].nodeId] == augmentedGraph.nodes[j].originalNodeId);
+			idMapper[augmentedGraph.nodes[j].nodeId] = augmentedGraph.nodes[j].originalNodeId;
+		}
+		assert(idMapper.count(augmentedGraph.nodes[j].nodeId) == 0 || idMapper[augmentedGraph.nodes[j].nodeId] == augmentedGraph.nodes[j].originalNodeId);
+		idMapper[augmentedGraph.nodes[j].nodeId] = augmentedGraph.nodes[j].originalNodeId;
+	}
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&augmentedGraph, &augmentedGraphAlignment, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, augmentedGraphAlignment, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
+		threads.emplace_back([&augmentedGraph, &idMapper, &aligner, &alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, idMapper, aligner, alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)

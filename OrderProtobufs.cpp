@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <vector>
+#include "CommonUtils.h"
 #include "TopologicalSort.h"
 #include "vg.pb.h"
 #include "stream.hpp"
@@ -28,41 +29,6 @@ void order(std::vector<Orderable>& orderables, Function nodeIdGetter, const vg::
 	std::sort(orderables.begin(), orderables.end(), [&nodeIdPositions, nodeIdGetter](const Orderable& left, const Orderable& right) { return nodeIdPositions[nodeIdGetter(left)] < nodeIdPositions[nodeIdGetter(right)];});
 }
 
-vg::Graph mergeGraphs(const std::vector<vg::Graph>& parts)
-{
-	vg::Graph newGraph;
-	std::vector<const vg::Node*> allNodes;
-	std::vector<const vg::Edge*> allEdges;
-	for (size_t i = 0; i < parts.size(); i++)
-	{
-		for (int j = 0; j < parts[i].node_size(); j++)
-		{
-			allNodes.push_back(&parts[i].node(j));
-		}
-		for (int j = 0; j < parts[i].edge_size(); j++)
-		{
-			allEdges.push_back(&parts[i].edge(j));
-		}
-	}
-	for (size_t i = 0; i < allNodes.size(); i++)
-	{
-		auto node = newGraph.add_node();
-		node->set_id(allNodes[i]->id());
-		node->set_sequence(allNodes[i]->sequence());
-		node->set_name(allNodes[i]->name());
-	}
-	for (size_t i = 0; i < allEdges.size(); i++)
-	{
-		auto edge = newGraph.add_edge();
-		edge->set_from(allEdges[i]->from());
-		edge->set_to(allEdges[i]->to());
-		edge->set_from_start(allEdges[i]->from_start());
-		edge->set_to_end(allEdges[i]->to_end());
-		edge->set_overlap(allEdges[i]->overlap());
-	}
-	return newGraph;
-}
-
 bool endsWith(const std::string& str, std::string ending)
 {
 	if (str.size() < ending.size()) return false;
@@ -82,23 +48,14 @@ int main(int argc, char** argv)
 		std::cout << "needs 3 parameters";
 		std::exit(0);
 	}
-	vg::Graph graph;
-	{
-		if (is_file_exist(argv[1])){
-			std::cout << "load graph from " << argv[1] << std::endl;
-			std::ifstream graphfile { argv[1], std::ios::in | std::ios::binary };
-			std::vector<vg::Graph> parts;
-			std::function<void(vg::Graph&)> lambda = [&parts](vg::Graph& g) {
-				parts.push_back(g);
-			};
-			stream::for_each(graphfile, lambda);
-			graph = mergeGraphs(parts);
-		}
-		else{
-			std::cout << "No graph file exists" << std::endl;
-			std::exit(0);
-		}
+	if (is_file_exist(argv[1])){
+		std::cout << "load graph from " << argv[1] << std::endl;
 	}
+	else{
+		std::cout << "No graph file exists" << std::endl;
+		std::exit(0);
+	}
+	vg::Graph graph = CommonUtils::LoadVGGraph(argv[1]);
 
 	std::string filename {argv[2]};
 
