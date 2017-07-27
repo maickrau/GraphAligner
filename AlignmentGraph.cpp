@@ -103,14 +103,24 @@ void AlignmentGraph::Finalize()
 	{
 		if (inNeighbors[i].size() >= 2) specialNodes++;
 	}
-	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 	firstInOrder = 0;
 	for (size_t i = 1; i < notInOrder.size(); i++)
 	{
 		if (notInOrder[i]) firstInOrder = i+1;
-			//all not-in-order nodes have to be at the start
+		//all not-in-order nodes have to be at the start
 		assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
 	}
+	std::cerr << nodeStart.size() << " nodes" << std::endl;
+	std::cerr << nodeSequences.size() << "bp" << std::endl;
+	if (firstInOrder != 0)
+	{
+		std::cerr << (firstInOrder - 1) << " nodes out of order" << std::endl;
+	}
+	else
+	{
+		std::cerr << "0 nodes out of order" << std::endl;
+	}
+	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 }
 
 size_t AlignmentGraph::SizeInBp() const

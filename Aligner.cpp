@@ -251,7 +251,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 		}
 		assertSetRead(fastq->seq_id);
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
-		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << "\n";
+		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 
 		decltype(graphAligner.AlignOneWay("", "", 0, 0)) alignment;
 
