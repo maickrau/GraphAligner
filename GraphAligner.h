@@ -45,15 +45,6 @@ public:
 	static constexpr int ChunkBits = 8;
 	static constexpr uint64_t AllZeros = 0x0000000000000000;
 	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
-	//used for calculating the prefix sum differences.
-	//this should be 1 for every other chunk and 0 for every other
-	static constexpr uint64_t ChunkMask1 = 0xFF00FF00FF00FF00;
-	//this should be 0 for every other chunk and 1 for every other (basically !ChunkMask1)
-	static constexpr uint64_t ChunkMask2 = 0x00FF00FF00FF00FF;
-	//this should have 0101.. for the area in ChunkMask2 and 0 in ChunkMask1
-	static constexpr uint64_t FenceMask1 = 0x0055005500550055;
-	//this should have 0101.. for the area in ChunkMask1 and 0 in ChunkMask2
-	static constexpr uint64_t FenceMask2 = 0x5500550055005500;
 	//positions of the sign bits for each chunk
 	static constexpr uint64_t SignMask = 0x8080808080808080;
 	//constant for multiplying the chunk popcounts into prefix sums
@@ -621,18 +612,44 @@ private:
 		assert((prefixSumVN & result) == 0);
 		result += prefixSumVP;
 		result -= prefixSumVN;
+		result ^= WordConfiguration<Word>::SignMask;
 		return result;
 	}
 
+#ifdef EXTRAASSERTIONS
+	std::pair<uint64_t, uint64_t> differenceMasksCellByCell(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference) const
+	{
+		int leftscore = 0;
+		int rightscore = scoreDifference;
+		uint64_t leftSmaller = 0;
+		uint64_t rightSmaller = 0;
+		for (int i = 0; i < 64; i++)
+		{
+			leftscore += leftVP & 1;
+			leftscore -= leftVN & 1;
+			rightscore += rightVP & 1;
+			rightscore -= rightVN & 1;
+			leftVP >>= 1;
+			leftVN >>= 1;
+			rightVP >>= 1;
+			rightVN >>= 1;
+			if (leftscore < rightscore) leftSmaller |= ((Word)1) << i;
+			if (rightscore < leftscore) rightSmaller |= ((Word)1) << i;
+		}
+		return std::make_pair(leftSmaller, rightSmaller);
+	}
+#endif
+
 	std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference) const
 	{
-		//do the addition in chunks to prevent calculations from interfering with the other bytes
-		const uint64_t chunkmask1 = WordConfiguration<Word>::ChunkMask1;
-		const uint64_t chunkmask2 = WordConfiguration<Word>::ChunkMask2;
-		//the fences make sure that when moving positive<->negative the other bytes are not effected
-		const uint64_t fencemask1 = WordConfiguration<Word>::FenceMask1;
-		const uint64_t fencemask2 = WordConfiguration<Word>::FenceMask2;
+#ifdef EXTRAASSERTIONS
+		auto correctValue = differenceMasksCellByCell(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+#endif
 		const uint64_t signmask = WordConfiguration<Word>::SignMask;
+		const uint64_t lsbmask = WordConfiguration<Word>::LSBMask;
+		const int chunksize = WordConfiguration<Word>::ChunkBits;
+		const uint64_t allones = WordConfiguration<Word>::AllOnes;
+		const uint64_t allzeros = WordConfiguration<Word>::AllZeros;
 		uint64_t VPcommon = ~(leftVP & rightVP);
 		uint64_t VNcommon = ~(leftVN & rightVN);
 		leftVP &= VPcommon;
@@ -642,48 +659,79 @@ private:
 		//left is lower everywhere
 		if (scoreDifference > WordConfiguration<Word>::popcount(rightVN) + WordConfiguration<Word>::popcount(leftVP))
 		{
-			return std::make_pair(WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros);
+			return std::make_pair(allones, allzeros);
 		}
 		assert(scoreDifference >= 0);
 		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP), 0), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN), 0));
 		uint64_t byteVPVNSumRight = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP), scoreDifference), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN), 0));
-		uint64_t left = (byteVPVNSumLeft & chunkmask1) | fencemask1;
-		uint64_t right = (byteVPVNSumRight & chunkmask1);
-		uint64_t difference = (left - right) & chunkmask1;
-		left = (byteVPVNSumLeft & chunkmask2) | fencemask2;
-		right = (byteVPVNSumRight & chunkmask2);
-		difference |= (left - right) & chunkmask2;
-		//difference now contains the prefix sum difference (left-right) at each byte
+		uint64_t difference = byteVPVNSumLeft;
+		{
+			//take the bytvpvnsumright and split it from positive/negative values into two vectors with positive values, one which needs to be added and the other deducted
+			//smearmask is 1 where the number needs to be deducted, and 0 where it needs to be added
+			//except sign bits which are all 0
+			uint64_t smearmask = ((byteVPVNSumRight & signmask) >> (chunksize-1)) * ((((Word)1) << (chunksize-1))-1);
+			assert((smearmask & signmask) == 0);
+			uint64_t deductions = ~smearmask & byteVPVNSumRight & ~signmask;
+			//byteVPVNSumRight is in one's complement so take the not-value + 1
+			uint64_t additions = (smearmask & ~byteVPVNSumRight) + (smearmask & lsbmask);
+			assert((deductions & signmask) == 0);
+			uint64_t signsBefore = difference & signmask;
+			//unset the sign bits so additions don't interfere with other chunks
+			difference &= ~signmask;
+			difference += additions;
+			//the sign bit is 1 if the value went from <0 to >=0
+			//so in that case we need to flip it
+			difference ^= signsBefore;
+			signsBefore = difference & signmask;
+			//set the sign bits so that deductions don't interfere with other chunks
+			difference |= signmask;
+			difference -= deductions;
+			//sign bit is 0 if the value went from >=0 to <0
+			//so flip them to the correct values
+			signsBefore ^= signmask & ~difference;
+			difference &= ~signmask;
+			difference |= signsBefore;
+		}
+		//difference now contains the prefix sum difference (left-right) at each chunk
 		uint64_t resultLeftSmallerThanRight = 0;
 		uint64_t resultRightSmallerThanLeft = 0;
-		const uint64_t LSBmask1 = WordConfiguration<Word>::LSBMask & chunkmask1;
-		const uint64_t LSBmask2 = WordConfiguration<Word>::LSBMask & chunkmask2;
-		for (int bit = 0; bit < WordConfiguration<Word>::ChunkBits; bit++)
+		for (int bit = 0; bit < chunksize; bit++)
 		{
-			uint64_t difference1 = (difference & chunkmask1) | fencemask1;
-			uint64_t difference2 = (difference & chunkmask2) | fencemask2;
-			difference1 += (leftVP & LSBmask1);
-			difference1 -= (leftVN & LSBmask1);
-			difference1 -= (rightVP & LSBmask1);
-			difference1 += (rightVN & LSBmask1);
-			difference2 += (leftVP & LSBmask2);
-			difference2 -= (leftVN & LSBmask2);
-			difference2 -= (rightVP & LSBmask2);
-			difference2 += (rightVN & LSBmask2);
+			uint64_t signsBefore = difference & signmask;
+			//unset the sign bits so additions don't interfere with other chunks
+			difference &= ~signmask;
+			difference += leftVP & lsbmask;
+			difference += rightVN & lsbmask;
+			//the sign bit is 1 if the value went from <0 to >=0
+			//so in that case we need to flip it
+			difference ^= signsBefore;
+			signsBefore = difference & signmask;
+			//set the sign bits so that deductions don't interfere with other chunks
+			difference |= signmask;
+			difference -= leftVN & lsbmask;
+			difference -= rightVP & lsbmask;
+			//sign bit is 0 if the value went from >=0 to <0
+			//so flip them to the correct values
+			signsBefore ^= signmask & ~difference;
+			difference &= ~signmask;
+			difference |= signsBefore;
 			leftVN >>= 1;
 			leftVP >>= 1;
 			rightVN >>= 1;
 			rightVP >>= 1;
-			difference = (difference1 & chunkmask1) | (difference2 & chunkmask2);
 			//difference now contains the prefix sums difference (left-right) at each byte at (bit)'th bit
 			//left < right when the prefix sum difference is negative (sign bit is set)
 			uint64_t negative = (difference & signmask);
 			resultLeftSmallerThanRight |= negative >> (WordConfiguration<Word>::ChunkBits - 1 - bit);
 			//Test equality to zero. If it's zero, substracting one will make the sign bit 0, otherwise 1
-			uint64_t notEqualToZero = ((difference | signmask) - WordConfiguration<Word>::LSBMask) & signmask;
+			uint64_t notEqualToZero = ((difference | signmask) - lsbmask) & signmask;
 			//right > left when the prefix sum difference is positive (not zero and not negative)
 			resultRightSmallerThanLeft |= (notEqualToZero & ~negative) >> (WordConfiguration<Word>::ChunkBits - 1 - bit);
 		}
+#ifdef EXTRAASSERTIONS
+		assert(resultLeftSmallerThanRight == correctValue.first);
+		assert(resultRightSmallerThanLeft == correctValue.second);
+#endif
 		return std::make_pair(resultLeftSmallerThanRight, resultRightSmallerThanLeft);
 	}
 
@@ -732,6 +780,54 @@ private:
 #endif
 		return result;
 	}
+
+#ifdef EXTRAASSERTIONS
+	WordSlice mergeTwoSlicesCellByCell(WordSlice left, WordSlice right) const
+	{
+		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
+		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
+		ScoreType leftScore = left.scoreStart;
+		WordSlice merged;
+		merged.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
+		merged.VP = WordConfiguration<Word>::AllZeros;
+		merged.VN = WordConfiguration<Word>::AllZeros;
+		ScoreType rightScore = right.scoreStart;
+		merged.scoreStart = std::min(rightScore, leftScore);
+		assert(merged.scoreStart >= merged.scoreBeforeStart - 1);
+		assert(merged.scoreStart <= merged.scoreBeforeStart + 1);
+		if (merged.scoreStart == merged.scoreBeforeStart - 1)
+		{
+			merged.VN |= 1;
+		}
+		else if (merged.scoreStart == merged.scoreBeforeStart + 1)
+		{
+			merged.VP |= 1;
+		}
+		ScoreType previousScore = merged.scoreStart;
+		for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
+		{
+			Word mask = ((Word)1) << j;
+			if (left.VP & mask) leftScore++;
+			else if (left.VN & mask) leftScore--;
+			if (right.VN & mask) rightScore--;
+			else if (right.VP & mask) rightScore++;
+			ScoreType betterScore = std::min(leftScore, rightScore);
+			if (betterScore == previousScore+1) merged.VP |= mask;
+			else if (betterScore == previousScore-1) merged.VN |= mask;
+			assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
+			assert(betterScore >= previousScore-1);
+			assert(betterScore <= previousScore+1);
+			previousScore = betterScore;
+		}
+		merged.scoreEnd = previousScore;
+		assert((merged.VP & merged.VN) == WordConfiguration<Word>::AllZeros);
+		assert(merged.scoreEnd <= left.scoreEnd);
+		assert(merged.scoreEnd <= right.scoreEnd);
+		assert(merged.scoreStart <= left.scoreStart);
+		assert(merged.scoreStart <= right.scoreStart);
+		return merged;
+	}
+#endif
 
 	WordSlice getNodeStartSlice(Word Eq, size_t nodeIndex, const std::vector<WordSlice>& previousSlice, const std::vector<WordSlice>& currentSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{

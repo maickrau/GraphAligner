@@ -64,8 +64,11 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(from >= 0);
 	assert(to < inNeighbors.size());
 	assert(from < nodeStart.size());
-	//no duplicate edges
-	assert(std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end());
+	//skip duplicate edges
+	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) != inNeighbors[to].end())
+	{
+		return;
+	}
 
 	inNeighbors[to].push_back(from);
 	outNeighbors[from].push_back(to);
@@ -77,7 +80,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 
 void AlignmentGraph::Finalize()
 {
-		//add the end dummy node as the last node
+	//add the end dummy node as the last node
 	dummyNodeEnd = nodeSequences.size();
 	nodeIDs.push_back(0);
 	nodeStart.push_back(nodeSequences.size());
