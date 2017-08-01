@@ -78,7 +78,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	}
 }
 
-void AlignmentGraph::Finalize()
+void AlignmentGraph::Finalize(int wordSize)
 {
 	//add the end dummy node as the last node
 	dummyNodeEnd = nodeSequences.size();
@@ -113,17 +113,37 @@ void AlignmentGraph::Finalize()
 		//all not-in-order nodes have to be at the start
 		assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
 	}
+	cycleCuttingNodes.resize(firstInOrder);
+	cycleCuttingNodePredecessors.resize(firstInOrder);
+	for (size_t i = 1; i < firstInOrder; i++)
+	{
+		calculateCycleCutters(i, wordSize);
+	}
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
 	std::cerr << nodeSequences.size() << "bp" << std::endl;
+	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 	if (firstInOrder != 0)
 	{
 		std::cerr << (firstInOrder - 1) << " nodes out of order" << std::endl;
+		std::cerr << "cycle cuts:" << std::endl;
+		for (size_t i = 1; i < cycleCuttingNodes.size(); i++)
+		{
+			int cuttersbp = 0;
+			for (size_t j = 0; j < cycleCuttingNodes[i].size(); j++)
+			{
+				cuttersbp += nodeEnd[cycleCuttingNodes[i][j]] - nodeStart[cycleCuttingNodes[i][j]];
+			}
+			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cycleCuttingNodes[i].size() << ", " << cuttersbp << "bp" << std::endl;
+			if (cuttersbp > nodeSequences.size() * 0.1)
+			{
+				std::cerr << "WARNING: large cut!" << std::endl;
+			}
+		}
 	}
 	else
 	{
 		std::cerr << "0 nodes out of order" << std::endl;
 	}
-	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 }
 
 size_t AlignmentGraph::SizeInBp() const
@@ -140,4 +160,33 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 		result.emplace_back(nodeStart[nodeLookup.at(seedHits[i].nodeId)] + seedHits[i].nodePos, seedHits[i].sequencePosition);
 	}
 	return result;
+}
+
+void AlignmentGraph::calculateCycleCuttersRec(size_t cycleStart, size_t node, int wordSize, int lengthLeft, std::vector<size_t>& cutters, std::vector<std::vector<size_t>>& predecessors)
+{
+	lengthLeft -= nodeEnd[node] - nodeStart[node];
+	if (lengthLeft > 0)
+	{
+		for (size_t i = 0; i < inNeighbors[node].size(); i++)
+		{
+			calculateCycleCuttersRec(cycleStart, inNeighbors[node][i], wordSize, lengthLeft, cutters, predecessors);
+		}
+	}
+	predecessors.emplace_back();
+	if (lengthLeft > 0)
+	{
+		for (size_t i = 0; i < inNeighbors[node].size(); i++)
+		{
+			predecessors.back().push_back(inNeighbors[node][i]);
+		}
+	}
+	cutters.push_back(node);
+}
+
+void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
+{
+	calculateCycleCuttersRec(cycleStart, cycleStart, wordSize, 2*wordSize, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessors[cycleStart]);
+	assert(cycleCuttingNodes[cycleStart].size() > 0);
+	assert(cycleCuttingNodes[cycleStart].back() == cycleStart);
+	assert(cycleCuttingNodes[cycleStart].size() == cycleCuttingNodePredecessors[cycleStart].size());
 }

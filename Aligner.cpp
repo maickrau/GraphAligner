@@ -395,7 +395,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	{
 		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
-	alignmentGraph.Finalize();
+	alignmentGraph.Finalize(64);
 	GraphAligner<size_t, int32_t, uint64_t> aligner { alignmentGraph };
 
 	std::map<int, int> idMapper;

@@ -21,11 +21,13 @@ public:
 	AlignmentGraph();
 	void AddNode(int nodeId, std::string sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
-	void Finalize();
+	void Finalize(int wordSize);
 	size_t SizeInBp() const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
+	void calculateCycleCutters(size_t cycleStart, int wordSize);
+	void calculateCycleCuttersRec(size_t cycleStart, size_t node, int wordSize, int lengthLeft, std::vector<size_t>& cutters, std::vector<std::vector<size_t>>& predecessors);
 	std::vector<bool> notInOrder;
 	std::vector<size_t> nodeStart;
 	std::vector<size_t> nodeEnd;
@@ -35,6 +37,8 @@ private:
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
+	std::vector<std::vector<size_t>> cycleCuttingNodes;
+	std::vector<std::vector<std::vector<size_t>>> cycleCuttingNodePredecessors;
 	std::string nodeSequences;
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
