@@ -134,7 +134,7 @@ public:
 		auto band = getFullBand(sequence.size(), dynamicRowStart);
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
-		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
+		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
 		return result;
 	}
@@ -145,7 +145,7 @@ public:
 		auto band = getSeededStartBand(seedHits, dynamicRowStart, startBandwidth, sequence);
 		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
 		//failed alignment, don't output
-		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::min()) return emptyAlignment();
+		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment();
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
 		return result;
 	}
@@ -326,7 +326,7 @@ private:
 	AlignmentResult emptyAlignment() const
 	{
 		vg::Alignment result;
-		result.set_score(std::numeric_limits<decltype(result.score())>::min());
+		result.set_score(std::numeric_limits<decltype(result.score())>::max());
 		return AlignmentResult { result, true, 0 };
 	}
 
@@ -1375,6 +1375,10 @@ private:
 		}
 		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, dynamicWidth, startBand, dynamicRowStart);
 		std::cerr << "score: " << slice.minScorePerWordSlice.back() << std::endl;
+		if (slice.minScorePerWordSlice.back() > sequence.size() * 0.4)
+		{
+			return std::make_tuple(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{}, slice.cellsProcessed);
+		}
 		auto backtraceresult = backtrace(std::make_pair(slice.finalMinScoreColumn, sequence.size()), sequence, slice.minScorePerWordSlice);
 		for (int i = 0; i < padding; i++)
 		{

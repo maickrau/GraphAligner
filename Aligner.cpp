@@ -276,7 +276,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 			cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			continue;
 		}
-		if (alignment.alignment.score() == std::numeric_limits<decltype(alignment.alignment.score())>::min())
+		if (alignment.alignment.score() == std::numeric_limits<decltype(alignment.alignment.score())>::max())
 		{
 			cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			continue;
