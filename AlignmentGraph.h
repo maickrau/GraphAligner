@@ -26,7 +26,7 @@ public:
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
-	void getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<bool>& resultSources);
+	void getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors);
 	void getCycleCutterTreeRec(size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents);
 	void calculateCycleCutters(size_t cycleStart, int wordSize);
 	std::vector<bool> notInOrder;
@@ -39,7 +39,7 @@ private:
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<std::vector<size_t>> cycleCuttingNodes;
-	std::vector<std::vector<bool>> cycleCuttingNodeSource;
+	std::vector<std::vector<std::vector<size_t>>> cycleCuttingNodePredecessor;
 	std::string nodeSequences;
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
