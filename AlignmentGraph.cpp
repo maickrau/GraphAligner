@@ -116,6 +116,7 @@ void AlignmentGraph::Finalize(int wordSize)
 	}
 	cycleCuttingNodes.resize(firstInOrder);
 	cycleCuttingNodePredecessor.resize(firstInOrder);
+	cycleCutPreviousCut.resize(firstInOrder);
 	for (size_t i = 1; i < firstInOrder; i++)
 	{
 		calculateCycleCutters(i, wordSize);
@@ -162,10 +163,15 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 	return result;
 }
 
-void AlignmentGraph::getCycleCutterTreeRec(size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents)
+void AlignmentGraph::getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents)
 {
 	nodes.push_back(node);
 	parents.push_back(parent);
+	if (node < cycleCut)
+	{
+		assert(notInOrder[node]);
+		return;
+	}
 	auto current = nodes.size()-1;
 	lengthLeft -= nodeEnd[node] - nodeStart[node];
 	if (lengthLeft > 0)
@@ -179,7 +185,7 @@ void AlignmentGraph::getCycleCutterTreeRec(size_t node, size_t parent, int wordS
 		std::sort(neighbors.begin(), neighbors.end());
 		for (auto neighbor : neighbors)
 		{
-			getCycleCutterTreeRec(neighbor, current, wordSize, lengthLeft, nodes, parents);
+			getCycleCutterTreeRec(cycleCut, neighbor, current, wordSize, lengthLeft, nodes, parents);
 		}
 	}
 }
@@ -197,7 +203,7 @@ bool subtreesAreIdentical(const std::vector<size_t>& nodes, const std::vector<st
 	return true;
 }
 
-void AlignmentGraph::getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors)
+void AlignmentGraph::getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors, std::vector<bool>& resultPreviousCut)
 {
 	assert(nodes.size() == parents.size());
 	std::vector<size_t> distanceFromLeaf;
@@ -254,6 +260,7 @@ void AlignmentGraph::getDAGFromIdenticalSubtrees(const std::vector<size_t>& node
 			uniquenessClassIndex[uniquenessClasses[i]] = resultNodes.size();
 			resultNodes.push_back(nodes[uniquenessClasses[i]]);
 			resultPredecessors.emplace_back();
+			resultPreviousCut.push_back(nodes[i] < nodes[0]);
 			uniques.insert(uniquenessClasses[i]);
 		}
 	}
@@ -278,11 +285,12 @@ void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
 
 	std::vector<size_t> nodes;
 	std::vector<size_t> parents;
-	getCycleCutterTreeRec(cycleStart, 0, wordSize, 2*wordSize, nodes, parents);
-	getDAGFromIdenticalSubtrees(nodes, parents, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart]);
+	getCycleCutterTreeRec(cycleStart, cycleStart, 0, wordSize, 2*wordSize, nodes, parents);
+	getDAGFromIdenticalSubtrees(nodes, parents, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart], cycleCutPreviousCut[cycleStart]);
 
 	assert(cycleCuttingNodes[cycleStart].size() > 0);
 	assert(cycleCuttingNodes[cycleStart][0] == cycleStart);
 	assert(cycleCuttingNodes[cycleStart].size() == cycleCuttingNodePredecessor[cycleStart].size());
 	assert(cycleCuttingNodePredecessor[cycleStart].size() == 1 || cycleCuttingNodePredecessor[cycleStart][0].size() > 0);
+	assert(cycleCutPreviousCut[cycleStart].size() == cycleCuttingNodes[cycleStart].size());
 }
