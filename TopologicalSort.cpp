@@ -6,8 +6,16 @@
 #include "ThreadReadAssertion.h"
 
 using namespace std;
-void topological_sort_using_DFS_loop(vector<vector<size_t> >& graph, vector<size_t>& sorted);
-void topological_sort_using_DFS(vector<vector<size_t> >& graph, vector<bool>& explored, size_t i, vector<size_t>& sorted, size_t& t);
+void topological_sort_using_DFS_loop(const vector<vector<size_t> >& graph, vector<size_t>& sorted);
+void topological_sort_using_DFS(const vector<vector<size_t> >& graph, vector<bool>& explored, size_t i, vector<size_t>& sorted, size_t& t);
+
+std::vector<size_t> topologicalSort(const std::vector<std::vector<size_t>>& graph)
+{
+	std::vector<size_t> sorted;
+	sorted.resize(graph.size(), 0);
+	topological_sort_using_DFS_loop(graph, sorted);
+	return sorted;
+}
 
 std::vector<size_t> topologicalSort(const vg::Graph& vggraph)
 {
@@ -49,7 +57,7 @@ std::vector<size_t> topologicalSort(const DirectedGraph& digraph)
 
 
 
-void topological_sort_using_DFS(vector<vector<size_t> >& graph, vector<bool>& explored, size_t i, vector<size_t>& sorted, size_t& t)
+void topological_sort_using_DFS(const vector<vector<size_t> >& graph, vector<bool>& explored, size_t i, vector<size_t>& sorted, size_t& t)
 {
 	explored[i] = true;
 
@@ -67,8 +75,9 @@ void topological_sort_using_DFS(vector<vector<size_t> >& graph, vector<bool>& ex
 	return;
 }
 
-void topological_sort_using_DFS_loop(vector<vector<size_t> >& graph, vector<size_t>& sorted)
+void topological_sort_using_DFS_loop(const vector<vector<size_t> >& graph, vector<size_t>& sorted)
 {
+	assert(graph.size() == sorted.size());
 	vector<bool> explored(graph.size(), false);
 	size_t t = graph.size();
 

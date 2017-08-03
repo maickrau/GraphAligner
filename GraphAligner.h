@@ -1229,11 +1229,12 @@ private:
 			{
 				auto cutter = graph.cycleCuttingNodes[i][k];
 				if (!currentBand[cutter]) continue;
-				bool source = true;
-				for (size_t m = 0; m < graph.cycleCuttingNodePredecessors[i][k].size(); m++)
+				bool hasNeighbor = false;
+				for (size_t m = 0; m < graph.inNeighbors[cutter].size() && !hasNeighbor; m++)
 				{
-					if (currentBand[graph.cycleCuttingNodePredecessors[i][k][m]]) source = false;
+					if (currentBand[graph.inNeighbors[cutter][m]]) hasNeighbor = false;
 				}
+				bool source = graph.cycleCuttingNodeSource[i][k] && hasNeighbor;
 				calculateNode(cutter, j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source);
 			}
 			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
