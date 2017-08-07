@@ -433,11 +433,11 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
 
 	std::ofstream alignmentOut { alignmentFile, std::ios::out | std::ios::binary };
+	stream::write_buffered(alignmentOut, alignments, 0);
 	if (auggraphFile != "")
 	{
 		vg::Graph augmentedGraphAllReads;
 		augmentedGraphAllReads = augmentGraphwithAlignment(graph, alignments);
-		stream::write_buffered(alignmentOut, alignments, 0);
 		outputGraph(auggraphFile, augmentedGraphAllReads);
 	}
 }
