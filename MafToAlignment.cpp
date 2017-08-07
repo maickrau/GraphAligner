@@ -7,12 +7,13 @@
 
 struct MafEntry {
 	std::string readname;
+	std::string realsequence;
 	int startpos;
 	int length;
-	bool forward;
+	bool backward;
 };
 
-std::vector<vg::Alignment> mafsToAlignments(const std::vector<MafEntry>& mafs, const std::vector<int>& posToNode, const std::map<int, bool>& nodeIsReverse)
+std::vector<vg::Alignment> mafsToAlignments(const std::vector<MafEntry>& mafs, const std::vector<int>& posToNode, const std::map<int, int>& nodeSize, const std::map<int, bool>& nodeIsReverse)
 {
 	std::vector<vg::Alignment> result;
 	for (size_t i = 0; i < mafs.size(); i++)
@@ -26,7 +27,7 @@ std::vector<vg::Alignment> mafsToAlignments(const std::vector<MafEntry>& mafs, c
 				nodeIds.push_back(posToNode[mafs[i].startpos+j]);
 			}
 		}
-		if (!mafs[i].forward)
+		if (mafs[i].backward)
 		{
 			std::reverse(nodeIds.begin(), nodeIds.end());
 		}
@@ -41,7 +42,9 @@ std::vector<vg::Alignment> mafsToAlignments(const std::vector<MafEntry>& mafs, c
 			vgmapping->set_allocated_position(position);
 			vgmapping->set_rank(j);
 			position->set_node_id(nodeIds[j]);
-			position->set_is_reverse(nodeIsReverse.at(nodeIds[j]) ^ !mafs[i].forward);
+			position->set_is_reverse(nodeIsReverse.at(nodeIds[j]) ^ mafs[i].backward);
+			auto edit = vgmapping->add_edit();
+			edit->set_from_length(nodeSize.at(nodeIds[j]));
 		}
 		result.push_back(mafResult);
 	}
@@ -57,6 +60,7 @@ std::vector<MafEntry> getMafEntries(std::string filename)
 	{
 		std::string line;
 		std::getline(mafFile, line);
+		std::string a, b, direction;
 		if (line.size() == 0 || line[0] != 'a') continue;
 		MafEntry maf;
 		std::string checks, checkref;
@@ -64,9 +68,21 @@ std::vector<MafEntry> getMafEntries(std::string filename)
 		assert(checkref == "ref");
 		assert(checks == "s");
 		mafFile >> maf.startpos >> maf.length;
-		std::getline(mafFile, line);
+		mafFile >> a >> b;
+		mafFile >> maf.realsequence;
+		//https://stackoverflow.com/questions/20406744/how-to-find-and-replace-all-occurrences-of-a-substring-in-a-string
+		std::string::size_type n = 0;
+		while ((n = maf.realsequence.find("-", n)) != std::string::npos)
+		{
+			maf.realsequence.replace(n, 1, "");
+		}
 		mafFile >> checks >> maf.readname;
 		assert(checks == "s");
+		mafFile >> a >> b >> direction;
+		if (direction == "-")
+		{
+			maf.realsequence = CommonUtils::ReverseComplement(maf.realsequence);
+		}
 		result.push_back(maf);
 	}
 
@@ -88,6 +104,7 @@ int main(int argc, char** argv)
 
 	std::vector<int> posToNode;
 	std::map<int, bool> nodeIsReverse;
+	std::map<int, int> nodeSizes;
 
 	for (int i = 0; i < referenceAlignment.path().mapping_size(); i++)
 	{
@@ -100,10 +117,21 @@ int main(int argc, char** argv)
 		nodeIsReverse[mapping.position().node_id()] = mapping.position().is_reverse();
 	}
 
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		nodeSizes[graph.node(i).id()] = graph.node(i).sequence().size();
+	}
+
 	auto mafs = getMafEntries(argv[3]);
-	auto alignments = mafsToAlignments(mafs, posToNode, nodeIsReverse);
+	auto alignments = mafsToAlignments(mafs, posToNode, nodeSizes, nodeIsReverse);
 
 	std::ofstream alignmentOut { argv[4], std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, alignments, 0);
+
+	std::ofstream readsOut { argv[5], std::ios::out };
+	for (size_t i = 0; i < mafs.size(); i++)
+	{
+		readsOut << ">" << mafs[i].readname << std::endl << mafs[i].realsequence << std::endl;
+	}
 
 }

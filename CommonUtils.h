@@ -8,6 +8,7 @@
 namespace CommonUtils
 {
 	vg::Graph LoadVGGraph(std::string filename);
+	std::string ReverseComplement(std::string original);
 }
 
 #endif

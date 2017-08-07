@@ -46,38 +46,6 @@ bool is_file_exist(const char *fileName)
 	return infile.good();
 }
 
-std::string reverseComplement(std::string str)
-{
-	std::string result;
-	for (int i = str.size()-1; i >= 0; i--)
-	{
-		switch (str[i])
-		{
-			case 'A':
-			case 'a':
-			result += 'T';
-			break;
-			case 'C':
-			case 'c':
-			result += 'G';
-			break;
-			case 'T':
-			case 't':
-			result += 'A';
-			break;
-			case 'G':
-			case 'g':
-			result += 'C';
-			break;
-			case 'N':
-			case 'n':
-			result += 'N';
-			break;
-		}
-	}
-	return result;
-}
-
 std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesRight, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesLeft)
 {
 	bool reverse = false;
@@ -91,7 +59,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 	std::string realsequence;
 	if (reverse)
 	{
-		realsequence = reverseComplement(g.node(currentNode).sequence().substr(0, startPos));	
+		realsequence = CommonUtils::ReverseComplement(g.node(currentNode).sequence().substr(0, startPos));	
 	}
 	else
 	{
@@ -119,7 +87,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 		}
 		if (reverse)
 		{
-			realsequence += reverseComplement(g.node(currentNode).sequence());
+			realsequence += CommonUtils::ReverseComplement(g.node(currentNode).sequence());
 		}
 		else
 		{

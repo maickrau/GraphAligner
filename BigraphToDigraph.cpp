@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cassert>
+#include "CommonUtils.h"
 #include "ssw_cpp.h"
 #include "vg.pb.h"
 #include "fastqloader.h"
@@ -38,7 +39,7 @@ DirectedGraph::DirectedGraph(const vg::Graph& bigraph)
 		assert(nodeMapping.count(bigraph.node(i).id()) == 0);
 		nodeMapping[bigraph.node(i).id()] = std::make_pair(nodes.size()+1, nodes.size());
 		nodes.emplace_back(bigraph.node(i).id() * 2, bigraph.node(i).id(), true, bigraph.node(i).sequence());
-		nodes.emplace_back(bigraph.node(i).id() * 2 + 1, bigraph.node(i).id(), false, FastQ::reverseComplement(bigraph.node(i).sequence()));
+		nodes.emplace_back(bigraph.node(i).id() * 2 + 1, bigraph.node(i).id(), false, CommonUtils::ReverseComplement(bigraph.node(i).sequence()));
 	}
 	for (int i = 0; i < bigraph.edge_size(); i++)
 	{

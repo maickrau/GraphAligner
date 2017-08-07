@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include "fastqloader.h"
+#include "CommonUtils.h"
 
 std::vector<FastQ> loadFastqFastqFromFile(std::string filename)
 {
@@ -68,42 +69,10 @@ std::vector<FastQ> loadFastqFromFile(std::string filename)
 	return std::vector<FastQ>{};
 }
 
-std::string FastQ::reverseComplement(std::string str)
-{
-	std::string result;
-	for (int i = str.size()-1; i >= 0; i--)
-	{
-		switch (str[i])
-		{
-			case 'A':
-			case 'a':
-			result += 'T';
-			break;
-			case 'C':
-			case 'c':
-			result += 'G';
-			break;
-			case 'T':
-			case 't':
-			result += 'A';
-			break;
-			case 'G':
-			case 'g':
-			result += 'C';
-			break;
-			case 'N':
-			case 'n':
-			result += 'N';
-			break;
-		}
-	}
-	return result;
-}
-
 FastQ FastQ::reverseComplement() const
 {
 	FastQ result;
-	result.sequence = reverseComplement(sequence);
+	result.sequence = CommonUtils::ReverseComplement(sequence);
 	result.seq_id = seq_id;
 	result.quality = quality;
 	std::reverse(result.quality.begin(), result.quality.end());

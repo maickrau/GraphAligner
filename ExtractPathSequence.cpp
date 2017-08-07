@@ -7,39 +7,6 @@
 #include "stream.hpp"
 #include "CommonUtils.h"
 
-std::string reverseComplement(std::string str)
-{
-	std::string result;
-	for (size_t i = 0; i < str.size(); i++)
-	{
-		switch(str[i])
-		{
-			case 'a':
-			case 'A':
-				result += 'T';
-				break;
-			case 't':
-			case 'T':
-				result += 'A';
-				break;
-			case 'c':
-			case 'C':
-				result += 'G';
-				break;
-			case 'g':
-			case 'G':
-				result += 'C';
-				break;
-			case 'n':
-			case 'N':
-				result += 'N';
-				break;
-		}
-	}
-	std::reverse(result.begin(), result.end());
-	return result;
-}
-
 void printPath(const vg::Graph& g, const vg::Alignment& v)
 {
 	std::map<int, int> ids;
@@ -59,7 +26,7 @@ void printPath(const vg::Graph& g, const vg::Alignment& v)
 		}
 		if (v.path().mapping(i).position().is_reverse())
 		{
-			sequence = reverseComplement(sequence);
+			sequence = CommonUtils::ReverseComplement(sequence);
 		}
 		if (v.path().mapping(i).position().offset() > 0)
 		{
