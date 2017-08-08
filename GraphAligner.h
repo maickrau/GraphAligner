@@ -1323,6 +1323,63 @@ private:
 					BT |= mask;
 					BG |= mask;
 					break;
+					case 'R':
+					case 'r':
+					BA |= mask;
+					BG |= mask;
+					break;
+					case 'Y':
+					case 'y':
+					BC |= mask;
+					BT |= mask;
+					break;
+					case 'K':
+					case 'k':
+					BG |= mask;
+					BT |= mask;
+					break;
+					case 'M':
+					case 'm':
+					BA |= mask;
+					BC |= mask;
+					break;
+					case 'S':
+					case 's':
+					BC |= mask;
+					BG |= mask;
+					break;
+					case 'W':
+					case 'w':
+					BA |= mask;
+					BT |= mask;
+					break;
+					case 'B':
+					case 'b':
+					BC |= mask;
+					BG |= mask;
+					BT |= mask;
+					break;
+					case 'D':
+					case 'd':
+					BA |= mask;
+					BG |= mask;
+					BT |= mask;
+					break;
+					case 'H':
+					case 'h':
+					BA |= mask;
+					BC |= mask;
+					BT |= mask;
+					break;
+					case 'V':
+					case 'v':
+					BA |= mask;
+					BC |= mask;
+					BG |= mask;
+					break;
+					default:
+					assert(false);
+					break;
 				}
 			}
 			size_t slice = j / WordConfiguration<Word>::WordSize;
