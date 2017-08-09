@@ -131,6 +131,16 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 			saveCycleCut(cutFilename);
 		}
 	}
+	else
+	{
+		cycleCuttingNodes.resize(firstInOrder);
+		cycleCuttingNodePredecessor.resize(firstInOrder);
+		cycleCutPreviousCut.resize(firstInOrder);
+		for (size_t i = 1; i < firstInOrder; i++)
+		{
+			calculateCycleCutters(i, wordSize);
+		}
+	}
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
 	std::cerr << nodeSequences.size() << "bp" << std::endl;
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
