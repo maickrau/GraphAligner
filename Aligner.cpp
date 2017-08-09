@@ -156,7 +156,7 @@ void saveToFile(const T& vec, std::string filename)
 	oa << vec;
 }
 
-std::vector<int> getMFVS(const DirectedGraph& graph)
+std::vector<size_t> getMFVS(const DirectedGraph& graph)
 {
 	mfvs::Graph mfvsgraph { graph.nodes.size() };
 	for (size_t i = 0; i < graph.nodes.size(); i++)
@@ -167,16 +167,23 @@ std::vector<int> getMFVS(const DirectedGraph& graph)
 	{
 		mfvsgraph.addEdge(graph.edges[i].fromIndex, graph.edges[i].toIndex);
 	}
-	return mfvsgraph.minimumFeedbackVertexSet();
+	auto list = mfvsgraph.minimumFeedbackVertexSet();
+	std::vector<size_t> result;
+	for (size_t i = 0; i < list.size(); i++)
+	{
+		assert(list[i] >= 0);
+		result.push_back(list[i]);
+	}
+	return result;
 }
 
 void OrderByFeedbackVertexset(DirectedGraph& graph, std::string mfvsFilename, std::string orderFilename)
 {
 	BufferedWriter output { std::cout };
-	std::vector<int> vertexSetvector;
+	std::vector<size_t> vertexSetvector;
 	if (mfvsFilename != "")
 	{
-		vertexSetvector = loadFromFile<std::vector<int>>(mfvsFilename);
+		vertexSetvector = loadFromFile<std::vector<size_t>>(mfvsFilename);
 		if (vertexSetvector.size() == 0)
 		{
 			vertexSetvector = getMFVS(graph);
