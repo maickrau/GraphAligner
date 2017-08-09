@@ -5,6 +5,9 @@
 #include <functional>
 #include <algorithm>
 #include <thread>
+#include <boost/serialization/vector.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 #include "CommonUtils.h"
 #include "vg.pb.h"
 #include "stream.hpp"
@@ -134,9 +137,27 @@ int numberOfVerticesOutOfOrder(const DirectedGraph& digraph)
 	return outOfOrderSet.size();
 }
 
-void OrderByFeedbackVertexset(DirectedGraph& graph)
+template <typename T>
+T loadFromFile(std::string filename)
 {
-	BufferedWriter output { std::cout };
+	T result;
+	std::ifstream file {filename};
+	if (!file.good()) return result;
+	boost::archive::text_iarchive ia(file);
+	ia >> result;
+	return result;
+}
+
+template <typename T>
+void saveToFile(const T& vec, std::string filename)
+{
+	std::ofstream file {filename};
+	boost::archive::text_oarchive oa(file);
+	oa << vec;
+}
+
+std::vector<int> getMFVS(const DirectedGraph& graph)
+{
 	mfvs::Graph mfvsgraph { graph.nodes.size() };
 	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
@@ -146,14 +167,44 @@ void OrderByFeedbackVertexset(DirectedGraph& graph)
 	{
 		mfvsgraph.addEdge(graph.edges[i].fromIndex, graph.edges[i].toIndex);
 	}
-	output << "Before the removal of MVFS, is the graph acyclic:" << mfvsgraph.isAcyclic() << "\n";
-	auto vertexSetvector = mfvsgraph.minimumFeedbackVertexSet();
+	return mfvsgraph.minimumFeedbackVertexSet();
+}
+
+void OrderByFeedbackVertexset(DirectedGraph& graph, std::string mfvsFilename, std::string orderFilename)
+{
+	BufferedWriter output { std::cout };
+	std::vector<int> vertexSetvector;
+	if (mfvsFilename != "")
+	{
+		vertexSetvector = loadFromFile<std::vector<int>>(mfvsFilename);
+		if (vertexSetvector.size() == 0)
+		{
+			vertexSetvector = getMFVS(graph);
+			saveToFile(vertexSetvector, mfvsFilename);
+		}
+	}
+	else
+	{
+		vertexSetvector = getMFVS(graph);
+	}
 	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
 	output << "feedback vertex set size: " << vertexSetvector.size() << "\n";
-	output << "After the removal of MVFS, is the graph acyclic:" << mfvsgraph.isAcyclic() << BufferedWriter::Flush;
 	DirectedGraph graphWithoutVFS { graph };
 	graphWithoutVFS.RemoveNodes(vertexset);
-	std::vector<size_t> indexOrder = topologicalSort(graphWithoutVFS);
+	std::vector<size_t> indexOrder;
+	if (orderFilename != "")
+	{
+		indexOrder = loadFromFile<std::vector<size_t>>(orderFilename);
+		if (indexOrder.size() == 0)
+		{
+			indexOrder = topologicalSort(graphWithoutVFS);
+			saveToFile(indexOrder, orderFilename);
+		}
+	}
+	else
+	{
+		indexOrder = topologicalSort(graphWithoutVFS);
+	}
 	std::vector<int> nodeIdOrder;
 	for (size_t i = 0; i < vertexSetvector.size(); i++)
 	{
@@ -312,7 +363,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, int startBandwidth)
+void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, int startBandwidth, std::string mfvsFilename, std::string orderFilename, std::string cycleCutFilename)
 {
 	assertSetRead("Preprocessing");
 
@@ -385,7 +436,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 		std::cerr << "No nodes in the graph" << std::endl;
 		std::abort();
 	}
-	OrderByFeedbackVertexset(augmentedGraph);
+	OrderByFeedbackVertexset(augmentedGraph, mfvsFilename, orderFilename);
 	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
 	AlignmentGraph alignmentGraph;
@@ -397,7 +448,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	{
 		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
-	alignmentGraph.Finalize(64);
+	alignmentGraph.Finalize(64, cycleCutFilename);
 	GraphAligner<size_t, int32_t, uint64_t> aligner { alignmentGraph };
 
 	std::map<int, int> idMapper;

@@ -12,6 +12,9 @@ int main(int argc, char** argv)
 	std::string alignmentFile = "";
 	std::string auggraphFile = "";
 	std::string seedFile = "";
+	std::string mfvsFile = "";
+	std::string orderFile = "";
+	std::string cycleCutFile = "";
 	int startBandwidth = 0;
 	int numThreads = 0;
 	int dynamicWidth = 0;
@@ -19,7 +22,7 @@ int main(int argc, char** argv)
 	int c;
 	bool initialFullBand = false;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:v:o:c:")) != -1)
 	{
 		switch(c)
 		{
@@ -53,6 +56,15 @@ int main(int argc, char** argv)
 			case 'd':
 				dynamicRowStart = std::stoi(optarg);
 				break;
+			case 'v':
+				mfvsFile = std::string(optarg);
+				break;
+			case 'o':
+				orderFile = std::string(optarg);
+				break;
+			case 'c':
+				cycleCutFile = std::string(optarg);
+				break;
 		}
 	}
 
@@ -80,7 +92,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth);
+	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth, mfvsFile, orderFile, cycleCutFile);
 
 	return 0;
 }

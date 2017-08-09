@@ -5,7 +5,7 @@ CPPFLAGS=-Wall -std=c++14 -O3 -g -pg
 ODIR=obj
 BINDIR=bin
 
-LIBS=-lm -lprotobuf -lz 
+LIBS=-lm -lprotobuf -lz -lboost_serialization
 
 DEPS = vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h BigraphToDigraph.h mfvs_graph.h mfvs_utils.h stream.hpp 2dArray.h SparseBoolMatrix.h SparseMatrix.h ssw_cpp.h Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h
 

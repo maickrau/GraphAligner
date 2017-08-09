@@ -21,11 +21,13 @@ public:
 	AlignmentGraph();
 	void AddNode(int nodeId, std::string sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
-	void Finalize(int wordSize);
+	void Finalize(int wordSize, std::string cutFilename);
 	size_t SizeInBp() const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
+	bool loadCycleCut(std::string filename);
+	void saveCycleCut(std::string filename);
 	void getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors, std::vector<bool>& resultPreviousCut);
 	void getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents);
 	void calculateCycleCutters(size_t cycleStart, int wordSize);

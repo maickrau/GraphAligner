@@ -1,9 +1,12 @@
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <algorithm>
+#include <boost/serialization/vector.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 #include "AlignmentGraph.h"
 #include "TopologicalSort.h"
-
 
 AlignmentGraph::AlignmentGraph() :
 nodeStart(),
@@ -79,7 +82,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	}
 }
 
-void AlignmentGraph::Finalize(int wordSize)
+void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 {
 	//add the end dummy node as the last node
 	dummyNodeEnd = nodeSequences.size();
@@ -114,12 +117,19 @@ void AlignmentGraph::Finalize(int wordSize)
 		//all not-in-order nodes have to be at the start
 		assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
 	}
-	cycleCuttingNodes.resize(firstInOrder);
-	cycleCuttingNodePredecessor.resize(firstInOrder);
-	cycleCutPreviousCut.resize(firstInOrder);
-	for (size_t i = 1; i < firstInOrder; i++)
+	if (cutFilename != "")
 	{
-		calculateCycleCutters(i, wordSize);
+		if (!loadCycleCut(cutFilename))
+		{
+			cycleCuttingNodes.resize(firstInOrder);
+			cycleCuttingNodePredecessor.resize(firstInOrder);
+			cycleCutPreviousCut.resize(firstInOrder);
+			for (size_t i = 1; i < firstInOrder; i++)
+			{
+				calculateCycleCutters(i, wordSize);
+			}
+			saveCycleCut(cutFilename);
+		}
 	}
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
 	std::cerr << nodeSequences.size() << "bp" << std::endl;
@@ -145,6 +155,26 @@ void AlignmentGraph::Finalize(int wordSize)
 	{
 		std::cerr << "0 nodes out of order" << std::endl;
 	}
+}
+
+void AlignmentGraph::saveCycleCut(std::string filename)
+{
+	std::ofstream file {filename};
+	boost::archive::text_oarchive oa(file);
+	oa << cycleCuttingNodes;
+	oa << cycleCuttingNodePredecessor;
+	oa << cycleCutPreviousCut;
+}
+
+bool AlignmentGraph::loadCycleCut(std::string filename)
+{
+	std::ifstream file {filename};
+	if (!file.good()) return false;
+	boost::archive::text_iarchive ia(file);
+	ia >> cycleCuttingNodes;
+	ia >> cycleCuttingNodePredecessor;
+	ia >> cycleCutPreviousCut;
+	return true;
 }
 
 size_t AlignmentGraph::SizeInBp() const
