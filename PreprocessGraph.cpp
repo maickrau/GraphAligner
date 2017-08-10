@@ -1,3 +1,4 @@
+#include <chrono>
 #include <fstream>
 #include <tuple>
 #include <boost/serialization/vector.hpp>
@@ -18,12 +19,18 @@ public:
 	int state;
 };
 
+auto starttime = std::chrono::system_clock::now();
+
 void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>& graph, std::vector<bool>& explored, std::set<size_t>& mfvs, std::vector<size_t>& currentStack, size_t i, std::vector<size_t>& sorted, size_t& t)
 {
 	std::vector<DFSStack> stack;
 	stack.emplace_back(i, 1);
 	while (!stack.empty())
 	{
+		if (t % 1000000 == 0)
+		{
+			std::cerr << t << " left " << ((double)t / (double)sorted.size()) * 100 << "% " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - starttime).count() << "s" << std::endl;
+		}
 		auto top = stack.back();
 		stack.pop_back();
 		i = top.i;
