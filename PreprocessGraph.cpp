@@ -29,7 +29,7 @@ void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>
 	{
 		if (t % 1000000 == 0)
 		{
-			std::cerr << t << " left " << ((double)t / (double)sorted.size()) * 100 << "% " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - starttime).count() << "s" << std::endl;
+			std::cerr << "DFS " << t << " left " << ((double)t / (double)sorted.size()) * 100 << "% " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - starttime).count() << "s" << std::endl;
 		}
 		auto top = stack.back();
 		stack.pop_back();
@@ -96,28 +96,35 @@ void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& gra
 	}
 	for (size_t i = 1; i < sorted.size(); i++)
 	{
+		if (i % 1000000 == 0)
+		{
+			std::cerr << "index fix " << i << " " << ((double)i / (double)sorted.size()) * 100 << "% " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - starttime).count() << "s" << std::endl;
+		}
 		newIndex[i] = newIndex[i] + newIndex[i-1];
 	}
 	if (mfvs.size() > 0)
 	{
-		int removed = 0;
-		for (size_t i = sorted.size()-1; i < sorted.size(); i--)
+		int offset = 0;
+		for (size_t i = 0; i < sorted.size()-mfvs.size(); i++)
 		{
-			if (mfvs.count(sorted[i]) > 0)
+			if (i % 1000000 == 0)
 			{
-				sorted.erase(sorted.begin()+i);
-				removed++;
+				std::cerr << "MFVS removal " << i << " " << ((double)i / (double)sorted.size()) * 100 << "% " << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - starttime).count() << "s" << std::endl;
 			}
-			else
+			while (mfvs.count(sorted[i+offset]) > 0)
 			{
-				sorted[i] = newIndex[sorted[i]];
-				assert(sorted[i] >= 0);
-				assert(sorted[i] < graph.size() - mfvs.size());
-				assert(resultSet.count(sorted[i]) == 0);
-				resultSet.insert(sorted[i]);
+				offset++;
+				assert(offset <= mfvs.size());
+				assert(i+offset < sorted.size());
 			}
+			sorted[i] = newIndex[sorted[i+offset]];
+			assert(sorted[i] >= 0);
+			assert(sorted[i] < graph.size() - mfvs.size());
+			assert(resultSet.count(sorted[i]) == 0);
+			resultSet.insert(sorted[i]);
 		}
-		assert(removed == mfvs.size());
+		assert(offset == mfvs.size());
+		sorted.erase(sorted.end()-offset, sorted.end());
 	}
 	assert(resultSet.size() == sorted.size());
 
