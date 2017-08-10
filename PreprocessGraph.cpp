@@ -90,6 +90,7 @@ void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& gra
 	std::set<size_t> resultSet;
 	newIndex.resize(sorted.size(), 1);
 	newIndex[0] = 0;
+	std::cerr << "MFVS is " << mfvs.size() << " nodes" << std::endl;
 	for (auto x : mfvs)
 	{
 		newIndex[x]--;
