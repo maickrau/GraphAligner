@@ -7,31 +7,60 @@
 #include "CommonUtils.h"
 #include "BigraphToDigraph.h"
 
-void topological_sort_using_DFS(const std::vector<std::vector<size_t>>& graph, std::vector<bool>& explored, std::set<size_t>& mfvs, std::vector<size_t>& currentStack, size_t i, std::vector<size_t>& sorted, size_t& t)
+//sometimes the graph is really large and doing DFS recursively runs into a stack overflow.
+//use our own stack in the heap
+//see https://stackoverflow.com/questions/159590/way-to-go-from-recursion-to-iteration
+class DFSStack
 {
-	for (size_t k = 0; k < currentStack.size(); k++)
+public:
+	DFSStack(int i, int state) : i(i), state(state) {};
+	int i;
+	int state;
+};
+
+void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>& graph, std::vector<bool>& explored, std::set<size_t>& mfvs, std::vector<size_t>& currentStack, size_t i, std::vector<size_t>& sorted, size_t& t)
+{
+	std::vector<DFSStack> stack;
+	stack.emplace_back(i, 1);
+	while (!stack.empty())
 	{
-		if (currentStack[k] == i)
+		auto top = stack.back();
+		stack.pop_back();
+		i = top.i;
+		switch(top.state)
 		{
-			mfvs.insert(i);
-			explored[i] = true;
-			return;
+			case 1:
+				for (size_t k = 0; k < currentStack.size(); k++)
+				{
+					if (currentStack[k] == i)
+					{
+						mfvs.insert(i);
+						explored[i] = true;
+						continue;
+					}
+				}
+				if (explored[i]) continue;
+				currentStack.push_back(i);
+				explored[i] = true;
+				stack.emplace_back(i, 2);
+				for (size_t j = 0; j < graph[i].size(); ++j)
+				{
+					stack.emplace_back(graph[i][j], 1);
+				}
+				break;
+
+			case 2:
+				assert(currentStack.size() > 0);
+				assert(currentStack.back() == i);
+				currentStack.pop_back();
+				--t;
+				sorted[t] = i;
+				break;
+
+			default:
+				assert(false);
 		}
 	}
-	if (explored[i]) return;
-	currentStack.push_back(i);
-	explored[i] = true;
-
-	for (size_t j = 0; j < graph[i].size(); ++j)
-	{
-		topological_sort_using_DFS(graph, explored, mfvs, currentStack, graph[i][j], sorted, t);
-	}
-	currentStack.pop_back();
-
-	--t;
-	sorted[t] = i;
-
-	return;
 }
 
 void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& graph, std::vector<size_t>& sorted, std::set<size_t>& mfvs)
@@ -45,7 +74,7 @@ void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& gra
 		if (explored[i] == false)
 		{
 			std::vector<size_t> currentStack;
-			topological_sort_using_DFS(graph, explored, mfvs, currentStack, i, sorted, t);
+			topological_sort_using_DFS_stackless(graph, explored, mfvs, currentStack, i, sorted, t);
 		}
 	}
 
