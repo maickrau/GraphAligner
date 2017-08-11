@@ -113,38 +113,47 @@ void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 	assert(nodeIdsAreValid());
 }
 
-size_t smallerThan(const std::set<int>& set, int comparison)
-{
-	size_t result = 0;
-	for (auto x : set)
-	{
-		if (x < comparison) result++;
-	}
-	return result;
-}
-
 void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 {
 	assert(edgesPointToValidNodes());
 	assert(nodeIdsAreValid());
 	size_t nodesBefore = nodes.size();
-	for (size_t i = nodes.size()-1; i >= 0 && i < nodes.size(); i--)
+	size_t offset = 0;
+	for (size_t i = 0; i < nodes.size(); i++)
 	{
-		if (nodeIndices.count(i) > 0)
-		{
-			nodes.erase(nodes.begin() + i);
-		}
+		while (nodeIndices.count(i+offset) > 0) offset++;
+		assert(i+offset <= nodes.size());
+		if (i+offset == nodes.size()) break;
+		if (offset > 0) nodes[i] = nodes[i+offset];
 	}
-	for (size_t i = edges.size()-1; i >= 0 && i < edges.size(); i--)
+	assert(offset == nodeIndices.size());
+	nodes.erase(nodes.end()-offset, nodes.end());
+	offset = 0;
+	std::vector<size_t> newIndex;
+	newIndex.resize(nodes.size(), 1);
+	newIndex[0] = 0;
+	for (auto x : nodeIndices)
 	{
-		if (nodeIndices.count(edges[i].fromIndex) > 0 || nodeIndices.count(edges[i].toIndex) > 0)
-		{
-			edges.erase(edges.begin() + i);
-			continue;
-		}
-		edges[i].fromIndex -= smallerThan(nodeIndices, edges[i].fromIndex);
-		edges[i].toIndex -= smallerThan(nodeIndices, edges[i].toIndex);
+		assert((x == 0 && newIndex[x] == 0) || (x != 0 && newIndex[x] == 1));
+		newIndex[x] -= 1;
 	}
+	for (size_t i = 1; i < nodes.size(); i++)
+	{
+		newIndex[i] += newIndex[i-1];
+	}
+	assert(newIndex[nodes.size()-1] == nodes.size()-1-nodeIndices.size());
+	for (size_t i = 0; i < edges.size(); i++)
+	{
+		while (i+offset < edges.size() && (nodeIndices.count(edges[i+offset].fromIndex) > 0 || nodeIndices.count(edges[i+offset].toIndex) > 0)) offset++;
+		if (i+offset == edges.size()) break;
+		assert(newIndex[edges[i+offset].fromIndex] >= 0);
+		assert(newIndex[edges[i+offset].toIndex] >= 0);
+		assert(edges[i+offset].fromIndex == 0 || newIndex[edges[i+offset].fromIndex] == newIndex[edges[i+offset].fromIndex-1]+1);
+		assert(edges[i+offset].toIndex == 0 || newIndex[edges[i+offset].toIndex] == newIndex[edges[i+offset].toIndex-1]+1);
+		edges[i].fromIndex = newIndex[edges[i+offset].fromIndex];
+		edges[i].toIndex = newIndex[edges[i+offset].toIndex];
+	}
+	edges.erase(edges.end()-offset, edges.end());
 	assert(nodes.size() + nodeIndices.size() == nodesBefore);
 	assert(edgesPointToValidNodes());
 	assert(nodeIdsAreValid());
