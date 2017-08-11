@@ -130,18 +130,20 @@ void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 	nodes.erase(nodes.end()-offset, nodes.end());
 	offset = 0;
 	std::vector<size_t> newIndex;
-	newIndex.resize(nodes.size(), 1);
+	newIndex.resize(nodesBefore, 1);
 	newIndex[0] = 0;
 	for (auto x : nodeIndices)
 	{
+		assert(x < newIndex.size());
+		assert(x >= 0);
 		assert((x == 0 && newIndex[x] == 0) || (x != 0 && newIndex[x] == 1));
 		newIndex[x] -= 1;
 	}
-	for (size_t i = 1; i < nodes.size(); i++)
+	for (size_t i = 1; i < nodesBefore; i++)
 	{
 		newIndex[i] += newIndex[i-1];
 	}
-	assert(newIndex[nodes.size()-1] == nodes.size()-1-nodeIndices.size());
+	assert(newIndex[nodesBefore-1] == nodesBefore-1-nodeIndices.size());
 	for (size_t i = 0; i < edges.size(); i++)
 	{
 		while (i+offset < edges.size() && (nodeIndices.count(edges[i+offset].fromIndex) > 0 || nodeIndices.count(edges[i+offset].toIndex) > 0)) offset++;
