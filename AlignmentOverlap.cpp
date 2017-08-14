@@ -118,10 +118,6 @@ Overlap backtrace(const std::vector<std::vector<int>>& direction, std::string re
 
 std::vector<Overlap> getExactOverlaps(const std::string& readname1, const std::vector<NodeMovement>& read1, const std::string& readname2, const std::vector<NodeMovement>& read2, double minMatchFraction, double minSizeFraction, bool backward2)
 {
-	if (readname1 == "S1_772" && readname2 == "S1_371")
-	{
-		int a = 1;
-	}
 	int read1size = 0;
 	int read2size = 0;
 	for (size_t i = 0; i < read1.size(); i++)

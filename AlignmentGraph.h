@@ -2,7 +2,7 @@
 #define AlignmentGraph_h
 
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <tuple>
 #include "ThreadReadAssertion.h"
 
@@ -19,7 +19,8 @@ public:
 		size_t nodePos;
 	};
 	AlignmentGraph();
-	void AddNode(int nodeId, std::string sequence, bool reverseNode);
+	void ReserveNodes(size_t numNodes, size_t totalSequenceLength);
+	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize, std::string cutFilename);
 	size_t SizeInBp() const;
@@ -35,10 +36,10 @@ private:
 	std::vector<size_t> nodeStart;
 	std::vector<size_t> nodeEnd;
 	std::vector<size_t> indexToNode;
-	std::map<int, size_t> nodeLookup;
+	std::unordered_map<int, size_t> nodeLookup;
 	std::vector<int> nodeIDs;
-	std::vector<std::vector<size_t>> inNeighbors;
-	std::vector<std::vector<size_t>> outNeighbors;
+	std::vector<std::set<size_t>> inNeighbors;
+	std::vector<std::set<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<std::vector<size_t>> cycleCuttingNodes;
 	std::vector<std::vector<std::vector<size_t>>> cycleCuttingNodePredecessor;

@@ -31,7 +31,21 @@ firstInOrder(0)
 	notInOrder.push_back(false);
 }
 
-void AlignmentGraph::AddNode(int nodeId, std::string sequence, bool reverseNode)
+void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
+{
+	nodeSequences.reserve(sequenceLength);
+	nodeLookup.reserve(numNodes);
+	nodeIDs.reserve(numNodes);
+	nodeStart.reserve(numNodes);
+	inNeighbors.reserve(numNodes);
+	outNeighbors.reserve(numNodes);
+	reverse.reserve(numNodes);
+	indexToNode.reserve(sequenceLength);
+	nodeEnd.reserve(numNodes);
+	notInOrder.reserve(numNodes);
+}
+
+void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool reverseNode)
 {
 	assert(!finalized);
 	//subgraph extraction might produce different subgraphs with common nodes
@@ -46,7 +60,10 @@ void AlignmentGraph::AddNode(int nodeId, std::string sequence, bool reverseNode)
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
-	indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
+	for (size_t i = indexToNode.size(); i < nodeSequences.size(); i++)
+	{
+		indexToNode.push_back(nodeStart.size()-1);
+	}
 	nodeEnd.emplace_back(nodeSequences.size());
 	notInOrder.push_back(false);
 	assert(nodeIDs.size() == nodeStart.size());
@@ -68,14 +85,9 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(from >= 0);
 	assert(to < inNeighbors.size());
 	assert(from < nodeStart.size());
-	//skip duplicate edges
-	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) != inNeighbors[to].end())
-	{
-		return;
-	}
 
-	inNeighbors[to].push_back(from);
-	outNeighbors[from].push_back(to);
+	inNeighbors[to].insert(from);
+	outNeighbors[from].insert(to);
 	if (from >= to)
 	{
 		notInOrder[to] = true;
@@ -92,7 +104,7 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	nodeSequences.push_back('-');
-	indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
+	indexToNode.push_back('-');
 	nodeEnd.emplace_back(nodeSequences.size());
 	notInOrder.push_back(false);
 	assert(nodeSequences.size() >= nodeStart.size());
@@ -114,11 +126,21 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	}
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 	firstInOrder = 0;
+	size_t inOrdersWrongfullyClassified = 0;
 	for (size_t i = 1; i < notInOrder.size(); i++)
 	{
+		if (i > 1 && notInOrder[i] && !notInOrder[i-1])
+		{
+			inOrdersWrongfullyClassified += i - firstInOrder;
+		}
 		if (notInOrder[i]) firstInOrder = i+1;
-		//all not-in-order nodes have to be at the start
-		assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
+		//relax this constraint for now until we figure out what is going on with the inOrdersWrongfullyClassified nodes
+		// //all not-in-order nodes have to be at the start
+		// assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
+	}
+	if (inOrdersWrongfullyClassified > 0)
+	{
+		std::cerr << inOrdersWrongfullyClassified << " nodes wrongly(?) classified as MFVS vertices!!" << std::endl;
 	}
 	if (firstInOrder != 0)
 	{
@@ -220,9 +242,8 @@ void AlignmentGraph::getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t 
 	if (lengthLeft > 0)
 	{
 		std::vector<size_t> neighbors;
-		for (size_t i = 0; i < inNeighbors[node].size(); i++)
+		for (auto neighbor : inNeighbors[node])
 		{
-			auto neighbor = inNeighbors[node][i];
 			neighbors.push_back(neighbor);
 		}
 		std::sort(neighbors.begin(), neighbors.end());

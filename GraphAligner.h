@@ -227,9 +227,9 @@ private:
 			currentDistancePlusOneQueue.emplace_back(w, j-1, backtraceIndexToCurrent);
 			if (w == graph.nodeStart[nodeIndex])
 			{
-				for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+				for (auto neighbor : graph.inNeighbors[nodeIndex])
 				{
-					auto u = graph.nodeEnd[graph.inNeighbors[nodeIndex][i]]-1;
+					auto u = graph.nodeEnd[neighbor]-1;
 					currentDistancePlusOneQueue.emplace_back(u, j, backtraceIndexToCurrent);
 					if (sequence[j-1] == 'N' || graph.nodeSequences[w] == sequence[j-1])
 					{
@@ -405,9 +405,9 @@ private:
 		}
 		if (w == end && j < sequenceLength+1 && j < maxRow)
 		{
-			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.outNeighbors[nodeIndex])
 			{
-				expandBandForwards(result, graph.nodeStart[graph.outNeighbors[nodeIndex][i]], j, sequenceLength, maxRow);
+				expandBandForwards(result, graph.nodeStart[neighbor], j, sequenceLength, maxRow);
 			}
 		}
 	}
@@ -426,9 +426,9 @@ private:
 		result[j].emplace_back(w);
 		if (w == start && j > 0)
 		{
-			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.inNeighbors[nodeIndex])
 			{
-				expandBandBackwards(result, graph.nodeEnd[graph.inNeighbors[nodeIndex][i]] - 1, j-1, sequenceLength);
+				expandBandBackwards(result, graph.nodeEnd[neighbor] - 1, j-1, sequenceLength);
 			}
 		}
 	}
@@ -470,9 +470,8 @@ private:
 			{
 				auto nextNode = endQueue.top();
 				endQueue.pop();
-				for (size_t i = 0; i < graph.outNeighbors[nextNode.index].size(); i++)
+				for (auto neighbor : graph.outNeighbors[nextNode.index])
 				{
-					auto neighbor = graph.outNeighbors[nextNode.index][i];
 					if (!currentBand[neighbor])
 					{
 						currentBand[neighbor] = true;
@@ -509,9 +508,8 @@ private:
 			{
 				endQueue.pop();
 				assert(currentBand[endBest.index]);
-				for (size_t i = 0; i < graph.outNeighbors[endBest.index].size(); i++)
+				for (auto neighbor : graph.outNeighbors[endBest.index])
 				{
-					auto neighbor = graph.outNeighbors[endBest.index][i];
 					if (!currentBand[neighbor])
 					{
 						currentBand[neighbor] = true;
@@ -532,16 +530,16 @@ private:
 		LengthType end = graph.nodeEnd[nodeIndex];
 		if (dynamicWidth > previousMinimumIndex - start)
 		{
-			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.inNeighbors[nodeIndex])
 			{
-				expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - (previousMinimumIndex - start));
+				expandDynamicBandBackward(band, neighbor, dynamicWidth - (previousMinimumIndex - start));
 			}
 		}
 		if (dynamicWidth > end - previousMinimumIndex)
 		{
-			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.outNeighbors[nodeIndex])
 			{
-				expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - (end - previousMinimumIndex));
+				expandDynamicBandForward(band, neighbor, dynamicWidth - (end - previousMinimumIndex));
 			}
 		}
 	}
@@ -554,16 +552,16 @@ private:
 		//this means that it might not reach some nodes with distance < dynamicwidth
 		if (band[nodeIndex]) return;
 		band[nodeIndex] = true;
-		for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
+		for (auto neighbor : graph.outNeighbors[nodeIndex])
 		{
-			expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - 1);
+			expandDynamicBandForward(band, neighbor, dynamicWidth - 1);
 		}
 		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
 		if (dynamicWidth > nodeSize)
 		{
-			for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.inNeighbors[nodeIndex])
 			{
-				expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
+				expandDynamicBandBackward(band, neighbor, dynamicWidth - nodeSize);
 			}
 		}
 	}
@@ -577,16 +575,16 @@ private:
 		//this means that it might not reach some nodes with distance < dynamicwidth if there's multiple paths and it arbitrarily picks the longest one first
 		if (band[nodeIndex]) return;
 		band[nodeIndex] = true;
-		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
-			expandDynamicBandBackward(band, graph.inNeighbors[nodeIndex][i], dynamicWidth - 1);
+			expandDynamicBandBackward(band, neighbor, dynamicWidth - 1);
 		}
 		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
 		if (dynamicWidth > nodeSize)
 		{
-			for (size_t i = 0; i < graph.outNeighbors[nodeIndex].size(); i++)
+			for (auto neighbor : graph.outNeighbors[nodeIndex])
 			{
-				expandDynamicBandForward(band, graph.outNeighbors[nodeIndex][i], dynamicWidth - nodeSize);
+				expandDynamicBandForward(band, neighbor, dynamicWidth - nodeSize);
 			}
 		}
 	}
@@ -629,9 +627,8 @@ private:
 		}
 		if (w == graph.nodeStart[nodeIndex])
 		{
-			for (size_t neighbori = 0; neighbori < graph.inNeighbors[nodeIndex].size(); neighbori++)
+			for (auto neighbor : graph.inNeighbors[nodeIndex].size())
 			{
-				auto neighbor = graph.inNeighbors[nodeIndex][neighbori];
 				if (!previousBand[neighbor] && !currentBand[neighbor]) continue;
 				auto u = graph.nodeEnd[neighbor]-1;
 				ScoreType previous[66];
@@ -919,9 +916,8 @@ private:
 		WordSlice previousUp;
 		bool foundOne = false;
 		bool foundOneUp = false;
-		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
-			auto neighbor = graph.inNeighbors[nodeIndex][i];
 			if (previousBand[neighbor])
 			{
 				if (!foundOneUp)
@@ -983,10 +979,10 @@ private:
 
 	bool isSource(size_t nodeIndex, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
-		for (size_t i = 0; i < graph.inNeighbors[nodeIndex].size(); i++)
+		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
-			if (currentBand[graph.inNeighbors[nodeIndex][i]]) return false;
-			if (previousBand[graph.inNeighbors[nodeIndex][i]]) return false;
+			if (currentBand[neighbor]) return false;
+			if (previousBand[neighbor]) return false;
 		}
 		return true;
 	}

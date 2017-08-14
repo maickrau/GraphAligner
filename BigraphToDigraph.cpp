@@ -1,15 +1,16 @@
 #include <iostream>
 #include <cassert>
+#include <unordered_map>
 #include "CommonUtils.h"
 #include "ssw_cpp.h"
 #include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
 
-DirectedGraph::SeedHit::SeedHit(int nodeId, size_t nodePos, size_t seqPos) : 
-nodeId(nodeId), 
-nodePos(nodePos), 
-seqPos(seqPos) 
+DirectedGraph::SeedHit::SeedHit(int nodeId, size_t nodePos, size_t seqPos) :
+nodeId(nodeId),
+nodePos(nodePos),
+seqPos(seqPos)
 {
 }
 
@@ -27,19 +28,23 @@ toIndex(to)
 {
 }
 
-DirectedGraph::DirectedGraph()
+DirectedGraph::DirectedGraph() :
+totalSequenceLength(0)
 {
 }
 
-DirectedGraph::DirectedGraph(const vg::Graph& bigraph)
+DirectedGraph::DirectedGraph(const vg::Graph& bigraph) :
+totalSequenceLength(0)
 {
-	std::map<int, std::pair<size_t, size_t>> nodeMapping;
+	std::unordered_map<int, std::pair<size_t, size_t>> nodeMapping;
+	nodeMapping.reserve(bigraph.node_size());
 	for (int i = 0; i < bigraph.node_size(); i++)
 	{
 		assert(nodeMapping.count(bigraph.node(i).id()) == 0);
 		nodeMapping[bigraph.node(i).id()] = std::make_pair(nodes.size()+1, nodes.size());
 		nodes.emplace_back(bigraph.node(i).id() * 2, bigraph.node(i).id(), true, bigraph.node(i).sequence());
 		nodes.emplace_back(bigraph.node(i).id() * 2 + 1, bigraph.node(i).id(), false, CommonUtils::ReverseComplement(bigraph.node(i).sequence()));
+		totalSequenceLength += bigraph.node(i).sequence().size() * 2;
 	}
 	for (int i = 0; i < bigraph.edge_size(); i++)
 	{
@@ -80,7 +85,8 @@ void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 	assert(nodeIdOrder.size() == nodes.size());
 	std::vector<size_t> indexOrder;
 	indexOrder.resize(nodes.size(), -1);
-	std::map<int, size_t> mapping;
+	std::unordered_map<int, size_t> mapping;
+	mapping.reserve(nodes.size());
 	for (size_t i = 0; i < nodes.size(); i++)
 	{
 		mapping[nodes[i].nodeId] = i;
@@ -95,7 +101,7 @@ void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 	for (size_t i = 0; i < indexOrder.size(); i++)
 	{
 		assert(indexOrder[i] != -1);
-		newNodes.emplace_back(nodes[indexOrder[i]]);
+		newNodes.emplace_back(std::move(nodes[indexOrder[i]]));
 		reverseIndexOrder[indexOrder[i]] = i;
 	}
 	for (size_t i = 0; i < edges.size(); i++)
@@ -108,7 +114,7 @@ void DirectedGraph::ReorderByNodeIds(const std::vector<int>& nodeIdOrder)
 		edges[i].toIndex = reverseIndexOrder[edges[i].toIndex];
 	}
 	assert(newNodes.size() == nodes.size());
-	nodes = newNodes;
+	nodes = std::move(newNodes);
 	assert(edgesPointToValidNodes());
 	assert(nodeIdsAreValid());
 }
@@ -121,10 +127,14 @@ void DirectedGraph::RemoveNodes(const std::set<int>& nodeIndices)
 	size_t offset = 0;
 	for (size_t i = 0; i < nodes.size(); i++)
 	{
-		while (nodeIndices.count(i+offset) > 0) offset++;
+		while (nodeIndices.count(i+offset) > 0)
+		{
+			totalSequenceLength	-= nodes[i+offset].sequence.size();
+			offset++;
+		}
 		assert(i+offset <= nodes.size());
 		if (i+offset == nodes.size()) break;
-		if (offset > 0) nodes[i] = nodes[i+offset];
+		if (offset > 0) nodes[i] = std::move(nodes[i+offset]);
 	}
 	assert(offset == nodeIndices.size());
 	nodes.erase(nodes.end()-offset, nodes.end());
@@ -189,9 +199,10 @@ void DirectedGraph::AddSubgraph(const DirectedGraph& subgraph)
 	}
 	for (size_t i = 0; i < subgraph.nodes.size(); i++)
 	{
-		if (existingNodes.count(subgraph.nodes[i].nodeId) == 0) 
+		if (existingNodes.count(subgraph.nodes[i].nodeId) == 0)
 		{
 			nodes.emplace_back(subgraph.nodes[i]);
+			totalSequenceLength += subgraph.nodes[i].sequence.size();
 		}
 	}
 	std::map<int, size_t> idToIndex;

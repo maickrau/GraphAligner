@@ -447,6 +447,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
 	AlignmentGraph alignmentGraph;
+	alignmentGraph.ReserveNodes(augmentedGraph.nodes.size(), augmentedGraph.totalSequenceLength);
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
 		alignmentGraph.AddNode(augmentedGraph.nodes[j].nodeId, augmentedGraph.nodes[j].sequence, !augmentedGraph.nodes[j].rightEnd);

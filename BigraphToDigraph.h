@@ -40,6 +40,7 @@ public:
 	void ConnectComponents(const std::vector<int>& previousSinks, const std::vector<int>& nextSources);
 	std::vector<SeedHit> GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const;
 	void PruneByReachability(const std::vector<int>& startNodeIds);
+	size_t totalSequenceLength;
 private:
 	void addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current);
 	std::tuple<size_t, size_t, size_t> getLocalAlignmentSsw(std::string sequence, size_t nodeIndex) const;
