@@ -1,6 +1,7 @@
 #ifndef AlignmentGraph_h
 #define AlignmentGraph_h
 
+#include <functional>
 #include <vector>
 #include <unordered_map>
 #include <tuple>
@@ -29,8 +30,8 @@ public:
 private:
 	bool loadCycleCut(std::string filename);
 	void saveCycleCut(std::string filename);
-	void getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors, std::vector<bool>& resultPreviousCut);
-	void getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents);
+	void iterateOverCycleCuttingTree(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> function);
+	void getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut);
 	void calculateCycleCutters(size_t cycleStart, int wordSize);
 	std::vector<bool> notInOrder;
 	std::vector<size_t> nodeStart;
@@ -42,7 +43,7 @@ private:
 	std::vector<std::set<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<std::vector<size_t>> cycleCuttingNodes;
-	std::vector<std::vector<std::vector<size_t>>> cycleCuttingNodePredecessor;
+	std::vector<std::vector<std::set<size_t>>> cycleCuttingNodePredecessor;
 	std::vector<std::vector<bool>> cycleCutPreviousCut;
 	std::string nodeSequences;
 	size_t dummyNodeStart;

@@ -1219,9 +1219,8 @@ private:
 			return;
 		}
 		bool source = true;
-		for (size_t i = 0; i < graph.cycleCuttingNodePredecessor[cycleCut][index].size(); i++)
+		for (auto otherIndex : graph.cycleCuttingNodePredecessor[cycleCut][index])
 		{
-			auto otherIndex = graph.cycleCuttingNodePredecessor[cycleCut][index][i];
 			if (currentBand[graph.cycleCuttingNodes[cycleCut][otherIndex]]) 
 			{
 				cutCyclesRec(j, cycleCut, otherIndex, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, previousCorrectValues);
@@ -1229,6 +1228,40 @@ private:
 			}
 		}
 		calculateNode(graph.cycleCuttingNodes[cycleCut][index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source);
+	}
+
+	void cutCyclesSimple(size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	{
+		if (graph.firstInOrder == 0) return;
+		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
+		//store the correct values here and then merge them at the end
+		std::vector<WordSlice> correctEndValues;
+		correctEndValues.resize(graph.firstInOrder);
+		for (size_t i = 1; i < graph.firstInOrder; i++)
+		{
+			assert(graph.notInOrder[i]);
+			assert(graph.cycleCuttingNodes[i].size() > 0);
+			assert(graph.cycleCuttingNodes[i][0] == i);
+			if (!currentBand[i]) continue;
+			for (size_t index = graph.cycleCuttingNodes[i].size()-1; index < graph.cycleCuttingNodes[i].size(); index--)
+			{
+				if (graph.cycleCutPreviousCut[i][index])
+				{
+					assert(graph.cycleCuttingNodes[i][index] < correctEndValues.size());
+					currentSlice[graph.nodeEnd[graph.cycleCuttingNodes[i][index]]-1] = correctEndValues[graph.cycleCuttingNodes[i][index]];
+				}
+				else
+				{
+					calculateNode(graph.cycleCuttingNodes[i][index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, false);
+				}
+			}
+			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
+		}
+		for (size_t i = 1; i < graph.firstInOrder; i++)
+		{
+			if (!currentBand[i]) continue;
+			currentSlice[graph.nodeEnd[i]-1] = correctEndValues[i];
+		}
 	}
 
 	void cutCycles(size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
@@ -1390,6 +1423,7 @@ private:
 				currentBand.assign(currentBand.size(), false);
 				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
 			}
+			// cutCyclesSimple(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
 			cutCycles(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
 			for (size_t i = graph.firstInOrder; i < graph.nodeStart.size(); i++)
 			{

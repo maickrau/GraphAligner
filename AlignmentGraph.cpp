@@ -3,6 +3,7 @@
 #include <limits>
 #include <algorithm>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/set.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include "AlignmentGraph.h"
@@ -228,115 +229,193 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 	return result;
 }
 
-void AlignmentGraph::getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents)
+void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> f)
 {
-	nodes.push_back(node);
-	parents.push_back(parent);
-	if (node < cycleCut)
+	currentStack.push_back(node);
+	auto nodeSize = nodeEnd[node]-nodeStart[node];
+	if (nodeSize < sizeLeft)
 	{
-		assert(notInOrder[node]);
-		return;
-	}
-	auto current = nodes.size()-1;
-	lengthLeft -= nodeEnd[node] - nodeStart[node];
-	if (lengthLeft > 0)
-	{
-		std::vector<size_t> neighbors;
+		sizeLeft -= nodeSize;
 		for (auto neighbor : inNeighbors[node])
 		{
-			neighbors.push_back(neighbor);
+			iterateOverCycleCuttingTree(cycleStart, neighbor, sizeLeft, currentStack, f);
 		}
-		std::sort(neighbors.begin(), neighbors.end());
-		for (auto neighbor : neighbors)
-		{
-			getCycleCutterTreeRec(cycleCut, neighbor, current, wordSize, lengthLeft, nodes, parents);
-		}
+		currentStack.pop_back();
+		return;
 	}
+	f(currentStack);
+	currentStack.pop_back();
 }
 
-bool subtreesAreIdentical(const std::vector<size_t>& nodes, const std::vector<std::vector<size_t>>& children, size_t first, size_t second)
+void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
 {
-	assert(first < nodes.size());
-	assert(second < nodes.size());
-	if (nodes[first] != nodes[second]) return false;
-	if (children[first].size() != children[second].size()) return false;
-	for (size_t i = 0; i < children[first].size(); i++)
-	{
-		if (!subtreesAreIdentical(nodes, children, children[first][i], children[second][i])) return false;
-	}
-	return true;
-}
+	std::vector<std::vector<size_t>> mergingDP;
+	mergingDP.resize(1);
+	std::vector<size_t> currentStack;
 
-void AlignmentGraph::getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors, std::vector<bool>& resultPreviousCut)
-{
-	assert(nodes.size() == parents.size());
-	std::vector<size_t> distanceFromLeaf;
-	std::vector<size_t> treeHash;
-	std::vector<std::vector<size_t>> children;
-	std::vector<size_t> uniquenessClasses;
-	std::map<size_t, std::vector<size_t>> hashToSubtree;
-	distanceFromLeaf.resize(nodes.size(), 0);
-	uniquenessClasses.resize(nodes.size(), 0);
-	children.resize(nodes.size());
-	treeHash.resize(nodes.size());
-	for (size_t i = parents.size()-1; i != 0; i--)
-	{
-		children[parents[i]].push_back(i);
-		distanceFromLeaf[parents[i]] = std::max(distanceFromLeaf[parents[i]], distanceFromLeaf[i] + 1);
-	}
-
-	for (size_t i = 0; i < nodes.size(); i++)
-	{
-		treeHash[i] = nodes[i] * (distanceFromLeaf[i] + 1);
-	}
-	for (size_t i = parents.size()-1; i != 0; i--)
-	{
-		treeHash[parents[i]] ^= treeHash[i];
-	}
-	for (size_t i = nodes.size()-1; i < nodes.size(); i--)
-	{
-		bool found = false;
-		for (size_t j = 0; j < hashToSubtree[treeHash[i]].size(); j++)
+	iterateOverCycleCuttingTree(cycleStart, cycleStart, sizeLeft, currentStack, [&mergingDP, &supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
+		if (supersequence.size() == 0)
 		{
-			if (subtreesAreIdentical(nodes, children, i, hashToSubtree[treeHash[i]][j]))
+			assert(currentStack.size() > 0);
+			supersequence = currentStack;
+			supersequencePredecessors.resize(supersequence.size());
+			for (size_t i = 0; i < supersequence.size()-1; i++)
 			{
-				uniquenessClasses[i] = hashToSubtree[treeHash[i]][j];
-				found = true;
-				break;
+				supersequencePredecessors[i].insert(i+1);
+			}
+			return;
+		}
+		assert(supersequence.size() > 0);
+		assert(currentStack.size() > 0);
+
+		assert(mergingDP.size() > 0);
+		if (mergingDP[mergingDP.size()-1].size() < currentStack.size())
+		{
+			for (size_t i = 0; i < mergingDP.size(); i++)
+			{
+				mergingDP[i].resize(currentStack.size(), 0);
 			}
 		}
-		if (!found)
+		if (mergingDP.size() < supersequence.size())
 		{
-			uniquenessClasses[i] = i;
-			hashToSubtree[treeHash[i]].push_back(i);
+			std::vector<size_t> example;
+			example.resize(currentStack.size());
+			mergingDP.resize(supersequence.size(), example);
 		}
-	}
-	std::set<size_t> uniques;
-	std::vector<size_t> uniquenessClassIndex;
-	uniquenessClassIndex.resize(nodes.size());
-	for (size_t i = 0; i < uniquenessClasses.size(); i++)
-	{
-		assert(uniquenessClasses[i] >= i);
-		assert(i == 0 || uniquenessClasses[i] != 0);
-		assert(i != 0 || uniquenessClasses[i] == 0);
-		if (uniquenessClasses[i] == i)
+		assert(mergingDP[0].size() > 0);
+		for (size_t i = 0; i < supersequence.size(); i++)
 		{
-			uniquenessClassIndex[uniquenessClasses[i]] = resultNodes.size();
-			resultNodes.push_back(nodes[uniquenessClasses[i]]);
-			resultPredecessors.emplace_back();
-			resultPreviousCut.push_back(nodes[i] < nodes[0]);
-			uniques.insert(uniquenessClasses[i]);
+			mergingDP[i][0] = i+1;
 		}
-	}
-	for (size_t i = 0; i < uniquenessClasses.size(); i++)
-	{
-		if (uniquenessClasses[i] == i)
+		for (size_t j = 0; j < currentStack.size(); j++)
 		{
-			for (size_t j = 0; j < children[i].size(); j++)
+			mergingDP[0][j] = j+1;
+		}
+		for (size_t i = 1; i < supersequence.size(); i++)
+		{
+			for (size_t j = 1; j < currentStack.size(); j++)
 			{
-				resultPredecessors[uniquenessClassIndex[i]].push_back(uniquenessClassIndex[uniquenessClasses[children[i][j]]]);
+				mergingDP[i][j] = std::min(mergingDP[i][j-1]+1, mergingDP[i-1][j]+1);
+				if (supersequence[i] == currentStack[j]) mergingDP[i][j] = std::min(mergingDP[i][j], mergingDP[i-1][j-1]+1);
 			}
 		}
+		assert(currentStack.size() > 0);
+		assert(mergingDP.size() > supersequence.size()-1);
+		assert(mergingDP[supersequence.size()-1].size() > currentStack.size()-1);
+		assert(mergingDP[supersequence.size()-1][currentStack.size()-1] >= supersequence.size());
+		std::vector<size_t> newSupersequence;
+		size_t i = supersequence.size()-1;
+		size_t j = currentStack.size()-1;
+		while (i != 0 || j != 0)
+		{
+			assert(i < mergingDP.size());
+			assert(j < mergingDP[i].size());
+			assert(i < supersequence.size());
+			assert(j < currentStack.size());
+			size_t targetScore;
+			char dir = 'L';
+			if (i > 0)
+			{
+				targetScore = mergingDP[i-1][j];
+				dir = 'L';
+			}
+			else
+			{
+				targetScore = mergingDP[i][j-1];
+				dir = 'U';
+			}
+			if (j > 0 && mergingDP[i][j-1] < targetScore)
+			{
+				targetScore = mergingDP[i][j-1];
+				dir = 'U';
+			}
+			if (i > 0 && mergingDP[i-1][j] < targetScore)
+			{
+				targetScore = mergingDP[i-1][j];
+				dir = 'L';
+			}
+			if (i > 0 && j > 0 && supersequence[i] == currentStack[j] && mergingDP[i-1][j-1] < targetScore)
+			{
+				targetScore = mergingDP[i-1][j-1];
+				dir = 'D';
+			}
+			switch(dir)
+			{
+				case 'L':
+					newSupersequence.push_back(supersequence[i]);
+					i--;
+					break;
+				case 'U':
+					newSupersequence.push_back(currentStack[j]);
+					j--;
+					break;
+				case 'D':
+					newSupersequence.push_back(supersequence[i]);
+					assert(supersequence[i] == currentStack[j]);
+					i--;
+					j--;
+					break;
+				default:
+					assert(false);
+			}
+		}
+		newSupersequence.push_back(supersequence[0]);
+		std::reverse(newSupersequence.begin(), newSupersequence.end());
+		assert(newSupersequence.size() >= supersequence.size());
+		std::vector<size_t> indexMapping;
+		indexMapping.resize(supersequence.size());
+		size_t offset = 0;
+		for (size_t i = 0; i < supersequence.size(); i++)
+		{
+			while (newSupersequence[i+offset] != supersequence[i])
+			{
+				offset++;
+				assert(i+offset < newSupersequence.size());
+			}
+			indexMapping[i] = i+offset;
+		}
+		supersequencePredecessors.resize(newSupersequence.size());
+		for (size_t i = supersequence.size()-1; i < supersequence.size(); i--) 
+		{
+			if (indexMapping[i] != i)
+			{
+				for (auto x : supersequencePredecessors[i])
+				{
+					supersequencePredecessors[indexMapping[i]].insert(indexMapping[x]);
+				}
+				supersequencePredecessors[i].clear();
+			}
+			else
+			{
+				auto news = supersequencePredecessors[i];
+				supersequencePredecessors[i].clear();
+				for (auto x : news)
+				{
+					supersequencePredecessors[i].insert(indexMapping[x]);
+				}
+			}
+		}
+		offset = 0;
+		size_t lastIndex = 0;
+		for (size_t i = 0; i < currentStack.size(); i++)
+		{
+			while (newSupersequence[i+offset] != currentStack[i])
+			{
+				offset++;
+				assert(i+offset < newSupersequence.size());
+			}
+			if (i > 1)
+			{
+				supersequencePredecessors[lastIndex].insert(i+offset);
+			}
+			lastIndex = i+offset;
+		}
+		supersequence = newSupersequence;
+	});
+
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(supersequence[i] < cycleStart);
 	}
 }
 
@@ -349,8 +428,7 @@ void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
 
 	std::vector<size_t> nodes;
 	std::vector<size_t> parents;
-	getCycleCutterTreeRec(cycleStart, cycleStart, 0, wordSize, 2*wordSize, nodes, parents);
-	getDAGFromIdenticalSubtrees(nodes, parents, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart], cycleCutPreviousCut[cycleStart]);
+	getCycleCuttersSupersequence(cycleStart, 2*wordSize, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart], cycleCutPreviousCut[cycleStart]);
 
 	assert(cycleCuttingNodes[cycleStart].size() > 0);
 	assert(cycleCuttingNodes[cycleStart][0] == cycleStart);
