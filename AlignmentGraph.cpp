@@ -256,83 +256,78 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft
 
 void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
 {
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
-		if (supersequence.size() == 0)
+	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
+	size_t supersequenceSize = 0;
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize](const std::vector<size_t>& currentStack) {
+		size_t currentPos = 0;
+		size_t stackProcessed = 0;
+		for (size_t i = 0; i < currentStack.size(); i++)
 		{
-			assert(currentStack.size() > 0);
-			supersequence = currentStack;
-			return;
-		}
-		assert(supersequence.size() > 0);
-		assert(currentStack.size() > 0);
-
-		Array2D<size_t, false> scores { supersequence.size(), currentStack.size(), std::numeric_limits<size_t>::max() };
-		Array2D<char, false> backtrace { supersequence.size(), currentStack.size(), '-' };
-
-		for (size_t i = 0; i < supersequence.size(); i++)
-		{
-			scores(i, 0) = 0;
-			backtrace(i, 0) = 'L';
-		}
-		for (size_t j = 0; j < currentStack.size(); j++)
-		{
-			scores(0, j) = j;
-			backtrace(0, j) = 'U';
-		}
-		for (size_t i = 1; i < supersequence.size(); i++)
-		{
-			for (size_t j = 1; j < currentStack.size(); j++)
+			auto list = supersequenceIndex[currentStack[i]];
+			assert(i != 0 || supersequenceSize == 0 || (list.size() > 0 && list[0] == 0));
+			if (list.size() == 0 || list.back() <= currentPos) break;
+			if (i == 0)
 			{
-				size_t value = scores(i-1, j);
-				char source = 'L';
-				if (scores(i, j-1)+1 < value)
-				{
-					value = scores(i, j-1)+1;
-					source = 'U';
-				}
-				if (supersequence[i] == currentStack[j] && scores(i-1, j-1) < value)
-				{
-					value = scores(i-1, j-1);
-					source = 'D';
-				}
-				scores(i, j) = value;
-				backtrace(i, j) = source;
+				assert(list[0] == 0);
+				stackProcessed++;
+				continue;
 			}
+			auto pos = std::upper_bound(list.begin(), list.end(), currentPos);
+			assert(pos != list.end());
+			currentPos = *pos;
+			stackProcessed++;
 		}
-		std::vector<size_t> newSupersequence;
-		size_t i = supersequence.size()-1;
-		size_t j = currentStack.size()-1;
-		while (i != 0 || j != 0)
+
+		for (size_t i = stackProcessed; i < currentStack.size(); i++)
 		{
-			assert(i < supersequence.size());
-			assert(j < currentStack.size());
-			char dir = backtrace(i, j);
-			switch(dir)
-			{
-				case 'L':
-					newSupersequence.push_back(supersequence[i]);
-					i--;
-					break;
-				case 'U':
-					newSupersequence.push_back(currentStack[j]);
-					j--;
-					break;
-				case 'D':
-					newSupersequence.push_back(supersequence[i]);
-					assert(supersequence[i] == currentStack[j]);
-					i--;
-					j--;
-					break;
-				default:
-					assert(false);
-			}
+			supersequenceIndex[currentStack[i]].push_back(supersequenceSize);
+			supersequenceSize++;
 		}
-		assert(supersequence[0] == currentStack[0]);
-		newSupersequence.push_back(supersequence[0]);
-		std::reverse(newSupersequence.begin(), newSupersequence.end());
-		assert(newSupersequence.size() >= supersequence.size());
-		supersequence = std::move(newSupersequence);
 	});
+
+	std::vector<size_t> toobigSupersequence;
+	toobigSupersequence.resize(supersequenceSize, std::numeric_limits<size_t>::max());
+	for (auto pair : supersequenceIndex)
+	{
+		for (auto pos : pair.second)
+		{
+			assert(pos < toobigSupersequence.size());
+			assert(toobigSupersequence[pos] == std::numeric_limits<size_t>::max());
+			toobigSupersequence[pos] = pair.first;
+		}
+	}
+
+	#ifndef NDEBUG
+	for (size_t i = 0; i < toobigSupersequence.size(); i++)
+	{
+		assert(toobigSupersequence[i] != std::numeric_limits<size_t>::max());
+	}
+	#endif
+
+	supersequence = toobigSupersequence;
+	// std::vector<bool> used;
+	// used.resize(toobigSupersequence.size(), false);
+	// used[0] = true;
+	// iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&toobigSupersequence, &used](const std::vector<size_t>& currentStack) {
+	// 	size_t offset = 0;
+	// 	assert(toobigSupersequence[0] == currentStack[0]);
+	// 	assert(toobigSupersequence.size() >= currentStack.size());
+	// 	for (size_t i = 1; i < currentStack.size(); i++)
+	// 	{
+	// 		while (toobigSupersequence[i+offset] != currentStack[i])
+	// 		{
+	// 			offset++;
+	// 			assert(i+offset < toobigSupersequence.size());
+	// 		}
+	// 		used[i+offset] = true;
+	// 	}
+	// });
+
+	// supersequence.reserve(toobigSupersequence.size());
+	// for (size_t i = 0; i < toobigSupersequence.size(); i++)
+	// {
+	// 	if (used[i]) supersequence.push_back(toobigSupersequence[i]);
+	// }
 
 	supersequencePredecessors.resize(supersequence.size());
 
