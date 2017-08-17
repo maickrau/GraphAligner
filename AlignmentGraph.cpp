@@ -6,6 +6,7 @@
 #include <boost/serialization/set.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+#include "2dArray.h"
 #include "AlignmentGraph.h"
 #include "TopologicalSort.h"
 
@@ -229,7 +230,7 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 	return result;
 }
 
-void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> f)
+void AlignmentGraph::iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> f)
 {
 	currentStack.push_back(node);
 	auto nodeSize = nodeEnd[node]-nodeStart[node];
@@ -238,7 +239,7 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, size_t node,
 		sizeLeft -= nodeSize;
 		for (auto neighbor : inNeighbors[node])
 		{
-			iterateOverCycleCuttingTree(cycleStart, neighbor, sizeLeft, currentStack, f);
+			iterateOverCycleCuttingTreeRec(cycleStart, neighbor, sizeLeft, currentStack, f);
 		}
 		currentStack.pop_back();
 		return;
@@ -247,13 +248,15 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, size_t node,
 	currentStack.pop_back();
 }
 
+void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft, std::function<void(const std::vector<size_t>&)> f)
+{
+	std::vector<size_t> currentStack;
+	iterateOverCycleCuttingTreeRec(cycleStart, cycleStart, sizeLeft, currentStack, f);
+}
+
 void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
 {
-	std::vector<std::vector<size_t>> mergingDP;
-	mergingDP.resize(1);
-	std::vector<size_t> currentStack;
-
-	iterateOverCycleCuttingTree(cycleStart, cycleStart, sizeLeft, currentStack, [&mergingDP, &supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
 		if (supersequence.size() == 0)
 		{
 			assert(currentStack.size() > 0);
@@ -268,77 +271,47 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 		assert(supersequence.size() > 0);
 		assert(currentStack.size() > 0);
 
-		assert(mergingDP.size() > 0);
-		if (mergingDP[mergingDP.size()-1].size() < currentStack.size())
-		{
-			for (size_t i = 0; i < mergingDP.size(); i++)
-			{
-				mergingDP[i].resize(currentStack.size(), 0);
-			}
-		}
-		if (mergingDP.size() < supersequence.size())
-		{
-			std::vector<size_t> example;
-			example.resize(currentStack.size());
-			mergingDP.resize(supersequence.size(), example);
-		}
-		assert(mergingDP[0].size() > 0);
+		Array2D<size_t, false> scores { supersequence.size(), currentStack.size(), std::numeric_limits<size_t>::max() };
+		Array2D<char, false> backtrace { supersequence.size(), currentStack.size(), '-' };
+
 		for (size_t i = 0; i < supersequence.size(); i++)
 		{
-			mergingDP[i][0] = i+1;
+			scores(i, 0) = 0;
+			backtrace(i, 0) = 'L';
 		}
 		for (size_t j = 0; j < currentStack.size(); j++)
 		{
-			mergingDP[0][j] = j+1;
+			scores(0, j) = j;
+			backtrace(0, j) = 'U';
 		}
 		for (size_t i = 1; i < supersequence.size(); i++)
 		{
 			for (size_t j = 1; j < currentStack.size(); j++)
 			{
-				mergingDP[i][j] = std::min(mergingDP[i][j-1]+1, mergingDP[i-1][j]+1);
-				if (supersequence[i] == currentStack[j]) mergingDP[i][j] = std::min(mergingDP[i][j], mergingDP[i-1][j-1]+1);
+				size_t value = scores(i-1, j);
+				char source = 'L';
+				if (scores(i, j-1)+1 < value)
+				{
+					value = scores(i, j-1)+1;
+					source = 'U';
+				}
+				if (supersequence[i] == currentStack[j] && scores(i-1, j-1) < value)
+				{
+					value = scores(i-1, j-1);
+					source = 'D';
+				}
+				scores(i, j) = value;
+				backtrace(i, j) = source;
 			}
 		}
-		assert(currentStack.size() > 0);
-		assert(mergingDP.size() > supersequence.size()-1);
-		assert(mergingDP[supersequence.size()-1].size() > currentStack.size()-1);
-		assert(mergingDP[supersequence.size()-1][currentStack.size()-1] >= supersequence.size());
 		std::vector<size_t> newSupersequence;
 		size_t i = supersequence.size()-1;
 		size_t j = currentStack.size()-1;
 		while (i != 0 || j != 0)
 		{
-			assert(i < mergingDP.size());
-			assert(j < mergingDP[i].size());
 			assert(i < supersequence.size());
 			assert(j < currentStack.size());
-			size_t targetScore;
-			char dir = 'L';
-			if (i > 0)
-			{
-				targetScore = mergingDP[i-1][j];
-				dir = 'L';
-			}
-			else
-			{
-				targetScore = mergingDP[i][j-1];
-				dir = 'U';
-			}
-			if (j > 0 && mergingDP[i][j-1] < targetScore)
-			{
-				targetScore = mergingDP[i][j-1];
-				dir = 'U';
-			}
-			if (i > 0 && mergingDP[i-1][j] < targetScore)
-			{
-				targetScore = mergingDP[i-1][j];
-				dir = 'L';
-			}
-			if (i > 0 && j > 0 && supersequence[i] == currentStack[j] && mergingDP[i-1][j-1] < targetScore)
-			{
-				targetScore = mergingDP[i-1][j-1];
-				dir = 'D';
-			}
+			char dir = backtrace(i, j);
 			switch(dir)
 			{
 				case 'L':
@@ -359,6 +332,7 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 					assert(false);
 			}
 		}
+		assert(supersequence[0] == currentStack[0]);
 		newSupersequence.push_back(supersequence[0]);
 		std::reverse(newSupersequence.begin(), newSupersequence.end());
 		assert(newSupersequence.size() >= supersequence.size());
