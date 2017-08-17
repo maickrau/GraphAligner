@@ -234,7 +234,7 @@ void AlignmentGraph::iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t no
 {
 	currentStack.push_back(node);
 	auto nodeSize = nodeEnd[node]-nodeStart[node];
-	if (nodeSize < sizeLeft)
+	if (node >= cycleStart && nodeSize < sizeLeft)
 	{
 		sizeLeft -= nodeSize;
 		for (auto neighbor : inNeighbors[node])
@@ -256,16 +256,11 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft
 
 void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
 {
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
 		if (supersequence.size() == 0)
 		{
 			assert(currentStack.size() > 0);
 			supersequence = currentStack;
-			supersequencePredecessors.resize(supersequence.size());
-			for (size_t i = 0; i < supersequence.size()-1; i++)
-			{
-				supersequencePredecessors[i].insert(i+1);
-			}
 			return;
 		}
 		assert(supersequence.size() > 0);
@@ -336,55 +331,26 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 		newSupersequence.push_back(supersequence[0]);
 		std::reverse(newSupersequence.begin(), newSupersequence.end());
 		assert(newSupersequence.size() >= supersequence.size());
-		std::vector<size_t> indexMapping;
-		indexMapping.resize(supersequence.size());
+		supersequence = std::move(newSupersequence);
+	});
+
+	supersequencePredecessors.resize(supersequence.size());
+
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
 		size_t offset = 0;
-		for (size_t i = 0; i < supersequence.size(); i++)
-		{
-			while (newSupersequence[i+offset] != supersequence[i])
-			{
-				offset++;
-				assert(i+offset < newSupersequence.size());
-			}
-			indexMapping[i] = i+offset;
-		}
-		supersequencePredecessors.resize(newSupersequence.size());
-		for (size_t i = supersequence.size()-1; i < supersequence.size(); i--) 
-		{
-			if (indexMapping[i] != i)
-			{
-				for (auto x : supersequencePredecessors[i])
-				{
-					supersequencePredecessors[indexMapping[i]].insert(indexMapping[x]);
-				}
-				supersequencePredecessors[i].clear();
-			}
-			else
-			{
-				auto news = supersequencePredecessors[i];
-				supersequencePredecessors[i].clear();
-				for (auto x : news)
-				{
-					supersequencePredecessors[i].insert(indexMapping[x]);
-				}
-			}
-		}
-		offset = 0;
 		size_t lastIndex = 0;
-		for (size_t i = 0; i < currentStack.size(); i++)
+		assert(supersequence[0] == currentStack[0]);
+		assert(supersequence.size() >= currentStack.size());
+		for (size_t i = 1; i < currentStack.size(); i++)
 		{
-			while (newSupersequence[i+offset] != currentStack[i])
+			while (supersequence[i+offset] != currentStack[i])
 			{
 				offset++;
-				assert(i+offset < newSupersequence.size());
+				assert(i+offset < supersequence.size());
 			}
-			if (i > 1)
-			{
-				supersequencePredecessors[lastIndex].insert(i+offset);
-			}
+			supersequencePredecessors[lastIndex].insert(i+offset);
 			lastIndex = i+offset;
 		}
-		supersequence = newSupersequence;
 	});
 
 	for (size_t i = 0; i < supersequence.size(); i++)
