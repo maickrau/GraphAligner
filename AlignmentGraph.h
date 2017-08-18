@@ -28,6 +28,7 @@ public:
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
+	void calculateCycleCuts(int wordSize);
 	bool loadCycleCut(std::string filename);
 	void saveCycleCut(std::string filename);
 	void iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> function);

@@ -156,25 +156,13 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	{
 		if (!loadCycleCut(cutFilename))
 		{
-			cycleCuttingNodes.resize(firstInOrder);
-			cycleCuttingNodePredecessor.resize(firstInOrder);
-			cycleCutPreviousCut.resize(firstInOrder);
-			for (size_t i = 1; i < firstInOrder; i++)
-			{
-				calculateCycleCutters(i, wordSize);
-			}
+			calculateCycleCuts(wordSize);
 			saveCycleCut(cutFilename);
 		}
 	}
 	else
 	{
-		cycleCuttingNodes.resize(firstInOrder);
-		cycleCuttingNodePredecessor.resize(firstInOrder);
-		cycleCutPreviousCut.resize(firstInOrder);
-		for (size_t i = 1; i < firstInOrder; i++)
-		{
-			calculateCycleCutters(i, wordSize);
-		}
+		calculateCycleCuts(wordSize);
 	}
 	if (firstInOrder != 0)
 	{
@@ -191,6 +179,19 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 			totalCuttersbp += cuttersbp;
 		}
 		std::cerr << "total cut: " << totalCuttersbp << "bp (" << (double)totalCuttersbp / (double)nodeSequences.size() * 100 << "%)" << std::endl;
+	}
+}
+
+void AlignmentGraph::calculateCycleCuts(int wordSize)
+{
+	std::cerr << "calculating cycle cuts" << std::endl;
+	cycleCuttingNodes.resize(firstInOrder);
+	cycleCuttingNodePredecessor.resize(firstInOrder);
+	cycleCutPreviousCut.resize(firstInOrder);
+	for (size_t i = 1; i < firstInOrder; i++)
+	{
+		std::cerr << "cut " << i << "/" << firstInOrder << std::endl;
+		calculateCycleCutters(i, wordSize);
 	}
 }
 
@@ -259,19 +260,23 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
 	size_t supersequenceSize = 0;
 	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize](const std::vector<size_t>& currentStack) {
+		assert(currentStack.size() > 0);
 		size_t currentPos = 0;
-		size_t stackProcessed = 0;
-		for (size_t i = 0; i < currentStack.size(); i++)
+		if (supersequenceSize == 0)
+		{
+			supersequenceIndex[currentStack[0]].push_back(supersequenceSize);
+			supersequenceSize++;
+		}
+		else
+		{
+			auto list = supersequenceIndex[currentStack[0]];
+			assert(list.size() > 0 && list[0] == 0);
+		}
+		size_t stackProcessed = 1;
+		for (size_t i = 1; i < currentStack.size(); i++)
 		{
 			auto list = supersequenceIndex[currentStack[i]];
-			assert(i != 0 || supersequenceSize == 0 || (list.size() > 0 && list[0] == 0));
 			if (list.size() == 0 || list.back() <= currentPos) break;
-			if (i == 0)
-			{
-				assert(list[0] == 0);
-				stackProcessed++;
-				continue;
-			}
 			auto pos = std::upper_bound(list.begin(), list.end(), currentPos);
 			assert(pos != list.end());
 			currentPos = *pos;
