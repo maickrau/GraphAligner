@@ -255,38 +255,43 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft
 	iterateOverCycleCuttingTreeRec(cycleStart, cycleStart, sizeLeft, currentStack, f);
 }
 
-std::vector<size_t> AlignmentGraph::getSupersequenceIndexing(size_t cycleStart, int sizeLeft)
+std::vector<size_t> AlignmentGraph::getSupersequenceIndexingAndPredecessors(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors)
 {
 	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
 	size_t supersequenceSize = 0;
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize, &predecessors](const std::vector<size_t>& currentStack) {
 		assert(currentStack.size() > 0);
 		size_t currentPos = 0;
 		if (supersequenceSize == 0)
 		{
 			supersequenceIndex[currentStack[0]].push_back(supersequenceSize);
+			predecessors.emplace_back();
 			supersequenceSize++;
 		}
 		else
 		{
-			auto list = supersequenceIndex[currentStack[0]];
+			auto& list = supersequenceIndex[currentStack[0]];
 			assert(list.size() > 0 && list[0] == 0);
 		}
 		size_t stackProcessed = 1;
 		for (size_t i = 1; i < currentStack.size(); i++)
 		{
-			auto list = supersequenceIndex[currentStack[i]];
+			auto& list = supersequenceIndex[currentStack[i]];
 			if (list.size() == 0 || list.back() <= currentPos) break;
 			auto pos = std::upper_bound(list.begin(), list.end(), currentPos);
 			assert(pos != list.end());
+			predecessors[currentPos].insert(*pos);
 			currentPos = *pos;
 			stackProcessed++;
 		}
 
 		for (size_t i = stackProcessed; i < currentStack.size(); i++)
 		{
+			predecessors[currentPos].insert(supersequenceSize);
+			currentPos = supersequenceSize;
 			supersequenceIndex[currentStack[i]].push_back(supersequenceSize);
 			supersequenceSize++;
+			predecessors.emplace_back();
 		}
 	});
 
@@ -301,6 +306,7 @@ std::vector<size_t> AlignmentGraph::getSupersequenceIndexing(size_t cycleStart, 
 			toobigSupersequence[pos] = pair.first;
 		}
 	}
+	assert(predecessors.size() == toobigSupersequence.size());
 
 	#ifndef NDEBUG
 	for (size_t i = 0; i < toobigSupersequence.size(); i++)
@@ -309,30 +315,6 @@ std::vector<size_t> AlignmentGraph::getSupersequenceIndexing(size_t cycleStart, 
 	}
 	#endif
 
-	// supersequence = toobigSupersequence;
-	// std::vector<bool> used;
-	// used.resize(toobigSupersequence.size(), false);
-	// used[0] = true;
-	// iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&toobigSupersequence, &used](const std::vector<size_t>& currentStack) {
-	// 	size_t offset = 0;
-	// 	assert(toobigSupersequence[0] == currentStack[0]);
-	// 	assert(toobigSupersequence.size() >= currentStack.size());
-	// 	for (size_t i = 1; i < currentStack.size(); i++)
-	// 	{
-	// 		while (toobigSupersequence[i+offset] != currentStack[i])
-	// 		{
-	// 			offset++;
-	// 			assert(i+offset < toobigSupersequence.size());
-	// 		}
-	// 		used[i+offset] = true;
-	// 	}
-	// });
-
-	// supersequence.reserve(toobigSupersequence.size());
-	// for (size_t i = 0; i < toobigSupersequence.size(); i++)
-	// {
-	// 	if (used[i]) supersequence.push_back(toobigSupersequence[i]);
-	// }
 	return toobigSupersequence;
 }
 
@@ -356,17 +338,16 @@ void AlignmentGraph::getPredecessorsFromSupersequence(size_t cycleStart, int siz
 			lastIndex = i+offset;
 		}
 	});
-
-	for (size_t i = 0; i < supersequence.size(); i++)
-	{
-		previousCut.push_back(supersequence[i] < cycleStart);
-	}
 }
 
 void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
 {
-	supersequence = getSupersequenceIndexing(cycleStart, sizeLeft);
-	getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
+	supersequence = getSupersequenceIndexingAndPredecessors(cycleStart, sizeLeft, supersequencePredecessors);
+	// getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(supersequence[i] < cycleStart);
+	}
 }
 
 void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)

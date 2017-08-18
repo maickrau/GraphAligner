@@ -31,7 +31,7 @@ private:
 	void calculateCycleCuts(int wordSize);
 	bool loadCycleCut(std::string filename);
 	void saveCycleCut(std::string filename);
-	std::vector<size_t> getSupersequenceIndexing(size_t cycleStart, int sizeLeft);
+	std::vector<size_t> getSupersequenceIndexingAndPredecessors(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors);
 	void getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, const std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut);
 	void iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> function);
 	void iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft, std::function<void(const std::vector<size_t>&)> function);
