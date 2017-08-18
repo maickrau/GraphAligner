@@ -255,7 +255,7 @@ void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft
 	iterateOverCycleCuttingTreeRec(cycleStart, cycleStart, sizeLeft, currentStack, f);
 }
 
-void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
+std::vector<size_t> AlignmentGraph::getSupersequenceIndexing(size_t cycleStart, int sizeLeft)
 {
 	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
 	size_t supersequenceSize = 0;
@@ -309,7 +309,7 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 	}
 	#endif
 
-	supersequence = toobigSupersequence;
+	// supersequence = toobigSupersequence;
 	// std::vector<bool> used;
 	// used.resize(toobigSupersequence.size(), false);
 	// used[0] = true;
@@ -333,7 +333,11 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 	// {
 	// 	if (used[i]) supersequence.push_back(toobigSupersequence[i]);
 	// }
+	return toobigSupersequence;
+}
 
+void AlignmentGraph::getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, const std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
+{
 	supersequencePredecessors.resize(supersequence.size());
 
 	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
@@ -357,6 +361,12 @@ void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLef
 	{
 		previousCut.push_back(supersequence[i] < cycleStart);
 	}
+}
+
+void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
+{
+	supersequence = getSupersequenceIndexing(cycleStart, sizeLeft);
+	getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
 }
 
 void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
