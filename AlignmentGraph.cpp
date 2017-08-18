@@ -274,15 +274,20 @@ std::vector<size_t> AlignmentGraph::getSupersequenceIndexingAndPredecessors(size
 			assert(list.size() > 0 && list[0] == 0);
 		}
 		size_t stackProcessed = 1;
-		for (size_t i = 1; i < currentStack.size(); i++)
+		for (size_t i = 1; i < currentStack.size();)
 		{
 			auto& list = supersequenceIndex[currentStack[i]];
 			if (list.size() == 0 || list.back() <= currentPos) break;
 			auto pos = std::upper_bound(list.begin(), list.end(), currentPos);
 			assert(pos != list.end());
-			predecessors[currentPos].insert(*pos);
-			currentPos = *pos;
-			stackProcessed++;
+			do
+			{
+				predecessors[currentPos].insert(*pos);
+				currentPos = *pos;
+				stackProcessed++;
+				++pos;
+				i++;
+			} while (pos != list.end() && i < currentStack.size() && currentStack[i-1] == currentStack[i]);
 		}
 
 		for (size_t i = stackProcessed; i < currentStack.size(); i++)
