@@ -3,9 +3,12 @@
 
 #include <functional>
 #include <vector>
+#include <set>
 #include <unordered_map>
 #include <tuple>
 #include "ThreadReadAssertion.h"
+
+class CycleCutCalculation;
 
 class AlignmentGraph
 {
@@ -19,6 +22,20 @@ public:
 		int nodeId;
 		size_t nodePos;
 	};
+	class CycleCut
+	{
+	public:
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version)
+		{
+			ar & nodes;
+			ar & predecessors;
+			ar & previousCut;
+		}
+		std::vector<size_t> nodes;
+		std::vector<std::set<size_t>> predecessors;
+		std::vector<bool> previousCut;
+	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t totalSequenceLength);
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
@@ -31,12 +48,7 @@ private:
 	void calculateCycleCuts(int wordSize);
 	bool loadCycleCut(std::string filename);
 	void saveCycleCut(std::string filename);
-	std::vector<size_t> getSupersequenceIndexingAndPredecessors(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors);
-	void getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, const std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut);
-	void iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> function);
-	void iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft, std::function<void(const std::vector<size_t>&)> function);
-	void getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut);
-	void calculateCycleCutters(size_t cycleStart, int wordSize);
+	void calculateCycleCutters(const CycleCutCalculation& cutCalculator, size_t cycleStart, int wordSize);
 	std::vector<bool> notInOrder;
 	std::vector<size_t> nodeStart;
 	std::vector<size_t> nodeEnd;
@@ -46,17 +58,17 @@ private:
 	std::vector<std::set<size_t>> inNeighbors;
 	std::vector<std::set<size_t>> outNeighbors;
 	std::vector<bool> reverse;
-	std::vector<std::vector<size_t>> cycleCuttingNodes;
-	std::vector<std::vector<std::set<size_t>>> cycleCuttingNodePredecessor;
-	std::vector<std::vector<bool>> cycleCutPreviousCut;
+	std::vector<CycleCut> cuts;
 	std::string nodeSequences;
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
 	bool finalized;
 	size_t firstInOrder;
 
+	friend class CycleCutCalculation;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAligner;
 };
+
 
 #endif

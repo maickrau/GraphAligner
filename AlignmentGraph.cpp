@@ -9,6 +9,7 @@
 #include "2dArray.h"
 #include "AlignmentGraph.h"
 #include "TopologicalSort.h"
+#include "CycleCutCalculation.h"
 
 AlignmentGraph::AlignmentGraph() :
 nodeStart(),
@@ -168,14 +169,14 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	{
 		std::cerr << "cycle cuts:" << std::endl;
 		size_t totalCuttersbp = 0;
-		for (size_t i = 1; i < cycleCuttingNodes.size(); i++)
+		for (size_t i = 1; i < cuts.size(); i++)
 		{
 			size_t cuttersbp = 0;
-			for (size_t j = 0; j < cycleCuttingNodes[i].size(); j++)
+			for (size_t j = 0; j < cuts[i].nodes.size(); j++)
 			{
-				cuttersbp += nodeEnd[cycleCuttingNodes[i][j]] - nodeStart[cycleCuttingNodes[i][j]];
+				cuttersbp += nodeEnd[cuts[i].nodes[j]] - nodeStart[cuts[i].nodes[j]];
 			}
-			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cycleCuttingNodes[i].size() << ", " << cuttersbp << "bp" << std::endl;
+			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cuts[i].nodes.size() << ", " << cuttersbp << "bp" << std::endl;
 			totalCuttersbp += cuttersbp;
 		}
 		std::cerr << "total cut: " << totalCuttersbp << "bp (" << (double)totalCuttersbp / (double)nodeSequences.size() * 100 << "%)" << std::endl;
@@ -184,14 +185,13 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 
 void AlignmentGraph::calculateCycleCuts(int wordSize)
 {
+	CycleCutCalculation cutCalculator(*this);
 	std::cerr << "calculating cycle cuts" << std::endl;
-	cycleCuttingNodes.resize(firstInOrder);
-	cycleCuttingNodePredecessor.resize(firstInOrder);
-	cycleCutPreviousCut.resize(firstInOrder);
+	cuts.resize(firstInOrder);
 	for (size_t i = 1; i < firstInOrder; i++)
 	{
-		std::cerr << "cut " << i << "/" << firstInOrder << std::endl;
-		calculateCycleCutters(i, wordSize);
+		std::cerr << "cut " << i << "/" << firstInOrder << " node id " << nodeIDs[i] << std::endl;
+		calculateCycleCutters(cutCalculator, i, wordSize);
 	}
 }
 
@@ -199,9 +199,7 @@ void AlignmentGraph::saveCycleCut(std::string filename)
 {
 	std::ofstream file {filename};
 	boost::archive::text_oarchive oa(file);
-	oa << cycleCuttingNodes;
-	oa << cycleCuttingNodePredecessor;
-	oa << cycleCutPreviousCut;
+	oa << cuts;
 }
 
 bool AlignmentGraph::loadCycleCut(std::string filename)
@@ -209,9 +207,7 @@ bool AlignmentGraph::loadCycleCut(std::string filename)
 	std::ifstream file {filename};
 	if (!file.good()) return false;
 	boost::archive::text_iarchive ia(file);
-	ia >> cycleCuttingNodes;
-	ia >> cycleCuttingNodePredecessor;
-	ia >> cycleCutPreviousCut;
+	ia >> cuts;
 	return true;
 }
 
@@ -231,144 +227,18 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 	return result;
 }
 
-void AlignmentGraph::iterateOverCycleCuttingTreeRec(size_t cycleStart, size_t node, int sizeLeft, std::vector<size_t>& currentStack, std::function<void(const std::vector<size_t>&)> f)
+void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalculation, size_t cycleStart, int wordSize)
 {
-	currentStack.push_back(node);
-	auto nodeSize = nodeEnd[node]-nodeStart[node];
-	if (node >= cycleStart && nodeSize < sizeLeft)
-	{
-		sizeLeft -= nodeSize;
-		for (auto neighbor : inNeighbors[node])
-		{
-			iterateOverCycleCuttingTreeRec(cycleStart, neighbor, sizeLeft, currentStack, f);
-		}
-		currentStack.pop_back();
-		return;
-	}
-	f(currentStack);
-	currentStack.pop_back();
-}
+	assert(cuts.size() > cycleStart);
+	assert(cuts[cycleStart].nodes.size() == 0);
+	assert(cuts[cycleStart].predecessors.size() == 0);
+	assert(cuts[cycleStart].previousCut.size() == 0);
 
-void AlignmentGraph::iterateOverCycleCuttingTree(size_t cycleStart, int sizeLeft, std::function<void(const std::vector<size_t>&)> f)
-{
-	std::vector<size_t> currentStack;
-	iterateOverCycleCuttingTreeRec(cycleStart, cycleStart, sizeLeft, currentStack, f);
-}
+	cuts[cycleStart] = cutCalculation.GetCycleCut(cycleStart, wordSize);
 
-std::vector<size_t> AlignmentGraph::getSupersequenceIndexingAndPredecessors(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors)
-{
-	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
-	size_t supersequenceSize = 0;
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize, &predecessors](const std::vector<size_t>& currentStack) {
-		assert(currentStack.size() > 0);
-		size_t currentPos = 0;
-		if (supersequenceSize == 0)
-		{
-			supersequenceIndex[currentStack[0]].push_back(supersequenceSize);
-			predecessors.emplace_back();
-			supersequenceSize++;
-		}
-		else
-		{
-			auto& list = supersequenceIndex[currentStack[0]];
-			assert(list.size() > 0 && list[0] == 0);
-		}
-		size_t stackProcessed = 1;
-		for (size_t i = 1; i < currentStack.size();)
-		{
-			auto& list = supersequenceIndex[currentStack[i]];
-			if (list.size() == 0 || list.back() <= currentPos) break;
-			auto pos = std::upper_bound(list.begin(), list.end(), currentPos);
-			assert(pos != list.end());
-			do
-			{
-				predecessors[currentPos].insert(*pos);
-				currentPos = *pos;
-				stackProcessed++;
-				++pos;
-				i++;
-			} while (pos != list.end() && i < currentStack.size() && currentStack[i-1] == currentStack[i]);
-		}
-
-		for (size_t i = stackProcessed; i < currentStack.size(); i++)
-		{
-			predecessors[currentPos].insert(supersequenceSize);
-			currentPos = supersequenceSize;
-			supersequenceIndex[currentStack[i]].push_back(supersequenceSize);
-			supersequenceSize++;
-			predecessors.emplace_back();
-		}
-	});
-
-	std::vector<size_t> toobigSupersequence;
-	toobigSupersequence.resize(supersequenceSize, std::numeric_limits<size_t>::max());
-	for (auto pair : supersequenceIndex)
-	{
-		for (auto pos : pair.second)
-		{
-			assert(pos < toobigSupersequence.size());
-			assert(toobigSupersequence[pos] == std::numeric_limits<size_t>::max());
-			toobigSupersequence[pos] = pair.first;
-		}
-	}
-	assert(predecessors.size() == toobigSupersequence.size());
-
-	#ifndef NDEBUG
-	for (size_t i = 0; i < toobigSupersequence.size(); i++)
-	{
-		assert(toobigSupersequence[i] != std::numeric_limits<size_t>::max());
-	}
-	#endif
-
-	return toobigSupersequence;
-}
-
-void AlignmentGraph::getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, const std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
-{
-	supersequencePredecessors.resize(supersequence.size());
-
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
-		size_t offset = 0;
-		size_t lastIndex = 0;
-		assert(supersequence[0] == currentStack[0]);
-		assert(supersequence.size() >= currentStack.size());
-		for (size_t i = 1; i < currentStack.size(); i++)
-		{
-			while (supersequence[i+offset] != currentStack[i])
-			{
-				offset++;
-				assert(i+offset < supersequence.size());
-			}
-			supersequencePredecessors[lastIndex].insert(i+offset);
-			lastIndex = i+offset;
-		}
-	});
-}
-
-void AlignmentGraph::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut)
-{
-	supersequence = getSupersequenceIndexingAndPredecessors(cycleStart, sizeLeft, supersequencePredecessors);
-	// getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
-	for (size_t i = 0; i < supersequence.size(); i++)
-	{
-		previousCut.push_back(supersequence[i] < cycleStart);
-	}
-}
-
-void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
-{
-	assert(cycleCuttingNodes.size() > cycleStart);
-	assert(cycleCuttingNodePredecessor.size() > cycleStart);
-	assert(cycleCuttingNodes[cycleStart].size() == 0);
-	assert(cycleCuttingNodePredecessor[cycleStart].size() == 0);
-
-	std::vector<size_t> nodes;
-	std::vector<size_t> parents;
-	getCycleCuttersSupersequence(cycleStart, 2*wordSize, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart], cycleCutPreviousCut[cycleStart]);
-
-	assert(cycleCuttingNodes[cycleStart].size() > 0);
-	assert(cycleCuttingNodes[cycleStart][0] == cycleStart);
-	assert(cycleCuttingNodes[cycleStart].size() == cycleCuttingNodePredecessor[cycleStart].size());
-	assert(cycleCuttingNodePredecessor[cycleStart].size() == 1 || cycleCuttingNodePredecessor[cycleStart][0].size() > 0);
-	assert(cycleCutPreviousCut[cycleStart].size() == cycleCuttingNodes[cycleStart].size());
+	assert(cuts[cycleStart].nodes.size() > 0);
+	assert(cuts[cycleStart].predecessors.size() == cuts[cycleStart].nodes.size());
+	assert(cuts[cycleStart].previousCut.size() == cuts[cycleStart].nodes.size());
+	assert(cuts[cycleStart].nodes[0] == cycleStart);
+	assert(cuts[cycleStart].predecessors.size() == 1 || cuts[cycleStart].predecessors[0].size() > 0);
 }

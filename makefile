@@ -7,9 +7,9 @@ BINDIR=bin
 
 LIBS=-lm -lprotobuf -lz -lboost_serialization
 
-DEPS = vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h BigraphToDigraph.h mfvs_graph.h mfvs_utils.h stream.hpp 2dArray.h SparseBoolMatrix.h SparseMatrix.h ssw_cpp.h Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h
+DEPS = vg.pb.h fastqloader.h GraphAligner.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h BigraphToDigraph.h mfvs_graph.h mfvs_utils.h stream.hpp 2dArray.h SparseBoolMatrix.h SparseMatrix.h ssw_cpp.h Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h CycleCutCalculation.h
 
-_OBJ = Aligner.o GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o mfvs_graph.o mfvs_utils.o BigraphToDigraph.o ssw_cpp.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o
+_OBJ = Aligner.o GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o mfvs_graph.o mfvs_utils.o BigraphToDigraph.o ssw_cpp.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o CycleCutCalculation.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
 $(ODIR)/%.o: %.cpp $(DEPS)
