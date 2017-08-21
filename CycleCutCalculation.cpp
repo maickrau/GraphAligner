@@ -2,6 +2,7 @@
 #include <algorithm>
 #include "AlignmentGraph.h"
 #include "CycleCutCalculation.h"
+#include "2dArray.h"
 
 CycleCutCalculation::CycleCutCalculation(const AlignmentGraph& graph) : graph(graph)
 {
@@ -121,7 +122,100 @@ void CycleCutCalculation::getPredecessorsFromSupersequence(size_t cycleStart, in
 	});
 }
 
-void CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+std::vector<size_t> CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft) const
+{
+	std::vector<size_t> supersequence;
+	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
+		if (supersequence.size() == 0)
+		{
+			assert(currentStack.size() > 0);
+			supersequence = currentStack;
+			return;
+		}
+		assert(supersequence.size() > 0);
+		assert(currentStack.size() > 0);
+
+		Array2D<size_t, false> scores { supersequence.size(), currentStack.size(), std::numeric_limits<size_t>::max() };
+		Array2D<char, false> backtrace { supersequence.size(), currentStack.size(), '-' };
+
+		for (size_t i = 0; i < supersequence.size(); i++)
+		{
+			scores(i, 0) = 0;
+			backtrace(i, 0) = 'L';
+		}
+		for (size_t j = 0; j < currentStack.size(); j++)
+		{
+			scores(0, j) = j;
+			backtrace(0, j) = 'U';
+		}
+		for (size_t i = 1; i < supersequence.size(); i++)
+		{
+			for (size_t j = 1; j < currentStack.size(); j++)
+			{
+				size_t value = scores(i-1, j);
+				char source = 'L';
+				if (scores(i, j-1)+1 < value)
+				{
+					value = scores(i, j-1)+1;
+					source = 'U';
+				}
+				if (supersequence[i] == currentStack[j] && scores(i-1, j-1) < value)
+				{
+					value = scores(i-1, j-1);
+					source = 'D';
+				}
+				scores(i, j) = value;
+				backtrace(i, j) = source;
+			}
+		}
+		std::vector<size_t> newSupersequence;
+		size_t i = supersequence.size()-1;
+		size_t j = currentStack.size()-1;
+		while (i != 0 || j != 0)
+		{
+			assert(i < supersequence.size());
+			assert(j < currentStack.size());
+			char dir = backtrace(i, j);
+			switch(dir)
+			{
+				case 'L':
+					newSupersequence.push_back(supersequence[i]);
+					i--;
+					break;
+				case 'U':
+					newSupersequence.push_back(currentStack[j]);
+					j--;
+					break;
+				case 'D':
+					newSupersequence.push_back(supersequence[i]);
+					assert(supersequence[i] == currentStack[j]);
+					i--;
+					j--;
+					break;
+				default:
+					assert(false);
+			}
+		}
+		assert(supersequence[0] == currentStack[0]);
+		newSupersequence.push_back(supersequence[0]);
+		std::reverse(newSupersequence.begin(), newSupersequence.end());
+		assert(newSupersequence.size() >= supersequence.size());
+		supersequence = std::move(newSupersequence);
+	});
+	return supersequence;
+}
+
+void CycleCutCalculation::getCycleCuttersBySupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+{
+	supersequence = getCycleCuttersSupersequence(cycleStart, sizeLeft);
+	getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(supersequence[i] < cycleStart);
+	}
+}
+
+void CycleCutCalculation::getCycleCuttersByIndex(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
 {
 	supersequence = getSupersequenceIndexingAndPredecessors(cycleStart, sizeLeft, supersequencePredecessors);
 	// getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
@@ -131,10 +225,17 @@ void CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int si
 	}
 }
 
-AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCut(size_t startNode, int wordSize) const
+AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutByIndex(size_t startNode, int wordSize) const
 {
 	AlignmentGraph::CycleCut result;
-	getCycleCuttersSupersequence(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
+	getCycleCuttersByIndex(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
+	return result;
+}
+
+AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutBySupersequence(size_t startNode, int wordSize) const
+{
+	AlignmentGraph::CycleCut result;
+	getCycleCuttersBySupersequence(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
 	return result;
 }
 
