@@ -233,7 +233,9 @@ void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalcula
 	assert(cuts[cycleStart].predecessors.size() == 0);
 	assert(cuts[cycleStart].previousCut.size() == 0);
 
-	cuts[cycleStart] = cutCalculation.GetCycleCutByIndex(cycleStart, wordSize);
+	// cuts[cycleStart] = cutCalculation.GetCycleCutByDumbWay(cycleStart, wordSize);
+	cuts[cycleStart] = cutCalculation.GetCycleCutBySupersequence(cycleStart, wordSize);
+	// cuts[cycleStart] = cutCalculation.GetCycleCutByIndex(cycleStart, wordSize);
 
 	assert(cuts[cycleStart].nodes.size() > 0);
 	assert(cuts[cycleStart].predecessors.size() == cuts[cycleStart].nodes.size());

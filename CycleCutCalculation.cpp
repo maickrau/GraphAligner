@@ -1,5 +1,7 @@
+#include <iostream>
 #include <limits>
 #include <algorithm>
+#include "TopologicalSort.h"
 #include "AlignmentGraph.h"
 #include "CycleCutCalculation.h"
 #include "2dArray.h"
@@ -32,11 +34,99 @@ void CycleCutCalculation::iterateOverCycleCuttingTree(size_t cycleStart, int siz
 	iterateOverCycleCuttingTreeRec(cycleStart, cycleStart, sizeLeft, currentStack, f);
 }
 
+void CycleCutCalculation::iterateOverCycleCuttingCyclesRec(size_t cycleStart, size_t node, std::vector<size_t>& currentStack, std::unordered_set<size_t>& cyclic, int sizeLeft, std::function<void(const std::vector<size_t>&)> cycleFunction) const
+{
+	currentStack.push_back(node);
+	auto nodeSize = graph.nodeEnd[node]-graph.nodeStart[node];
+	bool recursed = false;
+	if (node >= cycleStart && nodeSize < sizeLeft)
+	{
+		sizeLeft -= nodeSize;
+		for (auto neighbor : graph.inNeighbors[node])
+		{
+			if (cyclic.count(neighbor) > 0)
+			{
+				iterateOverCycleCuttingCyclesRec(cycleStart, neighbor, currentStack, cyclic, sizeLeft, cycleFunction);
+				recursed = true;
+			}
+		}
+		if (recursed)
+		{
+			currentStack.pop_back();
+			return;
+		}
+	}
+	cycleFunction(currentStack);
+	currentStack.pop_back();
+}
+
+void CycleCutCalculation::getReachableRec(size_t node, int sizeLeft, std::unordered_set<size_t>& reachable) const
+{
+	reachable.insert(node);
+	auto nodeSize = graph.nodeEnd[node] - graph.nodeStart[node];
+	if (nodeSize < sizeLeft)
+	{
+		sizeLeft -= nodeSize;
+		for (auto neighbor : graph.inNeighbors[node])
+		{
+			if (reachable.count(neighbor) > 0) continue;
+			getReachableRec(neighbor, sizeLeft, reachable);
+		}
+	}
+}
+
+void CycleCutCalculation::DFSSplitCyclicAndNoncyclic(size_t node, std::vector<size_t>& currentStack, std::unordered_set<size_t>& visited, std::unordered_set<size_t>& cyclic, const std::unordered_set<size_t>& reachable) const
+{
+	if (visited.count(node) > 0)
+	{
+		for (size_t i = currentStack.size()-1; i < currentStack.size(); i--)
+		{
+			if (currentStack[i] == node)
+			{
+				for (size_t j = 0; j < currentStack.size(); j++)
+				{
+					cyclic.insert(currentStack[j]);
+				}
+				break;
+			}
+		}
+		return;
+	}
+	currentStack.push_back(node);
+	visited.insert(node);
+	for (auto neighbor : graph.inNeighbors[node])
+	{
+		if (reachable.count(neighbor) == 0) continue;
+		DFSSplitCyclicAndNoncyclic(neighbor, currentStack, visited, cyclic, reachable);
+	}
+	currentStack.pop_back();
+}
+
+void CycleCutCalculation::iterateOverCycleCuttingCycles(size_t cycleStart, int sizeLeft, std::function<void(const std::vector<size_t>&)> cycleFunction, std::function<void(const std::unordered_set<size_t>&)> uncycleFunction) const
+{
+	std::unordered_set<size_t> visited;
+	std::unordered_set<size_t> cyclic;
+	std::vector<size_t> currentStack;
+	std::unordered_set<size_t> reachable;
+	getReachableRec(cycleStart, sizeLeft, reachable);
+	DFSSplitCyclicAndNoncyclic(cycleStart, currentStack, visited, cyclic, reachable);
+	std::cerr << "visited " << visited.size() << ", cyclic " << cyclic.size() << std::endl;
+	assert(currentStack.size() == 0);
+	iterateOverCycleCuttingCyclesRec(cycleStart, cycleStart, currentStack, cyclic, sizeLeft, cycleFunction);
+	for (auto node : cyclic)
+	{
+		visited.erase(node);
+	}
+	uncycleFunction(visited);
+}
+
 std::vector<size_t> CycleCutCalculation::getSupersequenceIndexingAndPredecessors(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors) const
 {
 	std::unordered_map<size_t, std::vector<size_t>> supersequenceIndex;
 	size_t supersequenceSize = 0;
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize, &predecessors](const std::vector<size_t>& currentStack) {
+	std::unordered_set<size_t> uncyclic;
+	// iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize, &predecessors](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingCycles(cycleStart, sizeLeft, [&supersequenceIndex, &supersequenceSize, &predecessors](const std::vector<size_t>& currentStack) {
 		assert(currentStack.size() > 0);
 		size_t currentPos = 0;
 		if (supersequenceSize == 0)
@@ -75,7 +165,11 @@ std::vector<size_t> CycleCutCalculation::getSupersequenceIndexingAndPredecessors
 			supersequenceSize++;
 			predecessors.emplace_back();
 		}
-	});
+	}
+	,[&uncyclic](const std::unordered_set<size_t>& set) {
+		uncyclic = set;
+	}
+	);
 
 	std::vector<size_t> toobigSupersequence;
 	toobigSupersequence.resize(supersequenceSize, std::numeric_limits<size_t>::max());
@@ -97,14 +191,17 @@ std::vector<size_t> CycleCutCalculation::getSupersequenceIndexingAndPredecessors
 	}
 	#endif
 
+	appendNonCyclicParts(uncyclic, toobigSupersequence, predecessors);
+
 	return toobigSupersequence;
 }
 
-void CycleCutCalculation::getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, const std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+void CycleCutCalculation::getPredecessorsFromSupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
 {
 	supersequencePredecessors.resize(supersequence.size());
+	std::unordered_set<size_t> uncyclic;
 
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingCycles(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
 		size_t offset = 0;
 		size_t lastIndex = 0;
 		assert(supersequence[0] == currentStack[0]);
@@ -119,13 +216,75 @@ void CycleCutCalculation::getPredecessorsFromSupersequence(size_t cycleStart, in
 			supersequencePredecessors[lastIndex].insert(i+offset);
 			lastIndex = i+offset;
 		}
+	},
+	[&uncyclic](const std::unordered_set<size_t>& set) {
+		uncyclic = set;
 	});
+	appendNonCyclicParts(uncyclic, supersequence, supersequencePredecessors);
+}
+
+void CycleCutCalculation::appendNonCyclicParts(const std::unordered_set<size_t>& uncyclic, std::vector<size_t>& nodes, std::vector<std::set<size_t>>& predecessors) const
+{
+	std::unordered_set<size_t> cyclic;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		cyclic.insert(nodes[i]);
+	}
+	std::vector<std::vector<size_t>> topologicalSortGraph;
+	std::unordered_map<size_t, size_t> topologicalIndex;
+	std::vector<size_t> reverseTopologicalIndex;
+	for (auto node : uncyclic)
+	{
+		topologicalIndex[node] = topologicalSortGraph.size();
+		reverseTopologicalIndex.push_back(node);
+		topologicalSortGraph.emplace_back();
+	}
+	for (size_t i = 0; i < topologicalSortGraph.size(); i++)
+	{
+		for (auto neighbor : graph.inNeighbors[reverseTopologicalIndex[i]])
+		{
+			if (uncyclic.count(neighbor) == 0) continue;
+			topologicalSortGraph[i].push_back(topologicalIndex[neighbor]);
+		}
+	}
+	auto order = topologicalSort(topologicalSortGraph);
+	assert(order.size() == reverseTopologicalIndex.size());
+	std::unordered_map<size_t, std::vector<size_t>> nodeIndex;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		nodeIndex[nodes[i]].push_back(i);
+	}
+	for (size_t i = 0; i < order.size(); i++)
+	{
+		assert(order[i] < reverseTopologicalIndex.size());
+		nodes.push_back(reverseTopologicalIndex[order[i]]);
+		nodeIndex[nodes.back()].push_back(nodes.size()-1);
+		predecessors.emplace_back();
+		for (auto neighbor : graph.outNeighbors[nodes.back()])
+		{
+			for (auto index : nodeIndex[neighbor])
+			{
+				predecessors[index].insert(nodes.size()-1);
+			}
+		}
+	}
+}
+
+std::vector<size_t> CycleCutCalculation::getCycleCuttersTheDumbWay(size_t cycleStart, int sizeLeft) const
+{
+	std::vector<size_t> supersequence;
+	iterateOverCycleCuttingCycles(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
+		supersequence.insert(supersequence.end(), currentStack.begin(), currentStack.end());
+	},
+	[](const std::unordered_set<size_t>& set) {}
+	);
+	return supersequence;
 }
 
 std::vector<size_t> CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft) const
 {
 	std::vector<size_t> supersequence;
-	iterateOverCycleCuttingTree(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
+	iterateOverCycleCuttingCycles(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
 		if (supersequence.size() == 0)
 		{
 			assert(currentStack.size() > 0);
@@ -201,13 +360,25 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersSupersequence(size_t cyc
 		std::reverse(newSupersequence.begin(), newSupersequence.end());
 		assert(newSupersequence.size() >= supersequence.size());
 		supersequence = std::move(newSupersequence);
-	});
+	},
+	[](const std::unordered_set<size_t>& set) {}
+	);
 	return supersequence;
 }
 
 void CycleCutCalculation::getCycleCuttersBySupersequence(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
 {
 	supersequence = getCycleCuttersSupersequence(cycleStart, sizeLeft);
+	getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(supersequence[i] < cycleStart);
+	}
+}
+
+void CycleCutCalculation::getCycleCuttersByDumbWay(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+{
+	supersequence = getCycleCuttersTheDumbWay(cycleStart, sizeLeft);
 	getPredecessorsFromSupersequence(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
 	for (size_t i = 0; i < supersequence.size(); i++)
 	{
@@ -225,6 +396,24 @@ void CycleCutCalculation::getCycleCuttersByIndex(size_t cycleStart, int sizeLeft
 	}
 }
 
+void CycleCutCalculation::PrintTreeSize(size_t startNode, int wordSize) const
+{
+	size_t total = 0;
+	iterateOverCycleCuttingCycles(startNode, wordSize*2, [&total](const std::vector<size_t>& currentStack) {
+		total++;
+		if (total % 1000000 == 0)
+		{
+			std::cerr << total << " ";
+		}
+	}
+	,[&total](const std::unordered_set<size_t>& uncyclic) {
+		std::cerr << " uncyclic " << uncyclic.size() << std::endl;
+		total += uncyclic.size();
+	}
+	);
+	std::cerr << "total treesize: " << total << std::endl;
+}
+
 AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutByIndex(size_t startNode, int wordSize) const
 {
 	AlignmentGraph::CycleCut result;
@@ -238,4 +427,12 @@ AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutBySupersequence(size_t 
 	getCycleCuttersBySupersequence(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
 	return result;
 }
+
+AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutByDumbWay(size_t startNode, int wordSize) const
+{
+	AlignmentGraph::CycleCut result;
+	getCycleCuttersByDumbWay(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
+	return result;
+}
+
 
