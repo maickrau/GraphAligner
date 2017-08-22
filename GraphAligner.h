@@ -1208,59 +1208,23 @@ private:
 		return result;
 	}
 
-	void cutCyclesRec(size_t j, size_t cycleCut, size_t index, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousCorrectValues) const
+	void getCycleCutReachability(size_t j, size_t cycleCut, size_t index, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<bool>& reachable, std::vector<bool>& source) const
 	{
+		assert(index < reachable.size());
+		if (reachable[index]) return;
+		reachable[index] = true;
 		assert(graph.notInOrder[cycleCut]);
 		assert(currentBand[graph.cuts[cycleCut].nodes[index]]);
-		if (graph.cuts[cycleCut].previousCut[index])
-		{
-			assert(graph.cuts[cycleCut].nodes[index] < previousCorrectValues.size());
-			currentSlice[graph.nodeEnd[graph.cuts[cycleCut].nodes[index]]-1] = previousCorrectValues[graph.cuts[cycleCut].nodes[index]];
-			return;
-		}
-		bool source = true;
+		if (graph.cuts[cycleCut].previousCut[index]) return;
+		source[index] = true;
 		for (auto otherIndex : graph.cuts[cycleCut].predecessors[index])
 		{
-			if (currentBand[graph.cuts[cycleCut].nodes[otherIndex]]) 
+			assert(otherIndex > index);
+			if (currentBand[graph.cuts[cycleCut].nodes[otherIndex]])
 			{
-				cutCyclesRec(j, cycleCut, otherIndex, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, previousCorrectValues);
-				source = false;
+				getCycleCutReachability(j, cycleCut, otherIndex, currentBand, previousBand, reachable, source);
+				source[index] = false;
 			}
-		}
-		calculateNode(graph.cuts[cycleCut].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source);
-	}
-
-	void cutCyclesSimple(size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
-	{
-		if (graph.firstInOrder == 0) return;
-		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
-		//store the correct values here and then merge them at the end
-		std::vector<WordSlice> correctEndValues;
-		correctEndValues.resize(graph.firstInOrder);
-		for (size_t i = 1; i < graph.firstInOrder; i++)
-		{
-			assert(graph.notInOrder[i]);
-			assert(graph.cuts[i].nodes.size() > 0);
-			assert(graph.cuts[i].nodes[0] == i);
-			if (!currentBand[i]) continue;
-			for (size_t index = graph.cuts[i].nodes.size()-1; index < graph.cuts[i].nodes.size(); index--)
-			{
-				if (graph.cuts[i].previousCut[index])
-				{
-					assert(graph.cuts[i].nodes[index] < correctEndValues.size());
-					currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1] = correctEndValues[graph.cuts[i].nodes[index]];
-				}
-				else
-				{
-					calculateNode(graph.cuts[i].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, false);
-				}
-			}
-			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
-		}
-		for (size_t i = 1; i < graph.firstInOrder; i++)
-		{
-			if (!currentBand[i]) continue;
-			currentSlice[graph.nodeEnd[i]-1] = correctEndValues[i];
 		}
 	}
 
@@ -1277,7 +1241,24 @@ private:
 			assert(graph.cuts[i].nodes.size() > 0);
 			assert(graph.cuts[i].nodes[0] == i);
 			if (!currentBand[i]) continue;
-			cutCyclesRec(j, i, 0, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, correctEndValues);
+			std::vector<bool> reachable;
+			std::vector<bool> source;
+			reachable.resize(graph.cuts[i].nodes.size(), false);
+			source.resize(graph.cuts[i].nodes.size(), false);
+			getCycleCutReachability(j, i, 0, currentBand, previousBand, reachable, source);
+			for (size_t index = graph.cuts[i].nodes.size()-1; index < graph.cuts[i].nodes.size(); index--)
+			{
+				if (!reachable[index]) continue;
+				if (graph.cuts[i].previousCut[index])
+				{
+					assert(graph.cuts[i].nodes[index] < correctEndValues.size());
+					currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1] = correctEndValues[graph.cuts[i].nodes[index]];
+				}
+				else
+				{
+					calculateNode(graph.cuts[i].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source[index]);
+				}
+			}
 			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
 		}
 		for (size_t i = 1; i < graph.firstInOrder; i++)
@@ -1423,7 +1404,6 @@ private:
 				currentBand.assign(currentBand.size(), false);
 				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
 			}
-			// cutCyclesSimple(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
 			cutCycles(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
 			for (size_t i = graph.firstInOrder; i < graph.nodeStart.size(); i++)
 			{
