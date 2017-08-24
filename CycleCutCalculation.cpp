@@ -4,9 +4,7 @@
 #include <boost/config.hpp>
 #include <boost/graph/push_relabel_max_flow.hpp>
 #include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/edmonds_karp_max_flow.hpp>
 #include <boost/graph/graph_utility.hpp>
-#include <boost/graph/boykov_kolmogorov_max_flow.hpp>
 #include "TopologicalSort.h"
 #include "AlignmentGraph.h"
 #include "CycleCutCalculation.h"
@@ -106,19 +104,20 @@ void CycleCutCalculation::filterUnnecessaryCharacters(size_t cycleStart, int siz
 	}
 }
 
-void CycleCutCalculation::getPredecessorsFromSupersequenceOverEdgeCoveringPaths(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+void CycleCutCalculation::getPredecessorsFromSupersequenceOverEdgeCoveringPaths(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut, const std::vector<std::vector<size_t>>& paths) const
 {
 	supersequencePredecessors.resize(supersequence.size());
 	std::unordered_set<size_t> uncyclic;
 
-	iterateOverEdgeCoveringPaths(cycleStart, sizeLeft, [&supersequence, &supersequencePredecessors](const std::vector<size_t>& currentStack) {
+	for (const auto& path : paths)
+	{
 		size_t offset = 0;
 		size_t lastIndex = 0;
-		assert(supersequence[0] == currentStack[0]);
-		assert(supersequence.size() >= currentStack.size());
-		for (size_t i = 1; i < currentStack.size(); i++)
+		assert(supersequence[0] == path[0]);
+		assert(supersequence.size() >= path.size());
+		for (size_t i = 1; i < path.size(); i++)
 		{
-			while (supersequence[i+offset] != currentStack[i])
+			while (supersequence[i+offset] != path[i])
 			{
 				offset++;
 				assert(i+offset < supersequence.size());
@@ -126,7 +125,7 @@ void CycleCutCalculation::getPredecessorsFromSupersequenceOverEdgeCoveringPaths(
 			supersequencePredecessors[lastIndex].insert(i+offset);
 			lastIndex = i+offset;
 		}
-	});
+	}
 
 	filterUnnecessaryCharacters(cycleStart, sizeLeft, supersequence, supersequencePredecessors);
 
@@ -220,28 +219,32 @@ std::vector<size_t> getPairwiseSupersequenceByAlignment(const std::vector<size_t
 	return newSupersequence;
 }
 
-std::vector<size_t> CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft) const
+std::vector<size_t> CycleCutCalculation::getCycleCuttersSupersequence(size_t cycleStart, int sizeLeft, const std::vector<std::vector<size_t>>& paths) const
 {
 	std::vector<size_t> supersequence;
-	iterateOverEdgeCoveringPaths(cycleStart, sizeLeft, [&supersequence](const std::vector<size_t>& currentStack) {
+	for (const auto& path : paths)
+	{
 		if (supersequence.size() == 0)
 		{
-			assert(currentStack.size() > 0);
-			supersequence = currentStack;
-			return;
+			assert(path.size() > 0);
+			supersequence = path;
+			continue;
 		}
-		supersequence = getPairwiseSupersequenceByAlignment(supersequence, currentStack);
-	});
+		supersequence = getPairwiseSupersequenceByAlignment(supersequence, path);
+	}
 	return supersequence;
 }
 
-std::map<std::pair<size_t, size_t>, size_t> findFeasibleFlow(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors)
+std::vector<std::map<size_t, size_t>> findFeasibleFlow(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors)
 {
-	std::map<std::pair<size_t, size_t>, size_t> result;
-	std::map<size_t, std::vector<std::pair<size_t, size_t>>> pathBack;
-	std::map<size_t, std::vector<std::pair<size_t, size_t>>> pathForward;
+	std::vector<std::map<size_t, size_t>> result;
+	std::vector<std::vector<std::pair<size_t, size_t>>> pathBack;
+	std::vector<std::vector<std::pair<size_t, size_t>>> pathForward;
 	std::vector<std::set<size_t>> successors;
+	pathBack.resize(supersequence.size());
+	pathForward.resize(supersequence.size());
 	successors.resize(supersequence.size());
+	result.resize(supersequence.size());
 	for (size_t i = 0; i < supersequence.size(); i++)
 	{
 		for (auto predecessor : predecessors[i])
@@ -263,29 +266,28 @@ std::map<std::pair<size_t, size_t>, size_t> findFeasibleFlow(const std::vector<s
 	{
 		for (auto predecessor : predecessors[i])
 		{
-			auto thispart = std::make_pair(i, predecessor);
-			if (result[thispart] > 0) continue;
-			result[thispart]++;;
+			if (result[i][predecessor] > 0) continue;
+			result[i][predecessor]++;;
 			for (auto part : pathBack[i])
 			{
-				result[part]++;
+				result[part.first][part.second]++;
 			}
 			for (auto part : pathForward[predecessor])
 			{
-				result[part]++;
+				result[part.first][part.second]++;
 			}
 		}
 	}
 	return result;
 }
 
-void getOneFlowPath(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors, const std::map<std::pair<size_t, size_t>, size_t>& flows, size_t node, std::vector<size_t>& result)
+void getOneFlowPath(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors, const std::vector<std::map<size_t, size_t>>& flows, size_t node, std::vector<size_t>& result)
 {
 	result.push_back(node);
 	for (auto predecessor : predecessors[node])
 	{
 		assert(predecessor > node);
-		if (flows.at(std::make_pair(node, predecessor)) > 0)
+		if (flows[node].at(predecessor) > 0)
 		{
 			getOneFlowPath(supersequence, predecessors, flows, predecessor, result);
 			return;
@@ -293,7 +295,7 @@ void getOneFlowPath(const std::vector<size_t>& supersequence, const std::vector<
 	}
 }
 
-std::vector<std::vector<size_t>> findFlowPaths(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors, std::map<std::pair<size_t, size_t>, size_t> flows)
+std::vector<std::vector<size_t>> findFlowPaths(const std::vector<size_t>& supersequence, const std::vector<std::set<size_t>>& predecessors, std::vector<std::map<size_t, size_t>> flows)
 {
 	assert(supersequence.size() > 0);
 	std::vector<std::vector<size_t>> result;
@@ -311,8 +313,8 @@ std::vector<std::vector<size_t>> findFlowPaths(const std::vector<size_t>& supers
 		if (path.size() == 1) break;
 		for (size_t i = 1; i < path.size(); i++)
 		{
-			assert(flows[std::make_pair(path[i-1], path[i])] >= 1);
-			flows[std::make_pair(path[i-1], path[i])] -= 1;
+			assert(flows[path[i-1]][path[i]] >= 1);
+			flows[path[i-1]][path[i]] -= 1;
 		}
 		std::vector<size_t> pathID;
 		pathID.reserve(path.size());
@@ -324,9 +326,12 @@ std::vector<std::vector<size_t>> findFlowPaths(const std::vector<size_t>& supers
 	}
 	assert(result.size() > 0);
 #ifndef NDEBUG
-	for (auto x : flows)
+	for (size_t i = 0; i < flows.size(); i++)
 	{
-		assert(x.second == 0);
+		for (auto x : flows[i])
+		{
+			assert(x.second == 0);
+		}
 	}
 #endif
 	return result;
@@ -354,32 +359,21 @@ void CycleCutCalculation::iterateOverEdgeCoveringPaths(size_t cycleStart, int si
 		rev = get(boost::edge_reverse, g);
 	boost::property_map<Graph, boost::edge_residual_capacity_t>::type 
 		residual_capacity = get(boost::edge_residual_capacity, g);
-	Traits::vertex_descriptor s, t;
+	Traits::vertex_descriptor src, sink;
 	std::vector<Traits::vertex_descriptor> verts;
 	for (size_t i = 0; i < supersequence.size(); i++)
 	{
 		verts.push_back(boost::add_vertex(g));
 	}
-	auto src = boost::add_vertex(g);
-	auto sink = boost::add_vertex(g);
+	src = boost::add_vertex(g);
+	sink = boost::add_vertex(g);
 	auto startFlow = findFeasibleFlow(supersequence, predecessors);
-	size_t flowBeforeReduction = 0;
-	for (auto predecessor : predecessors[0])
-	{
-		flowBeforeReduction += startFlow[std::make_pair(0, predecessor)];
-	}
-	std::cerr << "flow before reduction: " << flowBeforeReduction << std::endl;
-	auto flowPathsBefore = findFlowPaths(supersequence, predecessors, startFlow).size();
-	std::cerr << "flow paths before: " << flowPathsBefore << std::endl;
 	{
 		Traits::edge_descriptor e1, e2;
 		bool in1, in2;
 		boost::tie(e1, in1) = add_edge(src, verts[0], g);
 		boost::tie(e2, in2) = add_edge(verts[0], src, g);
-		if (!in1 || !in2) {
-			std::cerr << "unable to add edge (src, 0)" << std::endl;
-			std::abort();
-		}
+		assert(in1 && in2);
 		capacity[e1] = supersequence.size() * supersequence.size();
 		capacity[e2] = 0;
 		rev[e1] = e2;
@@ -395,12 +389,9 @@ void CycleCutCalculation::iterateOverEdgeCoveringPaths(size_t cycleStart, int si
 			bool in1, in2;
 			boost::tie(e1, in1) = add_edge(verts[tail], verts[head], g);
 			boost::tie(e2, in2) = add_edge(verts[head], verts[tail], g);
-			if (!in1 || !in2) {
-				std::cerr << "unable to add edge (" << head << "," << tail << ")" << std::endl;
-				std::abort();
-			}
-			assert(startFlow[std::make_pair(i, predecessor)] >= 1);
-			capacity[e1] = startFlow[std::make_pair(i, predecessor)] - 1;
+			assert(in1 && in2);
+			assert(startFlow[i][predecessor] >= 1);
+			capacity[e1] = startFlow[i][predecessor] - 1;
 			capacity[e2] = 0;
 			rev[e1] = e2;
 			rev[e2] = e1;
@@ -411,10 +402,7 @@ void CycleCutCalculation::iterateOverEdgeCoveringPaths(size_t cycleStart, int si
 			bool in1, in2;
 			boost::tie(e1, in1) = add_edge(verts[i], sink, g);
 			boost::tie(e2, in2) = add_edge(sink, verts[i], g);
-			if (!in1 || !in2) {
-				std::cerr << "unable to add edge (" << i << ", sink)" << std::endl;
-				std::abort();
-			}
+			assert(in1 && in2);
 			capacity[e1] = supersequence.size() * supersequence.size();
 			capacity[e2] = 0;
 			rev[e1] = e2;
@@ -422,35 +410,23 @@ void CycleCutCalculation::iterateOverEdgeCoveringPaths(size_t cycleStart, int si
 		}
 	}
 
-	// auto boostFlow = edmonds_karp_max_flow(g, s, t);
-	// auto boostFlow = boykov_kolmogorov_max_flow(g, s, t);
-	// auto boostFlow = push_relabel_max_flow(g, s, t);
+	auto boostFlow = push_relabel_max_flow(g, src, sink);
 
-	// boost::graph_traits<Graph>::vertex_iterator u_iter, u_end;
-	// boost::graph_traits<Graph>::out_edge_iterator ei, e_end;
-	// for (boost::tie(u_iter, u_end) = vertices(g); u_iter != u_end; ++u_iter)
-	// {
-	// 	for (boost::tie(ei, e_end) = out_edges(*u_iter, g); ei != e_end; ++ei)
-	// 	{
-	// 		if (capacity[*ei] > 0)
-	// 		{
-	// 			auto from = *u_iter;
-	// 			auto to = target(*ei, g);
-	// 			if (from >= supersequence.size() || to >= supersequence.size()) continue;
-	// 			startFlow[std::make_pair(from, to)] -= (capacity[*ei] - residual_capacity[*ei]);
-	// 		}
-	// 	}
-	// }
-	// size_t flow = 0;
-	// for (auto predecessor : predecessors[0])
-	// {
-	// 	flow += startFlow[std::make_pair(0, predecessor)];
-	// }
-	// auto flowPathsAfter = findFlowPaths(supersequence, predecessors, startFlow).size();
-	// std::cerr << "flow paths after: " << flowPathsAfter << std::endl;
-	// std::cerr << "flow: " << flow << std::endl;
-	// std::cerr << "boost flow: " << boostFlow << std::endl;
-	// assert(flow == flowBeforeReduction - boostFlow);
+	boost::graph_traits<Graph>::vertex_iterator u_iter, u_end;
+	boost::graph_traits<Graph>::out_edge_iterator ei, e_end;
+	for (boost::tie(u_iter, u_end) = vertices(g); u_iter != u_end; ++u_iter)
+	{
+		for (boost::tie(ei, e_end) = out_edges(*u_iter, g); ei != e_end; ++ei)
+		{
+			if (capacity[*ei] > 0)
+			{
+				auto from = *u_iter;
+				auto to = target(*ei, g);
+				if (from >= supersequence.size() || to >= supersequence.size()) continue;
+				startFlow[from][to] -= (capacity[*ei] - residual_capacity[*ei]);
+			}
+		}
+	}
 
 	for (auto path : findFlowPaths(supersequence, predecessors, startFlow))
 	{
@@ -460,8 +436,13 @@ void CycleCutCalculation::iterateOverEdgeCoveringPaths(size_t cycleStart, int si
 
 void CycleCutCalculation::getCycleCutters(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
 {
-	supersequence = getCycleCuttersSupersequence(cycleStart, sizeLeft);
-	getPredecessorsFromSupersequenceOverEdgeCoveringPaths(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut);
+	std::vector<std::vector<size_t>> paths;
+	iterateOverEdgeCoveringPaths(cycleStart, sizeLeft, [&paths](const std::vector<size_t>& path)
+	{
+		paths.push_back(path);
+	});
+	supersequence = getCycleCuttersSupersequence(cycleStart, sizeLeft, paths);
+	getPredecessorsFromSupersequenceOverEdgeCoveringPaths(cycleStart, sizeLeft, supersequence, supersequencePredecessors, previousCut, paths);
 	for (size_t i = 0; i < supersequence.size(); i++)
 	{
 		previousCut.push_back(supersequence[i] < cycleStart);
