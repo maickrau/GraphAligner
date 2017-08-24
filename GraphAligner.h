@@ -957,6 +957,7 @@ private:
 			}
 		}
 		assert(foundOne);
+		assertSliceCorrectness(previous, previousUp, foundOneUp);
 		auto result = getNextSlice(Eq, previous, foundOneUp, previousEq, previousUp);
 		return result;
 	}
@@ -1097,6 +1098,24 @@ private:
 		assert(false);
 	}
 
+	void assertSliceCorrectness(const WordSlice& current, const WordSlice& up, bool previousBand) const
+	{
+#ifndef NDEBUG
+			auto wcvp = WordConfiguration<Word>::popcount(current.VP);
+			auto wcvn = WordConfiguration<Word>::popcount(current.VN);
+			assert(current.scoreEnd == current.scoreBeforeStart + wcvp - wcvn);
+
+			assert(current.scoreBeforeStart >= 0);
+			assert(current.scoreEnd >= 0);
+			assert(current.scoreBeforeStart <= current.scoreEnd + WordConfiguration<Word>::WordSize);
+			assert(current.scoreEnd <= current.scoreBeforeStart + WordConfiguration<Word>::WordSize);
+			assert((current.VP & current.VN) == WordConfiguration<Word>::AllZeros);
+
+			assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
+			assert(current.scoreBeforeStart >= 0);
+#endif
+	}
+
 	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, bool forceSource) const
 	{
 		//todo optimization: 42% inclusive 15% exclusive. can this be improved?
@@ -1140,6 +1159,7 @@ private:
 				result.minScore = currentSlice[start].scoreEnd;
 				result.minScoreIndex = start;
 			}
+			assertSliceCorrectness(currentSlice[start], previousSlice[start], previousBand[i]);
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 			start++;
 		}
@@ -1173,20 +1193,9 @@ private:
 				currentSlice[w] = mergeTwoSlices(getSourceSliceWithoutBefore(j), currentSlice[w]);
 			}
 
-#ifndef NDEBUG
-			auto wcvp = WordConfiguration<Word>::popcount(currentSlice[w].VP);
-			auto wcvn = WordConfiguration<Word>::popcount(currentSlice[w].VN);
-			assert(currentSlice[w].scoreEnd == currentSlice[w].scoreBeforeStart + wcvp - wcvn);
-#endif
 			assert(previousBand[i] || currentSlice[w].scoreBeforeStart == j || currentSlice[w].scoreBeforeStart == currentSlice[w-1].scoreBeforeStart + 1);
-			assert(currentSlice[w].scoreBeforeStart >= 0);
-			assert(currentSlice[w].scoreEnd >= 0);
-			assert(currentSlice[w].scoreBeforeStart <= currentSlice[w].scoreEnd + WordConfiguration<Word>::WordSize);
-			assert(currentSlice[w].scoreEnd <= currentSlice[w].scoreBeforeStart + WordConfiguration<Word>::WordSize);
-			assert((currentSlice[w].VP & currentSlice[w].VN) == WordConfiguration<Word>::AllZeros);
+			assertSliceCorrectness(currentSlice[w], previousSlice[w], previousBand[i]);
 
-			assert(!previousBand[i] || currentSlice[w].scoreBeforeStart <= previousSlice[w].scoreEnd);
-			assert(currentSlice[w].scoreBeforeStart >= 0);
 			if (currentSlice[w].scoreEnd < result.minScore)
 			{
 				result.minScore = currentSlice[w].scoreEnd;
@@ -1220,6 +1229,10 @@ private:
 		for (auto otherIndex : graph.cuts[cycleCut].predecessors[index])
 		{
 			assert(otherIndex > index);
+			if (previousBand[graph.cuts[cycleCut].nodes[otherIndex]])
+			{
+				source[index] = false;
+			}
 			if (currentBand[graph.cuts[cycleCut].nodes[otherIndex]])
 			{
 				getCycleCutReachability(j, cycleCut, otherIndex, currentBand, previousBand, reachable, source);
