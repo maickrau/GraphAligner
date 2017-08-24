@@ -449,6 +449,22 @@ void CycleCutCalculation::getCycleCutters(size_t cycleStart, int sizeLeft, std::
 	}
 }
 
+void CycleCutCalculation::getCycleCuttersTooBig(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+{
+	supersequence = getCycleCuttersOrder(cycleStart, sizeLeft, supersequencePredecessors);
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(supersequence[i] < cycleStart);
+	}
+}
+
+AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutTooBig(size_t startNode, int wordSize) const
+{
+	AlignmentGraph::CycleCut result;
+	getCycleCuttersTooBig(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
+	return result;
+}
+
 AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCut(size_t startNode, int wordSize) const
 {
 	AlignmentGraph::CycleCut result;

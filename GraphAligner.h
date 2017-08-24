@@ -918,6 +918,7 @@ private:
 		bool foundOneUp = false;
 		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
+			if (currentBand[neighbor]) assertSliceCorrectness(currentSlice[graph.nodeEnd[neighbor]-1], previousSlice[graph.nodeEnd[neighbor]-1], previousBand[neighbor]);
 			if (previousBand[neighbor])
 			{
 				if (!foundOneUp)
@@ -1140,6 +1141,7 @@ private:
 				result.minScore = currentSlice[start].scoreEnd;
 				result.minScoreIndex = start;
 			}
+			assertSliceCorrectness(currentSlice[start], previousSlice[start], previousBand[i]);
 			start++;
 		}
 		else
@@ -1247,7 +1249,7 @@ private:
 		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
 		//store the correct values here and then merge them at the end
 		std::vector<WordSlice> correctEndValues;
-		correctEndValues.resize(graph.firstInOrder);
+		correctEndValues.resize(graph.firstInOrder, {WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max()});
 		for (size_t i = 1; i < graph.firstInOrder; i++)
 		{
 			assert(graph.notInOrder[i]);
@@ -1265,19 +1267,24 @@ private:
 				if (graph.cuts[i].previousCut[index])
 				{
 					assert(graph.cuts[i].nodes[index] < correctEndValues.size());
+					assert(correctEndValues[graph.cuts[i].nodes[index]].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
 					currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1] = correctEndValues[graph.cuts[i].nodes[index]];
+					assertSliceCorrectness(currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousBand[graph.cuts[i].nodes[index]]);
 				}
 				else
 				{
 					calculateNode(graph.cuts[i].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source[index]);
+					assertSliceCorrectness(currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousBand[graph.cuts[i].nodes[index]]);
 				}
 			}
 			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
+			assertSliceCorrectness(currentSlice[graph.nodeEnd[i]-1], previousSlice[graph.nodeEnd[i]-1], previousBand[i]);
 		}
 		for (size_t i = 1; i < graph.firstInOrder; i++)
 		{
 			if (!currentBand[i]) continue;
 			currentSlice[graph.nodeEnd[i]-1] = correctEndValues[i];
+			assertSliceCorrectness(currentSlice[graph.nodeEnd[i]-1], previousSlice[graph.nodeEnd[i]-1], previousBand[i]);
 		}
 	}
 
