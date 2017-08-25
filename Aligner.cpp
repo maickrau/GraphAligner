@@ -319,6 +319,14 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 		}
 		else
 		{
+			if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+			{
+				coutoutput << "read " << fastq->seq_id << " has no seed hits";
+				cerroutput << "read " << fastq->seq_id << " has no seed hits";
+				coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+				continue;
+			}
 			auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits->at(fastq));
 			std::vector<std::remove_reference<decltype(alignmentGraph)>::type::SeedHit> alignerSeedHits;
 			for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
