@@ -3,10 +3,12 @@
 #include <limits>
 #include <algorithm>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/set.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include "AlignmentGraph.h"
 #include "TopologicalSort.h"
+#include "CycleCutCalculation.h"
 
 AlignmentGraph::AlignmentGraph() :
 nodeStart(),
@@ -154,41 +156,41 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	{
 		if (!loadCycleCut(cutFilename))
 		{
-			cycleCuttingNodes.resize(firstInOrder);
-			cycleCuttingNodePredecessor.resize(firstInOrder);
-			cycleCutPreviousCut.resize(firstInOrder);
-			for (size_t i = 1; i < firstInOrder; i++)
-			{
-				calculateCycleCutters(i, wordSize);
-			}
+			calculateCycleCuts(wordSize);
 			saveCycleCut(cutFilename);
 		}
 	}
 	else
 	{
-		cycleCuttingNodes.resize(firstInOrder);
-		cycleCuttingNodePredecessor.resize(firstInOrder);
-		cycleCutPreviousCut.resize(firstInOrder);
-		for (size_t i = 1; i < firstInOrder; i++)
-		{
-			calculateCycleCutters(i, wordSize);
-		}
+		calculateCycleCuts(wordSize);
 	}
 	if (firstInOrder != 0)
 	{
 		std::cerr << "cycle cuts:" << std::endl;
 		size_t totalCuttersbp = 0;
-		for (size_t i = 1; i < cycleCuttingNodes.size(); i++)
+		for (size_t i = 1; i < cuts.size(); i++)
 		{
 			size_t cuttersbp = 0;
-			for (size_t j = 0; j < cycleCuttingNodes[i].size(); j++)
+			for (size_t j = 0; j < cuts[i].nodes.size(); j++)
 			{
-				cuttersbp += nodeEnd[cycleCuttingNodes[i][j]] - nodeStart[cycleCuttingNodes[i][j]];
+				cuttersbp += nodeEnd[cuts[i].nodes[j]] - nodeStart[cuts[i].nodes[j]];
 			}
-			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cycleCuttingNodes[i].size() << ", " << cuttersbp << "bp" << std::endl;
+			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cuts[i].nodes.size() << ", " << cuttersbp << "bp" << std::endl;
 			totalCuttersbp += cuttersbp;
 		}
 		std::cerr << "total cut: " << totalCuttersbp << "bp (" << (double)totalCuttersbp / (double)nodeSequences.size() * 100 << "%)" << std::endl;
+	}
+}
+
+void AlignmentGraph::calculateCycleCuts(int wordSize)
+{
+	CycleCutCalculation cutCalculator(*this);
+	std::cerr << "calculating cycle cuts" << std::endl;
+	cuts.resize(firstInOrder);
+	for (size_t i = 1; i < firstInOrder; i++)
+	{
+		std::cerr << "cut " << i << "/" << firstInOrder << " node id " << nodeIDs[i] << std::endl;
+		calculateCycleCutters(cutCalculator, i, wordSize);
 	}
 }
 
@@ -196,9 +198,7 @@ void AlignmentGraph::saveCycleCut(std::string filename)
 {
 	std::ofstream file {filename};
 	boost::archive::text_oarchive oa(file);
-	oa << cycleCuttingNodes;
-	oa << cycleCuttingNodePredecessor;
-	oa << cycleCutPreviousCut;
+	oa << cuts;
 }
 
 bool AlignmentGraph::loadCycleCut(std::string filename)
@@ -206,9 +206,7 @@ bool AlignmentGraph::loadCycleCut(std::string filename)
 	std::ifstream file {filename};
 	if (!file.good()) return false;
 	boost::archive::text_iarchive ia(file);
-	ia >> cycleCuttingNodes;
-	ia >> cycleCuttingNodePredecessor;
-	ia >> cycleCutPreviousCut;
+	ia >> cuts;
 	return true;
 }
 
@@ -228,133 +226,19 @@ std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsI
 	return result;
 }
 
-void AlignmentGraph::getCycleCutterTreeRec(size_t cycleCut, size_t node, size_t parent, int wordSize, int lengthLeft, std::vector<size_t>& nodes, std::vector<size_t>& parents)
+void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalculation, size_t cycleStart, int wordSize)
 {
-	nodes.push_back(node);
-	parents.push_back(parent);
-	if (node < cycleCut)
-	{
-		assert(notInOrder[node]);
-		return;
-	}
-	auto current = nodes.size()-1;
-	lengthLeft -= nodeEnd[node] - nodeStart[node];
-	if (lengthLeft > 0)
-	{
-		std::vector<size_t> neighbors;
-		for (auto neighbor : inNeighbors[node])
-		{
-			neighbors.push_back(neighbor);
-		}
-		std::sort(neighbors.begin(), neighbors.end());
-		for (auto neighbor : neighbors)
-		{
-			getCycleCutterTreeRec(cycleCut, neighbor, current, wordSize, lengthLeft, nodes, parents);
-		}
-	}
-}
+	assert(cuts.size() > cycleStart);
+	assert(cuts[cycleStart].nodes.size() == 0);
+	assert(cuts[cycleStart].predecessors.size() == 0);
+	assert(cuts[cycleStart].previousCut.size() == 0);
 
-bool subtreesAreIdentical(const std::vector<size_t>& nodes, const std::vector<std::vector<size_t>>& children, size_t first, size_t second)
-{
-	assert(first < nodes.size());
-	assert(second < nodes.size());
-	if (nodes[first] != nodes[second]) return false;
-	if (children[first].size() != children[second].size()) return false;
-	for (size_t i = 0; i < children[first].size(); i++)
-	{
-		if (!subtreesAreIdentical(nodes, children, children[first][i], children[second][i])) return false;
-	}
-	return true;
-}
+	cuts[cycleStart] = cutCalculation.GetCycleCutTooBig(cycleStart, wordSize);
+	// cuts[cycleStart] = cutCalculation.GetCycleCut(cycleStart, wordSize);
 
-void AlignmentGraph::getDAGFromIdenticalSubtrees(const std::vector<size_t>& nodes, const std::vector<size_t>& parents, std::vector<size_t>& resultNodes, std::vector<std::vector<size_t>>& resultPredecessors, std::vector<bool>& resultPreviousCut)
-{
-	assert(nodes.size() == parents.size());
-	std::vector<size_t> distanceFromLeaf;
-	std::vector<size_t> treeHash;
-	std::vector<std::vector<size_t>> children;
-	std::vector<size_t> uniquenessClasses;
-	std::map<size_t, std::vector<size_t>> hashToSubtree;
-	distanceFromLeaf.resize(nodes.size(), 0);
-	uniquenessClasses.resize(nodes.size(), 0);
-	children.resize(nodes.size());
-	treeHash.resize(nodes.size());
-	for (size_t i = parents.size()-1; i != 0; i--)
-	{
-		children[parents[i]].push_back(i);
-		distanceFromLeaf[parents[i]] = std::max(distanceFromLeaf[parents[i]], distanceFromLeaf[i] + 1);
-	}
-
-	for (size_t i = 0; i < nodes.size(); i++)
-	{
-		treeHash[i] = nodes[i] * (distanceFromLeaf[i] + 1);
-	}
-	for (size_t i = parents.size()-1; i != 0; i--)
-	{
-		treeHash[parents[i]] ^= treeHash[i];
-	}
-	for (size_t i = nodes.size()-1; i < nodes.size(); i--)
-	{
-		bool found = false;
-		for (size_t j = 0; j < hashToSubtree[treeHash[i]].size(); j++)
-		{
-			if (subtreesAreIdentical(nodes, children, i, hashToSubtree[treeHash[i]][j]))
-			{
-				uniquenessClasses[i] = hashToSubtree[treeHash[i]][j];
-				found = true;
-				break;
-			}
-		}
-		if (!found)
-		{
-			uniquenessClasses[i] = i;
-			hashToSubtree[treeHash[i]].push_back(i);
-		}
-	}
-	std::set<size_t> uniques;
-	std::vector<size_t> uniquenessClassIndex;
-	uniquenessClassIndex.resize(nodes.size());
-	for (size_t i = 0; i < uniquenessClasses.size(); i++)
-	{
-		assert(uniquenessClasses[i] >= i);
-		assert(i == 0 || uniquenessClasses[i] != 0);
-		assert(i != 0 || uniquenessClasses[i] == 0);
-		if (uniquenessClasses[i] == i)
-		{
-			uniquenessClassIndex[uniquenessClasses[i]] = resultNodes.size();
-			resultNodes.push_back(nodes[uniquenessClasses[i]]);
-			resultPredecessors.emplace_back();
-			resultPreviousCut.push_back(nodes[i] < nodes[0]);
-			uniques.insert(uniquenessClasses[i]);
-		}
-	}
-	for (size_t i = 0; i < uniquenessClasses.size(); i++)
-	{
-		if (uniquenessClasses[i] == i)
-		{
-			for (size_t j = 0; j < children[i].size(); j++)
-			{
-				resultPredecessors[uniquenessClassIndex[i]].push_back(uniquenessClassIndex[uniquenessClasses[children[i][j]]]);
-			}
-		}
-	}
-}
-
-void AlignmentGraph::calculateCycleCutters(size_t cycleStart, int wordSize)
-{
-	assert(cycleCuttingNodes.size() > cycleStart);
-	assert(cycleCuttingNodePredecessor.size() > cycleStart);
-	assert(cycleCuttingNodes[cycleStart].size() == 0);
-	assert(cycleCuttingNodePredecessor[cycleStart].size() == 0);
-
-	std::vector<size_t> nodes;
-	std::vector<size_t> parents;
-	getCycleCutterTreeRec(cycleStart, cycleStart, 0, wordSize, 2*wordSize, nodes, parents);
-	getDAGFromIdenticalSubtrees(nodes, parents, cycleCuttingNodes[cycleStart], cycleCuttingNodePredecessor[cycleStart], cycleCutPreviousCut[cycleStart]);
-
-	assert(cycleCuttingNodes[cycleStart].size() > 0);
-	assert(cycleCuttingNodes[cycleStart][0] == cycleStart);
-	assert(cycleCuttingNodes[cycleStart].size() == cycleCuttingNodePredecessor[cycleStart].size());
-	assert(cycleCuttingNodePredecessor[cycleStart].size() == 1 || cycleCuttingNodePredecessor[cycleStart][0].size() > 0);
-	assert(cycleCutPreviousCut[cycleStart].size() == cycleCuttingNodes[cycleStart].size());
+	assert(cuts[cycleStart].nodes.size() > 0);
+	assert(cuts[cycleStart].predecessors.size() == cuts[cycleStart].nodes.size());
+	assert(cuts[cycleStart].previousCut.size() == cuts[cycleStart].nodes.size());
+	assert(cuts[cycleStart].nodes[0] == cycleStart);
+	assert(cuts[cycleStart].predecessors.size() == 1 || cuts[cycleStart].predecessors[0].size() > 0);
 }

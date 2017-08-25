@@ -918,6 +918,7 @@ private:
 		bool foundOneUp = false;
 		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
+			if (currentBand[neighbor]) assertSliceCorrectness(currentSlice[graph.nodeEnd[neighbor]-1], previousSlice[graph.nodeEnd[neighbor]-1], previousBand[neighbor]);
 			if (previousBand[neighbor])
 			{
 				if (!foundOneUp)
@@ -957,6 +958,7 @@ private:
 			}
 		}
 		assert(foundOne);
+		assertSliceCorrectness(previous, previousUp, foundOneUp);
 		auto result = getNextSlice(Eq, previous, foundOneUp, previousEq, previousUp);
 		return result;
 	}
@@ -1097,6 +1099,24 @@ private:
 		assert(false);
 	}
 
+	void assertSliceCorrectness(const WordSlice& current, const WordSlice& up, bool previousBand) const
+	{
+#ifndef NDEBUG
+			auto wcvp = WordConfiguration<Word>::popcount(current.VP);
+			auto wcvn = WordConfiguration<Word>::popcount(current.VN);
+			assert(current.scoreEnd == current.scoreBeforeStart + wcvp - wcvn);
+
+			assert(current.scoreBeforeStart >= 0);
+			assert(current.scoreEnd >= 0);
+			assert(current.scoreBeforeStart <= current.scoreEnd + WordConfiguration<Word>::WordSize);
+			assert(current.scoreEnd <= current.scoreBeforeStart + WordConfiguration<Word>::WordSize);
+			assert((current.VP & current.VN) == WordConfiguration<Word>::AllZeros);
+
+			assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
+			assert(current.scoreBeforeStart >= 0);
+#endif
+	}
+
 	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, bool forceSource) const
 	{
 		//todo optimization: 42% inclusive 15% exclusive. can this be improved?
@@ -1121,6 +1141,7 @@ private:
 				result.minScore = currentSlice[start].scoreEnd;
 				result.minScoreIndex = start;
 			}
+			assertSliceCorrectness(currentSlice[start], previousSlice[start], previousBand[i]);
 			start++;
 		}
 		else
@@ -1140,6 +1161,7 @@ private:
 				result.minScore = currentSlice[start].scoreEnd;
 				result.minScoreIndex = start;
 			}
+			assertSliceCorrectness(currentSlice[start], previousSlice[start], previousBand[i]);
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 			start++;
 		}
@@ -1173,20 +1195,9 @@ private:
 				currentSlice[w] = mergeTwoSlices(getSourceSliceWithoutBefore(j), currentSlice[w]);
 			}
 
-#ifndef NDEBUG
-			auto wcvp = WordConfiguration<Word>::popcount(currentSlice[w].VP);
-			auto wcvn = WordConfiguration<Word>::popcount(currentSlice[w].VN);
-			assert(currentSlice[w].scoreEnd == currentSlice[w].scoreBeforeStart + wcvp - wcvn);
-#endif
 			assert(previousBand[i] || currentSlice[w].scoreBeforeStart == j || currentSlice[w].scoreBeforeStart == currentSlice[w-1].scoreBeforeStart + 1);
-			assert(currentSlice[w].scoreBeforeStart >= 0);
-			assert(currentSlice[w].scoreEnd >= 0);
-			assert(currentSlice[w].scoreBeforeStart <= currentSlice[w].scoreEnd + WordConfiguration<Word>::WordSize);
-			assert(currentSlice[w].scoreEnd <= currentSlice[w].scoreBeforeStart + WordConfiguration<Word>::WordSize);
-			assert((currentSlice[w].VP & currentSlice[w].VN) == WordConfiguration<Word>::AllZeros);
+			assertSliceCorrectness(currentSlice[w], previousSlice[w], previousBand[i]);
 
-			assert(!previousBand[i] || currentSlice[w].scoreBeforeStart <= previousSlice[w].scoreEnd);
-			assert(currentSlice[w].scoreBeforeStart >= 0);
 			if (currentSlice[w].scoreEnd < result.minScore)
 			{
 				result.minScore = currentSlice[w].scoreEnd;
@@ -1208,27 +1219,28 @@ private:
 		return result;
 	}
 
-	void cutCyclesRec(size_t j, size_t cycleCut, size_t index, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousCorrectValues) const
+	void getCycleCutReachability(size_t j, size_t cycleCut, size_t index, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<bool>& reachable, std::vector<bool>& source) const
 	{
+		assert(index < reachable.size());
+		if (reachable[index]) return;
+		reachable[index] = true;
 		assert(graph.notInOrder[cycleCut]);
-		assert(currentBand[graph.cycleCuttingNodes[cycleCut][index]]);
-		if (graph.cycleCutPreviousCut[cycleCut][index])
+		assert(currentBand[graph.cuts[cycleCut].nodes[index]]);
+		if (graph.cuts[cycleCut].previousCut[index]) return;
+		source[index] = true;
+		for (auto otherIndex : graph.cuts[cycleCut].predecessors[index])
 		{
-			assert(graph.cycleCuttingNodes[cycleCut][index] < previousCorrectValues.size());
-			currentSlice[graph.nodeEnd[graph.cycleCuttingNodes[cycleCut][index]]-1] = previousCorrectValues[graph.cycleCuttingNodes[cycleCut][index]];
-			return;
-		}
-		bool source = true;
-		for (size_t i = 0; i < graph.cycleCuttingNodePredecessor[cycleCut][index].size(); i++)
-		{
-			auto otherIndex = graph.cycleCuttingNodePredecessor[cycleCut][index][i];
-			if (currentBand[graph.cycleCuttingNodes[cycleCut][otherIndex]]) 
+			assert(otherIndex > index);
+			if (previousBand[graph.cuts[cycleCut].nodes[otherIndex]])
 			{
-				cutCyclesRec(j, cycleCut, otherIndex, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, previousCorrectValues);
-				source = false;
+				source[index] = false;
+			}
+			if (currentBand[graph.cuts[cycleCut].nodes[otherIndex]])
+			{
+				getCycleCutReachability(j, cycleCut, otherIndex, currentBand, previousBand, reachable, source);
+				source[index] = false;
 			}
 		}
-		calculateNode(graph.cycleCuttingNodes[cycleCut][index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source);
 	}
 
 	void cutCycles(size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
@@ -1237,20 +1249,42 @@ private:
 		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
 		//store the correct values here and then merge them at the end
 		std::vector<WordSlice> correctEndValues;
-		correctEndValues.resize(graph.firstInOrder);
+		correctEndValues.resize(graph.firstInOrder, {WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max()});
 		for (size_t i = 1; i < graph.firstInOrder; i++)
 		{
 			assert(graph.notInOrder[i]);
-			assert(graph.cycleCuttingNodes[i].size() > 0);
-			assert(graph.cycleCuttingNodes[i][0] == i);
+			assert(graph.cuts[i].nodes.size() > 0);
+			assert(graph.cuts[i].nodes[0] == i);
 			if (!currentBand[i]) continue;
-			cutCyclesRec(j, i, 0, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, correctEndValues);
+			std::vector<bool> reachable;
+			std::vector<bool> source;
+			reachable.resize(graph.cuts[i].nodes.size(), false);
+			source.resize(graph.cuts[i].nodes.size(), false);
+			getCycleCutReachability(j, i, 0, currentBand, previousBand, reachable, source);
+			for (size_t index = graph.cuts[i].nodes.size()-1; index < graph.cuts[i].nodes.size(); index--)
+			{
+				if (!reachable[index]) continue;
+				if (graph.cuts[i].previousCut[index])
+				{
+					assert(graph.cuts[i].nodes[index] < correctEndValues.size());
+					assert(correctEndValues[graph.cuts[i].nodes[index]].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
+					currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1] = correctEndValues[graph.cuts[i].nodes[index]];
+					assertSliceCorrectness(currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousBand[graph.cuts[i].nodes[index]]);
+				}
+				else
+				{
+					calculateNode(graph.cuts[i].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source[index]);
+					assertSliceCorrectness(currentSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousSlice[graph.nodeEnd[graph.cuts[i].nodes[index]]-1], previousBand[graph.cuts[i].nodes[index]]);
+				}
+			}
 			correctEndValues[i] = currentSlice[graph.nodeEnd[i]-1];
+			assertSliceCorrectness(currentSlice[graph.nodeEnd[i]-1], previousSlice[graph.nodeEnd[i]-1], previousBand[i]);
 		}
 		for (size_t i = 1; i < graph.firstInOrder; i++)
 		{
 			if (!currentBand[i]) continue;
 			currentSlice[graph.nodeEnd[i]-1] = correctEndValues[i];
+			assertSliceCorrectness(currentSlice[graph.nodeEnd[i]-1], previousSlice[graph.nodeEnd[i]-1], previousBand[i]);
 		}
 	}
 
