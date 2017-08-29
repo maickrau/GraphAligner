@@ -757,7 +757,12 @@ private:
 		}
 		assert(scoreDifference >= 0);
 		uint64_t byteVPVNSumLeft = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP), 0), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN), 0));
-		uint64_t byteVPVNSumRight = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP), scoreDifference), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN), 0));
+		auto rightVPprefixsum = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP), scoreDifference);
+		if (rightVPprefixsum & WordConfiguration<Word>::SignMask != 0)
+		{
+			return std::make_pair(allones, allzeros);
+		}
+		uint64_t byteVPVNSumRight = byteVPVNSum(rightVPprefixsum, bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN), 0));
 		uint64_t difference = byteVPVNSumLeft;
 		{
 			//take the bytvpvnsumright and split it from positive/negative values into two vectors with positive values, one which needs to be added and the other deducted
