@@ -292,6 +292,7 @@ private:
 			for (size_t i = 0; i < bandLocations[j].size(); i++)
 			{
 				expandBandDynamically(result[index], bandLocations[j][i], startBandwidth);
+				projectForwardAndExpandBand(result[index], bandLocations[j][i], startBandwidth);
 			}
 		}
 		return result;
@@ -448,74 +449,93 @@ private:
 		}
 	};
 
-	void expandBandFromPrevious(std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<WordSlice>& previousSlice, LengthType dynamicWidth, const std::vector<ScoreType>& nodeMinScores) const
+	void projectForwardRec(std::set<size_t>& positions, LengthType nodeIndex, LengthType sizeLeft) const
 	{
-		//todo optimization: 18% inclusive 17% exclusive. can this be improved?
-		assert(dynamicWidth < graph.nodeSequences.size());
-		assert(currentBand.size() == previousBand.size());
-		assert(currentBand.size() == graph.nodeStart.size());
-		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> nodeQueue;
-		std::priority_queue<IndexWithScore, std::vector<IndexWithScore>, std::greater<IndexWithScore>> endQueue;
-		for (size_t i = 0; i < graph.nodeStart.size(); i++)
+		auto end = graph.nodeEnd[nodeIndex];
+		auto start = graph.nodeStart[nodeIndex];
+		if (sizeLeft < end - start)
 		{
-			if (!previousBand[i]) continue;
-			nodeQueue.emplace(i, nodeMinScores[i]);
-			endQueue.emplace(i, previousSlice[graph.nodeEnd[i]-1].scoreEnd);
+			positions.insert(start + sizeLeft);
+			return;
 		}
-		LengthType currentWidth = 0;
-		while (currentWidth < dynamicWidth)
+		assert(sizeLeft >= end - start);
+		sizeLeft -= end - start;
+		for (auto neighbor : graph.outNeighbors[nodeIndex])
 		{
-			assert(nodeQueue.size() > 0 || endQueue.size() > 0);
-			if (nodeQueue.size() == 0)
+			projectForwardRec(positions, neighbor, sizeLeft);
+		}
+	}
+
+	void addOutneighbors(std::set<int>& nodeids, int currentNodeId, int sizeLeft) const
+	{
+		size_t fw = currentNodeId*2;
+		size_t bw = currentNodeId*2+1;
+		auto nodesize = graph.nodeEnd[graph.nodeLookup.at(fw)] - graph.nodeStart[graph.nodeLookup.at(fw)];
+		assert(nodesize == graph.nodeEnd[graph.nodeLookup.at(bw)] - graph.nodeStart[graph.nodeLookup.at(bw)]);
+		for (auto neighbor : graph.outNeighbors[graph.nodeLookup.at(fw)])
+		{
+			int targetID = graph.nodeIDs[neighbor]/2;
+			assert(nodeids.count(targetID*2) == nodeids.count(targetID*2+1));
+			if (nodeids.count(targetID*2) == 1) continue;
+			nodeids.insert(targetID*2);
+			nodeids.insert(targetID*2+1);
+			if (sizeLeft > graph.nodeEnd[neighbor]- graph.nodeStart[neighbor])
 			{
-				auto nextNode = endQueue.top();
-				endQueue.pop();
-				for (auto neighbor : graph.outNeighbors[nextNode.index])
-				{
-					if (!currentBand[neighbor])
-					{
-						currentBand[neighbor] = true;
-						currentWidth += graph.nodeEnd[neighbor] - graph.nodeStart[neighbor];
-						endQueue.emplace(neighbor, nextNode.score + graph.nodeEnd[neighbor] - graph.nodeStart[neighbor]);
-					}
-				}
-				continue;
+				addOutneighbors(nodeids, targetID, sizeLeft - graph.nodeEnd[neighbor] + graph.nodeStart[neighbor]);
 			}
-			if (endQueue.size() == 0)
+		}
+		for (auto neighbor : graph.outNeighbors[graph.nodeLookup.at(bw)])
+		{
+			int targetID = graph.nodeIDs[neighbor]/2;
+			assert(nodeids.count(targetID*2) == nodeids.count(targetID*2+1));
+			if (nodeids.count(targetID*2) == 1) continue;
+			nodeids.insert(targetID*2);
+			nodeids.insert(targetID*2+1);
+			if (sizeLeft > graph.nodeEnd[neighbor]- graph.nodeStart[neighbor])
 			{
-				auto nextNode = nodeQueue.top();
-				nodeQueue.pop();
-				if (!currentBand[nextNode.index])
-				{
-					currentBand[nextNode.index] = true;
-					currentWidth += graph.nodeEnd[nextNode.index] - graph.nodeStart[nextNode.index];
-				}
-				continue;
+				addOutneighbors(nodeids, targetID, sizeLeft - graph.nodeEnd[neighbor] + graph.nodeStart[neighbor]);
 			}
-			auto nodeBest = nodeQueue.top();
-			auto endBest = endQueue.top();
-			if (nodeBest.score <= endBest.score)
+		}
+	}
+
+	void projectForwardAndExpandBand(std::vector<bool>& band, LengthType previousMinimumIndex, LengthType dynamicWidth) const
+	{
+		assert(previousMinimumIndex < graph.nodeSequences.size());
+		auto nodeIndex = graph.indexToNode[previousMinimumIndex];
+		auto end = graph.nodeEnd[nodeIndex];
+		std::set<size_t> positions;
+		positions.insert(previousMinimumIndex);
+		if (end > previousMinimumIndex + WordConfiguration<Word>::WordSize)
+		{
+			positions.insert(previousMinimumIndex + WordConfiguration<Word>::WordSize);
+		}
+		else
+		{
+			for (auto neighbor : graph.outNeighbors[nodeIndex])
 			{
-				nodeQueue.pop();
-				assert(previousBand[nodeBest.index]);
-				if (!currentBand[nodeBest.index])
+				projectForwardRec(positions, neighbor, WordConfiguration<Word>::WordSize - (end - previousMinimumIndex));
+			}
+		}
+		assert(positions.size() >= 1);
+		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
+		std::unordered_map<size_t, size_t> distanceAtNodeStart;
+		for (auto position : positions)
+		{
+			auto nodeIndex = graph.indexToNode[position];
+			LengthType start = graph.nodeStart[nodeIndex];
+			LengthType end = graph.nodeEnd[nodeIndex];
+			if (dynamicWidth > position - start)
+			{
+				for (auto neighbor : graph.inNeighbors[nodeIndex])
 				{
-					currentBand[nodeBest.index] = true;
-					currentWidth += graph.nodeEnd[nodeBest.index] - graph.nodeStart[nodeBest.index];
+					expandDynamicBandFromStart(band, neighbor, dynamicWidth - (position - start), distanceAtNodeEnd, distanceAtNodeStart);
 				}
 			}
-			else
+			if (dynamicWidth > end - position)
 			{
-				endQueue.pop();
-				assert(currentBand[endBest.index]);
-				for (auto neighbor : graph.outNeighbors[endBest.index])
+				for (auto neighbor : graph.outNeighbors[nodeIndex])
 				{
-					if (!currentBand[neighbor])
-					{
-						currentBand[neighbor] = true;
-						currentWidth += graph.nodeEnd[neighbor] - graph.nodeStart[neighbor];
-						endQueue.emplace(neighbor, endBest.score + graph.nodeEnd[neighbor] - graph.nodeStart[neighbor]);
-					}
+					expandDynamicBandFromEnd(band, neighbor, dynamicWidth - (end - position), distanceAtNodeEnd, distanceAtNodeStart);
 				}
 			}
 		}
@@ -528,64 +548,51 @@ private:
 		band[nodeIndex] = true;
 		LengthType start = graph.nodeStart[nodeIndex];
 		LengthType end = graph.nodeEnd[nodeIndex];
+		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
+		std::unordered_map<size_t, size_t> distanceAtNodeStart;
 		if (dynamicWidth > previousMinimumIndex - start)
 		{
-			for (auto neighbor : graph.inNeighbors[nodeIndex])
-			{
-				expandDynamicBandBackward(band, neighbor, dynamicWidth - (previousMinimumIndex - start));
-			}
+			expandDynamicBandFromStart(band, nodeIndex, dynamicWidth - (previousMinimumIndex - start), distanceAtNodeEnd, distanceAtNodeStart);
 		}
 		if (dynamicWidth > end - previousMinimumIndex)
 		{
-			for (auto neighbor : graph.outNeighbors[nodeIndex])
-			{
-				expandDynamicBandForward(band, neighbor, dynamicWidth - (end - previousMinimumIndex));
-			}
+			expandDynamicBandFromEnd(band, nodeIndex, dynamicWidth - (end - previousMinimumIndex), distanceAtNodeEnd, distanceAtNodeStart);
 		}
 	}
 
-	void expandDynamicBandBackward(std::vector<bool>& band, LengthType nodeIndex, LengthType dynamicWidth) const
+	void expandDynamicBandFromStart(std::vector<bool>& band, LengthType nodeIndex, LengthType dynamicWidth, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::unordered_map<size_t, size_t>& distanceAtNodeStart) const
 	{
 		if (dynamicWidth == 0) return;
-		assert(nodeIndex < graph.nodeStart.size());
-		//todo fix: currently only the first path that reaches the node is considered
-		//this means that it might not reach some nodes with distance < dynamicwidth
-		if (band[nodeIndex]) return;
-		band[nodeIndex] = true;
-		for (auto neighbor : graph.outNeighbors[nodeIndex])
-		{
-			expandDynamicBandForward(band, neighbor, dynamicWidth - 1);
-		}
-		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
-		if (dynamicWidth > nodeSize)
-		{
-			for (auto neighbor : graph.inNeighbors[nodeIndex])
-			{
-				expandDynamicBandBackward(band, neighbor, dynamicWidth - nodeSize);
-			}
-		}
-	}
-
-	template <typename MatrixType>
-	void expandDynamicBandForward(MatrixType& band, LengthType nodeIndex, LengthType dynamicWidth) const
-	{
-		if (dynamicWidth == 0) return;
-		assert(nodeIndex < graph.nodeStart.size());
-		//todo fix: currently only the first path that reaches the node is considered
-		//this means that it might not reach some nodes with distance < dynamicwidth if there's multiple paths and it arbitrarily picks the longest one first
-		if (band[nodeIndex]) return;
+		auto foundStart = distanceAtNodeStart.find(nodeIndex);
+		if (foundStart != distanceAtNodeStart.end() && foundStart->second >= dynamicWidth) return;
+		distanceAtNodeStart[nodeIndex] = dynamicWidth;
 		band[nodeIndex] = true;
 		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
-			expandDynamicBandBackward(band, neighbor, dynamicWidth - 1);
+			expandDynamicBandFromEnd(band, neighbor, dynamicWidth-1, distanceAtNodeEnd, distanceAtNodeStart);
 		}
-		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex];
+		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex] - 1;
 		if (dynamicWidth > nodeSize)
 		{
-			for (auto neighbor : graph.outNeighbors[nodeIndex])
-			{
-				expandDynamicBandForward(band, neighbor, dynamicWidth - nodeSize);
-			}
+			expandDynamicBandFromEnd(band, nodeIndex, dynamicWidth - nodeSize, distanceAtNodeEnd, distanceAtNodeStart);
+		}
+	}
+
+	void expandDynamicBandFromEnd(std::vector<bool>& band, LengthType nodeIndex, LengthType dynamicWidth, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::unordered_map<size_t, size_t>& distanceAtNodeStart) const
+	{
+		if (dynamicWidth == 0) return;	
+		auto foundStart = distanceAtNodeEnd.find(nodeIndex);
+		if (foundStart != distanceAtNodeEnd.end() && foundStart->second >= dynamicWidth) return;
+		distanceAtNodeEnd[nodeIndex] = dynamicWidth;
+		band[nodeIndex] = true;
+		for (auto neighbor : graph.outNeighbors[nodeIndex])
+		{
+			expandDynamicBandFromStart(band, neighbor, dynamicWidth-1, distanceAtNodeEnd, distanceAtNodeStart);
+		}
+		auto nodeSize = graph.nodeEnd[nodeIndex] - graph.nodeStart[nodeIndex] - 1;
+		if (dynamicWidth > nodeSize)
+		{
+			expandDynamicBandFromStart(band, nodeIndex, dynamicWidth - nodeSize, distanceAtNodeEnd, distanceAtNodeStart);
 		}
 	}
 
@@ -1427,7 +1434,7 @@ private:
 			{
 				std::swap(currentBand, previousBand);
 				currentBand.assign(currentBand.size(), false);
-				expandBandFromPrevious(currentBand, previousBand, previousSlice, dynamicWidth, nodeMinScores);
+				projectForwardAndExpandBand(currentBand, previousMinimumIndex, dynamicWidth);
 			}
 			cutCycles(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
 			for (size_t i = graph.firstInOrder; i < graph.nodeStart.size(); i++)
