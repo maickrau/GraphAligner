@@ -773,6 +773,7 @@ private:
 #ifdef EXTRAASSERTIONS
 		auto correctValue = differenceMasksCellByCell(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 #endif
+		assert(scoreDifference >= 0);
 		const uint64_t signmask = WordConfiguration<Word>::SignMask;
 		const uint64_t lsbmask = WordConfiguration<Word>::LSBMask;
 		const int chunksize = WordConfiguration<Word>::ChunkBits;
@@ -792,6 +793,10 @@ private:
 		if (scoreDifference == 128 && rightVN == allones && leftVP == allones)
 		{
 			return std::make_pair(allones ^ ((Word)1 << (WordConfiguration<Word>::WordSize-1)), allzeros);
+		}
+		else if (scoreDifference == 0 && rightVN == allones && leftVP == allones)
+		{
+			return std::make_pair(0, allones);
 		}
 		assert(scoreDifference >= 0);
 		assert(scoreDifference < 128);
@@ -883,6 +888,7 @@ private:
 		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
 		auto leftSmaller = masks.first;
 		auto rightSmaller = masks.second;
+		assert((leftSmaller & rightSmaller) == 0);
 		auto mask = (rightSmaller | ((leftSmaller | rightSmaller) - (rightSmaller << 1))) & ~leftSmaller;
 		uint64_t leftReduction = leftSmaller & (rightSmaller << 1);
 		uint64_t rightReduction = rightSmaller & (leftSmaller << 1);
