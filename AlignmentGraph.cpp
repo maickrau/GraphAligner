@@ -242,3 +242,41 @@ void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalcula
 	assert(cuts[cycleStart].nodes[0] == cycleStart);
 	assert(cuts[cycleStart].predecessors.size() == 1 || cuts[cycleStart].predecessors[0].size() > 0);
 }
+
+std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpositions, size_t amount) const
+{
+	std::vector<std::set<size_t>> positions;
+	positions.resize(amount+1);
+	positions[0].insert(startpositions.begin(), startpositions.end());
+	for (size_t i = 0; i < amount; i++)
+	{
+		auto left = amount - i;
+		for (auto pos : positions[i])
+		{
+			auto nodeIndex = indexToNode[pos];
+			auto end = nodeEnd[nodeIndex];
+			if (pos + left < end)
+			{
+				assert(i + end - pos > amount);
+				positions.back().insert(pos + left);
+			}
+			else if (pos + left == end)
+			{
+				assert(i + end - pos == amount);
+				for (auto neighbor : outNeighbors[nodeIndex])
+				{
+					positions.back().insert(nodeStart[neighbor]);
+				}
+			}
+			else
+			{
+				assert(i + end - pos < amount);
+				for (auto neighbor : outNeighbors[nodeIndex])
+				{
+					positions[i + end - pos].insert(nodeStart[neighbor]);
+				}
+			}
+		}
+	}
+	return positions.back();
+}

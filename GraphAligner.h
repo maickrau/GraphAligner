@@ -473,53 +473,8 @@ private:
 		auto nodeIndex = graph.indexToNode[previousMinimumIndex];
 		auto end = graph.nodeEnd[nodeIndex];
 		std::set<size_t> positions;
-		if (end > previousMinimumIndex + WordConfiguration<Word>::WordSize)
-		{
-			positions.insert(previousMinimumIndex + WordConfiguration<Word>::WordSize);
-		}
-		else if (end == previousMinimumIndex + WordConfiguration<Word>::WordSize)
-		{
-			for (auto neighbor : graph.outNeighbors[nodeIndex])
-			{
-				positions.insert(graph.nodeStart[neighbor]);
-			}
-		}
-		else
-		{
-			std::vector<std::set<LengthType>> nodesAtDistance;
-			nodesAtDistance.resize(WordConfiguration<Word>::WordSize);
-			auto start = end - previousMinimumIndex;
-			for (auto neighbor : graph.outNeighbors[nodeIndex])
-			{
-				nodesAtDistance[start].insert(neighbor);
-			}
-			for (size_t i = start; i < nodesAtDistance.size(); i++)
-			{
-				for (auto node : nodesAtDistance[i])
-				{
-					auto newpos = i + graph.nodeEnd[node] - graph.nodeStart[node];
-					if (newpos > nodesAtDistance.size())
-					{
-						assert(graph.nodeStart[node] + WordConfiguration<Word>::WordSize - i < graph.nodeEnd[node]);
-						positions.insert(graph.nodeStart[node] + WordConfiguration<Word>::WordSize - i);
-						continue;
-					}
-					else if (newpos == nodesAtDistance.size())
-					{
-						assert(graph.nodeStart[node] + WordConfiguration<Word>::WordSize - i == graph.nodeEnd[node]);
-						for (auto neighbor : graph.outNeighbors[node])
-						{
-							positions.insert(graph.nodeStart[neighbor]);
-						}
-						continue;
-					}
-					for (auto neighbor : graph.outNeighbors[node])
-					{
-						nodesAtDistance[newpos].insert(neighbor);
-					}
-				}
-			}
-		}
+		positions.insert(previousMinimumIndex);
+		positions = graph.ProjectForward(positions, WordConfiguration<Word>::WordSize);
 		positions.insert(previousMinimumIndex);
 		assert(positions.size() >= 1);
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
