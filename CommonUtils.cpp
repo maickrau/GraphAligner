@@ -64,6 +64,51 @@ namespace CommonUtils
 				case 'n':
 				result += 'N';
 				break;
+				case 'U':
+				case 'u':
+				result += 'A';
+				break;
+				case 'R':
+				case 'r':
+				result += 'Y';
+				break;
+				case 'Y':
+				case 'y':
+				result += 'R';
+				break;
+				case 'K':
+				case 'k':
+				result += 'M';
+				break;
+				case 'M':
+				case 'm':
+				result += 'K';
+				break;
+				case 'S':
+				case 's':
+				result += 'S';
+				break;
+				case 'W':
+				case 'w':
+				result += 'W';
+				break;
+				case 'B':
+				case 'b':
+				result += 'V';
+				break;
+				case 'V':
+				case 'v':
+				result += 'B';
+				break;
+				case 'D':
+				case 'd':
+				result += 'H';
+				break;
+				case 'H':
+				case 'h':
+				result += 'D';
+				default:
+				assert(false);
 			}
 		}
 		return result;
