@@ -17,8 +17,9 @@ CycleCutCalculation::CycleCutCalculation(const AlignmentGraph& graph) : graph(gr
 std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors) const
 {
 	std::vector<size_t> supersequence;
-	std::map<std::pair<size_t, size_t>, size_t> positionInSupersequence;
-	std::vector<std::set<size_t>> nodes;
+	std::vector<std::unordered_map<size_t, size_t>> positionInSupersequence;
+	positionInSupersequence.resize(sizeLeft);
+	std::vector<std::unordered_set<size_t>> nodes;
 	nodes.resize(sizeLeft);
 	std::vector<std::pair<std::pair<size_t, size_t>, std::pair<size_t, size_t>>> edges;
 	nodes[0].insert(cycleStart);
@@ -26,14 +27,27 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 	{
 		for (auto node : nodes[i])
 		{
-			positionInSupersequence[std::make_pair(i, node)] = supersequence.size();
+			positionInSupersequence[i][node] = supersequence.size();
 			supersequence.push_back(node);
 			auto nodeSize = graph.nodeEnd[node] - graph.nodeStart[node];
 			if (i + nodeSize >= sizeLeft) continue;
 			for (auto neighbor : graph.inNeighbors[node])
 			{
-				nodes[i + nodeSize].insert(neighbor);
-				edges.emplace_back(std::make_pair(i, node), std::make_pair(i + nodeSize, neighbor));
+				bool found = false;
+				for (size_t j = i+1; j <= i+nodeSize; j++)
+				{
+					if (nodes[j].count(neighbor) > 0)
+					{
+						edges.emplace_back(std::make_pair(i, node), std::make_pair(j, neighbor));
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					nodes[i + nodeSize].insert(neighbor);
+					edges.emplace_back(std::make_pair(i, node), std::make_pair(i + nodeSize, neighbor));
+				}
 			}
 		}
 	}
@@ -42,7 +56,7 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 	{
 		auto from = edge.first;
 		auto to = edge.second;
-		predecessors[positionInSupersequence[from]].insert(positionInSupersequence[to]);
+		predecessors[positionInSupersequence[from.first][from.second]].insert(positionInSupersequence[to.first][to.second]);
 	}
 	return supersequence;
 }
