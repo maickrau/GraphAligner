@@ -479,6 +479,15 @@ private:
 		assert(positions.size() >= 1);
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 		std::unordered_map<size_t, size_t> distanceAtNodeStart;
+		band[nodeIndex] = true;
+		if (nodeIndex < graph.firstInOrder && bandOrderOutOfOrder != nullptr)
+		{
+			bandOrderOutOfOrder->insert(nodeIndex);
+		}
+		else if (nodeIndex >= graph.firstInOrder && bandOrder != nullptr)
+		{
+			bandOrder->insert(nodeIndex);
+		}
 		for (auto position : positions)
 		{
 			auto nodeIndex = graph.indexToNode[position];
@@ -1324,7 +1333,7 @@ private:
 
 		NodeSlice<WordSlice> previousSlice;
 
-		LengthType previousMinimumIndex;
+		LengthType previousMinimumIndex = std::numeric_limits<LengthType>::max();
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 		assert(startBand.size() > 0);
@@ -1339,7 +1348,7 @@ private:
 		{
 			NodeSlice<WordSlice> currentSlice;
 			ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
-			LengthType currentMinimumIndex = 0;
+			LengthType currentMinimumIndex = std::numeric_limits<LengthType>::max();
 			//preprocessed bitvectors for character equality
 			Word BA = WordConfiguration<Word>::AllZeros;
 			Word BT = WordConfiguration<Word>::AllZeros;
@@ -1468,6 +1477,7 @@ private:
 			else
 			{
 				std::swap(currentBand, previousBand);
+				assert(previousMinimumIndex != std::numeric_limits<LengthType>::max());
 				projectForwardAndExpandBand(currentBand, previousMinimumIndex, dynamicWidth, &bandOrder, &bandOrderOutOfOrder);
 			}
 			for (auto i : bandOrder)
@@ -1512,6 +1522,7 @@ private:
 				assert(previousBand[node]);
 				previousBand[node] = false;
 			}
+			assert(currentMinimumIndex != std::numeric_limits<LengthType>::max());
 			previousSlice = std::move(currentSlice);
 			previousMinimumIndex = currentMinimumIndex;
 			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
