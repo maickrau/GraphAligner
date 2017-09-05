@@ -1229,7 +1229,7 @@ private:
 		assert(index < reachable.size());
 		if (reachable[index]) return;
 		reachable[index] = true;
-		assert(graph.notInOrder[cycleCut]);
+		// assert(graph.notInOrder[cycleCut]);
 		assert(currentBand[graph.cuts[cycleCut].nodes[index]]);
 		if (graph.cuts[cycleCut].previousCut[index]) return;
 		source[index] = true;
@@ -1264,7 +1264,7 @@ private:
 			assert(currentBand[i]);
 			assert(i > 0);
 			assert(i < graph.firstInOrder);
-			assert(graph.notInOrder[i]);
+			// assert(graph.notInOrder[i]);
 			assert(graph.cuts[i].nodes.size() > 0);
 			assert(graph.cuts[i].nodes[0] == i);
 			std::vector<bool> reachable;
@@ -1449,7 +1449,7 @@ private:
 					{
 						previousSlice.addNode(node, graph.nodeEnd[node]-graph.nodeStart[node]);
 						std::vector<WordSlice>& slice = previousSlice.node(node);
-						for (size_t i = 0; i < graph.nodeEnd[i] - graph.nodeStart[i]; i++)
+						for (size_t i = 0; i < graph.nodeEnd[node] - graph.nodeStart[node]; i++)
 						{
 							slice[i] = {0, 0, 0, 0};
 						}
@@ -1458,7 +1458,7 @@ private:
 					{
 						previousSlice.addNode(node, graph.nodeEnd[node]-graph.nodeStart[node]);
 						std::vector<WordSlice>& slice = previousSlice.node(node);
-						for (size_t i = 0; i < graph.nodeEnd[i] - graph.nodeStart[i]; i++)
+						for (size_t i = 0; i < graph.nodeEnd[node] - graph.nodeStart[node]; i++)
 						{
 							slice[i] = {0, 0, 0, 0};
 						}
