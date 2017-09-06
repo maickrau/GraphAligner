@@ -241,6 +241,34 @@ void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalcula
 	assert(cuts[cycleStart].previousCut.size() == cuts[cycleStart].nodes.size());
 	assert(cuts[cycleStart].nodes[0] == cycleStart);
 	assert(cuts[cycleStart].predecessors.size() == 1 || cuts[cycleStart].predecessors[0].size() > 0);
+
+#ifndef NDEBUG
+	size_t totalSize = 0;
+	for (size_t i = 0; i < cuts[cycleStart].nodes.size(); i++)
+	{
+		totalSize += nodeEnd[cuts[cycleStart].nodes[i]] - nodeStart[cuts[cycleStart].nodes[i]];
+		if (totalSize >= wordSize) break;
+	}
+	assert(totalSize >= wordSize);
+
+	std::vector<bool> isPredecessor;
+	isPredecessor.resize(cuts[cycleStart].nodes.size(), false);
+	for (size_t i = 0; i < cuts[cycleStart].predecessors.size(); i++)
+	{
+		for (auto predecessor : cuts[cycleStart].predecessors[i])
+		{
+			assert(predecessor > i);
+			isPredecessor[predecessor] = true;
+		}
+	}
+
+	assert(!isPredecessor[0]);
+	for (size_t i = 1; i < cuts[cycleStart].nodes.size(); i++)
+	{
+		assert(isPredecessor[i]);
+	}
+
+#endif
 }
 
 std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpositions, size_t amount) const

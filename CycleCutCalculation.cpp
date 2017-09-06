@@ -1,3 +1,4 @@
+#include <queue>
 #include <iostream>
 #include <limits>
 #include <algorithm>
@@ -14,39 +15,191 @@ CycleCutCalculation::CycleCutCalculation(const AlignmentGraph& graph) : graph(gr
 {
 }
 
+class PriorityNode
+{
+public:
+	PriorityNode(size_t n, size_t d) : nodeIndex(n), distance(d) {};
+	size_t nodeIndex;
+	size_t distance;
+	bool operator<(const PriorityNode& other) const
+	{
+		return distance < other.distance;
+	}
+};
+
+std::unordered_set<size_t> CycleCutCalculation::getReachable(size_t cycleStart, size_t sizeLeft) const
+{
+	std::unordered_set<size_t> result;
+	std::priority_queue<PriorityNode> queue;
+	queue.emplace(cycleStart, 0);
+	while (queue.size() > 0)
+	{
+		auto top = queue.top();
+		queue.pop();
+		if (result.count(top.nodeIndex) == 1) continue;
+		result.insert(top.nodeIndex);
+		auto nextDistance = top.distance + graph.nodeEnd[top.nodeIndex] - graph.nodeStart[top.nodeIndex];
+		if (nextDistance >= sizeLeft) continue;
+		for (auto neighbor : graph.inNeighbors[top.nodeIndex])
+		{
+			queue.emplace(neighbor, nextDistance);
+		}
+	}
+	return result;
+}
+
+void CycleCutCalculation::splitCyclicAndNoncyclicRec(std::vector<size_t>& stack, size_t currentNode, const std::unordered_set<size_t>& reachable, std::unordered_set<size_t>& visited, std::unordered_set<size_t>& cyclic) const
+{
+	for (size_t i = 0; i < stack.size(); i++)
+	{
+		if (stack[i] == currentNode)
+		{
+			for (auto node : stack)
+			{
+				cyclic.insert(node);
+			}
+			return;
+		}
+	}
+	if (cyclic.count(currentNode) > 0)
+	{
+		for (auto node : stack)
+		{
+			cyclic.insert(node);
+		}
+		visited.insert(currentNode);
+		return;
+	}
+	if (visited.count(currentNode) > 0) return;
+	visited.insert(currentNode);
+	stack.push_back(currentNode);
+	for (auto neighbor : graph.inNeighbors[currentNode])
+	{
+		if (reachable.count(neighbor) == 0) continue;
+		splitCyclicAndNoncyclicRec(stack, neighbor, reachable, visited, cyclic);
+	}
+	stack.pop_back();
+}
+
+std::pair<std::unordered_set<size_t>, std::unordered_set<size_t>> CycleCutCalculation::splitCyclicAndNoncyclic(size_t cycleStart, int sizeLeft) const
+{
+	const auto reachable = getReachable(cycleStart, sizeLeft);
+	// return std::make_pair(reachable, std::unordered_set<size_t>{});
+	std::unordered_set<size_t> cyclic;
+	std::unordered_set<size_t> visited;
+	std::vector<size_t> stack;
+	splitCyclicAndNoncyclicRec(stack, cycleStart, reachable, visited, cyclic);
+	assert(visited.size() == reachable.size());
+	for (auto node : cyclic)
+	{
+		visited.erase(node);
+	}
+	assert(visited.size() + cyclic.size() == reachable.size());
+	assert(cyclic.count(cycleStart) != visited.count(cycleStart));
+	assert((cyclic.size() == 0 && cyclic.count(cycleStart) == 0) || (cyclic.size() > 0 && cyclic.count(cycleStart) == 1));
+	return std::make_pair(cyclic, visited);
+}
+
 std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors) const
 {
+	auto cyclicUncyclic = splitCyclicAndNoncyclic(cycleStart, sizeLeft);
+	auto& cyclic = cyclicUncyclic.first;
+	auto& uncyclicset = cyclicUncyclic.second;
+	assert((cyclic.size() == 0 && cyclic.count(cycleStart) == 0) || (cyclic.size() > 0 && cyclic.count(cycleStart) == 1));
+	assert((cyclic.size() == 0 && uncyclicset.count(cycleStart) == 1) || (cyclic.size() > 0 && uncyclicset.count(cycleStart) == 0));
 	std::vector<size_t> supersequence;
 	std::vector<std::unordered_map<size_t, size_t>> positionInSupersequence;
+	std::unordered_map<size_t, std::vector<size_t>> existingIndexesForNode;
 	positionInSupersequence.resize(sizeLeft);
 	std::vector<std::unordered_set<size_t>> nodes;
 	nodes.resize(sizeLeft);
 	std::vector<std::pair<std::pair<size_t, size_t>, std::pair<size_t, size_t>>> edges;
-	nodes[0].insert(cycleStart);
-	for (size_t i = 0; i < sizeLeft; i++)
+	if (cyclic.size() > 0)
 	{
-		for (auto node : nodes[i])
+		assert(cyclic.count(cycleStart) > 0);
+		nodes[0].insert(cycleStart);
+		for (size_t i = 0; i < sizeLeft; i++)
 		{
-			positionInSupersequence[i][node] = supersequence.size();
-			supersequence.push_back(node);
-			auto nodeSize = graph.nodeEnd[node] - graph.nodeStart[node];
-			if (i + nodeSize >= sizeLeft) continue;
-			for (auto neighbor : graph.inNeighbors[node])
+			for (auto node : nodes[i])
 			{
-				bool found = false;
-				for (size_t j = i+1; j <= i+nodeSize; j++)
+				assert(cyclic.count(node) > 0);
+				positionInSupersequence[i][node] = supersequence.size();
+				existingIndexesForNode[node].push_back(i);
+				supersequence.push_back(node);
+				auto nodeSize = graph.nodeEnd[node] - graph.nodeStart[node];
+				if (i + nodeSize >= sizeLeft) continue;
+				for (auto neighbor : graph.inNeighbors[node])
 				{
-					if (nodes[j].count(neighbor) > 0)
+					if (cyclic.count(neighbor) == 0) continue;
+					bool found = false;
+					for (size_t j = i+1; j <= i+nodeSize; j++)
 					{
-						edges.emplace_back(std::make_pair(i, node), std::make_pair(j, neighbor));
-						found = true;
-						break;
+						if (nodes[j].count(neighbor) > 0)
+						{
+							edges.emplace_back(std::make_pair(i, node), std::make_pair(j, neighbor));
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+					{
+						nodes[i + nodeSize].insert(neighbor);
+						edges.emplace_back(std::make_pair(i, node), std::make_pair(i + nodeSize, neighbor));
 					}
 				}
-				if (!found)
+			}
+		}
+	}
+	if (uncyclicset.size() > 0)
+	{
+		std::vector<size_t> uncyclic;
+		{
+			std::unordered_map<size_t, size_t> nodeIndex;
+			std::vector<size_t> topologicalSortNodes;
+			std::vector<std::vector<size_t>> topologicalSortNeighbors;
+			for (auto node : uncyclicset)
+			{
+				nodeIndex[node] = topologicalSortNodes.size();
+				topologicalSortNodes.push_back(node);
+			}
+			topologicalSortNeighbors.resize(topologicalSortNodes.size());
+			for (size_t i = 0; i < topologicalSortNodes.size(); i++)
+			{
+				for (auto neighbor : graph.inNeighbors[topologicalSortNodes[i]])
 				{
-					nodes[i + nodeSize].insert(neighbor);
-					edges.emplace_back(std::make_pair(i, node), std::make_pair(i + nodeSize, neighbor));
+					assert(neighbor != topologicalSortNodes[i]);
+					if (uncyclicset.count(neighbor) == 0) continue;
+					topologicalSortNeighbors[i].push_back(nodeIndex[neighbor]);
+				}
+			}
+			auto order = topologicalSort(topologicalSortNeighbors);
+			for (size_t i = 0; i < order.size(); i++)
+			{
+				uncyclic.push_back(topologicalSortNodes[order[i]]);
+			}
+		}
+		for (auto node : uncyclic)
+		{
+			assert(nodes[0].count(node) == 0);
+			assert(existingIndexesForNode.count(node) == 0);
+			assert(positionInSupersequence[0].count(node) == 0);
+			nodes[0].insert(node);
+			existingIndexesForNode[node].push_back(0);
+			positionInSupersequence[0][node] = supersequence.size();
+			supersequence.push_back(node);
+		}
+		for (auto node : uncyclic)
+		{
+			for (auto neighbor : graph.outNeighbors[node])
+			{
+				if (cyclic.count(neighbor) == 0 && uncyclicset.count(neighbor) == 0) continue;
+				assert(existingIndexesForNode.count(neighbor) == 1);
+				assert(existingIndexesForNode[neighbor].size() > 0);
+				for (auto pos : existingIndexesForNode[neighbor])
+				{
+					edges.emplace_back(std::make_pair(pos, neighbor), std::make_pair(0, node));
+					assert(positionInSupersequence[pos].count(neighbor) == 1);
+					assert(positionInSupersequence[pos][neighbor] < positionInSupersequence[0][node]);
 				}
 			}
 		}
@@ -56,8 +209,10 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 	{
 		auto from = edge.first;
 		auto to = edge.second;
+		assert(positionInSupersequence[from.first][from.second] < positionInSupersequence[to.first][to.second]);
 		predecessors[positionInSupersequence[from.first][from.second]].insert(positionInSupersequence[to.first][to.second]);
 	}
+	assert(supersequence.size() >= cyclic.size() + uncyclicset.size());
 	return supersequence;
 }
 
@@ -142,22 +297,6 @@ void CycleCutCalculation::getPredecessorsFromSupersequenceOverEdgeCoveringPaths(
 	}
 
 	filterUnnecessaryCharacters(cycleStart, sizeLeft, supersequence, supersequencePredecessors);
-
-#ifndef NDEBUG
-	std::vector<bool> isPredecessor;
-	isPredecessor.resize(supersequence.size(), false);
-	for (size_t i = 0; i < supersequencePredecessors.size(); i++)
-	{
-		for (auto predecessor : supersequencePredecessors[i])
-		{
-			isPredecessor[predecessor] = true;
-		}
-	}
-	for (size_t i = 1; i < isPredecessor.size(); i++)
-	{
-		assert(isPredecessor[i]);
-	}
-#endif
 }
 
 std::vector<size_t> getPairwiseSupersequenceByAlignment(const std::vector<size_t>& supersequence, const std::vector<size_t>& currentStack)
@@ -475,7 +614,7 @@ void CycleCutCalculation::getCycleCuttersTooBig(size_t cycleStart, int sizeLeft,
 AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutTooBig(size_t startNode, int wordSize) const
 {
 	AlignmentGraph::CycleCut result;
-	getCycleCuttersTooBig(startNode, wordSize*2, result.nodes, result.predecessors, result.previousCut);
+	getCycleCuttersTooBig(startNode, wordSize*2+1, result.nodes, result.predecessors, result.previousCut);
 	return result;
 }
 
