@@ -36,10 +36,10 @@ std::unordered_set<size_t> CycleCutCalculation::getReachable(size_t cycleStart, 
 	{
 		auto top = queue.top();
 		queue.pop();
+		if (top.distance > sizeLeft) continue;
 		if (result.count(top.nodeIndex) == 1) continue;
 		result.insert(top.nodeIndex);
 		auto nextDistance = top.distance + graph.nodeEnd[top.nodeIndex] - graph.nodeStart[top.nodeIndex];
-		if (nextDistance >= sizeLeft) continue;
 		for (auto neighbor : graph.inNeighbors[top.nodeIndex])
 		{
 			queue.emplace(neighbor, nextDistance);
@@ -58,6 +58,7 @@ void CycleCutCalculation::splitCyclicAndNoncyclicRec(std::vector<size_t>& stack,
 			{
 				cyclic.insert(node);
 			}
+			visited.insert(currentNode);
 			return;
 		}
 	}
@@ -212,7 +213,6 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 		assert(positionInSupersequence[from.first][from.second] < positionInSupersequence[to.first][to.second]);
 		predecessors[positionInSupersequence[from.first][from.second]].insert(positionInSupersequence[to.first][to.second]);
 	}
-	assert(supersequence.size() >= cyclic.size() + uncyclicset.size());
 	return supersequence;
 }
 

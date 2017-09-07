@@ -106,7 +106,7 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	nodeSequences.push_back('-');
-	indexToNode.push_back('-');
+	indexToNode.push_back(nodeStart.size() - 1);
 	nodeEnd.emplace_back(nodeSequences.size());
 	notInOrder.push_back(false);
 	assert(nodeSequences.size() >= nodeStart.size());
@@ -180,6 +180,29 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 		}
 		std::cerr << "total cut: " << totalCuttersbp << "bp (" << (double)totalCuttersbp / (double)nodeSequences.size() * 100 << "%)" << std::endl;
 	}
+#ifndef NDEBUG
+	assert(nodeSequences.size() >= nodeStart.size());
+	assert(nodeEnd.size() == nodeStart.size());
+	assert(notInOrder.size() == nodeStart.size());
+	assert(inNeighbors.size() == nodeStart.size());
+	assert(outNeighbors.size() == nodeStart.size());
+	assert(notInOrder.size() == nodeStart.size());
+	assert(reverse.size() == nodeStart.size());
+	assert(nodeIDs.size() == nodeStart.size());
+	assert(indexToNode.size() == nodeSequences.size());
+	for (size_t i = 0; i < nodeStart.size(); i++)
+	{
+		assert(nodeEnd[i] > nodeStart[i]);
+		assert(nodeEnd[i] <= nodeSequences.size());
+		if (i > 0) assert(nodeStart[i] == nodeEnd[i-1]);
+	}
+	for (size_t i = 0; i < nodeSequences.size(); i++)
+	{
+		assert(indexToNode[i] < nodeStart.size());
+		assert(nodeStart[indexToNode[i]] <= i);
+		assert(nodeEnd[indexToNode[i]] > i);
+	}
+#endif
 }
 
 void AlignmentGraph::calculateCycleCuts(int wordSize)
@@ -247,9 +270,9 @@ void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalcula
 	for (size_t i = 0; i < cuts[cycleStart].nodes.size(); i++)
 	{
 		totalSize += nodeEnd[cuts[cycleStart].nodes[i]] - nodeStart[cuts[cycleStart].nodes[i]];
-		if (totalSize >= wordSize) break;
+		if (totalSize >= wordSize * 2) break;
 	}
-	assert(totalSize >= wordSize);
+	assert(totalSize >= wordSize * 2);
 
 	std::vector<bool> isPredecessor;
 	isPredecessor.resize(cuts[cycleStart].nodes.size(), false);
