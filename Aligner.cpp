@@ -321,8 +321,8 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 		{
 			if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
 			{
-				coutoutput << "read " << fastq->seq_id << " has no seed hits";
-				cerroutput << "read " << fastq->seq_id << " has no seed hits";
+				coutoutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+				cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 				coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 				continue;
@@ -335,6 +335,8 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 			}
 			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
 		}
+
+		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;
 
 		//failed alignment, don't output
 		if (alignment.alignmentFailed)
