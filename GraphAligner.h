@@ -1213,8 +1213,6 @@ private:
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 		}
 
-		assert(slice[0].scoreEnd >= lastSliceMinScoreDebug);
-
 #ifdef EXTRAASSERTIONS
 		if (!forceSource)
 		{
@@ -1249,8 +1247,6 @@ private:
 				result.minScore = slice[w].scoreEnd;
 				result.minScoreIndex = nodeStart + w;
 			}
-
-			assert(slice[w].scoreEnd >= lastSliceMinScoreDebug);
 
 #ifdef EXTRAASSERTIONS
 			if (!forceSource)
@@ -1377,9 +1373,6 @@ private:
 
 		std::set<size_t> previousBandOrder;
 		std::set<size_t> previousBandOrderOutOfOrder;
-#ifndef NDEBUG
-		lastSliceMinScoreDebug = 0;
-#endif
 
 		for (size_t j = 0; j < sequence.size(); j += WordConfiguration<Word>::WordSize)
 		{
@@ -1579,9 +1572,6 @@ private:
 			}
 			assert(currentMinimumIndex != std::numeric_limits<LengthType>::max());
 			assert(result.minScorePerWordSlice.size() == 0 || currentMinimumScore >= result.minScorePerWordSlice.back());
-#ifndef NDEBUG
-			lastSliceMinScoreDebug = currentMinimumScore;
-#endif
 			previousSlice = std::move(currentSlice);
 			previousMinimumIndex = currentMinimumIndex;
 			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
@@ -1626,10 +1616,6 @@ private:
 		assert(backtraceresult.back().second == sequence.size() - padding - 1);
 		return std::make_tuple(slice.finalMinScore, backtraceresult, slice.cellsProcessed);
 	}
-
-#ifndef NDEBUG
-	mutable ScoreType lastSliceMinScoreDebug;
-#endif
 
 	const AlignmentGraph& graph;
 };
