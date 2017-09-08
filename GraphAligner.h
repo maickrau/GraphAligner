@@ -335,6 +335,8 @@ private:
 		for (size_t j = 0; j <= maxRow; j++)
 		{
 			std::set<LengthType> rowResult;
+			assert(forwardResult.size() > j);
+			assert(backwardResult.size() > j);
 			rowResult.insert(forwardResult[j].begin(), forwardResult[j].end());
 			rowResult.insert(backwardResult[j].begin(), backwardResult[j].end());
 			result[j].insert(result[j].end(), rowResult.begin(), rowResult.end());
