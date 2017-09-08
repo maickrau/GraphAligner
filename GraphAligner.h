@@ -298,10 +298,9 @@ private:
 	{
 		auto seedHitsInMatrix = graph.GetSeedHitPositionsInMatrix(sequence, originalSeedHits);
 		auto bandLocations = getBandLocations(sequence.size(), seedHitsInMatrix, dynamicRowStart);
-		for (LengthType j = 0; j < dynamicRowStart && j < sequence.size()+1; j += WordConfiguration<Word>::WordSize)
+		for (LengthType j = 1; j < bandLocations.size(); j++)
 		{
-			assert(bandLocations.size() > j + 64);
-			bandLocations[j].insert(bandLocations[j].end(), bandLocations[j+64].begin(), bandLocations[j+64].end());
+			bandLocations[j-1].insert(bandLocations[j-1].end(), bandLocations[j].begin(), bandLocations[j].end());
 		}
 		std::vector<std::vector<bool>> result;
 		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
@@ -310,15 +309,17 @@ private:
 			std::unordered_map<size_t, size_t> distanceAtNodeStart;
 			std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 			auto index = j/WordConfiguration<Word>::WordSize;
+			assert(result.size() > index);
+			assert(bandLocations.size() > index);
 			result[index].resize(graph.nodeStart.size(), false);
-			expandBandFromPositions(result[index], bandLocations[j], startBandwidth, distanceAtNodeStart, distanceAtNodeEnd, nullptr, nullptr);
+			expandBandFromPositions(result[index], bandLocations[index], startBandwidth, distanceAtNodeStart, distanceAtNodeEnd, nullptr, nullptr);
 		}
 		return result;
 	}
 
 	std::vector<std::vector<LengthType>> getBandLocations(int sequenceLength, const std::vector<MatrixPosition>& seedHits, LengthType maxRow) const
 	{
-		if (maxRow > sequenceLength+1) maxRow = sequenceLength+1;
+		if (maxRow > sequenceLength) maxRow = sequenceLength;
 		std::vector<std::vector<LengthType>> forwardResult;
 		std::vector<std::vector<LengthType>> backwardResult;
 		backwardResult.resize(sequenceLength+1);
@@ -331,15 +332,16 @@ private:
 			expandBandBackwards(backwardResult, hit.first, hit.second, sequenceLength);
 		}
 		std::vector<std::vector<LengthType>> result;
-		result.resize(maxRow+1);
-		for (size_t j = 0; j <= maxRow; j++)
+		result.resize((maxRow+WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1);
+		for (size_t j = 0; j <= maxRow; j += WordConfiguration<Word>::WordSize)
 		{
 			std::set<LengthType> rowResult;
 			assert(forwardResult.size() > j);
 			assert(backwardResult.size() > j);
+			assert(result.size() > j / WordConfiguration<Word>::WordSize);
 			rowResult.insert(forwardResult[j].begin(), forwardResult[j].end());
 			rowResult.insert(backwardResult[j].begin(), backwardResult[j].end());
-			result[j].insert(result[j].end(), rowResult.begin(), rowResult.end());
+			result[j / WordConfiguration<Word>::WordSize].insert(result[j / WordConfiguration<Word>::WordSize].end(), rowResult.begin(), rowResult.end());
 		}
 		return result;
 	}
@@ -415,11 +417,13 @@ private:
 
 	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength, LengthType maxRow) const
 	{
+		assert(result.size() > j);
 		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
 		auto nodeIndex = graph.indexToNode[w];
 		auto end = graph.nodeEnd[nodeIndex];
 		while (w != end && j < sequenceLength+1 && j < maxRow)
 		{
+			assert(result.size() > j);
 			result[j].emplace_back(w);
 			w++;
 			j++;
@@ -435,6 +439,7 @@ private:
 
 	void expandBandBackwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength) const
 	{
+		assert(result.size() > j);
 		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
 		auto nodeIndex = graph.indexToNode[w];
 		auto start = graph.nodeStart[nodeIndex];
