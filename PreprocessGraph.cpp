@@ -1,6 +1,7 @@
 #include <chrono>
 #include <fstream>
 #include <tuple>
+#include <unordered_set>
 #include <boost/serialization/vector.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -21,8 +22,9 @@ public:
 
 auto starttime = std::chrono::system_clock::now();
 
-void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>& graph, std::vector<bool>& explored, std::set<size_t>& mfvs, std::vector<size_t>& currentStack, size_t i, std::vector<size_t>& sorted, size_t& t)
+void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>& graph, std::vector<bool>& explored, std::unordered_set<size_t>& mfvs, size_t i, std::vector<size_t>& sorted, size_t& t)
 {
+	std::unordered_set<size_t> currentStack;
 	std::vector<DFSStack> stack;
 	stack.emplace_back(i, 1);
 	while (!stack.empty())
@@ -37,17 +39,14 @@ void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>
 		switch(top.state)
 		{
 			case 1:
-				for (size_t k = 0; k < currentStack.size(); k++)
+				if (currentStack.count(i) == 1)
 				{
-					if (currentStack[k] == i)
-					{
-						mfvs.insert(i);
-						explored[i] = true;
-						continue;
-					}
+					mfvs.insert(i);
+					explored[i] = true;
+					continue;
 				}
 				if (explored[i]) continue;
-				currentStack.push_back(i);
+				currentStack.insert(i);
 				explored[i] = true;
 				stack.emplace_back(i, 2);
 				for (size_t j = 0; j < graph[i].size(); ++j)
@@ -58,8 +57,8 @@ void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>
 
 			case 2:
 				assert(currentStack.size() > 0);
-				assert(currentStack.back() == i);
-				currentStack.pop_back();
+				assert(currentStack.count(i) == 1);
+				currentStack.erase(i);
 				--t;
 				sorted[t] = i;
 				break;
@@ -70,7 +69,7 @@ void topological_sort_using_DFS_stackless(const std::vector<std::vector<size_t>>
 	}
 }
 
-void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& graph, std::vector<size_t>& sorted, std::set<size_t>& mfvs)
+void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& graph, std::vector<size_t>& sorted, std::unordered_set<size_t>& mfvs)
 {
 	assert(graph.size() == sorted.size());
 	std::vector<bool> explored(graph.size(), false);
@@ -80,14 +79,13 @@ void topological_sort_using_DFS_loop(const std::vector<std::vector<size_t>>& gra
 	{
 		if (explored[i] == false)
 		{
-			std::vector<size_t> currentStack;
-			topological_sort_using_DFS_stackless(graph, explored, mfvs, currentStack, i, sorted, t);
+			topological_sort_using_DFS_stackless(graph, explored, mfvs, i, sorted, t);
 		}
 	}
 
 	assert(t == 0);
 	std::vector<size_t> newIndex;
-	std::set<size_t> resultSet;
+	std::unordered_set<size_t> resultSet;
 	newIndex.resize(sorted.size(), 1);
 	newIndex[0] = 0;
 	std::cerr << "MFVS is " << mfvs.size() << " nodes" << std::endl;
@@ -145,7 +143,7 @@ std::pair<std::vector<size_t>, std::vector<size_t>> topologicalSort(const Direct
 	}
 
 	std::vector<size_t> sorted(digraph.nodes.size(), 0);
-	std::set<size_t> mfvs;
+	std::unordered_set<size_t> mfvs;
 	topological_sort_using_DFS_loop(graph, sorted, mfvs);
 	std::vector<size_t> mfvsVec;
 	mfvsVec.insert(mfvsVec.end(), mfvs.begin(), mfvs.end());
