@@ -1345,6 +1345,7 @@ private:
 					if (previousBand[graph.cuts[i].nodes[index]]) assertSliceCorrectness(currentSlice.node(graph.cuts[i].nodes[index]).back(), previousSlice.node(graph.cuts[i].nodes[index]).back(), previousBand[graph.cuts[i].nodes[index]]);
 				}
 			}
+			correctEndValues[i] = currentSlice.node(i).back();
 			assert(graph.cuts[i].nodes[0] == i);
 			for (size_t index = 1; index < graph.cuts[i].nodes.size(); index++)
 			{
@@ -1359,7 +1360,7 @@ private:
 					currentSlice.node(node).back() = getSourceSliceWithoutBefore(j);
 				}
 			}
-			correctEndValues[i] = currentSlice.node(i).back();
+			currentSlice.node(i).back() = correctEndValues[i];
 			if (previousBand[i]) assertSliceCorrectness(currentSlice.node(i).back(), previousSlice.node(i).back(), previousBand[i]);
 		}
 		for (auto i : bandOrderOutOfOrder)
