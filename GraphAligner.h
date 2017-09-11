@@ -1297,6 +1297,17 @@ private:
 	void cutCycles(size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::set<size_t>& bandOrderOutOfOrder) const
 	{
 		if (graph.firstInOrder == 0) return;
+		for (auto& pair : currentSlice)
+		{
+			if (previousBand[pair.first])
+			{
+				pair.second.back() = getSourceSliceFromScore(previousSlice.node(pair.first).back().scoreEnd);
+			}
+			else
+			{
+				pair.second.back() = getSourceSliceWithoutBefore(j);
+			}
+		}
 		//if there are cycles within 2*w of eachothers, calculating a latter slice may overwrite the earlier slice's value
 		//store the correct values here and then merge them at the end
 		std::unordered_map<size_t, WordSlice> correctEndValues;
@@ -1332,6 +1343,20 @@ private:
 				{
 					calculateNode(graph.cuts[i].nodes[index], j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, source[index]);
 					if (previousBand[graph.cuts[i].nodes[index]]) assertSliceCorrectness(currentSlice.node(graph.cuts[i].nodes[index]).back(), previousSlice.node(graph.cuts[i].nodes[index]).back(), previousBand[graph.cuts[i].nodes[index]]);
+				}
+			}
+			assert(graph.cuts[i].nodes[0] == i);
+			for (size_t index = 1; index < graph.cuts[i].nodes.size(); index++)
+			{
+				auto node = graph.cuts[i].nodes[index];
+				if (!currentBand[node]) continue;
+				if (previousBand[node])
+				{
+					currentSlice.node(node).back() = getSourceSliceFromScore(previousSlice.node(node).back().scoreEnd);
+				}
+				else
+				{
+					currentSlice.node(node).back() = getSourceSliceWithoutBefore(j);
 				}
 			}
 			correctEndValues[i] = currentSlice.node(i).back();
@@ -1520,26 +1545,10 @@ private:
 			for (auto i : bandOrder)
 			{
 				currentSlice.addNode(i, graph.nodeEnd[i] - graph.nodeStart[i]);
-				if (previousBand[i])
-				{
-					currentSlice.node(i).back() = getSourceSliceFromScore(previousSlice.node(i).back().scoreEnd);
-				}
-				else
-				{
-					currentSlice.node(i).back() = getSourceSliceWithoutBefore(j);
-				}
 			}
 			for (auto i : bandOrderOutOfOrder)
 			{
 				currentSlice.addNode(i, graph.nodeEnd[i] - graph.nodeStart[i]);
-				if (previousBand[i])
-				{
-					currentSlice.node(i).back() = getSourceSliceFromScore(previousSlice.node(i).back().scoreEnd);
-				}
-				else
-				{
-					currentSlice.node(i).back() = getSourceSliceWithoutBefore(j);
-				}
 			}
 			assert(bandOrder.size() > 0 || bandOrderOutOfOrder.size() > 0);
 			cutCycles(j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, bandOrderOutOfOrder);

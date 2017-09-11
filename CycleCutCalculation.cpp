@@ -194,8 +194,7 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 			for (auto neighbor : graph.outNeighbors[node])
 			{
 				if (cyclic.count(neighbor) == 0 && uncyclicset.count(neighbor) == 0) continue;
-				assert(existingIndexesForNode.count(neighbor) == 1);
-				assert(existingIndexesForNode[neighbor].size() > 0);
+				if (existingIndexesForNode.count(neighbor) == 0) continue;
 				for (auto pos : existingIndexesForNode[neighbor])
 				{
 					edges.emplace_back(std::make_pair(pos, neighbor), std::make_pair(0, node));

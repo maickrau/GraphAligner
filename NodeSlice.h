@@ -25,6 +25,14 @@ public:
 		assert(found != nodes.end());
 		return found->second;
 	}
+	auto begin()
+	{
+		return nodes.begin();
+	}
+	auto end()
+	{
+		return nodes.end();
+	}
 private:
 	std::unordered_map<size_t, std::vector<T>> nodes;
 };
