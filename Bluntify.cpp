@@ -16,33 +16,142 @@ enum EndType
 	RightOff
 };
 
-class BluntifyGraph
+enum NodeKeepingType
+{
+	KeepLeft,
+	KeepRight,
+	KeepAll
+};
+
+class PreGraph
 {
 public:
 	class Edge
 	{
 	public:
-		Edge(size_t from, size_t to, EndType fromPos, EndType toPos) :
-		from(from),
-		to(to),
-		fromPos(fromPos),
-		toPos(toPos)
-		{
-		}
+		Edge(size_t from, bool fromStart, size_t to, bool toEnd) :
+		from(from), to(to), fromStart(fromStart), toEnd(toEnd)
+		{}
 		size_t from;
 		size_t to;
-		EndType fromPos;
-		EndType toPos;
+		bool fromStart;
+		bool toEnd;
 	};
-	std::vector<std::string> nodeSequences;
 	std::vector<Edge> edges;
+	std::vector<std::string> nodeSequences;
 };
 
-BluntifyGraph loadGraphFromGfa(std::string filename, int k)
+void setKeepingType(const std::vector<std::set<size_t>>& goodEdges, const std::vector<std::set<size_t>>& badEdges, std::vector<bool>& hasKeepingType, std::vector<NodeKeepingType>& result, size_t node, const NodeKeepingType type)
+{
+	assert(!hasKeepingType[node]);
+	assert(type == KeepLeft || type == KeepRight);
+	hasKeepingType[node] = true;
+	result[node] = type;
+	for (auto neighbor : goodEdges[node])
+	{
+		if (!hasKeepingType[neighbor]) continue;
+		if (result[neighbor] == KeepAll) continue;
+		if (result[neighbor] != result[node])
+		{
+			result[node] = KeepAll;
+			return;
+		}
+	}
+	for (auto neighbor : badEdges[node])
+	{
+		if (!hasKeepingType[neighbor]) continue;
+		if (result[neighbor] == KeepAll) continue;
+		if (result[neighbor] == result[node])
+		{
+			result[node] = KeepAll;
+			return;
+		}
+	}
+	for (auto neighbor : goodEdges[node])
+	{
+		if (hasKeepingType[neighbor]) continue;
+		setKeepingType(goodEdges, badEdges, hasKeepingType, result, neighbor, type);
+	}
+	for (auto neighbor : badEdges[node])
+	{
+		if (hasKeepingType[neighbor]) continue;
+		assert(type == KeepLeft || type == KeepRight);
+		setKeepingType(goodEdges, badEdges, hasKeepingType, result, neighbor, type == KeepLeft ? KeepRight : KeepLeft);
+	}
+}
+
+std::vector<NodeKeepingType> getNodeKeepingTypes(const PreGraph& graph)
+{
+	std::vector<bool> hasKeepingType;
+	std::vector<NodeKeepingType> result;
+	hasKeepingType.resize(graph.nodeSequences.size(), false);
+	result.resize(graph.nodeSequences.size());
+	// result.resize(graph.nodeSequences.size(), KeepAll);
+	// return result;
+	{
+		std::vector<bool> hasLeftEdge;
+		std::vector<bool> hasRightEdge;
+		hasLeftEdge.resize(graph.nodeSequences.size(), false);
+		hasRightEdge.resize(graph.nodeSequences.size(), false);
+		for (auto edge : graph.edges)
+		{
+			if (edge.fromStart)
+			{
+				hasLeftEdge[edge.from] = true;
+			}
+			else
+			{
+				hasRightEdge[edge.from] = true;
+			}
+			if (edge.toEnd)
+			{
+				hasRightEdge[edge.to] = true;
+			}
+			else
+			{
+				hasLeftEdge[edge.to] = true;
+			}
+		}
+		for (size_t i = 0; i < result.size(); i++)
+		{
+			if (!hasLeftEdge[i] || !hasRightEdge[i])
+			{
+				result[i] = KeepAll;
+				hasKeepingType[i] = true;
+			}
+		}
+	}
+	std::vector<std::set<size_t>> goodEdges;
+	std::vector<std::set<size_t>> badEdges;
+	goodEdges.resize(graph.nodeSequences.size());
+	badEdges.resize(graph.nodeSequences.size());
+	for (auto edge : graph.edges)
+	{
+		if (edge.fromStart == edge.toEnd)
+		{
+			goodEdges[edge.from].insert(edge.to);
+			goodEdges[edge.to].insert(edge.from);
+		}
+		else
+		{
+			badEdges[edge.from].insert(edge.to);
+			badEdges[edge.to].insert(edge.from);
+		}
+	}
+	result.resize(graph.nodeSequences.size());
+	hasKeepingType.resize(graph.nodeSequences.size(), false);
+	for (size_t i = 0; i < graph.nodeSequences.size(); i++)
+	{
+		if (!hasKeepingType[i]) setKeepingType(goodEdges, badEdges, hasKeepingType, result, i, KeepLeft);
+	}
+	return result;
+}
+
+PreGraph loadGraphFromGfa(std::string filename)
 {
 	std::unordered_map<int, std::string> nodeSequences;
 	std::ifstream file {filename};
-	BluntifyGraph result;
+	PreGraph result;
 	while (file.good())
 	{
 		std::string line;
@@ -75,13 +184,7 @@ BluntifyGraph loadGraphFromGfa(std::string filename, int k)
 			sstr >> empty >> fromid >> fromstart >> toid >> toend;
 			assert(fromstart == "+" || fromstart == "-");
 			assert(toend == "+" || toend == "-");
-			EndType frompos, topos;
-			frompos = fromstart == "-" ? LeftEdge : RightEdge;
-			topos = toend == "-" ? RightOff : LeftOff;
-			result.edges.emplace_back(fromid, toid, frompos, topos);
-			frompos = fromstart == "-" ? LeftOff : RightOff;
-			topos = toend == "-" ? RightEdge : LeftEdge;
-			result.edges.emplace_back(fromid, toid, frompos, topos);
+			result.edges.emplace_back(fromid, fromstart == "-", toid, toend == "-");
 		}
 	}
 	result.nodeSequences.resize(nodeSequences.size());
@@ -96,196 +199,165 @@ BluntifyGraph loadGraphFromGfa(std::string filename, int k)
 	return result;
 }
 
-std::pair<size_t, bool> getNewIndexAndDirection(const std::vector<bool>& smallerThan2k, const std::vector<bool>& biggerThan2k, size_t node, EndType pos)
+std::pair<size_t, bool> getNewIndexAndDirection(size_t oldNodeSize, int kmin1, size_t oldNodeId, bool oldNodeEnd, bool oldNodeOff)
 {
-	assert(node < smallerThan2k.size());
-	assert(node < biggerThan2k.size());
-	assert(!(smallerThan2k[node] && biggerThan2k[node]));
-	if (pos == LeftEdge)
+	if (oldNodeEnd && !oldNodeOff)
 	{
-		return std::make_pair(node * 3 + 1, false);
+		return std::make_pair(oldNodeId * 3 + 1, true);
 	}
-	else if (pos == RightEdge)
+	if (!oldNodeEnd && !oldNodeOff)
 	{
-		return std::make_pair(node * 3 + 2, true);
+		return std::make_pair(oldNodeId * 3, false);
 	}
-	else if (pos == LeftOff)
+	if (oldNodeEnd && oldNodeOff)
 	{
-		if (smallerThan2k[node])
+		if (oldNodeSize > 2 * kmin1)
 		{
-			return std::make_pair(node * 3 + 2, false);
-		}
-		else if (biggerThan2k[node])
-		{
-			return std::make_pair(node * 3 + 3, false);
+			return std::make_pair(oldNodeId * 3 + 2, true);
 		}
 		else
 		{
-			return std::make_pair(node * 3 + 2, false);
+			return std::make_pair(oldNodeId * 3, true);
 		}
 	}
-	else if (pos == RightOff)
+	if (!oldNodeEnd & oldNodeOff)
 	{
-		if (smallerThan2k[node])
+		if (oldNodeSize > 2 * kmin1)
 		{
-			return std::make_pair(node * 3 + 1, true);
-		}
-		else if (biggerThan2k[node])
-		{
-			return std::make_pair(node * 3 + 3, true);
+			return std::make_pair(oldNodeId * 3 + 2, false);
 		}
 		else
 		{
-			return std::make_pair(node * 3 + 1, true);
+			return std::make_pair(oldNodeId * 3 + 1, false);
 		}
 	}
 	assert(false);
-	return std::make_pair(0, true);
+	return std::make_pair(0, false);
 }
 
-vg::Graph convertBluntifyToVg(const BluntifyGraph& graph, int k)
+PreGraph bluntifyViaKeepingTypes(const PreGraph& graph, const std::vector<NodeKeepingType>& keepingType, int k)
 {
-	vg::Graph result;
-	std::vector<bool> smallerThan2k;
-	std::vector<bool> biggerThan2k;
-	smallerThan2k.resize(graph.nodeSequences.size(), false);
-	biggerThan2k.resize(graph.nodeSequences.size(), false);
+	assert(k > 1);
+	const int kmin1 = k - 1;
+	PreGraph result;
+	std::vector<bool> hasLeftPart;
+	std::vector<bool> hasRightPart;
+	std::vector<bool> hasMiddlePart;
+	hasLeftPart.resize(graph.nodeSequences.size(), false);
+	hasRightPart.resize(graph.nodeSequences.size(), false);
+	hasMiddlePart.resize(graph.nodeSequences.size(), false);
 	for (size_t i = 0; i < graph.nodeSequences.size(); i++)
 	{
-		auto& seq = graph.nodeSequences[i];
-		assert(seq.size() > 0);
-		if (seq.size() < 2 * (k - 1)) smallerThan2k[i] = true;
-		if (seq.size() > 2 * (k - 1)) biggerThan2k[i] = true;
-		auto leftnode = result.add_node();
-		assert(leftnode != nullptr);
-		leftnode->set_id(i * 3 + 1);
-		leftnode->set_name(std::to_string(i * 3 + 1));
-		if (smallerThan2k[i])
+		result.nodeSequences.push_back("");
+		result.nodeSequences.push_back("");
+		result.nodeSequences.push_back("");
+		const size_t seqsize = graph.nodeSequences[i].size();
+		if (seqsize < 2 * kmin1)
 		{
-			leftnode->set_sequence(seq.substr(0, seq.size() - (k - 1)));
+			if (keepingType[i] == KeepLeft || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3] = graph.nodeSequences[i].substr(0, seqsize - kmin1);
+				hasLeftPart[i] = true;
+			}
+			if (keepingType[i] == KeepRight || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3 + 1] = graph.nodeSequences[i].substr(kmin1);
+				hasRightPart[i] = true;
+			}
+			if (keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3 + 2] = graph.nodeSequences[i].substr(seqsize - kmin1, 2 * kmin1 - seqsize);
+				hasMiddlePart[i] = true;
+			}
+		}
+		else if (seqsize == 2 * kmin1)
+		{
+			if (keepingType[i] == KeepLeft || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3] = graph.nodeSequences[i].substr(0, kmin1);
+				hasLeftPart[i] = true;
+			}
+			if (keepingType[i] == KeepRight || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3 + 1] = graph.nodeSequences[i].substr(seqsize - kmin1);
+				hasRightPart[i] = true;
+			}
 		}
 		else
 		{
-			leftnode->set_sequence(seq.substr(0, k-1));
+			assert(seqsize > 2 * kmin1);
+			if (keepingType[i] == KeepLeft || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3] = graph.nodeSequences[i].substr(0, kmin1);
+				hasLeftPart[i] = true;
+			}
+			if (keepingType[i] == KeepRight || keepingType[i] == KeepAll)
+			{
+				result.nodeSequences[i * 3 + 1] = graph.nodeSequences[i].substr(seqsize - kmin1);
+				hasRightPart[i] = true;
+			}
+			result.nodeSequences[i * 3 + 2] = graph.nodeSequences[i].substr(kmin1, seqsize - 2 * kmin1);
+			hasMiddlePart[i] = true;
 		}
-		assert(leftnode->sequence().size() > 0);
-		auto rightnode = result.add_node();
-		assert(rightnode != nullptr);
-		rightnode->set_id(i * 3 + 2);
-		rightnode->set_name(std::to_string(i * 3 + 2));
-		if (smallerThan2k[i])
+		if (hasLeftPart[i] && hasRightPart[i])
 		{
-			rightnode->set_sequence(seq.substr(k - 1));
+			assert(result.nodeSequences[i * 3].size() == result.nodeSequences[i * 3 + 1].size());
 		}
-		else
+		if (hasLeftPart[i] && hasMiddlePart[i])
 		{
-			rightnode->set_sequence(seq.substr(seq.size() - (k - 1)));
+			result.edges.emplace_back(i * 3, false, i * 3 + 2, false);
 		}
-		assert(rightnode->sequence().size() > 0);
-		assert(leftnode->sequence().size() == rightnode->sequence().size());
-		if (smallerThan2k[i])
+		if (hasMiddlePart[i] && hasRightPart[i])
 		{
-			auto middlenode = result.add_node();
-			assert(middlenode != nullptr);
-			middlenode->set_id(i * 3 + 3);
-			middlenode->set_name(std::to_string(i * 3 + 3));
-			assert(seq.size() >= k - 1);
-			assert(seq.size() - (k - 1) + 2 * (k - 1) - seq.size() < seq.size());
-			middlenode->set_sequence(seq.substr(seq.size() - (k - 1), 2 * (k - 1) - seq.size()));
-			assert(middlenode->sequence().size() > 0);
-			assert(leftnode->sequence().size() + rightnode->sequence().size() + middlenode->sequence().size() == seq.size());
-			auto edge1 = result.add_edge();
-			assert(edge1 != nullptr);
-			edge1->set_from(i * 3 + 1);
-			edge1->set_to(i * 3 + 3);
-			edge1->set_from_start(false);
-			edge1->set_to_end(false);
-			edge1->set_overlap(0);
-			auto edge2 = result.add_edge();
-			assert(edge2 != nullptr);
-			edge2->set_from(i * 3 + 3);
-			edge2->set_to(i * 3 + 2);
-			edge2->set_from_start(false);
-			edge2->set_to_end(false);
-			edge2->set_overlap(0);
+			result.edges.emplace_back(i * 3 + 2, false, i * 3 + 1, false);
 		}
-		else if (biggerThan2k[i])
+		if (seqsize == 2 * kmin1 && hasLeftPart[i] && hasRightPart[i])
 		{
-			auto middlenode = result.add_node();
-			assert(middlenode != nullptr);
-			middlenode->set_id(i * 3 + 3);
-			middlenode->set_name(std::to_string(i * 3 + 3));
-			assert(k - 1 + seq.size() - 2 * (k - 1) < seq.size());
-			middlenode->set_sequence(seq.substr(k - 1, seq.size() - 2 * (k - 1)));
-			assert(middlenode->sequence().size() > 0);
-			assert(leftnode->sequence().size() + rightnode->sequence().size() + middlenode->sequence().size() == seq.size());
-			auto edge1 = result.add_edge();
-			assert(edge1 != nullptr);
-			edge1->set_from(i * 3 + 1);
-			edge1->set_to(i * 3 + 3);
-			edge1->set_from_start(false);
-			edge1->set_to_end(false);
-			edge1->set_overlap(0);
-			auto edge2 = result.add_edge();
-			assert(edge2 != nullptr);
-			edge2->set_from(i * 3 + 3);
-			edge2->set_to(i * 3 + 2);
-			edge2->set_from_start(false);
-			edge2->set_to_end(false);
-			edge2->set_overlap(0);
-		}
-		else
-		{
-			auto edge1 = result.add_edge();
-			assert(edge1 != nullptr);
-			edge1->set_from(i * 3 + 1);
-			edge1->set_to(i * 3 + 2);
-			edge1->set_from_start(false);
-			edge1->set_to_end(false);
-			edge1->set_overlap(0);
+			result.edges.emplace_back(i * 3, false, i * 3 + 1, false);
 		}
 	}
-	for (size_t i = 0; i < graph.edges.size(); i++)
+	for (auto edge : graph.edges)
 	{
-		auto left = getNewIndexAndDirection(smallerThan2k, biggerThan2k, graph.edges[i].from, graph.edges[i].fromPos);
-		auto right = getNewIndexAndDirection(smallerThan2k, biggerThan2k, graph.edges[i].to, graph.edges[i].toPos);
-		assert(left.first > 0);
-		assert(right.first > 0);
-		assert(left.first <= graph.nodeSequences.size() * 3 + 3);
-		assert(right.first <= graph.nodeSequences.size() * 3 + 3);
-		left.second = !left.second;
-		auto edge = result.add_edge();
-		edge->set_from(left.first);
-		edge->set_from_start(left.second);
-		edge->set_to(right.first);
-		edge->set_to_end(right.second);
-		edge->set_overlap(0);
+		auto newfrom = getNewIndexAndDirection(graph.nodeSequences[edge.from].size(), kmin1, edge.from, !edge.fromStart, false);
+		auto newto = getNewIndexAndDirection(graph.nodeSequences[edge.to].size(), kmin1, edge.to, edge.toEnd, true);
+		if (newfrom.first % 3 == 0 && !hasLeftPart[edge.from]) continue;
+		if (newfrom.first % 3 == 1 && !hasRightPart[edge.from]) continue;
+		if (newfrom.first % 3 == 2 && !hasMiddlePart[edge.from]) continue;
+		if (newto.first % 3 == 0 && !hasLeftPart[edge.to]) continue;
+		if (newto.first % 3 == 1 && !hasRightPart[edge.to]) continue;
+		if (newto.first % 3 == 2 && !hasMiddlePart[edge.to]) continue;
+		result.edges.emplace_back(newfrom.first, !newfrom.second, newto.first, newto.second);
 	}
-	assert(result.node_size() >= graph.nodeSequences.size() * 2);
-	assert(result.node_size() <= graph.nodeSequences.size() * 3);
-	assert(result.edge_size() >= graph.edges.size());
-	assert(result.edge_size() <= graph.edges.size() + graph.nodeSequences.size() * 2);
+	for (auto edge : graph.edges)
+	{
+		auto newfrom = getNewIndexAndDirection(graph.nodeSequences[edge.from].size(), kmin1, edge.from, !edge.fromStart, true);
+		auto newto = getNewIndexAndDirection(graph.nodeSequences[edge.to].size(), kmin1, edge.to, edge.toEnd, false);
+		if (newfrom.first % 3 == 0 && !hasLeftPart[edge.from]) continue;
+		if (newfrom.first % 3 == 1 && !hasRightPart[edge.from]) continue;
+		if (newfrom.first % 3 == 2 && !hasMiddlePart[edge.from]) continue;
+		if (newto.first % 3 == 0 && !hasLeftPart[edge.to]) continue;
+		if (newto.first % 3 == 1 && !hasRightPart[edge.to]) continue;
+		if (newto.first % 3 == 2 && !hasMiddlePart[edge.to]) continue;
+		result.edges.emplace_back(newfrom.first, !newfrom.second, newto.first, newto.second);
+	}
 	return result;
 }
 
-void writeGraph(const vg::Graph& graph, std::string filename)
-{
-	std::vector<vg::Graph> writeVector;
-	writeVector.push_back(graph);
-	std::ofstream graphOut { filename, std::ios::out | std::ios::binary };
-	stream::write_buffered(graphOut, writeVector, 0);
-}
-
-void writeGFA(const vg::Graph& graph, std::string filename)
+void writeGFA(const PreGraph& graph, std::string filename)
 {
 	std::ofstream file {filename};
-	for (int i = 0; i < graph.node_size(); i++)
+	//start at 1 because 0 is not a valid node id in vg
+	const int off = 1;
+	for (int i = 0; i < graph.nodeSequences.size(); i++)
 	{
-		file << "S\t" << graph.node(i).id() << "\t" << graph.node(i).sequence() << std::endl;
+		if (graph.nodeSequences[i].size() == 0) continue;
+		file << "S\t" << (i + off) << "\t" << graph.nodeSequences[i] << std::endl;
 	}
-	for (int i = 0; i < graph.edge_size(); i++)
+	for (int i = 0; i < graph.edges.size(); i++)
 	{
-		file << "L\t" << graph.edge(i).from() << "\t" << (graph.edge(i).from_start() ? "-" : "+") << "\t" << graph.edge(i).to() << "\t" << (graph.edge(i).to_end() ? "-" : "+") << "\t0M" << std::endl;
+		assert(graph.nodeSequences[graph.edges[i].from].size() > 0);
+		assert(graph.nodeSequences[graph.edges[i].to].size() > 0);
+		file << "L\t" << (graph.edges[i].from + off) << "\t" << (graph.edges[i].fromStart ? "-" : "+") << "\t" << (graph.edges[i].to + off) << "\t" << (graph.edges[i].toEnd ? "-" : "+") << "\t0M" << std::endl;
 	}
 }
 
@@ -294,6 +366,8 @@ int main(int argc, char** argv)
 	int k = std::stoi(argv[1]);
 	std::string inFile = argv[2];
 	std::string outFile = argv[3];
-	auto graph = convertBluntifyToVg(loadGraphFromGfa(inFile, k), k);
-	writeGFA(graph, outFile);
+	auto graph = loadGraphFromGfa(inFile);
+	auto keepingTypes = getNodeKeepingTypes(graph);
+	auto result = bluntifyViaKeepingTypes(graph, keepingTypes, k);
+	writeGFA(result, outFile);
 }
