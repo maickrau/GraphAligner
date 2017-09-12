@@ -41,42 +41,60 @@ public:
 	std::vector<std::string> nodeSequences;
 };
 
-void setKeepingType(const std::vector<std::set<size_t>>& goodEdges, const std::vector<std::set<size_t>>& badEdges, std::vector<bool>& hasKeepingType, std::vector<NodeKeepingType>& result, size_t node, const NodeKeepingType type)
+void setKeepingType(const std::vector<std::set<size_t>>& goodEdges, const std::vector<std::set<size_t>>& badEdges, std::vector<bool>& hasKeepingType, std::vector<NodeKeepingType>& result, size_t node, NodeKeepingType type)
 {
-	assert(!hasKeepingType[node]);
-	assert(type == KeepLeft || type == KeepRight);
-	hasKeepingType[node] = true;
-	result[node] = type;
-	for (auto neighbor : goodEdges[node])
+	std::vector<std::tuple<size_t, NodeKeepingType>> stack;
+	stack.emplace_back(node, type);
+	while (stack.size() > 0)
 	{
-		if (!hasKeepingType[neighbor]) continue;
-		if (result[neighbor] == KeepAll) continue;
-		if (result[neighbor] != result[node])
+		auto top = stack.back();
+		stack.pop_back();
+		node = std::get<0>(top);
+		type = std::get<1>(top);
+		bool madeKeepAll = false;
+		if (hasKeepingType[node])
 		{
-			result[node] = KeepAll;
-			return;
+			if (result[node] != type) result[node] = KeepAll;
+			continue;
 		}
-	}
-	for (auto neighbor : badEdges[node])
-	{
-		if (!hasKeepingType[neighbor]) continue;
-		if (result[neighbor] == KeepAll) continue;
-		if (result[neighbor] == result[node])
-		{
-			result[node] = KeepAll;
-			return;
-		}
-	}
-	for (auto neighbor : goodEdges[node])
-	{
-		if (hasKeepingType[neighbor]) continue;
-		setKeepingType(goodEdges, badEdges, hasKeepingType, result, neighbor, type);
-	}
-	for (auto neighbor : badEdges[node])
-	{
-		if (hasKeepingType[neighbor]) continue;
 		assert(type == KeepLeft || type == KeepRight);
-		setKeepingType(goodEdges, badEdges, hasKeepingType, result, neighbor, type == KeepLeft ? KeepRight : KeepLeft);
+		hasKeepingType[node] = true;
+		result[node] = type;
+		for (auto neighbor : goodEdges[node])
+		{
+			if (!hasKeepingType[neighbor]) continue;
+			if (result[neighbor] == KeepAll) continue;
+			if (result[neighbor] != result[node])
+			{
+				result[node] = KeepAll;
+				madeKeepAll = true;
+				break;
+			}
+		}
+		if (madeKeepAll) continue;
+		for (auto neighbor : badEdges[node])
+		{
+			if (!hasKeepingType[neighbor]) continue;
+			if (result[neighbor] == KeepAll) continue;
+			if (result[neighbor] == result[node])
+			{
+				result[node] = KeepAll;
+				madeKeepAll = true;
+				break;
+			}
+		}
+		if (madeKeepAll) continue;
+		for (auto neighbor : goodEdges[node])
+		{
+			if (hasKeepingType[neighbor]) continue;
+			stack.emplace_back(neighbor, type);
+		}
+		for (auto neighbor : badEdges[node])
+		{
+			if (hasKeepingType[neighbor]) continue;
+			assert(type == KeepLeft || type == KeepRight);
+			stack.emplace_back(neighbor, type == KeepLeft ? KeepRight : KeepLeft);
+		}
 	}
 }
 
@@ -368,6 +386,28 @@ int main(int argc, char** argv)
 	std::string outFile = argv[3];
 	auto graph = loadGraphFromGfa(inFile);
 	auto keepingTypes = getNodeKeepingTypes(graph);
+	size_t left, right, all;
+	left = 0;
+	right = 0;
+	all = 0;
+	for (size_t i = 0; i < keepingTypes.size(); i++)
+	{
+		switch(keepingTypes[i])
+		{
+		case KeepLeft:
+			left++;
+			break;
+		case KeepRight:
+			right++;
+			break;
+		case KeepAll:
+			all++;
+			break;
+		default:
+			assert(false);
+		}
+	}
+	std::cerr << "left: " << left << " right: " << right << " all: " << all << std::endl;
 	auto result = bluntifyViaKeepingTypes(graph, keepingTypes, k);
 	writeGFA(result, outFile);
 }
