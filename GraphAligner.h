@@ -459,38 +459,6 @@ private:
 		}
 	}
 
-	void addOutneighbors(std::set<int>& nodeids, int currentNodeId, int sizeLeft) const
-	{
-		size_t fw = currentNodeId*2;
-		size_t bw = currentNodeId*2+1;
-		auto nodesize = graph.nodeEnd[graph.nodeLookup.at(fw)] - graph.nodeStart[graph.nodeLookup.at(fw)];
-		assert(nodesize == graph.nodeEnd[graph.nodeLookup.at(bw)] - graph.nodeStart[graph.nodeLookup.at(bw)]);
-		for (auto neighbor : graph.outNeighbors[graph.nodeLookup.at(fw)])
-		{
-			int targetID = graph.nodeIDs[neighbor]/2;
-			assert(nodeids.count(targetID*2) == nodeids.count(targetID*2+1));
-			if (nodeids.count(targetID*2) == 1) continue;
-			nodeids.insert(targetID*2);
-			nodeids.insert(targetID*2+1);
-			if (sizeLeft > graph.nodeEnd[neighbor]- graph.nodeStart[neighbor])
-			{
-				addOutneighbors(nodeids, targetID, sizeLeft - graph.nodeEnd[neighbor] + graph.nodeStart[neighbor]);
-			}
-		}
-		for (auto neighbor : graph.outNeighbors[graph.nodeLookup.at(bw)])
-		{
-			int targetID = graph.nodeIDs[neighbor]/2;
-			assert(nodeids.count(targetID*2) == nodeids.count(targetID*2+1));
-			if (nodeids.count(targetID*2) == 1) continue;
-			nodeids.insert(targetID*2);
-			nodeids.insert(targetID*2+1);
-			if (sizeLeft > graph.nodeEnd[neighbor]- graph.nodeStart[neighbor])
-			{
-				addOutneighbors(nodeids, targetID, sizeLeft - graph.nodeEnd[neighbor] + graph.nodeStart[neighbor]);
-			}
-		}
-	}
-
 	class NodePosWithDistance
 	{
 	public:
