@@ -25,12 +25,16 @@ public:
 	{
 		return distance < other.distance;
 	}
+	bool operator>(const PriorityNode& other) const
+	{
+		return distance > other.distance;
+	}
 };
 
 std::unordered_set<size_t> CycleCutCalculation::getReachable(size_t cycleStart, size_t sizeLeft) const
 {
 	std::unordered_set<size_t> result;
-	std::priority_queue<PriorityNode> queue;
+	std::priority_queue<PriorityNode, std::vector<PriorityNode>, std::greater<PriorityNode>> queue;
 	queue.emplace(cycleStart, 0);
 	while (queue.size() > 0)
 	{
@@ -40,6 +44,7 @@ std::unordered_set<size_t> CycleCutCalculation::getReachable(size_t cycleStart, 
 		if (result.count(top.nodeIndex) == 1) continue;
 		result.insert(top.nodeIndex);
 		auto nextDistance = top.distance + graph.nodeEnd[top.nodeIndex] - graph.nodeStart[top.nodeIndex];
+		assert(nextDistance > top.distance);
 		for (auto neighbor : graph.inNeighbors[top.nodeIndex])
 		{
 			queue.emplace(neighbor, nextDistance);
@@ -194,7 +199,7 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 			for (auto neighbor : graph.outNeighbors[node])
 			{
 				if (cyclic.count(neighbor) == 0 && uncyclicset.count(neighbor) == 0) continue;
-				if (existingIndexesForNode.count(neighbor) == 0) continue;
+				assert(existingIndexesForNode.count(neighbor) > 0);
 				for (auto pos : existingIndexesForNode[neighbor])
 				{
 					edges.emplace_back(std::make_pair(pos, neighbor), std::make_pair(0, node));
@@ -202,6 +207,12 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 					assert(positionInSupersequence[pos][neighbor] < positionInSupersequence[0][node]);
 				}
 			}
+#ifndef NDEBUG
+			for (auto neighbor : graph.inNeighbors[node])
+			{
+				assert(cyclic.count(neighbor) == 0);
+			}
+#endif
 		}
 	}
 	predecessors.resize(supersequence.size());
