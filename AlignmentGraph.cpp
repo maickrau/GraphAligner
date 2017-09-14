@@ -9,6 +9,7 @@
 #include "AlignmentGraph.h"
 #include "TopologicalSort.h"
 #include "CycleCutCalculation.h"
+#include "CommonUtils.h"
 
 AlignmentGraph::AlignmentGraph() :
 nodeStart(),
@@ -238,17 +239,6 @@ size_t AlignmentGraph::SizeInBp() const
 	return nodeSequences.size();
 }
 
-std::vector<AlignmentGraph::MatrixPosition> AlignmentGraph::GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const
-{
-	std::vector<AlignmentGraph::MatrixPosition> result;
-	for (size_t i = 0; i < seedHits.size(); i++)
-	{
-		assert(nodeLookup.count(seedHits[i].nodeId) > 0);
-		result.emplace_back(nodeStart[nodeLookup.at(seedHits[i].nodeId)] + seedHits[i].nodePos, seedHits[i].sequencePosition);
-	}
-	return result;
-}
-
 void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalculation, size_t cycleStart, int wordSize)
 {
 	assert(cuts.size() > cycleStart);
@@ -330,4 +320,27 @@ std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpos
 		}
 	}
 	return positions.back();
+}
+
+size_t AlignmentGraph::GetReversePosition(size_t pos) const
+{
+	assert(pos < nodeSequences.size());
+	assert(pos > 0);
+	auto originalNode = indexToNode[pos];
+	auto bigraphNodeId = nodeIDs[originalNode] / 2;
+	size_t otherNode;
+	if (nodeIDs[originalNode] % 2 == 1)
+	{
+		otherNode = nodeLookup.at(bigraphNodeId * 2);
+	}
+	else
+	{
+		otherNode = nodeLookup.at(bigraphNodeId * 2 + 1);
+	}
+	assert(otherNode != originalNode);
+	assert(nodeEnd[otherNode] - nodeStart[otherNode] == nodeEnd[originalNode] - nodeStart[originalNode]);
+	assert(nodeSequences.substr(nodeStart[originalNode], nodeEnd[originalNode] - nodeStart[originalNode]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
+	size_t newPos = (nodeEnd[otherNode] - 1) - (pos - nodeStart[originalNode]);
+	assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
+	return newPos;
 }

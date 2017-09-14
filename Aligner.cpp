@@ -327,13 +327,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 				continue;
 			}
-			auto augmentedGraphSeedHits = augmentedGraph.GetSeedHits(fastq->sequence, graphAlignerSeedHits->at(fastq));
-			std::vector<std::remove_reference<decltype(alignmentGraph)>::type::SeedHit> alignerSeedHits;
-			for (size_t i = 0; i < augmentedGraphSeedHits.size(); i++)
-			{
-				alignerSeedHits.emplace_back(augmentedGraphSeedHits[i].seqPos, augmentedGraphSeedHits[i].nodeId, augmentedGraphSeedHits[i].nodePos);
-			}
-			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, alignerSeedHits, startBandwidth);
+			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, graphAlignerSeedHits->at(fastq), startBandwidth);
 		}
 
 		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;

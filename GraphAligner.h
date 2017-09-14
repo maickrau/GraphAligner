@@ -20,6 +20,7 @@
 #include "vg.pb.h"
 #include "ThreadReadAssertion.h"
 #include "NodeSlice.h"
+#include "CommonUtils.h"
 
 using namespace boost;
 
@@ -86,6 +87,25 @@ private:
 		ScoreType finalMinScore;
 		size_t cellsProcessed;
 	};
+	class TwoDirectionalSplitAlignment
+	{
+	public:
+		ScoreType MinScore() const
+		{
+			return scoresForward.back() + scoresBackward.back();
+		}
+		ScoreType MaxScore() const
+		{
+			return scoresForward.back() + scoresBackward.back() + nodeSize + startExtensionWidth * 2;
+		}
+		size_t sequenceSplitIndex;
+		std::vector<ScoreType> scoresForward;
+		std::vector<ScoreType> scoresBackward;
+		LengthType forwardEndPos;
+		LengthType backwardEndPos;
+		size_t nodeSize;
+		size_t startExtensionWidth;
+	};
 	class WordSlice
 	{
 	public:
@@ -148,17 +168,38 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<AlignmentGraph::SeedHit>& seedHits, int startBandwidth) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<std::pair<int, size_t>>& seedHits, int startBandwidth) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
-		auto band = getSeededStartBand(seedHits, dynamicRowStart, startBandwidth, sequence);
-		auto trace = getBacktrace(sequence, dynamicWidth, dynamicRowStart, band);
+		assert(seedHits.size() > 0);
+		std::vector<TwoDirectionalSplitAlignment> possibleSplits;
+		for (size_t i = 0; i < seedHits.size(); i++)
+		{
+			std::cerr << "seed " << i << "/" << seedHits.size() << " " << seedHits[i].first << "," << seedHits[i].second << std::endl;
+			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, seedHits[i].first, seedHits[i].second);
+			possibleSplits.push_back(result);
+		}
+		std::sort(possibleSplits.begin(), possibleSplits.end(), [](const auto& left, const auto& right) { return left.MinScore() < right.MinScore(); });
+		assert(possibleSplits.size() == seedHits.size());
 		auto timeEnd = std::chrono::system_clock::now();
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output
-		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
-		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
+		if (possibleSplits[0].MinScore() > sequence.size() * 0.4)
+		{
+			return emptyAlignment(time, 0);
+		}
+		auto bestTrace = getTraceFromSplit(possibleSplits[0], sequence);
+		for (size_t i = 1; i < possibleSplits.size(); i++)
+		{
+			if (possibleSplits[i].MinScore() > std::get<0>(bestTrace)) break;
+			auto trace = getTraceFromSplit(possibleSplits[i], sequence);
+			if (std::get<0>(trace) < std::get<0>(bestTrace))
+			{
+				bestTrace = trace;
+			}
+		}
+		auto result = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace), std::get<1>(bestTrace), 0);
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -178,17 +219,17 @@ private:
 		size_t backtraceIndex;
 	};
 
-	std::vector<MatrixPosition> backtrace(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice) const
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice) const
 	{
 		//first try the faster way
 		auto result = backtraceInner(endPosition, sequence, minScorePerWordSlice, false);
 		//if that breaks then do the full backtrace
-		if (result.size() == 0) result = backtraceInner(endPosition, sequence, minScorePerWordSlice, true);
-		assert(result.size() != 0);
+		if (result.second.size() == 0) result = backtraceInner(endPosition, sequence, minScorePerWordSlice, true);
+		assert(result.second.size() != 0);
 		return result;
 	}
 
-	std::vector<MatrixPosition> backtraceInner(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice, bool fullBacktrace) const
+	std::pair<ScoreType, std::vector<MatrixPosition>> backtraceInner(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice, bool fullBacktrace) const
 	{
 		ScoreType scoreAtEnd = minScorePerWordSlice.back();
 		ScoreType currentDistance = 0;
@@ -197,20 +238,21 @@ private:
 		std::vector<ExpandoCell> currentDistancePlusOneQueue;
 		currentDistanceQueue.emplace_back(endPosition.first, endPosition.second, 0);
 		SparseBoolMatrix<SliceRow<LengthType>> visitedCells {graph.nodeSequences.size(), sequence.size()+1};
+
 		while (true)
 		{
 			if (currentDistanceQueue.size() == 0)
 			{
 				if (currentDistancePlusOneQueue.size() == 0)
 				{
-					return std::vector<MatrixPosition> {};
+					return std::make_pair(0, std::vector<MatrixPosition> {});
 				}
 				assert(currentDistancePlusOneQueue.size() > 0);
 				std::swap(currentDistanceQueue, currentDistancePlusOneQueue);
 				currentDistance++;
 				if (currentDistance > scoreAtEnd)
 				{
-					return std::vector<MatrixPosition> {};
+					return std::make_pair(0, std::vector<MatrixPosition> {});
 				}
 			}
 			auto current = currentDistanceQueue.back();
@@ -280,7 +322,7 @@ private:
 			assert(visitedExpandos[index].backtraceIndex < index);
 			index = visitedExpandos[index].backtraceIndex;
 		}
-		return result;
+		return std::make_pair(currentDistance, result);
 	}
 
 	std::vector<std::vector<bool>> getFullBand(size_t sequenceSize, LengthType dynamicRowStart) const
@@ -290,58 +332,6 @@ private:
 		for (size_t i = 0; i < dynamicRowStart/WordConfiguration<Word>::WordSize; i++)
 		{
 			result[i].resize(graph.nodeStart.size(), true);
-		}
-		return result;
-	}
-
-	std::vector<std::vector<bool>> getSeededStartBand(const std::vector<AlignmentGraph::SeedHit>& originalSeedHits, int dynamicRowStart, int startBandwidth, const std::string& sequence) const
-	{
-		auto seedHitsInMatrix = graph.GetSeedHitPositionsInMatrix(sequence, originalSeedHits);
-		auto bandLocations = getBandLocations(sequence.size(), seedHitsInMatrix, dynamicRowStart);
-		for (LengthType j = 1; j < bandLocations.size(); j++)
-		{
-			bandLocations[j-1].insert(bandLocations[j-1].end(), bandLocations[j].begin(), bandLocations[j].end());
-		}
-		std::vector<std::vector<bool>> result;
-		result.resize(dynamicRowStart/WordConfiguration<Word>::WordSize);
-		for (LengthType j = 0; j < dynamicRowStart && j < sequence.size()+1; j += WordConfiguration<Word>::WordSize)
-		{
-			std::unordered_map<size_t, size_t> distanceAtNodeStart;
-			std::unordered_map<size_t, size_t> distanceAtNodeEnd;
-			auto index = j/WordConfiguration<Word>::WordSize;
-			assert(result.size() > index);
-			assert(bandLocations.size() > index);
-			result[index].resize(graph.nodeStart.size(), false);
-			expandBandFromPositions(result[index], bandLocations[index], startBandwidth, distanceAtNodeStart, distanceAtNodeEnd, nullptr, nullptr);
-		}
-		return result;
-	}
-
-	std::vector<std::vector<LengthType>> getBandLocations(int sequenceLength, const std::vector<MatrixPosition>& seedHits, LengthType maxRow) const
-	{
-		if (maxRow > sequenceLength) maxRow = sequenceLength;
-		std::vector<std::vector<LengthType>> forwardResult;
-		std::vector<std::vector<LengthType>> backwardResult;
-		backwardResult.resize(sequenceLength+1);
-		forwardResult.resize(sequenceLength+1);
-		backwardResult[0].emplace_back(0);
-		forwardResult[0].emplace_back(0);
-		for (auto hit : seedHits)
-		{
-			if (hit.second <= maxRow) expandBandForwards(forwardResult, hit.first, hit.second, sequenceLength, maxRow);
-			expandBandBackwards(backwardResult, hit.first, hit.second, sequenceLength);
-		}
-		std::vector<std::vector<LengthType>> result;
-		result.resize((maxRow+WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1);
-		for (size_t j = 0; j <= maxRow; j += WordConfiguration<Word>::WordSize)
-		{
-			std::set<LengthType> rowResult;
-			assert(forwardResult.size() > j);
-			assert(backwardResult.size() > j);
-			assert(result.size() > j / WordConfiguration<Word>::WordSize);
-			rowResult.insert(forwardResult[j].begin(), forwardResult[j].end());
-			rowResult.insert(backwardResult[j].begin(), backwardResult[j].end());
-			result[j / WordConfiguration<Word>::WordSize].insert(result[j / WordConfiguration<Word>::WordSize].end(), rowResult.begin(), rowResult.end());
 		}
 		return result;
 	}
@@ -413,50 +403,6 @@ private:
 		result.set_score(score);
 		result.set_sequence(sequence);
 		return AlignmentResult { result, false, cellsProcessed, std::numeric_limits<size_t>::max() };
-	}
-
-	void expandBandForwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength, LengthType maxRow) const
-	{
-		assert(result.size() > j);
-		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
-		auto nodeIndex = graph.indexToNode[w];
-		auto end = graph.nodeEnd[nodeIndex];
-		while (w != end && j < sequenceLength+1 && j < maxRow)
-		{
-			assert(result.size() > j);
-			result[j].emplace_back(w);
-			w++;
-			j++;
-		}
-		if (w == end && j < sequenceLength+1 && j < maxRow)
-		{
-			for (auto neighbor : graph.outNeighbors[nodeIndex])
-			{
-				expandBandForwards(result, graph.nodeStart[neighbor], j, sequenceLength, maxRow);
-			}
-		}
-	}
-
-	void expandBandBackwards(std::vector<std::vector<LengthType>>& result, LengthType w, LengthType j, size_t sequenceLength) const
-	{
-		assert(result.size() > j);
-		if (std::find(result[j].begin(), result[j].end(), w) != result[j].end()) return;
-		auto nodeIndex = graph.indexToNode[w];
-		auto start = graph.nodeStart[nodeIndex];
-		while (w != start && j > 0)
-		{
-			result[j].emplace_back(w);
-			w--;
-			j--;
-		}
-		result[j].emplace_back(w);
-		if (w == start && j > 0)
-		{
-			for (auto neighbor : graph.inNeighbors[nodeIndex])
-			{
-				expandBandBackwards(result, graph.nodeEnd[neighbor] - 1, j-1, sequenceLength);
-			}
-		}
 	}
 
 	class NodePosWithDistance
@@ -1574,6 +1520,171 @@ private:
 		return result;
 	}
 
+	std::vector<std::vector<bool>> getExtendedNodeBand(LengthType nodeIndex, LengthType startExtensionWidth) const
+	{
+		std::vector<std::vector<bool>> result;
+		result.resize(1);
+		result[0].resize(graph.nodeStart.size(), false);
+		auto start = graph.nodeStart[nodeIndex];
+		auto end = graph.nodeEnd[nodeIndex] - 1;
+		std::unordered_map<size_t, size_t> distanceAtNodeStart;
+		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
+		expandBandFromPositions(result[0], std::set<LengthType> {start, end}, startExtensionWidth, distanceAtNodeStart, distanceAtNodeEnd, nullptr, nullptr);
+		return result;
+	}
+
+	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, int dynamicWidth, int startExtensionWidth, LengthType matchBigraphNodeId, LengthType matchSequencePosition) const
+	{
+		assert(matchSequencePosition > 0);
+		assert(matchSequencePosition < sequence.size() - 1);
+		auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, matchSequencePosition));
+		auto forwardPart = sequence.substr(matchSequencePosition);
+		int backwardpadding = (WordConfiguration<Word>::WordSize - (backwardPart.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+		assert(backwardpadding < WordConfiguration<Word>::WordSize);
+		for (int i = 0; i < backwardpadding; i++)
+		{
+			backwardPart += 'N';
+		}
+		int forwardpadding = (WordConfiguration<Word>::WordSize - (forwardPart.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+		assert(forwardpadding < WordConfiguration<Word>::WordSize);
+		for (int i = 0; i < forwardpadding; i++)
+		{
+			forwardPart += 'N';
+		}
+		assert(backwardPart.size() + forwardPart.size() <= sequence.size() + 2 * WordConfiguration<Word>::WordSize);
+		auto forwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2);
+		auto backwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+		assert(graph.nodeSequences.substr(graph.nodeStart[forwardNode], graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode]) == CommonUtils::ReverseComplement(graph.nodeSequences.substr(graph.nodeStart[backwardNode], graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode])));
+		assert(graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode] == graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode]);
+		auto forwardBand = getExtendedNodeBand(forwardNode, startExtensionWidth);
+		auto forwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, dynamicWidth, forwardBand, WordConfiguration<Word>::WordSize);
+		auto backwardBand = getExtendedNodeBand(backwardNode, startExtensionWidth);
+		auto backwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, dynamicWidth, backwardBand, WordConfiguration<Word>::WordSize);
+		auto reverseForwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, dynamicWidth, backwardBand, WordConfiguration<Word>::WordSize);
+		auto reverseBackwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, dynamicWidth, forwardBand, WordConfiguration<Word>::WordSize);
+		auto firstscore = forwardSlice.minScorePerWordSlice.back() + backwardSlice.minScorePerWordSlice.back();
+		auto secondscore = reverseForwardSlice.minScorePerWordSlice.back() + reverseBackwardSlice.minScorePerWordSlice.back();
+		assert(firstscore <= backwardPart.size() + forwardPart.size());
+		assert(secondscore <= backwardPart.size() + forwardPart.size());
+		std::cerr << "first direction score: " << firstscore << std::endl;
+		std::cerr << "other direction score: " << secondscore << std::endl;
+		if (firstscore < secondscore)
+		{
+			TwoDirectionalSplitAlignment result;
+			result.sequenceSplitIndex = matchSequencePosition;
+			result.scoresForward = forwardSlice.minScorePerWordSlice;
+			result.scoresBackward = backwardSlice.minScorePerWordSlice;
+			result.forwardEndPos = forwardSlice.finalMinScoreColumn;
+			result.backwardEndPos = backwardSlice.finalMinScoreColumn;
+			result.nodeSize = graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode];
+			result.startExtensionWidth = startExtensionWidth;
+			return result;
+		}
+		else
+		{
+			TwoDirectionalSplitAlignment result;
+			result.sequenceSplitIndex = matchSequencePosition;
+			result.scoresForward = reverseForwardSlice.minScorePerWordSlice;
+			result.scoresBackward = reverseBackwardSlice.minScorePerWordSlice;
+			result.forwardEndPos = reverseForwardSlice.finalMinScoreColumn;
+			result.backwardEndPos = reverseBackwardSlice.finalMinScoreColumn;
+			result.nodeSize = graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode];
+			result.startExtensionWidth = startExtensionWidth;
+			return result;
+		}
+	}
+
+	std::vector<ScoreType> getMergedSplitScores(const std::vector<ScoreType>& backward, const std::vector<ScoreType>& forward, size_t nodeSize, size_t startExtensionWidth) const
+	{
+		std::vector<ScoreType> partialScores;
+		ScoreType endScore = 0;
+		for (size_t i = backward.size()-1; i < backward.size(); i--)
+		{
+			endScore += backward[i];
+			partialScores.push_back(endScore);
+		}
+		for (size_t i = 0; i < forward.size(); i++)
+		{
+			endScore += forward[i];
+			partialScores.push_back(endScore);
+		}
+		partialScores.back() += nodeSize + startExtensionWidth * 2;
+		return partialScores;
+	}
+
+	std::tuple<ScoreType, std::vector<MatrixPosition>> getTraceFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
+	{
+		std::string backtraceSequence;
+		auto startpartsize = split.sequenceSplitIndex;
+		auto endpartsize = sequence.size() - split.sequenceSplitIndex;
+		int startpadding = (WordConfiguration<Word>::WordSize - (startpartsize % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+		int endpadding = (WordConfiguration<Word>::WordSize - (endpartsize % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+		backtraceSequence.reserve(sequence.size() + startpadding + endpadding);
+		for (int i = 0; i < startpadding; i++)
+		{
+			backtraceSequence += 'N';
+		}
+		backtraceSequence.insert(backtraceSequence.end(), sequence.begin(), sequence.end());
+		for (int i = 0; i < endpadding; i++)
+		{
+			backtraceSequence += 'N';
+		}
+		auto backtraceresult = backtrace(std::make_pair(split.forwardEndPos, backtraceSequence.size()), backtraceSequence, getMergedSplitScores(split.scoresBackward, split.scoresForward, split.nodeSize, split.startExtensionWidth));
+		std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
+		auto reverseBacktraceResult = backtrace(std::make_pair(split.backwardEndPos, backtraceSequence.size()), CommonUtils::ReverseComplement(backtraceSequence), getMergedSplitScores(split.scoresForward, split.scoresBackward, split.nodeSize, split.startExtensionWidth));
+		std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
+		ScoreType finalScore;
+		std::vector<MatrixPosition> finalBacktrace;
+		if (reverseBacktraceResult.first < backtraceresult.first)
+		{
+			std::reverse(reverseBacktraceResult.second.begin(), reverseBacktraceResult.second.end());
+			for (size_t i = 0; i < reverseBacktraceResult.second.size(); i++)
+			{
+				reverseBacktraceResult.second[i].first = graph.GetReversePosition(reverseBacktraceResult.second[i].first);
+				assert(reverseBacktraceResult.second[i].second < sequence.size());
+				reverseBacktraceResult.second[i].second = sequence.size() - reverseBacktraceResult.second[i].second - 1;
+			}
+			finalScore = reverseBacktraceResult.first;
+			finalBacktrace = reverseBacktraceResult.second;
+		}
+		else
+		{
+			finalScore = backtraceresult.first;
+			finalBacktrace = backtraceresult.second;
+		}
+		assert(finalScore <= split.MaxScore());
+		for (int i = 0; i < endpadding; i++)
+		{
+			assert(finalBacktrace.back().second >= sequence.size() - endpadding);
+			finalBacktrace.pop_back();
+		}
+		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
+		if (finalBacktrace.back().second == sequence.size() - endpadding && graph.nodeSequences[finalBacktrace.back().first] != sequence[finalBacktrace.back().second])
+		{
+			finalBacktrace.pop_back();
+		}
+#ifndef NDEBUG
+		for (int i = 0; i < startpadding; i++)
+		{
+			assert(finalBacktrace[i].second < startpadding);
+		}
+#endif
+		finalBacktrace.erase(finalBacktrace.begin(), finalBacktrace.begin() + startpadding);
+		if (startpadding > 0 && finalBacktrace.front().second == startpadding - 1 && graph.nodeSequences[finalBacktrace.front().first] != sequence[finalBacktrace.front().second])
+		{
+			finalBacktrace.erase(finalBacktrace.begin());
+		}
+		for (size_t i = 0; i < finalBacktrace.size(); i++)
+		{
+			assert(finalBacktrace[i].second >= startpadding);
+			finalBacktrace[i].second -= startpadding;
+		}
+		assert(finalBacktrace[0].second == 0);
+		assert(finalBacktrace.back().second == sequence.size() - 1);
+
+		return std::make_tuple(finalScore, finalBacktrace);
+	}
+
 	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktrace(std::string sequence, int dynamicWidth, LengthType dynamicRowStart, std::vector<std::vector<bool>>& startBand) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
@@ -1588,18 +1699,20 @@ private:
 			return std::make_tuple(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{}, slice.cellsProcessed);
 		}
 		auto backtraceresult = backtrace(std::make_pair(slice.finalMinScoreColumn, sequence.size()), sequence, slice.minScorePerWordSlice);
+		assert(backtraceresult.first <= slice.finalMinScore);
 		for (int i = 0; i < padding; i++)
 		{
-			assert(backtraceresult.back().second >= sequence.size() - padding);
-			backtraceresult.pop_back();
+			assert(backtraceresult.second.back().second >= sequence.size() - padding);
+			backtraceresult.second.pop_back();
 		}
 		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
-		if (backtraceresult.back().second == sequence.size() - padding && graph.nodeSequences[backtraceresult.back().first] != sequence[backtraceresult.back().second])
+		if (backtraceresult.second.back().second == sequence.size() - padding && graph.nodeSequences[backtraceresult.second.back().first] != sequence[backtraceresult.second.back().second])
 		{
-			backtraceresult.pop_back();
+			backtraceresult.second.pop_back();
 		}
-		assert(backtraceresult.back().second == sequence.size() - padding - 1);
-		return std::make_tuple(slice.finalMinScore, backtraceresult, slice.cellsProcessed);
+		assert(backtraceresult.second[0].second == 0);
+		assert(backtraceresult.second.back().second == sequence.size() - padding - 1);
+		return std::make_tuple(slice.finalMinScore, backtraceresult.second, slice.cellsProcessed);
 	}
 
 	const AlignmentGraph& graph;
