@@ -74,6 +74,10 @@ public:
 	}
 };
 
+#ifndef NDEBUG
+thread_local int debugLastRowMinScore;
+#endif
+
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
@@ -689,6 +693,7 @@ private:
 		}
 		for (int i = 1; i < 65; i++)
 		{
+			assert(current[i+1] >= debugLastRowMinScore);
 			assert(current[i+1] >= current[i]-1);
 			assert(current[i+1] <= current[i]+1);
 			if (current[i+1] == current[i]+1) result.VP |= ((Word)1) << (i-1);
@@ -1063,6 +1068,8 @@ private:
 		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
 		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
 		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
+		assert(slice.scoreBeforeStart >= debugLastRowMinScore);
+		assert(slice.scoreEnd >= debugLastRowMinScore);
 #endif
 
 		return slice;
@@ -1116,6 +1123,8 @@ private:
 
 			assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
 			assert(current.scoreBeforeStart >= 0);
+			assert(current.scoreEnd >= debugLastRowMinScore);
+			assert(current.scoreBeforeStart >= debugLastRowMinScore);
 #endif
 	}
 
@@ -1206,7 +1215,7 @@ private:
 			assert(previousBand[i] || slice[w].scoreBeforeStart == j || slice[w].scoreBeforeStart == slice[w-1].scoreBeforeStart + 1);
 			assertSliceCorrectness(slice[w], oldSlice[w], previousBand[i]);
 
-			if (slice[w].scoreEnd < result.minScore)
+			if (slice[w].scoreEnd <= result.minScore)
 			{
 				result.minScore = slice[w].scoreEnd;
 				result.minScoreIndex = nodeStart + w;
@@ -1364,6 +1373,10 @@ private:
 		std::set<size_t> previousBandOrder;
 		std::set<size_t> previousBandOrderOutOfOrder;
 
+#ifndef NDEBUG
+		debugLastRowMinScore = 0;
+#endif
+
 		for (size_t j = 0; j < sequence.size(); j += WordConfiguration<Word>::WordSize)
 		{
 			NodeSlice<WordSlice> currentSlice;
@@ -1520,6 +1533,24 @@ private:
 					currentMinimumScore = nodeCalc.minScore;
 					currentMinimumIndex = nodeCalc.minScoreIndex;
 				}
+				if (nodeCalc.minScore <= currentMinimumScore)
+				{
+					if (nodeCalc.minScoreIndex == graph.nodeEnd[i]-1)
+					{
+						if (currentSlice.node(i).back().VP & ((Word)1 << (WordConfiguration<Word>::WordSize - 1)))
+						{
+							for (auto neighbor : graph.outNeighbors[i])
+							{
+								if (sequence[j + WordConfiguration<Word>::WordSize - 1] == graph.nodeSequences[graph.nodeStart[neighbor]])
+								{
+									assert(nodeCalc.minScore > 0);
+									currentMinimumScore = nodeCalc.minScore - 1;
+									currentMinimumIndex == graph.nodeStart[neighbor];
+								}
+							}
+						}
+					}
+				}
 				result.cellsProcessed += nodeCalc.cellsProcessed;
 			}
 			for (auto i : bandOrderOutOfOrder)
@@ -1531,6 +1562,24 @@ private:
 				{
 					currentMinimumScore = nodeCalc.minScore;
 					currentMinimumIndex = nodeCalc.minScoreIndex;
+				}
+				if (nodeCalc.minScore <= currentMinimumScore)
+				{
+					if (nodeCalc.minScoreIndex == graph.nodeEnd[i]-1)
+					{
+						if (currentSlice.node(i).back().VP & ((Word)1 << (WordConfiguration<Word>::WordSize - 1)))
+						{
+							for (auto neighbor : graph.outNeighbors[i])
+							{
+								if (sequence[j + WordConfiguration<Word>::WordSize - 1] == graph.nodeSequences[graph.nodeStart[neighbor]])
+								{
+									assert(nodeCalc.minScore > 0);
+									currentMinimumScore = nodeCalc.minScore - 1;
+									currentMinimumIndex == graph.nodeStart[neighbor];
+								}
+							}
+						}
+					}
 				}
 				result.cellsProcessed += nodeCalc.cellsProcessed;
 			}
@@ -1551,6 +1600,9 @@ private:
 			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
 			previousBandOrder = std::move(bandOrder);
 			previousBandOrderOutOfOrder = std::move(bandOrderOutOfOrder);
+#ifndef NDEBUG
+			debugLastRowMinScore = currentMinimumScore;
+#endif
 			if (currentMinimumScore > maxScore)
 			{
 				for (int i = j + WordConfiguration<Word>::WordSize; i < sequence.size(); i += WordConfiguration<Word>::WordSize)
