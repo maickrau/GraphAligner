@@ -87,9 +87,26 @@ private:
 	{
 	public:
 		std::vector<ScoreType> minScorePerWordSlice;
-		LengthType finalMinScoreColumn;
-		ScoreType finalMinScore;
+		std::vector<LengthType> minScoreIndexPerWordSlice;
 		size_t cellsProcessed;
+		LengthType FinalMinScoreDistance() const
+		{
+			assert(minScorePerWordSlice.size() > 0);
+			assert(minScoreIndexPerWordSlice.size() == minScorePerWordSlice.size());
+			return (minScoreIndexPerWordSlice.size() - 1) * WordConfiguration<Word>::WordSize;
+		}
+		ScoreType FinalMinScore() const
+		{
+			assert(minScorePerWordSlice.size() > 0);
+			assert(minScoreIndexPerWordSlice.size() == minScorePerWordSlice.size());
+			return minScorePerWordSlice.back();
+		}
+		LengthType FinalMinScoreColumn() const
+		{
+			assert(minScorePerWordSlice.size() > 0);
+			assert(minScoreIndexPerWordSlice.size() == minScorePerWordSlice.size());
+			return minScoreIndexPerWordSlice.back();
+		}
 	};
 	class TwoDirectionalSplitAlignment
 	{
@@ -107,6 +124,8 @@ private:
 		std::vector<ScoreType> scoresBackward;
 		LengthType forwardEndPos;
 		LengthType backwardEndPos;
+		LengthType forwardEndDistance;
+		LengthType backwardEndDistance;
 		size_t nodeSize;
 		size_t startExtensionWidth;
 	};
@@ -243,6 +262,7 @@ private:
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtraceInner(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice, bool fullBacktrace) const
 	{
+		assert(minScorePerWordSlice.size() * WordConfiguration<Word>::WordSize > sequence.size());
 		ScoreType scoreAtEnd = minScorePerWordSlice.back();
 		ScoreType currentDistance = 0;
 		std::vector<ExpandoCell> visitedExpandos;
@@ -376,9 +396,13 @@ private:
 		{
 			start = 1;
 		}
+		else if (graph.outNeighbors[graph.nodeLookup.at(firstEndPos.node_id())].count(graph.nodeLookup.at(secondStartPos.node_id())) == 1)
+		{
+			start = 0;
+		}
 		else
 		{
-			std::cerr << "Piecewise alignments don't end at the same position!";
+			std::cerr << "Piecewise alignments can't be merged!";
 			std::cerr << " first end: " << firstEndPos.node_id() << " " << (firstEndPos.is_reverse() ? "-" : "+");
 			std::cerr << " second start: " << secondStartPos.node_id() << " " << (secondStartPos.is_reverse() ? "-" : "+") << std::endl;
 		}
@@ -1356,9 +1380,8 @@ private:
 		//todo optimization: 82% inclusive 17% exclusive. can this be improved?
 		MatrixSlice result;
 		result.cellsProcessed = 0;
-		result.finalMinScore = 0;
-		result.finalMinScoreColumn = 0;
 		result.minScorePerWordSlice.emplace_back(0);
+		result.minScoreIndexPerWordSlice.emplace_back(0);
 
 		NodeSlice<WordSlice> previousSlice;
 
@@ -1598,6 +1621,7 @@ private:
 			previousSlice = std::move(currentSlice);
 			previousMinimumIndex = currentMinimumIndex;
 			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
+			result.minScoreIndexPerWordSlice.emplace_back(currentMinimumIndex);
 			previousBandOrder = std::move(bandOrder);
 			previousBandOrderOutOfOrder = std::move(bandOrderOutOfOrder);
 #ifndef NDEBUG
@@ -1608,6 +1632,7 @@ private:
 				for (int i = j + WordConfiguration<Word>::WordSize; i < sequence.size(); i += WordConfiguration<Word>::WordSize)
 				{
 					result.minScorePerWordSlice.push_back(sequence.size());
+					result.minScoreIndexPerWordSlice.push_back(0);
 				}
 				break;
 			}
@@ -1618,8 +1643,6 @@ private:
 			assert(result.minScorePerWordSlice[i] >= result.minScorePerWordSlice[i-1]);
 		}
 #endif
-		result.finalMinScoreColumn = previousMinimumIndex;
-		result.finalMinScore = result.minScorePerWordSlice.back();
 		return result;
 	}
 
@@ -1689,8 +1712,10 @@ private:
 			result.sequenceSplitIndex = matchSequencePosition;
 			result.scoresForward = forwardSlice.minScorePerWordSlice;
 			result.scoresBackward = backwardSlice.minScorePerWordSlice;
-			result.forwardEndPos = forwardSlice.finalMinScoreColumn;
-			result.backwardEndPos = backwardSlice.finalMinScoreColumn;
+			result.forwardEndPos = forwardSlice.FinalMinScoreColumn();
+			result.forwardEndDistance = forwardSlice.FinalMinScoreDistance();
+			result.backwardEndPos = backwardSlice.FinalMinScoreColumn();
+			result.backwardEndDistance = backwardSlice.FinalMinScoreDistance();
 			result.nodeSize = graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode];
 			result.startExtensionWidth = startExtensionWidth;
 			return result;
@@ -1701,8 +1726,10 @@ private:
 			result.sequenceSplitIndex = matchSequencePosition;
 			result.scoresForward = reverseForwardSlice.minScorePerWordSlice;
 			result.scoresBackward = reverseBackwardSlice.minScorePerWordSlice;
-			result.forwardEndPos = reverseForwardSlice.finalMinScoreColumn;
-			result.backwardEndPos = reverseBackwardSlice.finalMinScoreColumn;
+			result.forwardEndPos = reverseForwardSlice.FinalMinScoreColumn();
+			result.forwardEndDistance = reverseForwardSlice.FinalMinScoreDistance();
+			result.backwardEndPos = reverseBackwardSlice.FinalMinScoreColumn();
+			result.backwardEndDistance = reverseBackwardSlice.FinalMinScoreDistance();
 			result.nodeSize = graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode];
 			result.startExtensionWidth = startExtensionWidth;
 			return result;
@@ -1762,29 +1789,19 @@ private:
 		}
 		assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 		assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
-		auto backtraceresult = backtrace(std::make_pair(split.forwardEndPos, backtraceSequence.size()), backtraceSequence, split.scoresForward);
+		auto backtraceresult = backtrace(std::make_pair(split.forwardEndPos, split.forwardEndDistance), backtraceSequence, split.scoresForward);
 		std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
-		auto reverseBacktraceResult = backtrace(std::make_pair(split.backwardEndPos, backwardBacktraceSequence.size()), backwardBacktraceSequence, split.scoresBackward);
+		auto reverseBacktraceResult = backtrace(std::make_pair(split.backwardEndPos, split.backwardEndDistance), backwardBacktraceSequence, split.scoresBackward);
 		std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
 
-		for (int i = 0; i < endpadding; i++)
+		while (backtraceresult.second.back().second >= backtraceSequence.size() - endpadding)
 		{
 			assert(backtraceresult.second.back().second >= backtraceSequence.size() - endpadding);
 			backtraceresult.second.pop_back();
 		}
-		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
-		if (backtraceresult.second.back().second == backtraceSequence.size() - endpadding && graph.nodeSequences[backtraceresult.second.back().first] != backtraceSequence[backtraceresult.second.back().second])
-		{
-			backtraceresult.second.pop_back();
-		}
-		for (int i = 0; i < startpadding; i++)
+		while (reverseBacktraceResult.second.back().second >= backwardBacktraceSequence.size() - startpadding)
 		{
 			assert(reverseBacktraceResult.second.back().second >= backwardBacktraceSequence.size() - startpadding);
-			reverseBacktraceResult.second.pop_back();
-		}
-		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
-		if (reverseBacktraceResult.second.back().second == backwardBacktraceSequence.size() - startpadding && graph.nodeSequences[reverseBacktraceResult.second.back().first] != backwardBacktraceSequence[reverseBacktraceResult.second.back().second])
-		{
 			reverseBacktraceResult.second.pop_back();
 		}
 
@@ -1804,21 +1821,15 @@ private:
 		{
 			return std::make_tuple(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{}, slice.cellsProcessed);
 		}
-		auto backtraceresult = backtrace(std::make_pair(slice.finalMinScoreColumn, sequence.size()), sequence, slice.minScorePerWordSlice);
-		assert(backtraceresult.first <= slice.finalMinScore);
-		for (int i = 0; i < padding; i++)
-		{
-			assert(backtraceresult.second.back().second >= sequence.size() - padding);
-			backtraceresult.second.pop_back();
-		}
-		//if there's a mismatch at the last base, the backtrace might be spending one more jump in the padding
-		if (backtraceresult.second.back().second == sequence.size() - padding && graph.nodeSequences[backtraceresult.second.back().first] != sequence[backtraceresult.second.back().second])
+		auto backtraceresult = backtrace(std::make_pair(slice.FinalMinScoreColumn(), slice.FinalMinScoreDistance()), sequence, slice.minScorePerWordSlice);
+		assert(backtraceresult.first <= slice.FinalMinScore());
+		while (backtraceresult.second.back().second >= sequence.size() - padding)
 		{
 			backtraceresult.second.pop_back();
 		}
 		assert(backtraceresult.second[0].second == 0);
 		assert(backtraceresult.second.back().second == sequence.size() - padding - 1);
-		return std::make_tuple(slice.finalMinScore, backtraceresult.second, slice.cellsProcessed);
+		return std::make_tuple(slice.FinalMinScore(), backtraceresult.second, slice.cellsProcessed);
 	}
 
 	const AlignmentGraph& graph;
