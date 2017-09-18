@@ -514,6 +514,7 @@ private:
 			pos++;
 			if (pos == trace.size()) return emptyAlignment(std::numeric_limits<size_t>::max(), cellsProcessed);
 			assert(pos < trace.size());
+			assert(trace[pos].second >= trace[pos-1].second);
 			oldNode = graph.indexToNode[trace[pos].first];
 			assert(oldNode < graph.nodeIDs.size());
 		}
@@ -536,6 +537,7 @@ private:
 				btNodeEnd = trace[pos];
 				continue;
 			}
+			assert(trace[pos].second >= trace[pos-1].second);
 			assert(graph.indexToNode[btNodeEnd.first] == graph.indexToNode[btNodeStart.first]);
 			assert(btNodeEnd.second >= btNodeStart.second);
 			assert(btNodeEnd.first >= btNodeStart.first);
