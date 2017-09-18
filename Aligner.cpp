@@ -351,6 +351,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 		{
 			cerroutput << "read " << fastq->seq_id << " score is poor: " << alignment.alignment.score() << BufferedWriter::Flush;
 		}
+		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignment.firstPartStart << "-" << alignment.firstPartEnd << ", " << alignment.secondPartStart << "-" << alignment.secondPartEnd << ", second starts at index " << alignment.secondPartFirstIndex << BufferedWriter::Flush;
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, augmentedGraph, newIdToOriginalIdMapper);
 

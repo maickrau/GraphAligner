@@ -165,6 +165,11 @@ public:
 		bool alignmentFailed;
 		size_t cellsProcessed;
 		size_t elapsedMilliseconds;
+		size_t firstPartStart;
+		size_t firstPartEnd;
+		size_t secondPartStart;
+		size_t secondPartEnd;
+		size_t secondPartFirstIndex;
 	};
 
 	GraphAligner(const AlignmentGraph& graph) :
@@ -182,7 +187,12 @@ public:
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
+		if (std::get<1>(trace).size() == 0) return emptyAlignment(time, std::get<2>(trace));
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
+		result.firstPartStart = std::get<1>(trace)[0].second;
+		result.firstPartEnd = std::get<1>(trace).back().second;
+		result.secondPartStart = 0;
+		result.secondPartEnd = 0;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -234,6 +244,30 @@ public:
 			return emptyAlignment(time, 0);
 		}
 		auto result = mergeAlignments(bwresult, fwresult);
+		result.secondPartFirstIndex = bwresult.alignment.path().mapping_size();
+		if (std::get<1>(bestTrace.second).size() == 0)
+		{
+			//this way around. 
+			//bestTrace.second is backward and bestTrace.first is forward
+			//but result.firstPart is backward and result.secondPart is forward
+			result.firstPartStart = 0;
+			result.firstPartEnd = 0;
+		}
+		else
+		{
+			result.firstPartStart = std::get<1>(bestTrace.second)[0].second;
+			result.firstPartEnd = std::get<1>(bestTrace.second).back().second;
+		}
+		if (std::get<1>(bestTrace.first).size() == 0)
+		{
+			result.secondPartStart = 0;
+			result.secondPartEnd = 0;
+		}
+		else
+		{
+			result.secondPartStart = std::get<1>(bestTrace.first)[0].second;
+			result.secondPartEnd = std::get<1>(bestTrace.first).back().second;
+		}
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -305,7 +339,12 @@ private:
 		{
 			partials.push_back(minScorePerWordSlice[i]);
 		}
-		return backtrace(endPos, newseq, partials);
+		auto partialResult = backtrace(endPos, newseq, partials);
+		for (size_t i = 0; i < partialResult.second.size(); i++)
+		{
+			partialResult.second[i].second += start * WordConfiguration<Word>::WordSize;
+		}
+		return partialResult;
 	}
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> backtrace(MatrixPosition endPosition, const std::string& sequence, const std::vector<ScoreType>& minScorePerWordSlice) const
@@ -1932,6 +1971,13 @@ private:
 		{
 			assert(reverseBacktraceResult.second.back().second >= backwardBacktraceSequence.size() - startpadding);
 			reverseBacktraceResult.second.pop_back();
+		}
+
+		reverseBacktraceResult.second = reverseTrace(reverseBacktraceResult.second);
+
+		for (size_t i = 0; i < backtraceresult.second.size(); i++)
+		{
+			backtraceresult.second[i].second += split.sequenceSplitIndex;
 		}
 
 		return std::make_pair(backtraceresult, reverseBacktraceResult);
