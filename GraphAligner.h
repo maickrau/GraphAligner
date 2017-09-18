@@ -237,7 +237,7 @@ public:
 		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence);
 
 		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.first), std::get<1>(bestTrace.first), 0);
-		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.second), reverseTrace(std::get<1>(bestTrace.second)), 0);
+		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.second), std::get<1>(bestTrace.second), 0);
 		//failed alignment, don't output
 		if (fwresult.alignmentFailed && bwresult.alignmentFailed)
 		{
@@ -1835,16 +1835,15 @@ private:
 		return partialScores;
 	}
 
-	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace) const
+	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace, LengthType end) const
 	{
 		if (trace.size() == 0) return trace;
 		std::reverse(trace.begin(), trace.end());
-		auto secondMax = trace[0].second;
 		for (size_t i = 0; i < trace.size(); i++)
 		{
 			trace[i].first = graph.GetReversePosition(trace[i].first);
-			assert(trace[i].second <= secondMax);
-			trace[i].second = secondMax - trace[i].second;
+			assert(trace[i].second <= end);
+			trace[i].second = end - trace[i].second;
 		}
 		return trace;
 	}
@@ -1890,10 +1889,10 @@ private:
 	{
 		const boost::rational<boost::multiprecision::cpp_int> correctMismatchProbability {15, 100}; //15% from pacbio error rate
 		const boost::rational<boost::multiprecision::cpp_int> falseMismatchProbability {50, 100}; //50% empirically
-		const boost::rational<boost::multiprecision::cpp_int> falseToCorrectTransitionProbability = {1, 100}; //1% arbitrarily
-		const boost::rational<boost::multiprecision::cpp_int> correctToFalseTransitionProbability = {1, 100}; //1% arbitrarily
-		boost::rational<boost::multiprecision::cpp_int> correctProbability {30, 100}; //30% arbitrarily
-		boost::rational<boost::multiprecision::cpp_int> falseProbability {70, 100}; //70% arbitrarily
+		const boost::rational<boost::multiprecision::cpp_int> falseToCorrectTransitionProbability {1, 100000}; //10^-5. one slice at <=12 mismatches or two slices at <=15 mismatchs
+		const boost::rational<boost::multiprecision::cpp_int> correctToFalseTransitionProbability {1LL, 1000000000000000LL}; //10^-15. three slices at >=25 mismatches or two slices at >=30 mismatches
+		boost::rational<boost::multiprecision::cpp_int> correctProbability {80, 100}; //80% arbitrarily
+		boost::rational<boost::multiprecision::cpp_int> falseProbability {20, 100}; //20% arbitrarily
 		std::vector<bool> falseFromCorrectBacktrace;
 		std::vector<bool> correctFromCorrectBacktrace;
 		for (size_t i = 1; i < scores.size(); i++)
@@ -1973,7 +1972,7 @@ private:
 			reverseBacktraceResult.second.pop_back();
 		}
 
-		reverseBacktraceResult.second = reverseTrace(reverseBacktraceResult.second);
+		reverseBacktraceResult.second = reverseTrace(reverseBacktraceResult.second, split.sequenceSplitIndex - 1);
 
 		for (size_t i = 0; i < backtraceresult.second.size(); i++)
 		{
