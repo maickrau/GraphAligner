@@ -42,6 +42,7 @@ public:
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize, std::string cutFilename);
 	size_t GetReversePosition(size_t position) const;
+	size_t GetReverseNode(size_t nodeIndex) const;
 	size_t SizeInBp() const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;

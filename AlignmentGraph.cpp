@@ -246,6 +246,7 @@ void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalcula
 	assert(cuts[cycleStart].predecessors.size() == 0);
 	assert(cuts[cycleStart].previousCut.size() == 0);
 
+	// cuts[cycleStart] = cutCalculation.GetCycleCutSimplest(cycleStart, wordSize);
 	cuts[cycleStart] = cutCalculation.GetCycleCutTooBig(cycleStart, wordSize);
 	// cuts[cycleStart] = cutCalculation.GetCycleCut(cycleStart, wordSize);
 
@@ -322,14 +323,11 @@ std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpos
 	return positions.back();
 }
 
-size_t AlignmentGraph::GetReversePosition(size_t pos) const
+size_t AlignmentGraph::GetReverseNode(size_t nodeIndex) const
 {
-	assert(pos < nodeSequences.size());
-	assert(pos > 0);
-	auto originalNode = indexToNode[pos];
-	auto bigraphNodeId = nodeIDs[originalNode] / 2;
+	auto bigraphNodeId = nodeIDs[nodeIndex] / 2;
 	size_t otherNode;
-	if (nodeIDs[originalNode] % 2 == 1)
+	if (nodeIDs[nodeIndex] % 2 == 1)
 	{
 		otherNode = nodeLookup.at(bigraphNodeId * 2);
 	}
@@ -337,9 +335,18 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 	{
 		otherNode = nodeLookup.at(bigraphNodeId * 2 + 1);
 	}
-	assert(otherNode != originalNode);
-	assert(nodeEnd[otherNode] - nodeStart[otherNode] == nodeEnd[originalNode] - nodeStart[originalNode]);
-	assert(nodeSequences.substr(nodeStart[originalNode], nodeEnd[originalNode] - nodeStart[originalNode]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
+	assert(otherNode != nodeIndex);
+	assert(nodeEnd[otherNode] - nodeStart[otherNode] == nodeEnd[nodeIndex] - nodeStart[nodeIndex]);
+	assert(nodeSequences.substr(nodeStart[nodeIndex], nodeEnd[nodeIndex] - nodeStart[nodeIndex]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
+	return otherNode;
+}
+
+size_t AlignmentGraph::GetReversePosition(size_t pos) const
+{
+	assert(pos < nodeSequences.size());
+	assert(pos > 0);
+	auto originalNode = indexToNode[pos];
+	auto otherNode = GetReverseNode(originalNode);
 	size_t newPos = (nodeEnd[otherNode] - 1) - (pos - nodeStart[originalNode]);
 	assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
 	return newPos;

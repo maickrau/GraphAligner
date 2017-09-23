@@ -25,11 +25,27 @@ public:
 		assert(found != nodes.end());
 		return found->second;
 	}
+	bool hasNode(size_t nodeIndex) const
+	{
+		return nodes.find(nodeIndex) != nodes.end();
+	}
+	size_t size() const
+	{
+		return nodes.size();
+	}
 	auto begin()
 	{
 		return nodes.begin();
 	}
 	auto end()
+	{
+		return nodes.end();
+	}
+	auto begin() const
+	{
+		return nodes.begin();
+	}
+	auto end() const
 	{
 		return nodes.end();
 	}

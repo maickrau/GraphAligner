@@ -226,6 +226,44 @@ std::vector<size_t> CycleCutCalculation::getCycleCuttersOrder(size_t cycleStart,
 	return supersequence;
 }
 
+std::vector<size_t> CycleCutCalculation::getCycleCuttersSimplest(size_t cycleStart, int sizeLeft, std::vector<std::set<size_t>>& predecessors) const
+{
+	std::vector<size_t> supersequence;
+	std::vector<std::unordered_map<size_t, size_t>> positionInSupersequence;
+	std::unordered_map<size_t, std::vector<size_t>> existingIndexesForNode;
+	positionInSupersequence.resize(sizeLeft);
+	std::vector<std::unordered_set<size_t>> nodes;
+	nodes.resize(sizeLeft);
+	std::vector<std::pair<std::pair<size_t, size_t>, std::pair<size_t, size_t>>> edges;
+	nodes[0].insert(cycleStart);
+	for (size_t i = 0; i < sizeLeft; i++)
+	{
+		for (auto node : nodes[i])
+		{
+			positionInSupersequence[i][node] = supersequence.size();
+			existingIndexesForNode[node].push_back(i);
+			supersequence.push_back(node);
+			auto nodeSize = graph.nodeEnd[node] - graph.nodeStart[node];
+			if (i + nodeSize >= sizeLeft) continue;
+			for (auto neighbor : graph.inNeighbors[node])
+			{
+				nodes[i + nodeSize].insert(neighbor);
+				edges.emplace_back(std::make_pair(i, node), std::make_pair(i + nodeSize, neighbor));
+			}
+		}
+	}
+
+	predecessors.resize(supersequence.size());
+	for (auto edge : edges)
+	{
+		auto from = edge.first;
+		auto to = edge.second;
+		assert(positionInSupersequence[from.first][from.second] < positionInSupersequence[to.first][to.second]);
+		predecessors[positionInSupersequence[from.first][from.second]].insert(positionInSupersequence[to.first][to.second]);
+	}
+	return supersequence;
+}
+
 void CycleCutCalculation::filterUnnecessaryCharacters(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors) const
 {
 	std::vector<bool> isPredecessor;
@@ -612,6 +650,15 @@ void CycleCutCalculation::getCycleCutters(size_t cycleStart, int sizeLeft, std::
 	}
 }
 
+void CycleCutCalculation::getCycleCuttersSimplestff(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
+{
+	supersequence = getCycleCuttersSimplest(cycleStart, sizeLeft, supersequencePredecessors);
+	for (size_t i = 0; i < supersequence.size(); i++)
+	{
+		previousCut.push_back(false);
+	}
+}
+
 void CycleCutCalculation::getCycleCuttersTooBig(size_t cycleStart, int sizeLeft, std::vector<size_t>& supersequence, std::vector<std::set<size_t>>& supersequencePredecessors, std::vector<bool>& previousCut) const
 {
 	supersequence = getCycleCuttersOrder(cycleStart, sizeLeft, supersequencePredecessors);
@@ -619,6 +666,13 @@ void CycleCutCalculation::getCycleCuttersTooBig(size_t cycleStart, int sizeLeft,
 	{
 		previousCut.push_back(supersequence[i] < cycleStart);
 	}
+}
+
+AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutSimplest(size_t startNode, int wordSize) const
+{
+	AlignmentGraph::CycleCut result;
+	getCycleCuttersSimplestff(startNode, wordSize*3, result.nodes, result.predecessors, result.previousCut);
+	return result;
 }
 
 AlignmentGraph::CycleCut CycleCutCalculation::GetCycleCutTooBig(size_t startNode, int wordSize) const
