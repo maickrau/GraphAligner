@@ -13,10 +13,10 @@
 #include "stream.hpp"
 #include "fastqloader.h"
 #include "TopologicalSort.h"
-#include "GraphAligner.h"
 #include "mfvs_graph.h"
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
+#include "GraphAlignerWrapper.h"
 
 
 class BufferedWriter : std::ostream
@@ -291,7 +291,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Di
 	}
 }
 
-void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<int, int>& newIdToOriginalIdMapper, const GraphAligner<size_t, int32_t, uint64_t>& graphAligner, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<int, int>& newIdToOriginalIdMapper, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -311,11 +311,11 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 
-		decltype(graphAligner.AlignOneWay("", "", 0, 0)) alignment;
+		AlignmentResult alignment;
 
 		if (graphAlignerSeedHits == nullptr)
 		{
-			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
+			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart);
 		}
 		else
 		{
@@ -327,7 +327,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 				continue;
 			}
-			alignment = graphAligner.AlignOneWay(fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, graphAlignerSeedHits->at(fastq), startBandwidth);
+			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, graphAlignerSeedHits->at(fastq), startBandwidth);
 		}
 
 		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;
@@ -462,7 +462,6 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
 	alignmentGraph.Finalize(64, cycleCutFilename);
-	GraphAligner<size_t, int32_t, uint64_t> aligner { alignmentGraph };
 
 	std::map<int, int> idMapper;
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
@@ -478,7 +477,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&augmentedGraph, &idMapper, &aligner, &alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, idMapper, aligner, alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
+		threads.emplace_back([&augmentedGraph, &idMapper, &alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth]() { runComponentMappings(augmentedGraph, idMapper, alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
