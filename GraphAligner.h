@@ -103,15 +103,17 @@ private:
 		scoreEnd(0),
 		scoreBeforeStart(0),
 		confirmedRows(0),
-		confirmedBeforeStart(false)
+		confirmedBeforeStart(false),
+		scoreBeforeExists(false)
 		{}
-		WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool confirmedBeforeStart) :
+		WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool confirmedBeforeStart, bool scoreBeforeExists) :
 		VP(VP),
 		VN(VN),
 		scoreEnd(scoreEnd),
 		scoreBeforeStart(scoreBeforeStart),
 		confirmedRows(confirmedRows),
-		confirmedBeforeStart(confirmedBeforeStart)
+		confirmedBeforeStart(confirmedBeforeStart),
+		scoreBeforeExists(scoreBeforeExists)
 		{}
 		Word VP;
 		Word VN;
@@ -119,6 +121,7 @@ private:
 		ScoreType scoreBeforeStart;
 		char confirmedRows;
 		bool confirmedBeforeStart;
+		bool scoreBeforeExists;
 	};
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
 	class MatrixSlice
@@ -826,6 +829,18 @@ private:
 		assert((result.VP & result.VN) == 0);
 		result.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
+		if (left.scoreBeforeStart < right.scoreBeforeStart)
+		{
+			result.scoreBeforeExists = left.scoreBeforeExists;
+		}
+		else if (right.scoreBeforeStart < left.scoreBeforeStart)
+		{
+			result.scoreBeforeExists = right.scoreBeforeExists;
+		}
+		else
+		{
+			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
+		}
 		if (confirmedSmaller(left, right))
 		{
 			result.confirmedRows = left.confirmedRows;
@@ -926,11 +941,13 @@ private:
 				if (!foundOne)
 				{
 					previous = getSourceSliceFromScore(previousSlice.node(neighbor).back().scoreEnd);
+					previous.scoreBeforeExists = true;
 					foundOne = true;
 				}
 				else
 				{
 					auto competitor = getSourceSliceFromScore(previousSlice.node(neighbor).back().scoreEnd);
+					competitor.scoreBeforeExists = true;
 					previous = mergeTwoSlices(previous, competitor);
 				}
 			}
@@ -957,29 +974,29 @@ private:
 
 	WordSlice getUnconfirmedSliceFromScore(ScoreType previousScore) const
 	{
-		return { WordConfiguration<Word>::AllOnes & ~((Word)1), WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore+1, 0, false };
+		return { WordConfiguration<Word>::AllOnes & ~((Word)1), WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore+1, 0, false, false };
 	}
 
 	WordSlice getSourceSliceWithoutBefore(size_t row) const
 	{
-		return { WordConfiguration<Word>::AllOnes & ~((Word)1), WordConfiguration<Word>::AllZeros, row+WordConfiguration<Word>::WordSize, row+1, WordConfiguration<Word>::WordSize, true };
+		return { WordConfiguration<Word>::AllOnes & ~((Word)1), WordConfiguration<Word>::AllZeros, row+WordConfiguration<Word>::WordSize, row+1, WordConfiguration<Word>::WordSize, true, false };
 	}
 
 	WordSlice getSourceSliceFromScore(ScoreType previousScore) const
 	{
-		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, WordConfiguration<Word>::WordSize, true };
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, WordConfiguration<Word>::WordSize, true, false };
 	}
 
 	WordSlice getUnconfirmedSliceFromBefore(size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice) const
 	{
 		auto previousScore = previousSlice.node(nodeIndex)[0].scoreEnd;
-		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, 0, false };
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, 0, false, true };
 	}
 
 	WordSlice getSourceSliceFromBefore(size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice) const
 	{
 		auto previousScore = previousSlice.node(nodeIndex)[0].scoreEnd;
-		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, WordConfiguration<Word>::WordSize, true };
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, WordConfiguration<Word>::WordSize, true, true };
 	}
 
 	bool isSource(size_t nodeIndex, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
@@ -1028,12 +1045,10 @@ private:
 		auto oldValue = slice.scoreBeforeStart;
 		Word confirmedMask = ((Word)1) << slice.confirmedRows;
 		bool confirmOneMore = false;
-		// bool confirmTentative = false;
-		if (Eq & confirmedMask) confirmOneMore = true;
-		if (!diagonalInsideBand)
-		{
-			Eq &= ~((Word)1);
-		}
+		if (slice.confirmedBeforeStart && (Eq & confirmedMask)) confirmOneMore = true;
+		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
+		slice.scoreBeforeExists = previousInsideBand;
+		if (!diagonalInsideBand) Eq &= ~((Word)1);
 		if (!previousInsideBand)
 		{
 			slice.scoreBeforeStart += 1;
@@ -1044,7 +1059,6 @@ private:
 			assert(slice.scoreBeforeStart <= previous.scoreEnd);
 			slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
 		}
-		if (!slice.confirmedBeforeStart && previous.confirmedBeforeStart) confirmOneMore = true;
 		auto hin = slice.scoreBeforeStart - oldValue;
 
 		Word Xv = Eq | slice.VN;
@@ -1074,17 +1088,11 @@ private:
 
 		if (confirmOneMore)
 		{
-			if (!slice.confirmedBeforeStart)
+			assert(slice.confirmedBeforeStart);
+			//somehow std::min(slice.confirmedRows+1, WordConfiguration<Word>::WordSize) doesn't work here?!
+			if (slice.confirmedRows + 1 <= WordConfiguration<Word>::WordSize)
 			{
-				slice.confirmedBeforeStart = true;
-			}
-			else
-			{
-				//somehow std::min(slice.confirmedRows+1, WordConfiguration<Word>::WordSize) doesn't work here?!
-				if (slice.confirmedRows + 1 <= WordConfiguration<Word>::WordSize)
-				{
-					slice.confirmedRows += 1;
-				}
+				slice.confirmedRows += 1;
 			}
 		}
 
@@ -1166,10 +1174,11 @@ private:
 		else
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart);
-			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, j > 0 && graph.nodeSequences[graph.nodeStart[i]] == sequence[j-1]);
+			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[graph.nodeStart[i]] == sequence[j-1]));
 			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
 			{
 				slice[0] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[0].scoreEnd), slice[0]);
+				slice[0].scoreBeforeExists = true;
 			}
 			// if (slice[0].scoreBeforeStart > j)
 			// {
@@ -1195,11 +1204,12 @@ private:
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
 
-			slice[w] = getNextSlice(Eq, slice[w-1], previousBand[i], previousBand[i], j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1], oldSlice[w-1]);
+			slice[w] = getNextSlice(Eq, slice[w-1], previousBand[i], previousBand[i], (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
 
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				slice[w] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[w].scoreEnd), slice[w]);
+				slice[w].scoreBeforeExists = true;
 			}
 			// if (slice[w].scoreBeforeStart > j)
 			// {
@@ -1254,7 +1264,7 @@ private:
 			for (size_t i = 0; i < pair.second.size(); i++)
 			{
 				assert(pair.second[i].scoreEnd >= minScore);
-				slice[slice.size()-1-i] = {0, 0, pair.second[i].scoreEnd - minScore, pair.second[i].scoreEnd - minScore, WordConfiguration<Word>::WordSize, false};
+				slice[slice.size()-1-i] = {0, 0, pair.second[i].scoreEnd - minScore, pair.second[i].scoreEnd - minScore, WordConfiguration<Word>::WordSize, false, false};
 			}
 		}
 		assert(forwardSequence.size() % WordConfiguration<Word>::WordSize == 0);
@@ -1302,6 +1312,7 @@ private:
 		assert(band.scoreSlices.size() == band.minScorePerWordSlice.size());
 		for (size_t i = 0; i < band.minScorePerWordSlice.size(); i++)
 		{
+			if (band.minScoreIndexPerWordSlice[i] >= maxScore) break;
 			auto pos = band.minScoreIndexPerWordSlice[i];
 			auto node = graph.indexToNode[pos];
 			assert(band.scoreSlices[i].node(node)[pos-graph.nodeStart[node]].scoreEnd == band.minScorePerWordSlice[i]);
@@ -1310,6 +1321,7 @@ private:
 		}
 		for (size_t i = 0; i < slice.scoreSlices.size(); i++)
 		{
+			if (band.minScoreIndexPerWordSlice[i] >= maxScore) break;
 			std::vector<std::pair<size_t, std::vector<WordSlice>>> sortedList;
 			sortedList.insert(sortedList.end(), slice.scoreSlices[i].begin(), slice.scoreSlices[i].end());
 			std::sort(sortedList.begin(), sortedList.end(), [](auto& left, auto& right) { return left.first < right.first; });
@@ -1443,10 +1455,12 @@ private:
 				result.minScoreIndexPerWordSlice.push_back(minindex);
 				if (minscore > maxScore)
 				{
+					result.scoreSlices.emplace_back();
 					for (size_t i = j + 64; i < sequence.size(); i += 64)
 					{
-						result.minScorePerWordSlice.push_back(maxScore);
+						result.minScorePerWordSlice.push_back(sequence.size());
 						result.minScoreIndexPerWordSlice.push_back(0);
+						result.scoreSlices.emplace_back();
 					}
 					break;
 				}
@@ -1457,7 +1471,7 @@ private:
 					auto& slice = result.scoreSlices.back().node(node);
 					for (size_t i = graph.nodeStart[node]; i < graph.nodeEnd[node]; i++)
 					{
-						slice[i - graph.nodeStart[node]] = {0, 0, currentRowScores[i], 0, 64, false};
+						slice[i - graph.nodeStart[node]] = {0, 0, currentRowScores[i], 0, 64, false, false};
 						auto oldscore = sliceScores[0].node(node)[i - graph.nodeStart[node]];
 						for (size_t k = 1; k < 64; k++)
 						{
@@ -1619,7 +1633,7 @@ private:
 				const auto& old = previousSlice.node(node);
 				for (size_t i = 0; i < slice.size(); i++)
 				{
-					slice[i] = {WordConfiguration<Word>::AllOnes, 0, old[i].scoreEnd + WordConfiguration<Word>::WordSize, old[i].scoreEnd, 0, false};
+					slice[i] = {WordConfiguration<Word>::AllOnes, 0, old[i].scoreEnd + WordConfiguration<Word>::WordSize, old[i].scoreEnd, 0, false, true};
 				}
 			}
 			else
@@ -1740,9 +1754,10 @@ private:
 		std::cerr << std::endl;
 	}
 
-	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const std::set<LengthType>& component, size_t sequenceLen) const
+	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::set<LengthType>& component, size_t sequenceLen) const
 	{
 		std::vector<std::vector<ScoreType>> scores;
+		std::vector<ScoreType> scoresBeforeStart;
 		scores.resize(WordConfiguration<Word>::WordSize);
 		std::unordered_map<LengthType, size_t> nodeStarts;
 		std::vector<std::pair<ScoreType, MatrixPosition>> startCells;
@@ -1751,32 +1766,54 @@ private:
 		size_t totalCells = 0;
 		for (auto node : component)
 		{
+			assert(currentSlice.hasNode(node));
 			nodeStarts[node] = totalCells;
 			totalCells += graph.nodeEnd[node] - graph.nodeStart[node];
 			auto& slice = currentSlice.node(node);
 			auto start = graph.nodeStart[node];
 			for (size_t i = 0; i < slice.size(); i++)
 			{
-				startCells.emplace_back(slice[i].scoreBeforeStart, std::make_pair(start+i, -1));
+				if (slice[i].confirmedBeforeStart) startCells.emplace_back(slice[i].scoreBeforeStart, std::make_pair(start+i, -1));
 				for (size_t off = 0; off < slice[i].confirmedRows; off++)
 				{
 					startCells.emplace_back(getValue(slice[i], off), std::make_pair(start+i, off));
 				}
 			}
+			if (previousSlice.hasNode(node))
+			{
+				auto& oldSlice = previousSlice.node(node);
+				for (size_t i = 0; i < oldSlice.size(); i++)
+				{
+					assert(oldSlice[i].confirmedRows == WordConfiguration<Word>::WordSize);
+					startCells.emplace_back(oldSlice[i].scoreEnd, std::make_pair(start+i, -1));
+				}
+			}
 			for (auto neighbor : graph.inNeighbors[node])
 			{
 				if (component.count(neighbor) == 1) continue;
-				if (!currentSlice.hasNode(neighbor)) continue;
-				auto word = currentSlice.node(neighbor).back();
-				auto pos = graph.nodeEnd[neighbor]-1;
-				assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
-				startCells.emplace_back(word.scoreBeforeStart, std::make_pair(pos, -1));
-				for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
+				if (currentSlice.hasNode(neighbor))
 				{
-					startCells.emplace_back(getValue(word, off), std::make_pair(pos, off));
+					auto word = currentSlice.node(neighbor).back();
+					auto pos = graph.nodeEnd[neighbor]-1;
+					assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
+					assert(word.confirmedBeforeStart);
+					startCells.emplace_back(word.scoreBeforeStart, std::make_pair(pos, -1));
+					for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
+					{
+						startCells.emplace_back(getValue(word, off), std::make_pair(pos, off));
+					}
+				}
+				if (previousSlice.hasNode(neighbor))
+				{
+					auto word = previousSlice.node(neighbor).back();
+					auto pos = graph.nodeEnd[neighbor]-1;
+					assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
+					assert(word.confirmedBeforeStart);
+					startCells.emplace_back(word.scoreEnd, std::make_pair(pos, -1));
 				}
 			}
 		}
+		scoresBeforeStart.resize(totalCells, std::numeric_limits<ScoreType>::max());
 		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
 		{
 			scores[i].resize(totalCells, std::numeric_limits<ScoreType>::max());
@@ -1819,11 +1856,20 @@ private:
 			auto off = top.second;
 			auto nodeIndex = graph.indexToNode[w];
 			auto nodeStart = graph.nodeStart[nodeIndex];
-			if (off == -1 && nodeStarts.count(nodeIndex) == 1)
+			if (off == -1)
 			{
-				plusOneScore.emplace_back(w, off+1);
+				if (component.count(nodeIndex) == 1)
+				{
+					assert(nodeStarts.count(nodeIndex) == 1);
+					auto start = nodeStarts[nodeIndex];
+					assert(start + w - nodeStart < scoresBeforeStart.size());
+					assert(scoresBeforeStart[start + w - nodeStart] == std::numeric_limits<ScoreType>::max() || scoresBeforeStart[start + w - nodeStart] <= score);
+					if (scoresBeforeStart[start + w - nodeStart] <= score) continue;
+					scoresBeforeStart[start + w - nodeStart] = score;
+					plusOneScore.emplace_back(w, off+1);
+				}
 			}
-			else if (off != -1)
+			else
 			{
 				assert(top.second >= 0 && top.second < scores.size());
 				if (component.count(nodeIndex) == 1)
@@ -1837,7 +1883,7 @@ private:
 					plusOneScore.emplace_back(w, off+1);
 				}
 			}
-			auto mask = ((Word)1) << off;
+			auto mask = ((Word)1) << (off+1);
 			if (w == graph.nodeEnd[nodeIndex]-1)
 			{
 				assert(off < WordConfiguration<Word>::WordSize || off == -1);
@@ -1845,6 +1891,42 @@ private:
 				{
 					if (component.count(neighbor) == 0) continue;
 					auto u = graph.nodeStart[neighbor];
+					if (off == -1 && !previousSlice.hasNode(nodeIndex))
+					{
+						plusOneScore.emplace_back(u, off+1);
+					}
+					else
+					{
+						switch(graph.nodeSequences[u])
+						{
+							case 'A':
+								if (BA & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
+								break;
+							case 'T':
+								if (BT & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
+								break;
+							case 'C':
+								if (BC & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
+								break;
+							case 'G':
+								if (BG & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
+								break;
+							default:
+								assert(false);
+						}
+					}
+					plusOneScore.emplace_back(u, off);
+				}
+			}
+			else
+			{
+				auto u = w+1;
+				if (off == -1 && !previousSlice.hasNode(nodeIndex))
+				{
+					plusOneScore.emplace_back(u, off+1);
+				}
+				else
+				{
 					switch(graph.nodeSequences[u])
 					{
 						case 'A':
@@ -1862,30 +1944,8 @@ private:
 						default:
 							assert(false);
 					}
-					if (off != -1) plusOneScore.emplace_back(u, off);
 				}
-			}
-			else
-			{
-				auto u = w+1;
-				switch(graph.nodeSequences[u])
-				{
-					case 'A':
-						if (BA & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-						break;
-					case 'T':
-						if (BT & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-						break;
-					case 'C':
-						if (BC & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-						break;
-					case 'G':
-						if (BG & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-						break;
-					default:
-						assert(false);
-				}
-				if (off != -1) plusOneScore.emplace_back(u, off);
+				plusOneScore.emplace_back(u, off);
 			}
 		}
 		for (auto node : component)
@@ -1896,14 +1956,16 @@ private:
 			for (size_t i = start; i < start + size; i++)
 			{
 				assert(scores[0][i] != std::numeric_limits<ScoreType>::max());
+				assert(scoresBeforeStart[i] != std::numeric_limits<ScoreType>::max());
+				slice[i-start].scoreBeforeStart = scoresBeforeStart[i];
 				slice[i-start].VP = 0;
 				slice[i-start].VN = 0;
-				assert(scores[0][i] >= slice[i-start].scoreBeforeStart-1);
-				assert(scores[0][i] <= slice[i-start].scoreBeforeStart+1);
+				assert(scores[0][i] >= scoresBeforeStart[i]-1);
+				assert(scores[0][i] <= scoresBeforeStart[i]+1);
 				assert(i == start || scores[0][i] >= scores[0][i-1]-1);
 				assert(i == start || scores[0][i] <= scores[0][i-1]+1);
-				if (scores[0][i] == slice[i-start].scoreBeforeStart+1) slice[i-start].VP |= 1;
-				if (scores[0][i] == slice[i-start].scoreBeforeStart-1) slice[i-start].VN |= 1;
+				if (scores[0][i] == scoresBeforeStart[i]+1) slice[i-start].VP |= 1;
+				if (scores[0][i] == scoresBeforeStart[i]-1) slice[i-start].VN |= 1;
 				for (int off = 1; off < WordConfiguration<Word>::WordSize; off++)
 				{
 					assert(i == start || scores[off][i] >= scores[off][i-1]-1);
@@ -2131,7 +2193,7 @@ private:
 				if (doCellByCell)
 				{
 					std::cerr << "must fall back to cell by cell calculation!" << std::endl;
-					fallbackCalculateComponentCellByCell(BA, BT, BC, BG, currentSlice, components[component], sequence.size());
+					fallbackCalculateComponentCellByCell(BA, BT, BC, BG, currentSlice, previousSlice, components[component], sequence.size());
 					for (auto node : components[component])
 					{
 						auto& slice = currentSlice.node(node);
@@ -2177,6 +2239,7 @@ private:
 				{
 					result.minScorePerWordSlice.push_back(sequence.size());
 					result.minScoreIndexPerWordSlice.push_back(0);
+					result.scoreSlices.emplace_back();
 				}
 				break;
 			}
@@ -2200,7 +2263,7 @@ private:
 		auto& slice = result.node(nodeIndex);
 		for (size_t i = 0; i < slice.size(); i++)
 		{
-			slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
+			slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false, false};
 		}
 		return result;
 	}
@@ -2225,11 +2288,11 @@ private:
 			{
 				if (top.node == nodeIndex)
 				{
-					slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
+					slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false, false};
 				}
 				else
 				{
-					slice[i] = {0, 0, sequenceLen, sequenceLen, WordConfiguration<Word>::WordSize, false};
+					slice[i] = {0, 0, sequenceLen, sequenceLen, WordConfiguration<Word>::WordSize, false, false};
 				}
 			}
 			auto newDistance = top.distance + graph.nodeEnd[top.node] - graph.nodeStart[top.node];
@@ -2467,7 +2530,7 @@ private:
 			auto& slice = startBand.node(i);
 			for (size_t ii = 0; ii < slice.size(); ii++)
 			{
-				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
+				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false, false};
 			}
 		}
 		auto rowBandFunction = [this, &startBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, startBand); };
