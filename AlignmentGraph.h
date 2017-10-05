@@ -22,25 +22,11 @@ public:
 		int nodeId;
 		size_t nodePos;
 	};
-	class CycleCut
-	{
-	public:
-		template<class Archive>
-		void serialize(Archive & ar, const unsigned int version)
-		{
-			ar & nodes;
-			ar & predecessors;
-			ar & previousCut;
-		}
-		std::vector<size_t> nodes;
-		std::vector<std::set<size_t>> predecessors;
-		std::vector<bool> previousCut;
-	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t totalSequenceLength);
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
-	void Finalize(int wordSize, std::string cutFilename);
+	void Finalize(int wordSize);
 	size_t GetReversePosition(size_t position) const;
 	size_t GetReverseNode(size_t nodeIndex) const;
 	size_t SizeInBp() const;
@@ -48,10 +34,6 @@ public:
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
-	void calculateCycleCuts(int wordSize);
-	bool loadCycleCut(std::string filename);
-	void saveCycleCut(std::string filename);
-	void calculateCycleCutters(const CycleCutCalculation& cutCalculator, size_t cycleStart, int wordSize);
 	std::vector<bool> notInOrder;
 	std::vector<size_t> nodeStart;
 	std::vector<size_t> nodeEnd;
@@ -61,14 +43,12 @@ private:
 	std::vector<std::set<size_t>> inNeighbors;
 	std::vector<std::set<size_t>> outNeighbors;
 	std::vector<bool> reverse;
-	std::vector<CycleCut> cuts;
 	std::string nodeSequences;
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
 	bool finalized;
 	size_t firstInOrder;
 
-	friend class CycleCutCalculation;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAligner;
 };

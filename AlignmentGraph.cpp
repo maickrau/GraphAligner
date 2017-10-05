@@ -1,4 +1,3 @@
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <algorithm>
@@ -7,8 +6,6 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include "AlignmentGraph.h"
-#include "TopologicalSort.h"
-#include "CycleCutCalculation.h"
 #include "CommonUtils.h"
 
 AlignmentGraph::AlignmentGraph() :
@@ -97,7 +94,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	}
 }
 
-void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
+void AlignmentGraph::Finalize(int wordSize)
 {
 	//add the end dummy node as the last node
 	dummyNodeEnd = nodeSequences.size();
@@ -128,59 +125,6 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 		if (inNeighbors[i].size() >= 2) specialNodes++;
 	}
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
-	firstInOrder = 0;
-	size_t inOrdersWrongfullyClassified = 0;
-	for (size_t i = 1; i < notInOrder.size(); i++)
-	{
-		if (i > 1 && notInOrder[i] && !notInOrder[i-1])
-		{
-			inOrdersWrongfullyClassified += i - firstInOrder;
-		}
-		if (notInOrder[i]) firstInOrder = i+1;
-		//relax this constraint for now until we figure out what is going on with the inOrdersWrongfullyClassified nodes
-		// //all not-in-order nodes have to be at the start
-		// assert(i == 1 || !notInOrder[i] || notInOrder[i-1]);
-	}
-	if (inOrdersWrongfullyClassified > 0)
-	{
-		std::cerr << inOrdersWrongfullyClassified << " nodes wrongly(?) classified as MFVS vertices!!" << std::endl;
-	}
-	if (firstInOrder != 0)
-	{
-		std::cerr << (firstInOrder - 1) << " nodes out of order" << std::endl;
-	}
-	else
-	{
-		std::cerr << "0 nodes out of order" << std::endl;
-	}
-	if (cutFilename != "")
-	{
-		if (!loadCycleCut(cutFilename))
-		{
-			calculateCycleCuts(wordSize);
-			saveCycleCut(cutFilename);
-		}
-	}
-	else
-	{
-		calculateCycleCuts(wordSize);
-	}
-	if (firstInOrder != 0)
-	{
-		std::cerr << "cycle cuts:" << std::endl;
-		size_t totalCuttersbp = 0;
-		for (size_t i = 1; i < cuts.size(); i++)
-		{
-			size_t cuttersbp = 0;
-			for (size_t j = 0; j < cuts[i].nodes.size(); j++)
-			{
-				cuttersbp += nodeEnd[cuts[i].nodes[j]] - nodeStart[cuts[i].nodes[j]];
-			}
-			std::cerr << i << ": id " << nodeIDs[i] << ", cutting nodes " << cuts[i].nodes.size() << ", " << cuttersbp << "bp" << std::endl;
-			totalCuttersbp += cuttersbp;
-		}
-		std::cerr << "total cut: " << totalCuttersbp << "bp (" << (double)totalCuttersbp / (double)nodeSequences.size() * 100 << "%)" << std::endl;
-	}
 #ifndef NDEBUG
 	assert(nodeSequences.size() >= nodeStart.size());
 	assert(nodeEnd.size() == nodeStart.size());
@@ -206,83 +150,9 @@ void AlignmentGraph::Finalize(int wordSize, std::string cutFilename)
 #endif
 }
 
-void AlignmentGraph::calculateCycleCuts(int wordSize)
-{
-	CycleCutCalculation cutCalculator(*this);
-	std::cerr << "calculating cycle cuts" << std::endl;
-	cuts.resize(firstInOrder);
-	for (size_t i = 1; i < firstInOrder; i++)
-	{
-		std::cerr << "cut " << i << "/" << firstInOrder << " node id " << nodeIDs[i] << std::endl;
-		calculateCycleCutters(cutCalculator, i, wordSize);
-	}
-}
-
-void AlignmentGraph::saveCycleCut(std::string filename)
-{
-	std::ofstream file {filename};
-	boost::archive::text_oarchive oa(file);
-	oa << cuts;
-}
-
-bool AlignmentGraph::loadCycleCut(std::string filename)
-{
-	std::ifstream file {filename};
-	if (!file.good()) return false;
-	boost::archive::text_iarchive ia(file);
-	ia >> cuts;
-	return true;
-}
-
 size_t AlignmentGraph::SizeInBp() const
 {
 	return nodeSequences.size();
-}
-
-void AlignmentGraph::calculateCycleCutters(const CycleCutCalculation& cutCalculation, size_t cycleStart, int wordSize)
-{
-	assert(cuts.size() > cycleStart);
-	assert(cuts[cycleStart].nodes.size() == 0);
-	assert(cuts[cycleStart].predecessors.size() == 0);
-	assert(cuts[cycleStart].previousCut.size() == 0);
-
-	// cuts[cycleStart] = cutCalculation.GetCycleCutSimplest(cycleStart, wordSize);
-	cuts[cycleStart] = cutCalculation.GetCycleCutTooBig(cycleStart, wordSize);
-	// cuts[cycleStart] = cutCalculation.GetCycleCut(cycleStart, wordSize);
-
-	assert(cuts[cycleStart].nodes.size() > 0);
-	assert(cuts[cycleStart].predecessors.size() == cuts[cycleStart].nodes.size());
-	assert(cuts[cycleStart].previousCut.size() == cuts[cycleStart].nodes.size());
-	assert(cuts[cycleStart].nodes[0] == cycleStart);
-	assert(cuts[cycleStart].predecessors.size() == 1 || cuts[cycleStart].predecessors[0].size() > 0);
-
-#ifndef NDEBUG
-	size_t totalSize = 0;
-	for (size_t i = 0; i < cuts[cycleStart].nodes.size(); i++)
-	{
-		totalSize += nodeEnd[cuts[cycleStart].nodes[i]] - nodeStart[cuts[cycleStart].nodes[i]];
-		if (totalSize >= wordSize * 2) break;
-	}
-	assert(totalSize >= wordSize * 2);
-
-	std::vector<bool> isPredecessor;
-	isPredecessor.resize(cuts[cycleStart].nodes.size(), false);
-	for (size_t i = 0; i < cuts[cycleStart].predecessors.size(); i++)
-	{
-		for (auto predecessor : cuts[cycleStart].predecessors[i])
-		{
-			assert(predecessor > i);
-			isPredecessor[predecessor] = true;
-		}
-	}
-
-	assert(!isPredecessor[0]);
-	for (size_t i = 1; i < cuts[cycleStart].nodes.size(); i++)
-	{
-		assert(isPredecessor[i]);
-	}
-
-#endif
 }
 
 std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpositions, size_t amount) const

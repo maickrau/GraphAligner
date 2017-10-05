@@ -12,8 +12,6 @@
 #include "vg.pb.h"
 #include "stream.hpp"
 #include "fastqloader.h"
-#include "TopologicalSort.h"
-#include "mfvs_graph.h"
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
@@ -156,109 +154,11 @@ void saveToFile(const T& vec, std::string filename)
 	oa << vec;
 }
 
-std::vector<size_t> getMFVS(const DirectedGraph& graph)
-{
-	mfvs::Graph mfvsgraph { graph.nodes.size() };
-	for (size_t i = 0; i < graph.nodes.size(); i++)
-	{
-		mfvsgraph.addVertex(i);
-	}
-	for (size_t i = 0; i < graph.edges.size(); i++)
-	{
-		mfvsgraph.addEdge(graph.edges[i].fromIndex, graph.edges[i].toIndex);
-	}
-	auto list = mfvsgraph.minimumFeedbackVertexSet();
-	std::vector<size_t> result;
-	for (size_t i = 0; i < list.size(); i++)
-	{
-		assert(list[i] >= 0);
-		result.push_back(list[i]);
-	}
-	return result;
-}
-
-void OrderByFeedbackVertexset(DirectedGraph& graph, std::string mfvsFilename, std::string orderFilename)
-{
-	BufferedWriter output { std::cout };
-	std::vector<size_t> vertexSetvector;
-	if (mfvsFilename != "")
-	{
-		vertexSetvector = loadFromFile<std::vector<size_t>>(mfvsFilename);
-		if (vertexSetvector.size() == 0)
-		{
-			vertexSetvector = getMFVS(graph);
-			saveToFile(vertexSetvector, mfvsFilename);
-		}
-	}
-	else
-	{
-		vertexSetvector = getMFVS(graph);
-	}
-	std::set<int> vertexset { vertexSetvector.begin(), vertexSetvector.end() };
-	output << "feedback vertex set size: " << vertexSetvector.size() << "\n";
-	DirectedGraph graphWithoutVFS { graph };
-	graphWithoutVFS.RemoveNodes(vertexset);
-	std::vector<size_t> indexOrder;
-	if (orderFilename != "")
-	{
-		indexOrder = loadFromFile<std::vector<size_t>>(orderFilename);
-		if (indexOrder.size() == 0)
-		{
-			indexOrder = topologicalSort(graphWithoutVFS);
-			saveToFile(indexOrder, orderFilename);
-		}
-	}
-	else
-	{
-		indexOrder = topologicalSort(graphWithoutVFS);
-	}
-	std::vector<int> nodeIdOrder;
-	for (size_t i = 0; i < vertexSetvector.size(); i++)
-	{
-		nodeIdOrder.push_back(graph.nodes[vertexSetvector[i]].nodeId);
-	}
-	for (size_t i = 0; i < indexOrder.size(); i++)
-	{
-		nodeIdOrder.push_back(graphWithoutVFS.nodes[indexOrder[i]].nodeId);
-	}
-	graph.ReorderByNodeIds(nodeIdOrder);
-}
-
 void outputGraph(std::string filename, const vg::Graph& graph)
 {
 	std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
 	std::vector<vg::Graph> writeVector {graph};
 	stream::write_buffered(alignmentOut, writeVector, 0);
-}
-
-std::vector<int> getSinkNodes(const DirectedGraph& graph)
-{
-	std::set<int> notSinkNodes;
-	for (size_t i = 0; i < graph.edges.size(); i++)
-	{
-		notSinkNodes.insert(graph.nodes[graph.edges[i].fromIndex].nodeId);
-	}
-	std::vector<int> result;
-	for (size_t i = 0; i < graph.nodes.size(); i++)
-	{
-		if (notSinkNodes.count(graph.nodes[i].nodeId) == 0) result.push_back(graph.nodes[i].nodeId);
-	}
-	return result;
-}
-
-std::vector<int> getSourceNodes(const DirectedGraph& graph)
-{
-	std::set<int> notSourceNodes;
-	for (size_t i = 0; i < graph.edges.size(); i++)
-	{
-		notSourceNodes.insert(graph.nodes[graph.edges[i].toIndex].nodeId);
-	}
-	std::vector<int> result;
-	for (size_t i = 0; i < graph.nodes.size(); i++)
-	{
-		if (notSourceNodes.count(graph.nodes[i].nodeId) == 0) result.push_back(graph.nodes[i].nodeId);
-	}
-	return result;
 }
 
 bool GraphEqual(const DirectedGraph& first, const DirectedGraph& second)
@@ -375,7 +275,7 @@ void runComponentMappings(const DirectedGraph& augmentedGraph, const std::map<in
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, int startBandwidth, std::string mfvsFilename, std::string orderFilename, std::string cycleCutFilename)
+void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, int startBandwidth)
 {
 	assertSetRead("Preprocessing");
 
@@ -442,14 +342,6 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	std::mutex readMutex;
 
 	DirectedGraph augmentedGraph {graph};
-	std::cout << "augmented graph out of order before sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
-	if (augmentedGraph.nodes.size() == 0)
-	{
-		std::cerr << "No nodes in the graph" << std::endl;
-		std::abort();
-	}
-	OrderByFeedbackVertexset(augmentedGraph, mfvsFilename, orderFilename);
-	std::cout << "augmented graph out of order after sorting: " << numberOfVerticesOutOfOrder(augmentedGraph) << std::endl;
 
 	AlignmentGraph alignmentGraph;
 	alignmentGraph.ReserveNodes(augmentedGraph.nodes.size(), augmentedGraph.totalSequenceLength);
@@ -461,7 +353,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	{
 		alignmentGraph.AddEdgeNodeId(augmentedGraph.nodes[augmentedGraph.edges[j].fromIndex].nodeId, augmentedGraph.nodes[augmentedGraph.edges[j].toIndex].nodeId);
 	}
-	alignmentGraph.Finalize(64, cycleCutFilename);
+	alignmentGraph.Finalize(64);
 
 	std::map<int, int> idMapper;
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)

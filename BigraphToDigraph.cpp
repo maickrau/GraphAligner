@@ -2,7 +2,6 @@
 #include <cassert>
 #include <unordered_map>
 #include "CommonUtils.h"
-#include "ssw_cpp.h"
 #include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
@@ -242,40 +241,6 @@ void DirectedGraph::ConnectComponents(const std::vector<int>& previousSinksIds, 
 	}
 }
 
-std::tuple<size_t, size_t, size_t> DirectedGraph::getLocalAlignmentSsw(std::string sequence, size_t nodeIndex) const
-{
-	StripedSmithWaterman::Aligner aligner {2, 5, 2, 1};
-	aligner.SetReferenceSequence(sequence.c_str(), sequence.size());
-	StripedSmithWaterman::Filter filter;
-	filter.report_begin_position = true;
-	filter.report_cigar = false;
-	StripedSmithWaterman::Alignment alignment;
-	aligner.Align(nodes[nodeIndex].sequence.c_str(), filter, &alignment);
-	return std::make_tuple(alignment.query_begin, alignment.ref_begin, alignment.sw_score);
-}
-
-std::vector<DirectedGraph::SeedHit> DirectedGraph::GetSeedHits(const std::string& sequence, const std::vector<std::pair<int, size_t>>& hitsOriginalNodeIds) const
-{
-	std::vector<SeedHit> result;
-	for (size_t i = 0; i < hitsOriginalNodeIds.size(); i++)
-	{
-		std::pair<SeedHit, size_t> bestHit {{0, 0, 0}, 0};
-		for (size_t j = 0; j < nodes.size(); j++)
-		{
-			if (nodes[j].originalNodeId == hitsOriginalNodeIds[i].first)
-			{
-				auto hit = getLocalAlignmentSsw(sequence.substr(hitsOriginalNodeIds[i].second, 200), j);
-				bestHit = std::make_pair(SeedHit(nodes[j].nodeId, std::get<0>(hit), std::get<1>(hit)+hitsOriginalNodeIds[i].second), std::get<2>(hit));
-				if (bestHit.second > 0)
-				{
-					result.push_back(bestHit.first);
-				}
-			}
-		}
-	}
-	return result;
-}
-
 void DirectedGraph::addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current)
 {
 	assert(current < nodes.size());
@@ -285,41 +250,4 @@ void DirectedGraph::addReachable(std::vector<bool>& reachable, const std::vector
 		if (reachable[outNeighbors[current][i]]) continue;
 		addReachable(reachable, outNeighbors, outNeighbors[current][i]);
 	}
-}
-
-void DirectedGraph::PruneByReachability(const std::vector<int>& startNodeIds)
-{
-	assert(edgesPointToValidNodes());
-	assert(nodeIdsAreValid());
-	std::vector<std::vector<size_t>> outNeighbors;
-	std::vector<std::vector<size_t>> inNeighbors;
-	outNeighbors.resize(nodes.size());
-	inNeighbors.resize(nodes.size());
-	for (size_t i = 0; i < edges.size(); i++)
-	{
-		outNeighbors[edges[i].fromIndex].push_back(edges[i].toIndex);
-		inNeighbors[edges[i].toIndex].push_back(edges[i].fromIndex);
-	}
-	std::vector<bool> reachableOut;
-	std::vector<bool> reachableIn;
-	reachableOut.resize(nodes.size(), false);
-	reachableIn.resize(nodes.size(), false);
-	std::set<int> start;
-	start.insert(startNodeIds.begin(), startNodeIds.end());
-	for (size_t i = 0; i < nodes.size(); i++)
-	{
-		if (start.count(nodes[i].nodeId) > 0)
-		{
-			addReachable(reachableOut, outNeighbors, i);
-			addReachable(reachableIn, inNeighbors, i);
-		}
-	}
-	std::set<int> removeThese;
-	for (size_t i = 0; i < nodes.size(); i++)
-	{
-		if (!reachableOut[i] && !reachableIn[i]) removeThese.insert(i);
-	}
-	RemoveNodes(removeThese);
-	assert(edgesPointToValidNodes());
-	assert(nodeIdsAreValid());
 }

@@ -7,9 +7,9 @@ BINDIR=bin
 
 LIBS=-lm -lprotobuf -lz -lboost_serialization
 
-DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h SubgraphFromSeed.h TopologicalSort.h vg.pb.h BigraphToDigraph.h mfvs_graph.h mfvs_utils.h stream.hpp 2dArray.h SparseBoolMatrix.h SparseMatrix.h ssw_cpp.h Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h CycleCutCalculation.h
+DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h
 
-_OBJ = Aligner.o GsswWrapper.o vg.pb.o fastqloader.o TopologicalSort.o SubgraphFromSeed.o mfvs_graph.o mfvs_utils.o BigraphToDigraph.o ssw_cpp.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o CycleCutCalculation.o GraphAlignerWrapper.o
+_OBJ = Aligner.o GsswWrapper.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
 $(ODIR)/GraphAlignerWrapper.o: GraphAlignerWrapper.cpp GraphAligner.h $(DEPS)
@@ -17,10 +17,7 @@ $(ODIR)/GraphAlignerWrapper.o: GraphAlignerWrapper.cpp GraphAligner.h $(DEPS)
 $(ODIR)/%.o: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
 
-$(ODIR)/ssw.o:
-	$(CC) -c -o $@ ssw.c $(CPPFLAGS)
-
-$(BINDIR)/wrapper: $(OBJ) $(ODIR)/ssw.o
+$(BINDIR)/wrapper: $(OBJ)
 	$(GPP) -o $@ $^ $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++
 
 $(BINDIR)/ReadIndexToId: $(OBJ)
@@ -44,20 +41,14 @@ $(BINDIR)/PickSeedHits: $(OBJ)
 $(BINDIR)/AlignmentSequenceInserter: $(OBJ)
 	$(GPP) -o $@ AlignmentSequenceInserter.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
-$(BINDIR)/OrderProtobufs: $(OBJ)
-	$(GPP) -o $@ OrderProtobufs.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(ODIR)/TopologicalSort.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
-
 $(BINDIR)/SupportedSubgraph: $(OBJ)
-	$(GPP) -o $@ SupportedSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(ODIR)/TopologicalSort.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+	$(GPP) -o $@ SupportedSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
 $(BINDIR)/MafToAlignment: $(OBJ)
-	$(GPP) -o $@ MafToAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(ODIR)/TopologicalSort.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+	$(GPP) -o $@ MafToAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
 
 $(BINDIR)/ExtractPathSequence: $(OBJ)
 	$(GPP) -o $@ ExtractPathSequence.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
-
-$(BINDIR)/PreprocessGraph: $(OBJ)
-	$(GPP) -o $@ PreprocessGraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/BigraphToDigraph.o $(ODIR)/vg.pb.o $(ODIR)/ssw_cpp.o $(ODIR)/ssw.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
 
 $(BINDIR)/AlignmentOverlap: $(OBJ)
 	$(GPP) -o $@ AlignmentOverlap.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
@@ -65,7 +56,7 @@ $(BINDIR)/AlignmentOverlap: $(OBJ)
 $(BINDIR)/Bluntify: $(OBJ)
 	$(GPP) -o $@ Bluntify.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
 
-all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/OrderProtobufs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/PreprocessGraph $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify
+all: $(BINDIR)/wrapper $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify
 
 clean:
 	rm -f $(ODIR)/*
