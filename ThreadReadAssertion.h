@@ -9,6 +9,8 @@ namespace ThreadReadAssertion
 	void assertFailed(const char* expression, const char* file, int line);
 }
 
+#endif
+
 #ifndef NDEBUG
 
 #ifdef assert
@@ -23,7 +25,5 @@ namespace ThreadReadAssertion
 
 #define assert(ignore) ((void)0)
 #define assertSetRead(ignore) ((void)0)
-
-#endif
 
 #endif

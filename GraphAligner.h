@@ -18,10 +18,10 @@
 #include <boost/multiprecision/cpp_int.hpp>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
-#include "ThreadReadAssertion.h"
 #include "NodeSlice.h"
 #include "CommonUtils.h"
 #include "GraphAlignerWrapper.h"
+#include "ThreadReadAssertion.h"
 
 void printtime(const char* msg)
 {
@@ -1043,6 +1043,7 @@ private:
 		//todo optimization: 10% time inclusive 4% exclusive. can this be improved?
 		WordSlice previous;
 		WordSlice previousUp;
+		WordSlice current = currentSlice.node(nodeIndex)[0];
 		bool foundOne = false;
 		bool foundOneUp = false;
 		bool hasRealNeighbor = false;
@@ -1094,7 +1095,9 @@ private:
 		assert(foundOne);
 		assertSliceCorrectness(previous, previousUp, foundOneUp);
 		if (!hasRealNeighbor) Eq &= 1;
-		return getNextSlice(Eq, previous, previousBand[nodeIndex] && foundOneUp, foundOneUp, previousEq, previousUp);
+		assert(current.confirmedBeforeStart);
+		auto result = getNextSlice(Eq, previous, current.scoreBeforeExists && foundOneUp, foundOneUp, previousEq, previousUp);
+		return result;
 	}
 
 	WordSlice getUnconfirmedSliceFromScore(ScoreType previousScore) const
@@ -1327,8 +1330,9 @@ private:
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
 
 			assert(slice[w].scoreBeforeStart < sequence.size());
-			slice[w] = getNextSlice(Eq, slice[w-1], previousBand[i], previousBand[i], (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
+			assert(slice[w].confirmedBeforeStart);
 
+			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				slice[w] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[w].scoreEnd), slice[w]);
@@ -1774,11 +1778,12 @@ private:
 			assert(currentSlice.hasNode(node));
 			auto start = nodeStarts[node];
 			auto& slice = currentSlice.node(node);
+			auto& oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
 				assert(start+i < scoresBeforeStart.size());
 				assert(scoresBeforeStart[start+i] != std::numeric_limits<ScoreType>::max());
-				slice[i] = {WordConfiguration<Word>::AllOnes, 0, scoresBeforeStart[start+i]+WordConfiguration<Word>::WordSize, scoresBeforeStart[start+i], 0, true, previousBand[node] };
+				slice[i] = {WordConfiguration<Word>::AllOnes, 0, scoresBeforeStart[start+i]+WordConfiguration<Word>::WordSize, scoresBeforeStart[start+i], 0, true, previousBand[node] && oldSlice[i].scoreEnd == scoresBeforeStart[start+i] };
 			}
 		}
 	}
@@ -1838,7 +1843,7 @@ private:
 			for (size_t i = 0; i < slice.size(); i++)
 			{
 				assert(slice[i].confirmedBeforeStart);
-				startCells.emplace_back(slice[i].scoreBeforeStart, std::make_pair(start+i, -1));
+				if (slice[i].scoreBeforeExists) startCells.emplace_back(slice[i].scoreBeforeStart, std::make_pair(start+i, -1));
 				for (size_t off = 0; off < slice[i].confirmedRows; off++)
 				{
 					startCells.emplace_back(getValue(slice[i], off), std::make_pair(start+i, off));
@@ -1866,7 +1871,7 @@ private:
 					auto pos = graph.nodeEnd[neighbor]-1;
 					assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
 					assert(word.confirmedBeforeStart);
-					startCells.emplace_back(word.scoreBeforeStart, std::make_pair(pos, -1));
+					if (word.scoreBeforeExists) startCells.emplace_back(word.scoreBeforeStart, std::make_pair(pos, -1));
 					for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
 					{
 						startCells.emplace_back(getValue(word, off), std::make_pair(pos, off));

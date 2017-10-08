@@ -1,8 +1,8 @@
 //split this here so modifying GraphAligner.h doesn't require recompiling every cpp file
 
-#include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
 #include "GraphAligner.h"
+#include "ThreadReadAssertion.h"
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart)
 {
