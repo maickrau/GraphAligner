@@ -204,6 +204,14 @@ public:
 		{
 			return emptyAlignment(time, 0);
 		}
+		if (bestAlignment.Score() > sequence.size() * 0.4)
+		{
+			return emptyAlignment(time, 0);
+		}
+		if (bestAlignment.forward.minScoreIndexPerWordSlice.back() == 0 || bestAlignment.backward.minScoreIndexPerWordSlice.back() == 0)
+		{
+			return emptyAlignment(time, 0);
+		}
 		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence);
 
 		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.first), std::get<1>(bestTrace.first), 0);
@@ -1265,7 +1273,7 @@ private:
 #endif
 	}
 
-	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t totalSequenceLen) const
 	{
 		//todo optimization: 42% inclusive 15% exclusive. can this be improved?
 		NodeCalculationResult result;
@@ -1302,7 +1310,7 @@ private:
 		else
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart);
-			assert(slice[0].scoreBeforeStart < sequence.size());
+			assert(slice[0].scoreBeforeStart < totalSequenceLen);
 			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[graph.nodeStart[i]] == sequence[j-1]));
 			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
 			{
@@ -1329,7 +1337,7 @@ private:
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
 
-			assert(slice[w].scoreBeforeStart < sequence.size());
+			assert(slice[w].scoreBeforeStart < totalSequenceLen);
 			assert(slice[w].confirmedBeforeStart);
 
 			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
@@ -2167,7 +2175,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::set<LengthType>& bandOrder, const std::set<LengthType>& previousBandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::set<LengthType>& bandOrder, const std::set<LengthType>& previousBandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t totalSequenceLen) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		LengthType currentMinimumIndex = std::numeric_limits<LengthType>::max();
@@ -2201,7 +2209,7 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugOldNode = currentSlice.node(i);
 #endif
-				auto nodeCalc = calculateNode(i, j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
+				auto nodeCalc = calculateNode(i, j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand, totalSequenceLen);
 				auto newEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugNewNode = currentSlice.node(i);
@@ -2284,7 +2292,7 @@ private:
 	}
 
 	template <typename RowBandFunction>
-	MatrixSlice getBitvectorSliceScoresAndFinalPosition(const std::string& sequence, const NodeSlice<WordSlice>& initialSlice, ScoreType maxScore, RowBandFunction rowBandFunction) const
+	MatrixSlice getBitvectorSliceScoresAndFinalPosition(const std::string& sequence, const NodeSlice<WordSlice>& initialSlice, ScoreType maxScore, RowBandFunction rowBandFunction, size_t totalSequenceLen) const
 	{
 		//todo optimization: 82% inclusive 17% exclusive. can this be improved?
 		MatrixSlice result;
@@ -2326,7 +2334,7 @@ private:
 				currentSlice.addNode(i, graph.nodeEnd[i] - graph.nodeStart[i]);
 				currentBand[i] = true;
 			}
-			auto sliceResult = calculateSlice(sequence, j, currentSlice, previousSlice, bandOrder, previousBandOrder, currentBand, previousBand);
+			auto sliceResult = calculateSlice(sequence, j, currentSlice, previousSlice, bandOrder, previousBandOrder, currentBand, previousBand, totalSequenceLen);
 			ScoreType currentMinimumScore = sliceResult.minScore;
 			LengthType currentMinimumIndex = sliceResult.minScoreIndex;
 			result.cellsProcessed += sliceResult.cellsProcessed;
@@ -2452,13 +2460,13 @@ private:
 		auto forwardInitialBand = getOnlyOneNodeBand(forwardNode);
 		auto forwardBand = getSeededNodeBandForward(forwardNode, startExtensionWidth, sequence.size());
 		auto forwardRowBandFunction = [this, &forwardBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, forwardBand); };
-		auto forwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, forwardInitialBand, maxScore, forwardRowBandFunction);
+		auto forwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, forwardInitialBand, maxScore, forwardRowBandFunction, sequence.size());
 		auto backwardInitialBand = getOnlyOneNodeBand(backwardNode);
 		auto backwardBand = getSeededNodeBandForward(backwardNode, startExtensionWidth, sequence.size());
 		auto backwardRowBandFunction = [this, &backwardBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, backwardBand); };
-		auto backwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, backwardInitialBand, maxScore, backwardRowBandFunction);
-		auto reverseForwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, backwardInitialBand, maxScore, backwardRowBandFunction);
-		auto reverseBackwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, forwardInitialBand, maxScore, forwardRowBandFunction);
+		auto backwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, backwardInitialBand, maxScore, backwardRowBandFunction, sequence.size());
+		auto reverseForwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, backwardInitialBand, maxScore, backwardRowBandFunction, sequence.size());
+		auto reverseBackwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, forwardInitialBand, maxScore, forwardRowBandFunction, sequence.size());
 		auto firstscore = forwardSlice.minScorePerWordSlice.back() + backwardSlice.minScorePerWordSlice.back();
 		auto secondscore = reverseForwardSlice.minScorePerWordSlice.back() + reverseBackwardSlice.minScorePerWordSlice.back();
 		assert(firstscore <= backwardPart.size() + forwardPart.size());
@@ -2661,7 +2669,7 @@ private:
 			}
 		}
 		auto rowBandFunction = [this, &startBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, startBand); };
-		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, startBand, sequence.size() * 0.4, rowBandFunction);
+		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, startBand, sequence.size() * 0.4, rowBandFunction, sequence.size());
 		std::cerr << "score: " << slice.minScorePerWordSlice.back() << std::endl;
 		if (slice.minScorePerWordSlice.back() > sequence.size() * 0.4)
 		{
