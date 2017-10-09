@@ -148,6 +148,15 @@ void AlignmentGraph::Finalize(int wordSize)
 		assert(nodeEnd[indexToNode[i]] > i);
 	}
 #endif
+	notInOrder.shrink_to_fit();
+	nodeStart.shrink_to_fit();
+	nodeEnd.shrink_to_fit();
+	indexToNode.shrink_to_fit();
+	nodeIDs.shrink_to_fit();
+	inNeighbors.shrink_to_fit();
+	outNeighbors.shrink_to_fit();
+	reverse.shrink_to_fit();
+	nodeSequences.shrink_to_fit();
 }
 
 size_t AlignmentGraph::SizeInBp() const
