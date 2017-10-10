@@ -110,20 +110,30 @@ public:
 		int smallerBytes = 8 - ((((rankMask & SignMask) >> 7) * PrefixSumMultiplierConstant) >> 56);
 		assert(smallerBytes < 8);
 		//the bit position will be inside this byte
-		int pos = smallerBytes * 8;
-		uint64_t interestingByte = ((number >> pos) & 0xFF);
+		uint64_t interestingByte = (number >> (smallerBytes * 8)) & 0xFF;
 		if (smallerBytes > 0) rank -= (cumulative >> ((smallerBytes - 1) * 8)) & 0xFF;
 		assert(rank >= 0 && rank < 8);
-		//remove the 1's one at a time until we find the exact pos
-		while (interestingByte > 0)
-		{
-			if (interestingByte & 1) rank--;
-			if (rank < 0) break;
-			pos++;
-			interestingByte >>= 1;
-		}
-		assert(rank == -1);
-		return pos;
+		//spread the 1's from interesting byte to each byte
+		//first put every pair of bits into each 2-byte boundary
+		//then select only those pairs
+		//then spread the pairs into each byte boundary
+		//and select the ones
+		uint64_t spreadBits = (((interestingByte * 0x0000040010004001) & 0x0003000300030003) * 0x0000000000000081) & 0x0101010101010101;
+/*
+0000 0000  0000 0000  0000 0000  0000 0000  0000 0000  0000 0000  0000 0000  abcd efgh
+0000 0000  0000 00ab  cdef gh00  0000 abcd  efgh 0000  00ab cdef  gh00 0000  abcd efgh  * 0x0000040010004001
+0000 0000  0000 00ab  0000 0000  0000 00cd  0000 0000  0000 00ef  0000 0000  0000 00gh  & 0x0003000300030003
+0000 000a  b000 00ab  0000 000c  d000 00cd  0000 000e  f000 00ef  0000 000g  h000 00gh  * 0x0000000000000081
+0000 000a  0000 000b  0000 000c  0000 000d  0000 000e  0000 000f  0000 000g  0000 000h  & 0x0101010101010101
+*/
+		//find the position from the bits the same way as from the bytes
+		uint64_t cumulativeBits = spreadBits * PrefixSumMultiplierConstant;
+		uint64_t bitRankFinder = ((rank + 1) & 0xFF) * PrefixSumMultiplierConstant;
+		uint64_t bitRankMask = (cumulativeBits | SignMask) - bitRankFinder;
+		int smallerBits = 8 - ((((bitRankMask & SignMask) >> 7) * PrefixSumMultiplierConstant) >> 56);
+		assert(smallerBits >= 0);
+		assert(smallerBits < 8);
+		return smallerBytes * 8 + smallerBits;
 	}
 
 	static uint64_t MortonHigh(uint64_t left, uint64_t right)
