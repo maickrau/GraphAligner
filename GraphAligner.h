@@ -929,6 +929,47 @@ private:
 		return confirmedSmaller(left.confirmedRows, left.confirmedBeforeStart, right.confirmedRows, right.confirmedBeforeStart);
 	}
 
+	char confirmedRowsInMerged(WordSlice left, WordSlice right) const
+	{
+		ScoreType leftScore = left.scoreBeforeStart;
+		ScoreType rightScore = right.scoreBeforeStart;
+		auto minConfirmed = std::min(left.confirmedRows, right.confirmedRows);
+		auto maxConfirmed = std::max(left.confirmedRows, right.confirmedRows);
+		if (minConfirmed == WordConfiguration<Word>::WordSize) return WordConfiguration<Word>::WordSize;
+		if (maxConfirmed == minConfirmed) return minConfirmed;
+		auto mask = ~(WordConfiguration<Word>::AllOnes << minConfirmed);
+		leftScore += WordConfiguration<Word>::popcount(left.VP & mask);
+		leftScore -= WordConfiguration<Word>::popcount(left.VN & mask);
+		rightScore += WordConfiguration<Word>::popcount(right.VP & mask);
+		rightScore -= WordConfiguration<Word>::popcount(right.VN & mask);
+		char result = minConfirmed;
+		for (int i = minConfirmed; i < maxConfirmed; i++)
+		{
+			auto mask = ((Word)1) << i;
+			if (left.confirmedRows > i)
+			{
+				leftScore += (left.VP & mask) ? 1 : 0;
+				leftScore -= (left.VN & mask) ? 1 : 0;
+			}
+			else
+			{
+				leftScore -= 1;
+			}
+			if (right.confirmedRows > i)
+			{
+				rightScore += (right.VP & mask) ? 1 : 0;
+				rightScore -= (right.VN & mask) ? 1 : 0;
+			}
+			else
+			{
+				rightScore -= 1;
+			}
+			if (left.confirmedRows > i && leftScore <= rightScore) result = i;
+			if (right.confirmedRows > i && rightScore <= leftScore) result = i;
+		}
+		return result;
+	}
+
 	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
 	{
 		//optimization: 11% time inclusive 9% exclusive. can this be improved?
@@ -938,6 +979,9 @@ private:
 		auto correctValue = mergeTwoSlicesCellByCell(left, right);
 #endif
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
+		assert(left.confirmedBeforeStart);
+		assert(right.confirmedBeforeStart);
+		auto newConfirmedRows = confirmedRowsInMerged(left, right);
 		WordSlice result;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
@@ -975,18 +1019,8 @@ private:
 		{
 			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
 		}
-		if (confirmedSmaller(left, right))
-		{
-			result.confirmedRows = left.confirmedRows;
-			result.confirmedBeforeStart = left.confirmedBeforeStart;
-		}
-		else
-		{
-			result.confirmedRows = right.confirmedRows;
-			result.confirmedBeforeStart = right.confirmedBeforeStart;
-		}
-		assert(!confirmedSmaller(right, result));
-		assert(!confirmedSmaller(left, result));
+		result.confirmedRows = newConfirmedRows;
+		result.confirmedBeforeStart = true;
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 #ifdef EXTRABITVECTORASSERTIONS
 		assert(result.VP == correctValue.VP);
