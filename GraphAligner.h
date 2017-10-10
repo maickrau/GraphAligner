@@ -81,6 +81,83 @@ public:
 		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
 		return x;
 	}
+
+	static int BitPosition(uint64_t low, uint64_t high, int rank)
+	{
+		assert(rank >= 0);
+		auto result = BitPosition(low, rank);
+		if (result < 64) return result;
+		return 64 + BitPosition(high, result - 64);
+	}
+
+	static int BitPosition(uint64_t number, int rank)
+	{
+		uint64_t bytes = ChunkPopcounts(number);
+		//cumulative popcount of each byte
+		uint64_t cumulative = bytes * PrefixSumMultiplierConstant;
+		//rank is higher than the total number of ones
+		if (rank >= (cumulative >> 56))
+		{
+			rank -= cumulative >> 56;
+			return 64 + rank;
+		}
+		//spread the rank into each byte
+		uint64_t rankFinder = ((rank + 1) & 0xFF) * PrefixSumMultiplierConstant;
+		//rankMask's msb will be 0 if the c. popcount at that byte is < rank, or 1 if >= rank
+		uint64_t rankMask = (cumulative | SignMask) - rankFinder;
+		//the total number of ones in rankMask is the number of bytes whose c. popcount is >= rank
+		//8 - that is the number of bytes whose c. popcount is < rank
+		int smallerBytes = 8 - ((((rankMask & SignMask) >> 7) * PrefixSumMultiplierConstant) >> 56);
+		assert(smallerBytes < 8);
+		//the bit position will be inside this byte
+		int pos = smallerBytes * 8;
+		uint64_t interestingByte = ((number >> pos) & 0xFF);
+		if (smallerBytes > 0) rank -= (cumulative >> ((smallerBytes - 1) * 8)) & 0xFF;
+		assert(rank >= 0 && rank < 8);
+		//remove the 1's one at a time until we find the exact pos
+		while (interestingByte > 0)
+		{
+			if (interestingByte & 1) rank--;
+			if (rank < 0) break;
+			pos++;
+			interestingByte >>= 1;
+		}
+		assert(rank == -1);
+		return pos;
+	}
+
+	static uint64_t MortonHigh(uint64_t left, uint64_t right)
+	{
+		return Interleave(left >> 32, right >> 32);
+	}
+
+	static uint64_t MortonLow(uint64_t left, uint64_t right)
+	{
+		return Interleave(left & 0xFFFFFFFF, right & 0xFFFFFFFF);
+	}
+
+	//http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
+	static uint64_t Interleave(uint64_t x, uint64_t y)
+	{
+		assert(x == (x & 0xFFFFFFFF));
+		assert(y == (y & 0xFFFFFFFF));
+		static const uint64_t B[] = {0x5555555555555555, 0x3333333333333333, 0x0F0F0F0F0F0F0F0F, 0x00FF00FF00FF00FF, 0x0000FFFF0000FFFF};
+		static const uint64_t S[] = {1, 2, 4, 8, 16};
+
+		x = (x | (x << S[4])) & B[4];
+		x = (x | (x << S[3])) & B[3];
+		x = (x | (x << S[2])) & B[2];
+		x = (x | (x << S[1])) & B[1];
+		x = (x | (x << S[0])) & B[0];
+
+		y = (y | (y << S[4])) & B[4];
+		y = (y | (y << S[3])) & B[3];
+		y = (y | (y << S[2])) & B[2];
+		y = (y | (y << S[1])) & B[1];
+		y = (y | (y << S[0])) & B[0];
+
+		return x | (y << 1);
+	}
 };
 
 #ifndef NDEBUG
@@ -929,7 +1006,8 @@ private:
 		return confirmedSmaller(left.confirmedRows, left.confirmedBeforeStart, right.confirmedRows, right.confirmedBeforeStart);
 	}
 
-	char confirmedRowsInMerged(WordSlice left, WordSlice right) const
+#ifdef DEXTRACORRECTNESSASSERTIONS
+	char confirmedRowsInMergedCellByCell(WordSlice left, WordSlice right) const
 	{
 		ScoreType leftScore = left.scoreBeforeStart;
 		ScoreType rightScore = right.scoreBeforeStart;
@@ -964,10 +1042,45 @@ private:
 			{
 				rightScore -= 1;
 			}
-			if (left.confirmedRows > i && leftScore <= rightScore) result = i;
-			if (right.confirmedRows > i && rightScore <= leftScore) result = i;
+			if (left.confirmedRows > i && leftScore <= rightScore) result = i+1;
+			if (right.confirmedRows > i && rightScore <= leftScore) result = i+1;
 		}
 		return result;
+	}
+#endif
+
+	char confirmedRowsInMerged(WordSlice left, WordSlice right) const
+	{
+		if (right.confirmedRows > left.confirmedRows) std::swap(left, right);
+		ScoreType leftScore = left.scoreBeforeStart;
+		ScoreType rightScore = right.scoreBeforeStart;
+		int minConfirmed = std::min(left.confirmedRows, right.confirmedRows);
+		int maxConfirmed = std::max(left.confirmedRows, right.confirmedRows);
+		if (minConfirmed == WordConfiguration<Word>::WordSize) return WordConfiguration<Word>::WordSize;
+		if (maxConfirmed == minConfirmed) return minConfirmed;
+		Word confirmedMask = ~(WordConfiguration<Word>::AllOnes << minConfirmed);
+		leftScore += WordConfiguration<Word>::popcount(left.VP & confirmedMask);
+		leftScore -= WordConfiguration<Word>::popcount(left.VN & confirmedMask);
+		rightScore += WordConfiguration<Word>::popcount(right.VP & confirmedMask);
+		rightScore -= WordConfiguration<Word>::popcount(right.VN & confirmedMask);
+		if (rightScore < leftScore) return minConfirmed;
+		assert(leftScore <= rightScore);
+		int scoreDiff = rightScore - leftScore;
+		Word partiallyConfirmedMask = WordConfiguration<Word>::AllOnes;
+		if (maxConfirmed != 64) partiallyConfirmedMask = ~(WordConfiguration<Word>::AllOnes << maxConfirmed);
+		Word low = left.VP & partiallyConfirmedMask;
+		Word high = (~left.VN) & partiallyConfirmedMask;
+		low |= ~partiallyConfirmedMask;
+		high |= ~partiallyConfirmedMask;
+		low &= ~confirmedMask;
+		high &= ~confirmedMask;
+		Word mortonLow = WordConfiguration<Word>::MortonLow(low, high);
+		Word mortonHigh = WordConfiguration<Word>::MortonHigh(low, high);
+		int pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, scoreDiff);
+		if (pos/2 >= left.confirmedRows) return left.confirmedRows;
+		assert(pos / 2 >= minConfirmed);
+		assert(pos / 2 <= maxConfirmed);
+		return pos / 2;
 	}
 
 	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
@@ -982,6 +1095,9 @@ private:
 		assert(left.confirmedBeforeStart);
 		assert(right.confirmedBeforeStart);
 		auto newConfirmedRows = confirmedRowsInMerged(left, right);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(newConfirmedRows == confirmedRowsInMergedCellByCell(left, right));
+#endif
 		WordSlice result;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
@@ -1020,6 +1136,8 @@ private:
 			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
 		}
 		result.confirmedRows = newConfirmedRows;
+		assert(result.confirmedRows >= std::min(left.confirmedRows, right.confirmedRows));
+		assert(result.confirmedRows <= std::max(left.confirmedRows, right.confirmedRows));
 		result.confirmedBeforeStart = true;
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 #ifdef EXTRABITVECTORASSERTIONS
