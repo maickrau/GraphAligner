@@ -124,17 +124,6 @@ vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg
 	return augmentedGraph;
 }
 
-int numberOfVerticesOutOfOrder(const DirectedGraph& digraph)
-{
-	std::map<int, int> ids;
-	std::set<int> outOfOrderSet;
-	for (size_t i = 0; i < digraph.edges.size(); i++)
-	{
-		if (digraph.edges[i].toIndex <= digraph.edges[i].fromIndex) outOfOrderSet.insert(digraph.edges[i].toIndex);
-	}
-	return outOfOrderSet.size();
-}
-
 template <typename T>
 T loadFromFile(std::string filename)
 {
@@ -159,25 +148,6 @@ void outputGraph(std::string filename, const vg::Graph& graph)
 	std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
 	std::vector<vg::Graph> writeVector {graph};
 	stream::write_buffered(alignmentOut, writeVector, 0);
-}
-
-bool GraphEqual(const DirectedGraph& first, const DirectedGraph& second)
-{
-	if (first.nodes.size() != second.nodes.size()) return false;
-	if (first.edges.size() != second.edges.size()) return false;
-	for (size_t i = 0; i < first.nodes.size(); i++)
-	{
-		if (first.nodes[i].nodeId != second.nodes[i].nodeId) return false;
-		if (first.nodes[i].originalNodeId != second.nodes[i].originalNodeId) return false;
-		if (first.nodes[i].sequence != second.nodes[i].sequence) return false;
-		if (first.nodes[i].rightEnd != second.nodes[i].rightEnd) return false;
-	}
-	for (size_t i = 0; i < first.edges.size(); i++)
-	{
-		if (first.edges[i].fromIndex != second.edges[i].fromIndex) return false;
-		if (first.edges[i].toIndex != second.edges[i].toIndex) return false;
-	}
-	return true;
 }
 
 void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const std::map<int, int>& idMapper)
@@ -284,9 +254,22 @@ std::pair<AlignmentGraph, std::map<int, int>> getGraphAndIdMapper(std::string gr
 		std::cerr << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
-
-	DirectedGraph augmentedGraph {graph};
+	DirectedGraph augmentedGraph;
+	if (graphFile.substr(graphFile.size()-3) == ".vg")
+	{
+		vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
+		augmentedGraph = { graph };
+	}
+	else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
+	{
+		GfaGraph graph = GfaGraph::LoadFromFile(graphFile);
+		augmentedGraph = { graph };
+	}
+	else
+	{
+		std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
+		std::exit(0);
+	}
 
 	AlignmentGraph alignmentGraph;
 	alignmentGraph.ReserveNodes(augmentedGraph.nodes.size(), augmentedGraph.totalSequenceLength);

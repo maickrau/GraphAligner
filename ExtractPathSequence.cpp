@@ -3,22 +3,19 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <functional>
+#include "GfaGraph.h"
 #include "vg.pb.h"
 #include "stream.hpp"
 #include "CommonUtils.h"
 
-void printPath(const vg::Graph& g, const vg::Alignment& v)
+void printPath(const std::map<int, int>& ids, std::function<std::string(int)> seqGetter, const vg::Alignment& v)
 {
-	std::map<int, int> ids;
-	for (int i = 0; i < g.node_size(); i++)
-	{
-		ids[g.node(i).id()] = i;
-	}
 	std::cout << ">" << v.name() << std::endl;
 	for (int i = 0; i < v.path().mapping_size(); i++)
 	{
 		auto nodeid = v.path().mapping(i).position().node_id();
-		auto sequence = g.node(ids[nodeid]).sequence();
+		auto sequence = seqGetter(ids.at(nodeid));
 		int len = 0;
 		for (int j = 0; j < v.path().mapping(i).edit_size(); j++)
 		{
@@ -38,16 +35,52 @@ void printPath(const vg::Graph& g, const vg::Alignment& v)
 	std::cout << std::endl;
 }
 
+void printPath(const vg::Graph& g, const vg::Alignment& v)
+{
+	std::map<int, int> ids;
+	for (int i = 0; i < g.node_size(); i++)
+	{
+		ids[g.node(i).id()] = i;
+	}
+	printPath(ids, [&g](int id) {return g.node(id).sequence();}, v);
+}
+
+void printPath(const GfaGraph& g, const vg::Alignment& v)
+{
+	std::map<int, int> ids;
+	for (int i = 0; i < g.nodes.size(); i++)
+	{
+		ids[g.nodes[i].id] = i;
+	}
+	printPath(ids, [&g](int id) {return g.nodes[id].sequence;}, v);
+}
+
 int main(int argc, char** argv)
 {
-	vg::Graph graph = CommonUtils::LoadVGGraph(argv[1]);
+	std::string graphfilename {argv[1]};
+	if (graphfilename.substr(graphfilename.size()-3) == ".vg")
 	{
-		std::ifstream graphfile { argv[2], std::ios::in | std::ios::binary };
-		std::function<void(vg::Alignment&)> lambda = [&graph](vg::Alignment& g) {
-			std::cerr << g.name() << std::endl;
-			printPath(graph, g);
-		};
-		stream::for_each(graphfile, lambda);
+		vg::Graph graph = CommonUtils::LoadVGGraph(argv[1]);
+		{
+			std::ifstream graphfile { argv[2], std::ios::in | std::ios::binary };
+			std::function<void(vg::Alignment&)> lambda = [&graph](vg::Alignment& g) {
+				std::cerr << g.name() << std::endl;
+				printPath(graph, g);
+			};
+			stream::for_each(graphfile, lambda);
+		}
+	}
+	else if (graphfilename.substr(graphfilename.size() - 4) == ".gfa")
+	{
+		GfaGraph graph = GfaGraph::LoadFromFile(argv[1]);
+		{
+			std::ifstream graphfile { argv[2], std::ios::in | std::ios::binary };
+			std::function<void(vg::Alignment&)> lambda = [&graph](vg::Alignment& g) {
+				std::cerr << g.name() << std::endl;
+				printPath(graph, g);
+			};
+			stream::for_each(graphfile, lambda);
+		}
 	}
 
 }

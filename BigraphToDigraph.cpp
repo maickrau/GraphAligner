@@ -5,6 +5,7 @@
 #include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
+#include "ThreadReadAssertion.h"
 
 DirectedGraph::SeedHit::SeedHit(int nodeId, size_t nodePos, size_t seqPos) :
 nodeId(nodeId),
@@ -69,6 +70,51 @@ totalSequenceLength(0)
 		{
 			toLeft = nodeMapping[bigraph.edge(i).to()].first;
 			toRight = nodeMapping[bigraph.edge(i).to()].second;
+		}
+		edges.emplace_back(fromRight, toRight);
+		edges.emplace_back(toLeft, fromLeft);
+	}
+	assert(edgesPointToValidNodes());
+	assert(nodeIdsAreValid());
+}
+
+DirectedGraph::DirectedGraph(const GfaGraph& deBruijn) :
+totalSequenceLength(0)
+{
+	std::unordered_map<int, std::pair<size_t, size_t>> nodeMapping;
+	nodeMapping.reserve(deBruijn.nodes.size());
+	for (int i = 0; i < deBruijn.nodes.size(); i++)
+	{
+		assert(nodeMapping.count(deBruijn.nodes[i].id) == 0);
+		nodeMapping[deBruijn.nodes[i].id] = std::make_pair(nodes.size()+1, nodes.size());
+		nodes.emplace_back(deBruijn.nodes[i].id * 2, deBruijn.nodes[i].id, true, deBruijn.nodes[i].sequence.substr(0, deBruijn.nodes[i].sequence.size() - deBruijn.edgeOverlap));
+		nodes.emplace_back(deBruijn.nodes[i].id * 2 + 1, deBruijn.nodes[i].id, false, CommonUtils::ReverseComplement(deBruijn.nodes[i].sequence).substr(0, deBruijn.nodes[i].sequence.size() - deBruijn.edgeOverlap));
+		totalSequenceLength += deBruijn.nodes[i].sequence.size() * 2;
+	}
+	for (int i = 0; i < deBruijn.edges.size(); i++)
+	{
+		assert(nodeMapping.count(deBruijn.edges[i].from) == 1);
+		assert(nodeMapping.count(deBruijn.edges[i].to) == 1);
+		size_t fromLeft, fromRight, toLeft, toRight;
+		if (deBruijn.edges[i].fromStart)
+		{
+			fromLeft = nodeMapping[deBruijn.edges[i].from].second;
+			fromRight = nodeMapping[deBruijn.edges[i].from].first;
+		}
+		else
+		{
+			fromLeft = nodeMapping[deBruijn.edges[i].from].first;
+			fromRight = nodeMapping[deBruijn.edges[i].from].second;
+		}
+		if (deBruijn.edges[i].toEnd)
+		{
+			toLeft = nodeMapping[deBruijn.edges[i].to].second;
+			toRight = nodeMapping[deBruijn.edges[i].to].first;
+		}
+		else
+		{
+			toLeft = nodeMapping[deBruijn.edges[i].to].first;
+			toRight = nodeMapping[deBruijn.edges[i].to].second;
 		}
 		edges.emplace_back(fromRight, toRight);
 		edges.emplace_back(toLeft, fromLeft);

@@ -1499,7 +1499,7 @@ private:
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
 
-			assert(slice[w].scoreBeforeStart < totalSequenceLen);
+			// assert(slice[w].scoreBeforeStart < totalSequenceLen);
 			assert(slice[w].confirmedBeforeStart);
 
 			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
@@ -1753,44 +1753,87 @@ private:
 
 #endif
 
+	//https://stackoverflow.com/questions/159590/way-to-go-from-recursion-to-iteration
 	//https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
-	void getStronglyConnectedComponentsRec(LengthType nodeIndex, const std::set<LengthType>& subgraph, std::unordered_map<LengthType, size_t>& index, std::unordered_map<LengthType, size_t>& lowLink, size_t& stackindex, std::unordered_set<LengthType>& onStack, std::vector<LengthType>& stack, std::vector<std::set<LengthType>>& result) const
+	class ComponentAlgorithmCallStack
 	{
-		assert(index.count(nodeIndex) == 0);
-		assert(lowLink.count(nodeIndex) == 0);
-		assert(onStack.count(nodeIndex) == 0);
-		index[nodeIndex] = stackindex;
-		lowLink[nodeIndex] = stackindex;
-		stackindex++;
-		stack.push_back(nodeIndex);
-		onStack.insert(nodeIndex);
-		for (auto neighbor : graph.outNeighbors[nodeIndex])
+	public:
+		ComponentAlgorithmCallStack(LengthType nodeIndex, int state) : nodeIndex(nodeIndex), state(state) {}
+		LengthType nodeIndex;
+		int state;
+		std::set<size_t>::const_iterator neighborIterator;
+	};
+	void getStronglyConnectedComponentsRec(LengthType start, const std::set<LengthType>& subgraph, std::unordered_map<LengthType, size_t>& index, std::unordered_map<LengthType, size_t>& lowLink, size_t& stackindex, std::unordered_set<LengthType>& onStack, std::vector<LengthType>& stack, std::vector<std::set<LengthType>>& result) const
+	{
+		std::vector<ComponentAlgorithmCallStack> callStack;
+		callStack.emplace_back(start, 0);
+		while (callStack.size() > 0)
 		{
-			if (subgraph.count(neighbor) == 0) continue;
-			if (index.count(neighbor) == 0)
+			LengthType nodeIndex = callStack.back().nodeIndex;
+			int state = callStack.back().state;
+			auto iterator = callStack.back().neighborIterator;
+			size_t neighbor;
+			callStack.pop_back();
+			switch(state)
 			{
-				getStronglyConnectedComponentsRec(neighbor, subgraph, index, lowLink, stackindex, onStack, stack, result);
+			case 0:
+				assert(index.count(nodeIndex) == 0);
+				assert(lowLink.count(nodeIndex) == 0);
+				assert(onStack.count(nodeIndex) == 0);
+				index[nodeIndex] = stackindex;
+				lowLink[nodeIndex] = stackindex;
+				stackindex++;
+				stack.push_back(nodeIndex);
+				onStack.insert(nodeIndex);
+				iterator = graph.outNeighbors[nodeIndex].begin();
+			startloop:
+				//all neighbors processed
+				if (iterator == graph.outNeighbors[nodeIndex].end()) goto end;
+				neighbor = *iterator;
+				//neighbor not in the subgraph, go to next
+				if (subgraph.count(neighbor) == 0)
+				{
+					++iterator;
+					goto startloop;
+				}
+				//recursive call
+				if (index.count(neighbor) == 0)
+				{
+					callStack.emplace_back(nodeIndex, 1);
+					callStack.back().neighborIterator = iterator;
+					callStack.emplace_back(neighbor, 0);
+					continue;
+				}
+				if (onStack.count(neighbor) == 1)
+				{
+					assert(index.count(neighbor) == 1);
+					lowLink[nodeIndex] = std::min(lowLink[nodeIndex], index[neighbor]);
+				}
+				++iterator;
+				goto startloop;
+			case 1:
+				//handle the results of the recursive call
+				neighbor = *iterator;
 				assert(lowLink.count(neighbor) == 1);
 				lowLink[nodeIndex] = std::min(lowLink[nodeIndex], lowLink[neighbor]);
+				//next neighbor
+				++iterator;
+				goto startloop;
+			end:
+				if (lowLink[nodeIndex] == index[nodeIndex])
+				{
+					result.emplace_back();
+					assert(stack.size() > 0);
+					auto back = stack.back();
+					do
+					{
+						back = stack.back();
+						result.back().insert(back);
+						onStack.erase(back);
+						stack.pop_back();
+					} while (back != nodeIndex);
+				}
 			}
-			else if (onStack.count(neighbor) == 1)
-			{
-				assert(index.count(neighbor) == 1);
-				lowLink[nodeIndex] = std::min(lowLink[nodeIndex], index[neighbor]);
-			}
-		}
-		if (lowLink[nodeIndex] == index[nodeIndex])
-		{
-			result.emplace_back();
-			assert(stack.size() > 0);
-			auto back = stack.back();
-			do
-			{
-				back = stack.back();
-				result.back().insert(back);
-				onStack.erase(back);
-				stack.pop_back();
-			} while (back != nodeIndex);
 		}
 	}
 
@@ -2617,7 +2660,7 @@ private:
 		assert(backwardPart.size() + forwardPart.size() <= sequence.size() + 2 * WordConfiguration<Word>::WordSize);
 		auto forwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2);
 		auto backwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
-		assert(graph.nodeSequences.substr(graph.nodeStart[forwardNode], graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode]) == CommonUtils::ReverseComplement(graph.nodeSequences.substr(graph.nodeStart[backwardNode], graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode])));
+		// assert(graph.nodeSequences.substr(graph.nodeStart[forwardNode], graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode]) == CommonUtils::ReverseComplement(graph.nodeSequences.substr(graph.nodeStart[backwardNode], graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode])));
 		assert(graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode] == graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode]);
 		auto forwardInitialBand = getOnlyOneNodeBand(forwardNode);
 		auto forwardBand = getSeededNodeBandForward(forwardNode, startExtensionWidth, sequence.size());

@@ -216,7 +216,7 @@ size_t AlignmentGraph::GetReverseNode(size_t nodeIndex) const
 	}
 	assert(otherNode != nodeIndex);
 	assert(nodeEnd[otherNode] - nodeStart[otherNode] == nodeEnd[nodeIndex] - nodeStart[nodeIndex]);
-	assert(nodeSequences.substr(nodeStart[nodeIndex], nodeEnd[nodeIndex] - nodeStart[nodeIndex]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
+	// assert(nodeSequences.substr(nodeStart[nodeIndex], nodeEnd[nodeIndex] - nodeStart[nodeIndex]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
 	return otherNode;
 }
 
@@ -227,6 +227,6 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 	auto originalNode = indexToNode[pos];
 	auto otherNode = GetReverseNode(originalNode);
 	size_t newPos = (nodeEnd[otherNode] - 1) - (pos - nodeStart[originalNode]);
-	assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
+	// assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
 	return newPos;
 }

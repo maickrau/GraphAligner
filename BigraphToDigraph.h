@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include "vg.pb.h"
+#include "GfaGraph.h"
 
 class DirectedGraph
 {
@@ -32,6 +33,7 @@ public:
 	};
 	DirectedGraph();
 	DirectedGraph(const vg::Graph& bigraph);
+	DirectedGraph(const GfaGraph& bigraph);
 	std::vector<Node> nodes;
 	std::vector<Edge> edges;
 	void ReorderByNodeIds(const std::vector<int>& nodeIdOrder);
