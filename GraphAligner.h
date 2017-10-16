@@ -266,18 +266,18 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<std::pair<int, size_t>>& seedHits, int startBandwidth) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
 		assert(seedHits.size() > 0);
 		TwoDirectionalSplitAlignment bestAlignment;
-		std::pair<int, size_t> bestSeed;
+		std::tuple<int, size_t, bool> bestSeed;
 		bool hasAlignment = false;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::cerr << "seed " << i << "/" << seedHits.size() << " " << seedHits[i].first << "," << seedHits[i].second << std::endl;
-			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, seedHits[i].first, seedHits[i].second, hasAlignment ? bestAlignment.Score() : sequence.size() * 0.4);
+			std::cerr << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]) << std::endl;
+			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), hasAlignment ? bestAlignment.Score() : sequence.size() * 0.4);
 			if (result.Score() > sequence.size() * 0.4) continue;
 			if (!hasAlignment)
 			{
@@ -2677,7 +2677,7 @@ private:
 		return result;
 	}
 
-	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, int dynamicWidth, int startExtensionWidth, LengthType matchBigraphNodeId, LengthType matchSequencePosition, ScoreType maxScore) const
+	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, int dynamicWidth, int startExtensionWidth, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore) const
 	{
 		assert(matchSequencePosition > 0);
 		assert(matchSequencePosition < sequence.size() - 1);
@@ -2696,8 +2696,18 @@ private:
 			forwardPart += 'N';
 		}
 		assert(backwardPart.size() + forwardPart.size() <= sequence.size() + 2 * WordConfiguration<Word>::WordSize);
-		auto forwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2);
-		auto backwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+		size_t forwardNode;
+		size_t backwardNode;
+		if (matchBigraphNodeBackwards)
+		{
+			forwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+			backwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2);
+		}
+		else
+		{
+			forwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2);
+			backwardNode = graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+		}
 		// assert(graph.nodeSequences.substr(graph.nodeStart[forwardNode], graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode]) == CommonUtils::ReverseComplement(graph.nodeSequences.substr(graph.nodeStart[backwardNode], graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode])));
 		assert(graph.nodeEnd[forwardNode] - graph.nodeStart[forwardNode] == graph.nodeEnd[backwardNode] - graph.nodeStart[backwardNode]);
 		auto forwardInitialBand = getOnlyOneNodeBand(forwardNode);
@@ -2708,30 +2718,14 @@ private:
 		auto backwardBand = getSeededNodeBandForward(backwardNode, startExtensionWidth, sequence.size());
 		auto backwardRowBandFunction = [this, &backwardBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, backwardBand); };
 		auto backwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, backwardInitialBand, maxScore, backwardRowBandFunction, sequence.size());
-		auto reverseForwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, backwardInitialBand, maxScore, backwardRowBandFunction, sequence.size());
-		auto reverseBackwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, forwardInitialBand, maxScore, forwardRowBandFunction, sequence.size());
 		auto firstscore = forwardSlice.minScorePerWordSlice.back() + backwardSlice.minScorePerWordSlice.back();
-		auto secondscore = reverseForwardSlice.minScorePerWordSlice.back() + reverseBackwardSlice.minScorePerWordSlice.back();
 		assert(firstscore <= backwardPart.size() + forwardPart.size());
-		assert(secondscore <= backwardPart.size() + forwardPart.size());
-		std::cerr << "first direction score: " << firstscore << std::endl;
-		std::cerr << "other direction score: " << secondscore << std::endl;
-		if (firstscore < secondscore)
-		{
-			TwoDirectionalSplitAlignment result;
-			result.sequenceSplitIndex = matchSequencePosition;
-			result.forward = std::move(forwardSlice);
-			result.backward = std::move(backwardSlice);
-			return result;
-		}
-		else
-		{
-			TwoDirectionalSplitAlignment result;
-			result.sequenceSplitIndex = matchSequencePosition;
-			result.forward = std::move(reverseForwardSlice);
-			result.backward = std::move(reverseBackwardSlice);
-			return result;
-		}
+		std::cerr << "score: " << firstscore << std::endl;
+		TwoDirectionalSplitAlignment result;
+		result.sequenceSplitIndex = matchSequencePosition;
+		result.forward = std::move(forwardSlice);
+		result.backward = std::move(backwardSlice);
+		return result;
 	}
 
 	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace, LengthType end) const

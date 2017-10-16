@@ -3,6 +3,7 @@
 #ifndef GraphAlignerWrapper_h
 #define GraphAlignerWrapper_h
 
+#include <tuple>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
 
@@ -31,6 +32,6 @@ public:
 };
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart);
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart, const std::vector<std::pair<int, size_t>>& seedHits, int startBandwidth);
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth);
 
 #endif

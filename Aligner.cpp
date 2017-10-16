@@ -161,7 +161,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const st
 	}
 }
 
-void runComponentMappings(const std::map<int, int>& newIdToOriginalIdMapper, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const std::map<int, int>& newIdToOriginalIdMapper, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -312,8 +312,8 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 		std::exit(0);
 	}
 
-	const std::map<const FastQ*, std::vector<std::pair<int, size_t>>>* seedHitsToThreads = nullptr;
-	std::map<const FastQ*, std::vector<std::pair<int, size_t>>> seedHits;
+	const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* seedHitsToThreads = nullptr;
+	std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>> seedHits;
 
 	if (seedFile != "")
 	{
@@ -336,7 +336,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 			for (size_t j = 0; j < seeds[fastqs[i].seq_id].size(); j++)
 			{
 				auto& seedhit = seeds[fastqs[i].seq_id][j];
-				seedHits[&(fastqs[i])].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position());
+				seedHits[&(fastqs[i])].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position(), seedhit.path().mapping(0).position().is_reverse());
 			}
 		}
 		seedHitsToThreads = &seedHits;

@@ -10,7 +10,7 @@ AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_
 	return aligner.AlignOneWay(seq_id, sequence, dynamicWidth, dynamicRowStart);
 }
 
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart, const std::vector<std::pair<int, size_t>>& seedHits, int startBandwidth)
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth)
 {
 	GraphAligner<size_t, int32_t, uint64_t> aligner {graph};
 	return aligner.AlignOneWay(seq_id, sequence, dynamicWidth, dynamicRowStart, seedHits, startBandwidth);
