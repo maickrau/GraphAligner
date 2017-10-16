@@ -36,7 +36,17 @@ size_t getset(const std::set<size_t>& set, size_t pos)
 	auto iter = set.begin();
 	for (auto i = 0; i < pos; i++)
 	{
-		++iter;;
+		++iter;
+	}
+	return *iter;
+}
+
+size_t getset(const std::unordered_set<size_t>& set, size_t pos)
+{
+	auto iter = set.begin();
+	for (auto i = 0; i < pos; i++)
+	{
+		++iter;
 	}
 	return *iter;
 }
@@ -725,9 +735,9 @@ private:
 		}
 	}
 
-	std::set<LengthType> projectForwardAndExpandBandFromPrevious(LengthType previousMinimumIndex, LengthType dynamicWidth, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(LengthType previousMinimumIndex, LengthType dynamicWidth, const std::vector<bool>& previousBand) const
 	{
-		std::set<LengthType> result;
+		std::set<LengthType> nodes;
 		assert(previousMinimumIndex < graph.nodeSequences.size());
 		auto nodeIndex = graph.indexToNode[previousMinimumIndex];
 		std::set<size_t> positions;
@@ -737,11 +747,14 @@ private:
 		assert(positions.size() >= 1);
 		if (nodeIndex < graph.firstInOrder)
 		{
-			result.insert(nodeIndex);
+			nodes.insert(nodeIndex);
 		}
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 		std::unordered_map<size_t, size_t> distanceAtNodeStart;
-		expandBandFromPositionsFromPrevious(positions, dynamicWidth, distanceAtNodeStart, distanceAtNodeEnd, result, previousBand);
+		expandBandFromPositionsFromPrevious(positions, dynamicWidth, distanceAtNodeStart, distanceAtNodeEnd, nodes, previousBand);
+		std::vector<LengthType> result;
+		result.reserve(nodes.size());
+		result.insert(result.end(), nodes.begin(), nodes.end());
 		return result;
 	}
 
@@ -1530,17 +1543,18 @@ private:
 		return result;
 	}
 
-	std::set<LengthType> getBandOrderFromSlice(const NodeSlice<WordSlice>& slice) const
+	std::vector<LengthType> getBandOrderFromSlice(const NodeSlice<WordSlice>& slice) const
 	{
-		std::set<LengthType> result;
+		std::vector<LengthType> result;
+		result.reserve(slice.size());
 		for (const auto& node : slice)
 		{
-			result.insert(node.first);
+			result.push_back(node.first);
 		}
 		return result;
 	}
 
-	std::set<LengthType> defaultForwardRowBandFunction(LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand, LengthType dynamicWidth, const NodeSlice<WordSlice>& beforeSlice) const
+	std::vector<LengthType> defaultForwardRowBandFunction(LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand, LengthType dynamicWidth, const NodeSlice<WordSlice>& beforeSlice) const
 	{
 		if (j == 0)
 		{
@@ -1610,7 +1624,7 @@ private:
 		std::vector<bool> currentBand;
 		previousBand.resize(graph.nodeStart.size(), false);
 		currentBand.resize(graph.nodeStart.size(), false);
-		std::set<size_t> bandOrder = getBandOrderFromSlice(initialSlice);
+		std::vector<size_t> bandOrder = getBandOrderFromSlice(initialSlice);
 		for (auto i : bandOrder)
 		{
 			currentBand[i] = true;
@@ -1763,7 +1777,7 @@ private:
 		int state;
 		std::set<size_t>::const_iterator neighborIterator;
 	};
-	void getStronglyConnectedComponentsRec(LengthType start, const std::set<LengthType>& subgraph, std::unordered_map<LengthType, size_t>& index, std::unordered_map<LengthType, size_t>& lowLink, size_t& stackindex, std::unordered_set<LengthType>& onStack, std::vector<LengthType>& stack, std::vector<std::set<LengthType>>& result) const
+	void getStronglyConnectedComponentsRec(LengthType start, const std::vector<bool>& currentBand, std::unordered_map<LengthType, size_t>& index, std::unordered_map<LengthType, size_t>& lowLink, size_t& stackindex, std::unordered_set<LengthType>& onStack, std::vector<LengthType>& stack, std::vector<std::vector<LengthType>>& result) const
 	{
 		std::vector<ComponentAlgorithmCallStack> callStack;
 		callStack.emplace_back(start, 0);
@@ -1791,7 +1805,7 @@ private:
 				if (iterator == graph.outNeighbors[nodeIndex].end()) goto end;
 				neighbor = *iterator;
 				//neighbor not in the subgraph, go to next
-				if (subgraph.count(neighbor) == 0)
+				if (!currentBand[neighbor])
 				{
 					++iterator;
 					goto startloop;
@@ -1828,19 +1842,20 @@ private:
 					do
 					{
 						back = stack.back();
-						result.back().insert(back);
+						result.back().emplace_back(back);
 						onStack.erase(back);
 						stack.pop_back();
 					} while (back != nodeIndex);
+					result.back().shrink_to_fit();
 				}
 			}
 		}
 	}
 
 	//https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
-	std::vector<std::set<LengthType>> getStronglyConnectedComponents(const std::set<size_t>& nodes) const
+	std::vector<std::vector<LengthType>> getStronglyConnectedComponents(const std::vector<size_t>& nodes, const std::vector<bool>& currentBand) const
 	{
-		std::vector<std::set<LengthType>> result;
+		std::vector<std::vector<LengthType>> result;
 		std::unordered_map<LengthType, size_t> index;
 		std::unordered_map<LengthType, size_t> lowLink;
 		size_t stackIndex = 0;
@@ -1854,22 +1869,28 @@ private:
 		{
 			if (index.count(node) == 0)
 			{
-				getStronglyConnectedComponentsRec(node, nodes, index, lowLink, stackIndex, onStack, stack, result);
+				getStronglyConnectedComponentsRec(node, currentBand, index, lowLink, stackIndex, onStack, stack, result);
 			}
 		}
+		result.shrink_to_fit();
 		assert(stack.size() == 0);
 		assert(onStack.size() == 0);
 		assert(index.size() == nodes.size());
 		assert(lowLink.size() == nodes.size());
 #ifndef NDEBUG
-		std::set<size_t> debugFoundNodes;
+		std::unordered_set<size_t> debugFoundNodes;
+		std::unordered_map<size_t, size_t> debugComponentIndex;
+		size_t debugComponenti = 0;
 		for (const auto& component : result)
 		{
 			for (auto node : component)
 			{
+				assert(debugComponentIndex.count(node) == 0);
+				debugComponentIndex[node] = debugComponenti;
 				assert(debugFoundNodes.count(node) == 0);
 				debugFoundNodes.insert(node);
 			}
+			debugComponenti += 1;
 		}
 		for (auto node : nodes)
 		{
@@ -1881,8 +1902,9 @@ private:
 			{
 				for (auto neighbor : graph.outNeighbors[node])
 				{
-					if (nodes.count(neighbor) == 0) continue;
-					assert(findComponentIndex(result, neighbor) <= findComponentIndex(result, node));
+					if (!currentBand[neighbor]) continue;
+					assert(debugComponentIndex.count(neighbor) == 1);
+					assert(debugComponentIndex[neighbor] <= debugComponenti);
 				}
 			}
 		}
@@ -1913,7 +1935,7 @@ private:
 		int priority;
 	};
 
-	void forceComponentZeroRow(NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::set<LengthType>& component, size_t sequenceLen) const
+	void forceComponentZeroRow(NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<LengthType>& component, size_t componentIndex, const std::vector<size_t>& partOfComponent, size_t sequenceLen) const
 	{
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
 		std::vector<ScoreType> scoresBeforeStart;
@@ -1935,7 +1957,7 @@ private:
 			for (auto neighbor : graph.inNeighbors[node])
 			{
 				if (!currentBand[neighbor] && !previousBand[neighbor]) continue;
-				if (component.count(neighbor) == 1) continue;
+				if (partOfComponent[neighbor] == componentIndex) continue;
 				if (currentBand[neighbor])
 				{
 					assert(currentSlice.hasNode(neighbor));
@@ -1962,7 +1984,7 @@ private:
 			auto w = top.node;
 			auto score = top.priority;
 			auto nodeIndex = graph.indexToNode[w];
-			if (component.count(nodeIndex) == 1)
+			if (partOfComponent[nodeIndex] == componentIndex)
 			{
 				auto start = nodeStarts[nodeIndex];
 				auto index = w - graph.nodeStart[nodeIndex] + start;
@@ -1975,13 +1997,13 @@ private:
 				for (auto neighbor : graph.outNeighbors[nodeIndex])
 				{
 					if (!currentBand[neighbor]) continue;
-					if (component.count(neighbor) == 0) continue;
+					if (partOfComponent[neighbor] != componentIndex) continue;
 					queue.emplace(graph.nodeStart[neighbor], score+1);
 				}
 			}
 			else
 			{
-				assert(component.count(nodeIndex) == 1);
+				assert(partOfComponent[nodeIndex] == componentIndex);
 				queue.emplace(w+1, score+1);
 			}
 		}
@@ -2037,7 +2059,7 @@ private:
 		std::cerr << std::endl;
 	}
 
-	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::set<LengthType>& component, size_t sequenceLen, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& component, size_t sequenceLen, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t componentIndex, const std::vector<size_t>& partOfComponent) const
 	{
 		std::vector<std::vector<ScoreType>> scores;
 		scores.resize(WordConfiguration<Word>::WordSize);
@@ -2076,7 +2098,7 @@ private:
 			for (auto neighbor : graph.inNeighbors[node])
 			{
 				if (!currentBand[neighbor] && !previousBand[neighbor]) continue;
-				if (component.count(neighbor) == 1) continue;
+				if (partOfComponent[neighbor] == componentIndex) continue;
 				if (currentBand[neighbor])
 				{
 					assert(currentSlice.hasNode(neighbor));
@@ -2145,7 +2167,7 @@ private:
 			auto nodeStart = graph.nodeStart[nodeIndex];
 			if (off == -1)
 			{
-				if (component.count(nodeIndex) == 1)
+				if (partOfComponent[nodeIndex] == componentIndex)
 				{
 					plusOneScore.emplace_back(w, off+1);
 				}
@@ -2153,7 +2175,7 @@ private:
 			else
 			{
 				assert(top.second >= 0 && top.second < scores.size());
-				if (component.count(nodeIndex) == 1)
+				if (partOfComponent[nodeIndex] == componentIndex)
 				{
 					assert(nodeStarts.count(nodeIndex) == 1);
 					auto start = nodeStarts[nodeIndex];
@@ -2170,7 +2192,7 @@ private:
 				assert(off < WordConfiguration<Word>::WordSize || off == -1);
 				for (auto neighbor : graph.outNeighbors[nodeIndex])
 				{
-					if (component.count(neighbor) == 0) continue;
+					if (partOfComponent[neighbor] != componentIndex) continue;
 					auto u = graph.nodeStart[neighbor];
 					if (off == -1 && !previousSlice.hasNode(nodeIndex))
 					{
@@ -2201,7 +2223,7 @@ private:
 			}
 			else
 			{
-				assert(component.count(nodeIndex) == 1);
+				assert(partOfComponent[nodeIndex] == componentIndex);
 				auto u = w+1;
 				if (off == -1 && !previousSlice.hasNode(nodeIndex))
 				{
@@ -2275,7 +2297,7 @@ private:
 	}
 
 #ifndef NDEBUG
-	void verifyComponentZeroRow(const NodeSlice<WordSlice>& slice, const std::set<size_t>& component) const
+	void verifyComponentZeroRow(const NodeSlice<WordSlice>& slice, const std::vector<size_t>& component) const
 	{
 		for (auto& pair : slice)
 		{
@@ -2380,7 +2402,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::set<LengthType>& bandOrder, const std::set<LengthType>& previousBandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t totalSequenceLen) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& bandOrder, const std::vector<LengthType>& previousBandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t totalSequenceLen, std::vector<size_t>& partOfComponent) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		LengthType currentMinimumIndex = std::numeric_limits<LengthType>::max();
@@ -2399,10 +2421,17 @@ private:
 			if (characterMatch(sequence[j+i], 'T')) BT |= mask;
 			if (characterMatch(sequence[j+i], 'G')) BG |= mask;
 		}
-		auto components = getStronglyConnectedComponents(bandOrder);
+		auto components = getStronglyConnectedComponents(bandOrder, currentBand);
+		for (size_t i = 0; i < components.size(); i++)
+		{
+			for (auto node : components[i])
+			{
+				partOfComponent[node] = i;
+			}
+		}
 		for (size_t component = components.size()-1; component < components.size(); component--)
 		{
-			forceComponentZeroRow(currentSlice, previousSlice, currentBand, previousBand, components[component], sequence.size());
+			forceComponentZeroRow(currentSlice, previousSlice, currentBand, previousBand, components[component], component, partOfComponent, sequence.size());
 			std::set<LengthType> calculables;
 			calculables.insert(components[component].begin(), components[component].end());
 			while (calculables.size() > 0)
@@ -2430,7 +2459,7 @@ private:
 				{
 					for (auto neighbor : graph.outNeighbors[i])
 					{
-						if (components[component].count(neighbor) == 0) continue;
+						if (partOfComponent[neighbor] != component) continue;
 						if (currentSlice.node(neighbor)[0].confirmedRows < WordConfiguration<Word>::WordSize)
 						{
 							calculables.insert(neighbor);
@@ -2472,7 +2501,7 @@ private:
 			if (doCellByCell)
 			{
 				std::cerr << "must fall back to cell by cell calculation!" << std::endl;
-				fallbackCalculateComponentCellByCell(BA, BT, BC, BG, currentSlice, previousSlice, components[component], sequence.size(), currentBand, previousBand);
+				fallbackCalculateComponentCellByCell(BA, BT, BC, BG, currentSlice, previousSlice, components[component], sequence.size(), currentBand, previousBand, component, partOfComponent);
 				for (auto node : components[component])
 				{
 					auto& slice = currentSlice.node(node);
@@ -2486,6 +2515,13 @@ private:
 						}
 					}
 				}
+			}
+		}
+		for (size_t i = 0; i < components.size(); i++)
+		{
+			for (auto node : components[i])
+			{
+				partOfComponent[node] = std::numeric_limits<size_t>::max();
 			}
 		}
 
@@ -2508,11 +2544,13 @@ private:
 		LengthType previousMinimumIndex = std::numeric_limits<LengthType>::max();
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
+		std::vector<size_t> partOfComponent;
 		assert(initialSlice.size() > 0);
 		currentBand.resize(graph.nodeStart.size(), false);
 		previousBand.resize(graph.nodeStart.size(), false);
+		partOfComponent.resize(graph.nodeStart.size(), std::numeric_limits<size_t>::max());
 
-		std::set<size_t> previousBandOrder;
+		std::vector<size_t> previousBandOrder;
 
 #ifndef NDEBUG
 		debugLastRowMinScore = 0;
@@ -2539,7 +2577,7 @@ private:
 				currentSlice.addNode(i, graph.nodeEnd[i] - graph.nodeStart[i]);
 				currentBand[i] = true;
 			}
-			auto sliceResult = calculateSlice(sequence, j, currentSlice, previousSlice, bandOrder, previousBandOrder, currentBand, previousBand, totalSequenceLen);
+			auto sliceResult = calculateSlice(sequence, j, currentSlice, previousSlice, bandOrder, previousBandOrder, currentBand, previousBand, totalSequenceLen, partOfComponent);
 			ScoreType currentMinimumScore = sliceResult.minScore;
 			LengthType currentMinimumIndex = sliceResult.minScoreIndex;
 			result.cellsProcessed += sliceResult.cellsProcessed;
@@ -2606,7 +2644,7 @@ private:
 	NodeSlice<WordSlice> getSeededNodeBandForward(LengthType nodeIndex, LengthType startExtensionWidth, size_t sequenceLen) const
 	{
 		NodeSlice<WordSlice> result;
-		std::set<size_t> visited;
+		std::unordered_set<size_t> visited;
 		std::priority_queue<NodePosWithDistance, std::vector<NodePosWithDistance>, std::greater<NodePosWithDistance>> queue;
 		queue.emplace(nodeIndex, true, 0);
 		while (queue.size() > 0)
