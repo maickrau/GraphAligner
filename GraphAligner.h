@@ -8,19 +8,12 @@
 #include <cmath>
 #include <unordered_set>
 #include <queue>
-#include <boost/config.hpp>
-#include <boost/property_map/property_map.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graphviz.hpp>
-#include <boost/graph/johnson_all_pairs_shortest.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/rational.hpp>
-#include <boost/multiprecision/cpp_int.hpp>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
 #include "NodeSlice.h"
 #include "CommonUtils.h"
 #include "GraphAlignerWrapper.h"
+#include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 
 void printtime(const char* msg)
@@ -510,16 +503,6 @@ private:
 		edit->set_to_length(btNodeEnd.second - btNodeStart.second);
 		edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second));
 		return AlignmentResult { result, false, cellsProcessed, std::numeric_limits<size_t>::max() };
-	}
-
-	void setEstimatedCorrectAligned(MatrixSlice& slice) const
-	{
-		auto correctEstimation = estimateCorrectAlignmentViterbi(slice.minScorePerWordSlice);
-		slice.firstEstimatedWrong = 0;
-		while (slice.firstEstimatedWrong < correctEstimation.size() && correctEstimation[slice.firstEstimatedWrong])
-		{
-			slice.firstEstimatedWrong++;
-		}
 	}
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromSlice(const std::string& sequence, const MatrixSlice& slice) const
@@ -2513,6 +2496,8 @@ private:
 		//todo optimization: 82% inclusive 17% exclusive. can this be improved?
 		MatrixSlice result;
 		result.cellsProcessed = 0;
+		result.firstEstimatedWrong = 0;
+		AlignmentCorrectnessEstimationState correctnessEstimation;
 
 		NodeSlice<WordSlice> previousSlice;
 
@@ -2577,11 +2562,16 @@ private:
 			previousMinimumIndex = currentMinimumIndex;
 			result.minScorePerWordSlice.emplace_back(currentMinimumScore);
 			result.minScoreIndexPerWordSlice.emplace_back(currentMinimumIndex);
+			result.firstEstimatedWrong++;
 			previousBandOrder = std::move(bandOrder);
 #ifndef NDEBUG
 			debugLastRowMinScore = currentMinimumScore;
 #endif
-			if (currentMinimumScore > maxScore)
+			if (result.minScorePerWordSlice.size() > 2)
+			{
+				correctnessEstimation = correctnessEstimation.NextState(result.minScorePerWordSlice.back() - result.minScorePerWordSlice[result.minScorePerWordSlice.size()-2], WordConfiguration<Word>::WordSize);
+			}
+			if (!correctnessEstimation.CurrentlyCorrect())
 			{
 				for (int i = j + WordConfiguration<Word>::WordSize; i < sequence.size(); i += WordConfiguration<Word>::WordSize)
 				{
@@ -2686,7 +2676,6 @@ private:
 			auto backwardRowBandFunction = [this, &backwardBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, backwardBand); };
 			auto backwardSlice = getBitvectorSliceScoresAndFinalPosition(backwardPart, backwardInitialBand, maxScore, backwardRowBandFunction, sequence.size());
 			result.backward = std::move(backwardSlice);
-			setEstimatedCorrectAligned(result.backward);
 			score += result.backward.minScorePerWordSlice.back();
 		}
 		if (matchSequencePosition < sequence.size() - 1)
@@ -2703,7 +2692,6 @@ private:
 			auto forwardRowBandFunction = [this, &forwardBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, forwardBand); };
 			auto forwardSlice = getBitvectorSliceScoresAndFinalPosition(forwardPart, forwardInitialBand, maxScore, forwardRowBandFunction, sequence.size());
 			result.forward = std::move(forwardSlice);
-			setEstimatedCorrectAligned(result.forward);
 			score += result.forward.minScorePerWordSlice.back();
 		}
 		assert(score <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
@@ -2722,110 +2710,6 @@ private:
 			trace[i].second = end - trace[i].second;
 		}
 		return trace;
-	}
-
-	template <typename T>
-	T factorial(T n) const
-	{
-		T result {1};
-		for (int i = 2; i <= n; i += 1)
-		{
-			result *= i;
-		}
-		return result;
-	}
-
-	template <typename T>
-	T choose(T n, T k) const
-	{
-		return factorial<T>(n) / factorial<T>(k) / factorial<T>(n - k);
-	}
-
-	template <typename T>
-	T powr(T base, int exponent) const
-	{
-		assert(exponent >= 0);
-		if (exponent == 0) return T{1};
-		if (exponent == 1) return base;
-		if (exponent % 2 == 0)
-		{
-			auto part = powr(base, exponent / 2);
-			assert(part > 0);
-			return part * part;
-		}
-		if (exponent % 2 == 1)
-		{
-			auto part = powr(base, exponent / 2);
-			assert(part > 0);
-			return part * part * base;
-		}
-		assert(false);
-		std::abort();
-		return T{};
-	}
-
-	std::vector<bool> estimateCorrectAlignmentViterbi(const std::vector<ScoreType>& scores) const
-	{
-		const boost::rational<boost::multiprecision::cpp_int> correctMismatchProbability {15, 100}; //15% from pacbio error rate
-		const boost::rational<boost::multiprecision::cpp_int> falseMismatchProbability {50, 100}; //50% empirically
-		const boost::rational<boost::multiprecision::cpp_int> falseToCorrectTransitionProbability {1, 100000}; //10^-5. one slice at <=12 mismatches or two slices at <=15 mismatchs
-		const boost::rational<boost::multiprecision::cpp_int> correctToFalseTransitionProbability {1LL, 1000000000000000LL}; //10^-15. three slices at >=25 mismatches or two slices at >=30 mismatches
-		boost::rational<boost::multiprecision::cpp_int> correctProbability {80, 100}; //80% arbitrarily
-		boost::rational<boost::multiprecision::cpp_int> falseProbability {20, 100}; //20% arbitrarily
-		std::vector<bool> falseFromCorrectBacktrace;
-		std::vector<bool> correctFromCorrectBacktrace;
-		for (size_t i = 1; i < scores.size(); i++)
-		{
-			assert(scores[i] >= scores[i-1]);
-			auto scorediff = scores[i] - scores[i-1];
-			if (scorediff >= WordConfiguration<Word>::WordSize)
-			{
-				falseFromCorrectBacktrace.push_back(correctProbability * correctToFalseTransitionProbability >= falseProbability * (1 - falseToCorrectTransitionProbability));
-				correctFromCorrectBacktrace.push_back(correctProbability * (1 - correctToFalseTransitionProbability) >= falseProbability * falseToCorrectTransitionProbability);
-				correctProbability = 0;
-				falseProbability = 1;
-				for (size_t j = i+1; j < scores.size(); j++)
-				{
-					falseFromCorrectBacktrace.push_back(false);
-					correctFromCorrectBacktrace.push_back(false);
-				}
-				break;
-			}
-			assert(scorediff >= 0);
-			assert(scorediff <= WordConfiguration<Word>::WordSize);
-			correctFromCorrectBacktrace.push_back(correctProbability * (1 - correctToFalseTransitionProbability) >= falseProbability * falseToCorrectTransitionProbability);
-			falseFromCorrectBacktrace.push_back(correctProbability * correctToFalseTransitionProbability >= falseProbability * (1 - falseToCorrectTransitionProbability));
-			boost::rational<boost::multiprecision::cpp_int> newCorrectProbability = std::max(correctProbability * (1 - correctToFalseTransitionProbability), falseProbability * falseToCorrectTransitionProbability);
-			boost::rational<boost::multiprecision::cpp_int> newFalseProbability = std::max(correctProbability * correctToFalseTransitionProbability, falseProbability * (1 - falseToCorrectTransitionProbability));
-			auto chooseresult = choose<boost::multiprecision::cpp_int>(WordConfiguration<Word>::WordSize, scorediff);
-			auto correctMultiplier = chooseresult * powr(correctMismatchProbability, scorediff) * powr(1 - correctMismatchProbability, WordConfiguration<Word>::WordSize - scorediff);
-			auto falseMultiplier = chooseresult * powr(falseMismatchProbability, scorediff) * powr(1 - falseMismatchProbability, WordConfiguration<Word>::WordSize - scorediff);
-			newCorrectProbability *= correctMultiplier;
-			newFalseProbability *= falseMultiplier;
-			correctProbability = newCorrectProbability;
-			falseProbability = newFalseProbability;
-			auto normalizer = correctProbability + falseProbability;
-			correctProbability /= normalizer;
-			falseProbability /= normalizer;
-		}
-		assert(falseFromCorrectBacktrace.size() == scores.size() - 1);
-		assert(correctFromCorrectBacktrace.size() == scores.size() - 1);
-		bool currentCorrect = correctProbability > falseProbability;
-		std::vector<bool> result;
-		result.resize(scores.size() - 1);
-		for (size_t i = scores.size()-2; i < scores.size(); i--)
-		{
-			result[i] = currentCorrect;
-			if (currentCorrect)
-			{
-				currentCorrect = correctFromCorrectBacktrace[i];
-			}
-			else
-			{
-				currentCorrect = falseFromCorrectBacktrace[i];
-			}
-		}
-		return result;
 	}
 
 	std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
@@ -2907,7 +2791,6 @@ private:
 		auto rowBandFunction = [this, &startBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, startBand); };
 		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, startBand, sequence.size() * 0.4, rowBandFunction, sequence.size());
 		std::cerr << "score: " << slice.minScorePerWordSlice.back() << std::endl;
-		setEstimatedCorrectAligned(slice);
 
 		auto backtraceresult = getTraceFromSlice(sequence, slice);
 		while (backtraceresult.second.back().second >= sequence.size() - padding)
