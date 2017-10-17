@@ -225,14 +225,15 @@ private:
 		std::vector<ScoreType> minScorePerWordSlice;
 		std::vector<LengthType> minScoreIndexPerWordSlice;
 		std::vector<NodeSlice<WordSlice>> scoreSlices;
+		size_t firstEstimatedWrong;
 		size_t cellsProcessed;
 	};
 	class TwoDirectionalSplitAlignment
 	{
 	public:
-		ScoreType Score() const
+		size_t EstimatedCorrectlyAligned() const
 		{
-			return forward.minScorePerWordSlice.back() + forward.minScorePerWordSlice.back();
+			return (forward.firstEstimatedWrong + backward.firstEstimatedWrong) * WordConfiguration<Word>::WordSize;
 		}
 		size_t sequenceSplitIndex;
 		MatrixSlice forward;
@@ -256,10 +257,8 @@ public:
 		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
 		if (std::get<1>(trace).size() == 0) return emptyAlignment(time, std::get<2>(trace));
 		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
-		result.firstPartStart = std::get<1>(trace)[0].second;
-		result.firstPartEnd = std::get<1>(trace).back().second;
-		result.secondPartStart = 0;
-		result.secondPartEnd = 0;
+		result.alignmentStart = std::get<1>(trace)[0].second;
+		result.alignmentEnd = std::get<1>(trace).back().second;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -277,8 +276,7 @@ public:
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			std::cerr << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]) << std::endl;
-			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), hasAlignment ? bestAlignment.Score() : sequence.size() * 0.4);
-			if (result.Score() > sequence.size() * 0.4) continue;
+			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4);
 			if (!hasAlignment)
 			{
 				bestAlignment = std::move(result);
@@ -287,7 +285,7 @@ public:
 			}
 			else
 			{
-				if (result.Score() < bestAlignment.Score())
+				if (result.EstimatedCorrectlyAligned() > bestAlignment.EstimatedCorrectlyAligned())
 				{
 					bestAlignment = std::move(result);
 					bestSeed = seedHits[i];
@@ -301,15 +299,11 @@ public:
 		{
 			return emptyAlignment(time, 0);
 		}
-		if (bestAlignment.Score() > sequence.size() * 0.4)
-		{
-			return emptyAlignment(time, 0);
-		}
-		if (bestAlignment.forward.minScoreIndexPerWordSlice.back() == 0 || bestAlignment.backward.minScoreIndexPerWordSlice.back() == 0)
-		{
-			return emptyAlignment(time, 0);
-		}
 		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence);
+		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() || std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
+		{
+			return emptyAlignment(time, 0);
+		}
 
 		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.first), std::get<1>(bestTrace.first), 0);
 		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.second), std::get<1>(bestTrace.second), 0);
@@ -319,7 +313,9 @@ public:
 			return emptyAlignment(time, 0);
 		}
 		auto result = mergeAlignments(bwresult, fwresult);
-		result.secondPartFirstIndex = bwresult.alignment.path().mapping_size();
+		result.alignment.set_query_position(std::get<1>(bestTrace.second)[0].second);
+		result.alignmentStart = std::get<1>(bestTrace.second)[0].second;
+		result.alignmentEnd = result.alignmentStart + bestAlignment.EstimatedCorrectlyAligned();
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -497,10 +493,26 @@ private:
 		return AlignmentResult { result, false, cellsProcessed, std::numeric_limits<size_t>::max() };
 	}
 
-	std::vector<MatrixPosition> getTraceFromSlice(const std::string& sequence, const MatrixSlice& slice) const
+	void setEstimatedCorrectAligned(MatrixSlice& slice) const
 	{
+		auto correctEstimation = estimateCorrectAlignmentViterbi(slice.minScorePerWordSlice);
+		slice.firstEstimatedWrong = 0;
+		while (slice.firstEstimatedWrong < correctEstimation.size() && correctEstimation[slice.firstEstimatedWrong])
+		{
+			slice.firstEstimatedWrong++;
+		}
+	}
+
+	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromSlice(const std::string& sequence, const MatrixSlice& slice) const
+	{
+		if (slice.firstEstimatedWrong == 0)
+		{
+			return std::make_pair(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{});
+		}
+		assert(slice.firstEstimatedWrong > 0);
 		assert(slice.scoreSlices.size() * WordConfiguration<Word>::WordSize == sequence.size());
-		MatrixPosition pos = std::make_pair(slice.minScoreIndexPerWordSlice.back(), sequence.size()-1);
+		auto startrow = slice.firstEstimatedWrong * WordConfiguration<Word>::WordSize - 1;
+		MatrixPosition pos = std::make_pair(slice.minScoreIndexPerWordSlice[slice.firstEstimatedWrong-1], startrow);
 		std::vector<MatrixPosition> result;
 		while (pos.second != 0)
 		{
@@ -589,63 +601,7 @@ private:
 		}
 		result.push_back(pos);
 		std::reverse(result.begin(), result.end());
-		return result;
-	}
-
-	std::vector<MatrixPosition> getTraceFromSlices(size_t sequenceLen, const MatrixSlice& forward, const MatrixSlice& backward) const
-	{
-		assert(backward.minScorePerWordSlice.size() == forward.minScorePerWordSlice.size());
-		assert(forward.scoreSlices.size() == backward.scoreSlices.size());
-		assert(backward.minScorePerWordSlice.back() == forward.minScorePerWordSlice.back() * 2);
-		MatrixPosition pos = std::make_pair(forward.minScoreIndexPerWordSlice.back(), sequenceLen-1);
-		std::vector<MatrixPosition> result;
-		auto totalScore = forward.minScorePerWordSlice.back() * 2;
-		while (pos.second != 0)
-		{
-			result.push_back(pos);
-			auto nodeIndex = graph.indexToNode[pos.first];
-			if (getValue(forward, pos.first, pos.second-1) + getValue(backward, graph.GetReversePosition(pos.first), sequenceLen - pos.second) == totalScore)
-			{
-				pos.second--;
-				continue;
-			}
-			if (pos.first == graph.nodeStart[nodeIndex])
-			{
-				for (auto neighbor : graph.inNeighbors[nodeIndex])
-				{
-					if (!forward.scoreSlices[pos.second/WordConfiguration<Word>::WordSize].hasNode(neighbor)) continue;
-					auto u = graph.nodeEnd[neighbor]-1;
-					if (getValue(forward, u, pos.second-1) + getValue(backward, graph.GetReversePosition(u), sequenceLen - pos.second) == totalScore)
-					{
-						pos.first = u;
-						pos.second--;
-						continue;
-					}
-					if (u != pos.first && getValue(forward, u, pos.second) + getValue(backward, graph.GetReversePosition(u), sequenceLen - pos.second - 1) == totalScore)
-					{
-						pos.first = u;
-						continue;
-					}
-				}
-			}
-			else
-			{
-				if (getValue(forward, pos.first-1, pos.second-1) + getValue(backward, graph.GetReversePosition(pos.first-1), sequenceLen - pos.second) == totalScore)
-				{
-					pos.first--;
-					pos.second--;
-					continue;
-				}
-				if (getValue(forward, pos.first-1, pos.second) + getValue(backward, graph.GetReversePosition(pos.first-1), sequenceLen - pos.second - 1) == totalScore)
-				{
-					pos.first--;
-					continue;
-				}
-			}
-			assert(false);
-			std::abort();
-		}
-		return result;
+		return std::make_pair(slice.minScorePerWordSlice[slice.firstEstimatedWrong-1], result);
 	}
 
 	class NodePosWithDistance
@@ -2725,6 +2681,8 @@ private:
 		result.sequenceSplitIndex = matchSequencePosition;
 		result.forward = std::move(forwardSlice);
 		result.backward = std::move(backwardSlice);
+		setEstimatedCorrectAligned(result.forward);
+		setEstimatedCorrectAligned(result.backward);
 		return result;
 	}
 
@@ -2761,6 +2719,7 @@ private:
 	template <typename T>
 	T powr(T base, int exponent) const
 	{
+		assert(exponent >= 0);
 		if (exponent == 0) return T{1};
 		if (exponent == 1) return base;
 		if (exponent % 2 == 0)
@@ -2776,6 +2735,8 @@ private:
 			return part * part * base;
 		}
 		assert(false);
+		std::abort();
+		return T{};
 	}
 
 	std::vector<bool> estimateCorrectAlignmentViterbi(const std::vector<ScoreType>& scores) const
@@ -2792,6 +2753,21 @@ private:
 		{
 			assert(scores[i] >= scores[i-1]);
 			auto scorediff = scores[i] - scores[i-1];
+			if (scorediff >= WordConfiguration<Word>::WordSize)
+			{
+				falseFromCorrectBacktrace.push_back(correctProbability * correctToFalseTransitionProbability >= falseProbability * (1 - falseToCorrectTransitionProbability));
+				correctFromCorrectBacktrace.push_back(correctProbability * (1 - correctToFalseTransitionProbability) >= falseProbability * falseToCorrectTransitionProbability);
+				correctProbability = 0;
+				falseProbability = 1;
+				for (size_t j = i+1; j < scores.size(); j++)
+				{
+					falseFromCorrectBacktrace.push_back(false);
+					correctFromCorrectBacktrace.push_back(false);
+				}
+				break;
+			}
+			assert(scorediff >= 0);
+			assert(scorediff <= WordConfiguration<Word>::WordSize);
 			correctFromCorrectBacktrace.push_back(correctProbability * (1 - correctToFalseTransitionProbability) >= falseProbability * falseToCorrectTransitionProbability);
 			falseFromCorrectBacktrace.push_back(correctProbability * correctToFalseTransitionProbability >= falseProbability * (1 - falseToCorrectTransitionProbability));
 			boost::rational<boost::multiprecision::cpp_int> newCorrectProbability = std::max(correctProbability * (1 - correctToFalseTransitionProbability), falseProbability * falseToCorrectTransitionProbability);
@@ -2849,21 +2825,14 @@ private:
 		}
 		assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 		assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
-		// auto backtraceSlice = getBacktraceSlice(backtraceSequence, split.forward);
 
 		std::pair<ScoreType, std::vector<MatrixPosition>> backtraceresult;
-		backtraceresult.second = getTraceFromSlice(backtraceSequence, split.forward);
-
-		// backtraceresult.second = getTraceFromSlices(backtraceSequence.size(), split.forward, backtraceSlice);
-		backtraceresult.first = split.forward.minScorePerWordSlice.back();
+		backtraceresult = getTraceFromSlice(backtraceSequence, split.forward);
 
 		std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
-		// auto reverseBacktraceSlice = getBacktraceSlice(backwardBacktraceSequence, split.backward);
 
 		std::pair<ScoreType, std::vector<MatrixPosition>> reverseBacktraceResult;
-		reverseBacktraceResult.second = getTraceFromSlice(backwardBacktraceSequence, split.backward);
-		// reverseBacktraceResult.second = getTraceFromSlices(backwardBacktraceSequence.size(), split.backward, reverseBacktraceSlice);
-		reverseBacktraceResult.first = split.backward.minScorePerWordSlice.back();
+		reverseBacktraceResult = getTraceFromSlice(backwardBacktraceSequence, split.backward);
 
 		std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
 
@@ -2908,21 +2877,16 @@ private:
 		auto rowBandFunction = [this, &startBand, dynamicWidth](LengthType j, LengthType previousMinimumIndex, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(j, previousMinimumIndex, previousBand, dynamicWidth, startBand); };
 		auto slice = getBitvectorSliceScoresAndFinalPosition(sequence, startBand, sequence.size() * 0.4, rowBandFunction, sequence.size());
 		std::cerr << "score: " << slice.minScorePerWordSlice.back() << std::endl;
-		if (slice.minScorePerWordSlice.back() > sequence.size() * 0.4)
-		{
-			return std::make_tuple(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{}, slice.cellsProcessed);
-		}
-		// auto backtraceSlice = getBacktraceSlice(sequence, slice);
+		setEstimatedCorrectAligned(slice);
 
 		auto backtraceresult = getTraceFromSlice(sequence, slice);
-		// auto backtraceresult = getTraceFromSlices(sequence.size(), slice, backtraceSlice);
-		while (backtraceresult.back().second >= sequence.size() - padding)
+		while (backtraceresult.second.back().second >= sequence.size() - padding)
 		{
-			backtraceresult.pop_back();
+			backtraceresult.second.pop_back();
 		}
-		assert(backtraceresult[0].second == 0);
-		assert(backtraceresult.back().second == sequence.size() - padding - 1);
-		return std::make_tuple(slice.minScorePerWordSlice.back(), backtraceresult, slice.cellsProcessed);
+		assert(backtraceresult.second[0].second == 0);
+		assert(backtraceresult.second.back().second == sequence.size() - padding - 1);
+		return std::make_tuple(backtraceresult.first, backtraceresult.second, slice.cellsProcessed);
 	}
 
 };

@@ -17,18 +17,17 @@ public:
 	alignment(alignment),
 	alignmentFailed(alignmentFailed),
 	cellsProcessed(cellsProcessed),
-	elapsedMilliseconds(ms)
+	elapsedMilliseconds(ms),
+	alignmentStart(0),
+	alignmentEnd(0)
 	{
 	}
 	vg::Alignment alignment;
 	bool alignmentFailed;
 	size_t cellsProcessed;
 	size_t elapsedMilliseconds;
-	size_t firstPartStart;
-	size_t firstPartEnd;
-	size_t secondPartStart;
-	size_t secondPartEnd;
-	size_t secondPartFirstIndex;
+	size_t alignmentStart;
+	size_t alignmentEnd;
 };
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int dynamicWidth, size_t dynamicRowStart);
