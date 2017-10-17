@@ -221,7 +221,7 @@ void runComponentMappings(const std::map<int, int>& newIdToOriginalIdMapper, con
 		{
 			cerroutput << "read " << fastq->seq_id << " score is poor: " << alignment.alignment.score() << BufferedWriter::Flush;
 		}
-		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignment.alignmentStart << "-" << alignment.alignmentEnd << BufferedWriter::Flush;
+		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignment.alignmentStart << "-" << alignment.alignmentEnd << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
 		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment, newIdToOriginalIdMapper);
 
