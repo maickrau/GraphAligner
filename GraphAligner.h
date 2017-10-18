@@ -987,7 +987,7 @@ private:
 		return confirmedSmaller(left.confirmedRows, left.confirmedBeforeStart, right.confirmedRows, right.confirmedBeforeStart);
 	}
 
-#ifdef DEXTRACORRECTNESSASSERTIONS
+#ifdef EXTRACORRECTNESSASSERTIONS
 	char confirmedRowsInMergedCellByCell(WordSlice left, WordSlice right) const
 	{
 		ScoreType leftScore = left.scoreBeforeStart;
@@ -2017,6 +2017,25 @@ private:
 		std::cerr << std::endl;
 	}
 
+	ScoreType scoreplus(Word BA, Word BT, Word BC, Word BG, char nodeChar, int off) const
+	{
+		Word mask = ((Word)1) << off;
+		switch(nodeChar)
+		{
+			case 'A':
+				return (BA & mask) ? 0 : 1;
+			case 'T':
+				return (BT & mask) ? 0 : 1;
+			case 'C':
+				return (BC & mask) ? 0 : 1;
+			case 'G':
+				return (BG & mask) ? 0 : 1;
+		}
+		assert(false);
+		std::abort();
+		return 1;
+	}
+
 	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& component, size_t sequenceLen, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t componentIndex, const std::vector<size_t>& partOfComponent) const
 	{
 		std::vector<std::vector<ScoreType>> scores;
@@ -2025,21 +2044,33 @@ private:
 		std::vector<std::pair<ScoreType, MatrixPosition>> startCells;
 		std::vector<MatrixPosition> currentScore;
 		std::vector<MatrixPosition> plusOneScore;
+		std::vector<std::vector<LengthType>> outNeighbors;
+		std::vector<bool> hasBefore;
+		std::string seq;
 		size_t totalCells = 0;
 		for (auto node : component)
 		{
 			assert(currentSlice.hasNode(node));
 			nodeStarts[node] = totalCells;
+			auto cellbycellstart = totalCells;
 			totalCells += graph.nodeEnd[node] - graph.nodeStart[node];
+			outNeighbors.resize(totalCells);
 			auto& slice = currentSlice.node(node);
-			auto start = graph.nodeStart[node];
+			hasBefore.resize(totalCells, slice[0].scoreBeforeExists);
+			auto graphstart = graph.nodeStart[node];
 			for (size_t i = 0; i < slice.size(); i++)
 			{
+				seq += graph.nodeSequences[graphstart+i];
+				if (i < slice.size() - 1) outNeighbors[cellbycellstart+i].push_back(cellbycellstart+i+1);
 				assert(slice[i].confirmedBeforeStart);
-				if (slice[i].scoreBeforeExists) startCells.emplace_back(slice[i].scoreBeforeStart, std::make_pair(start+i, -1));
+				if (slice[i].scoreBeforeExists)
+				{
+					if (i < slice.size() - 1) startCells.emplace_back(slice[i].scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graphstart+i+1], 0), std::make_pair(cellbycellstart+i+1, 0));
+					startCells.emplace_back(slice[i].scoreBeforeStart+1, std::make_pair(cellbycellstart+i, 0));
+				}
 				for (size_t off = 0; off < slice[i].confirmedRows; off++)
 				{
-					startCells.emplace_back(getValue(slice[i], off), std::make_pair(start+i, off));
+					startCells.emplace_back(getValue(slice[i], off), std::make_pair(cellbycellstart+i, off));
 				}
 			}
 #ifndef NDEBUG
@@ -2053,38 +2084,83 @@ private:
 				}
 			}
 #endif
+		}
+		for (auto node : component)
+		{
+			auto cellbycellstart = nodeStarts[node];
+			assert(outNeighbors.size() > cellbycellstart);
 			for (auto neighbor : graph.inNeighbors[node])
 			{
 				if (!currentBand[neighbor] && !previousBand[neighbor]) continue;
-				if (partOfComponent[neighbor] == componentIndex) continue;
-				if (currentBand[neighbor])
+				if (partOfComponent[neighbor] == componentIndex)
 				{
-					assert(currentSlice.hasNode(neighbor));
+					assert(currentBand[neighbor]);
+					auto startpos = nodeStarts[neighbor] + graph.nodeEnd[neighbor] - graph.nodeStart[neighbor] - 1;
+					outNeighbors[startpos].push_back(cellbycellstart);
 					auto word = currentSlice.node(neighbor).back();
-					auto pos = graph.nodeEnd[neighbor]-1;
-					assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
 					assert(word.confirmedBeforeStart);
-					if (word.scoreBeforeExists) startCells.emplace_back(word.scoreBeforeStart, std::make_pair(pos, -1));
-					for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
+					if (word.scoreBeforeExists)
 					{
-						startCells.emplace_back(getValue(word, off), std::make_pair(pos, off));
+						startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.nodeStart[node]], 0), std::make_pair(cellbycellstart, 0));
+					}
+					if (previousBand[neighbor])
+					{
+						assert(previousSlice.hasNode(neighbor));
+						word = previousSlice.node(neighbor).back();
+						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
+						assert(word.confirmedBeforeStart);
+						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.nodeStart[node]], 0), std::make_pair(cellbycellstart, 0));
 					}
 				}
-				if (previousBand[neighbor])
+				else
 				{
-					assert(previousSlice.hasNode(neighbor));
-					auto word = previousSlice.node(neighbor).back();
-					auto pos = graph.nodeEnd[neighbor]-1;
-					assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
-					assert(word.confirmedBeforeStart);
-					startCells.emplace_back(word.scoreEnd, std::make_pair(pos, -1));
+					if (currentBand[neighbor])
+					{
+						assert(currentSlice.hasNode(neighbor));
+						auto word = currentSlice.node(neighbor).back();
+						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
+						assert(word.confirmedBeforeStart);
+						if (word.scoreBeforeExists)
+						{
+							startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.nodeStart[node]], 0), std::make_pair(cellbycellstart, 0));
+						}
+						for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
+						{
+							startCells.emplace_back(getValue(word, off) + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.nodeStart[node]], off+1), std::make_pair(cellbycellstart, off+1));
+							startCells.emplace_back(getValue(word, off) + 1, std::make_pair(cellbycellstart, off));
+						}
+					}
+					if (previousBand[neighbor])
+					{
+						assert(previousSlice.hasNode(neighbor));
+						auto word = previousSlice.node(neighbor).back();
+						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
+						assert(word.confirmedBeforeStart);
+						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.nodeStart[node]], 0), std::make_pair(cellbycellstart, 0));
+					}
 				}
 			}
+		}
+		for (auto node : component)
+		{
 		}
 		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
 		{
 			scores[i].resize(totalCells, std::numeric_limits<ScoreType>::max());
 		}
+		assert(outNeighbors.size() == hasBefore.size());
+		assert(scores.size() == WordConfiguration<Word>::WordSize);
+		assert(scores[0].size() == outNeighbors.size());
+#ifndef NDEBUG
+		for (size_t i = 1; i < scores.size(); i++)
+		{
+			assert(scores[i].size() == scores[0].size());
+		}
+		for (size_t i = 0; i < outNeighbors.size(); i++)
+		{
+			assert(outNeighbors[i].size() > 0);
+		}
+#endif
 		assert(startCells.size() > 0);
 		std::sort(startCells.begin(), startCells.end(), [](auto left, auto right) {return left.first > right.first;});
 		auto score = 0;
@@ -2118,96 +2194,21 @@ private:
 			assert(currentScore.size() > 0);
 			auto top = currentScore.back();
 			currentScore.pop_back();
-			if (top.second == WordConfiguration<Word>::WordSize) continue;
-			auto w = top.first;
+			auto pos = top.first;
 			auto off = top.second;
-			auto nodeIndex = graph.indexToNode[w];
-			auto nodeStart = graph.nodeStart[nodeIndex];
-			if (off == -1)
-			{
-				if (partOfComponent[nodeIndex] == componentIndex)
-				{
-					plusOneScore.emplace_back(w, off+1);
-				}
-			}
-			else
-			{
-				assert(top.second >= 0 && top.second < scores.size());
-				if (partOfComponent[nodeIndex] == componentIndex)
-				{
-					assert(nodeStarts.count(nodeIndex) == 1);
-					auto start = nodeStarts[nodeIndex];
-					assert(start + w - nodeStart < scores[off].size());
-					assert(scores[off][start + w - nodeStart] == std::numeric_limits<ScoreType>::max() || scores[off][start + w - nodeStart] <= score);
-					if (scores[off][start + w - nodeStart] <= score) continue;
-					scores[off][start + w - nodeStart] = score;
-					plusOneScore.emplace_back(w, off+1);
-				}
-			}
-			auto mask = ((Word)1) << (off+1);
-			if (w == graph.nodeEnd[nodeIndex]-1)
+			if (off == WordConfiguration<Word>::WordSize) continue;
+			assert(off >= 0);
+			assert(off < WordConfiguration<Word>::WordSize);
+			assert(pos < scores[off].size());
+			assert(scores[off][pos] == std::numeric_limits<ScoreType>::max() || scores[off][pos] <= score);
+			if (scores[off][pos] <= score) continue;
+			scores[off][pos] = score;
+			plusOneScore.emplace_back(pos, off+1);
+			for (auto u : outNeighbors[pos])
 			{
 				assert(off < WordConfiguration<Word>::WordSize || off == -1);
-				for (auto neighbor : graph.outNeighbors[nodeIndex])
-				{
-					if (partOfComponent[neighbor] != componentIndex) continue;
-					auto u = graph.nodeStart[neighbor];
-					if (off == -1 && !previousSlice.hasNode(nodeIndex))
-					{
-						plusOneScore.emplace_back(u, off+1);
-					}
-					else
-					{
-						switch(graph.nodeSequences[u])
-						{
-							case 'A':
-								if (BA & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-								break;
-							case 'T':
-								if (BT & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-								break;
-							case 'C':
-								if (BC & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-								break;
-							case 'G':
-								if (BG & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-								break;
-							default:
-								assert(false);
-						}
-					}
-					if (off != -1) plusOneScore.emplace_back(u, off);
-				}
-			}
-			else
-			{
-				assert(partOfComponent[nodeIndex] == componentIndex);
-				auto u = w+1;
-				if (off == -1 && !previousSlice.hasNode(nodeIndex))
-				{
-					plusOneScore.emplace_back(u, off+1);
-				}
-				else
-				{
-					switch(graph.nodeSequences[u])
-					{
-						case 'A':
-							if (BA & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-							break;
-						case 'T':
-							if (BT & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-							break;
-						case 'C':
-							if (BC & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-							break;
-						case 'G':
-							if (BG & mask) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
-							break;
-						default:
-							assert(false);
-					}
-				}
-				if (off != -1) plusOneScore.emplace_back(u, off);
+				if (scoreplus(BA, BT, BC, BG, seq[u], off+1) == 0) currentScore.emplace_back(u, off+1); else plusOneScore.emplace_back(u, off+1);
+				plusOneScore.emplace_back(u, off);
 			}
 		}
 		for (auto node : component)
