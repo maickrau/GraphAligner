@@ -31,23 +31,22 @@ public:
 	size_t GetReverseNode(size_t nodeIndex) const;
 	size_t SizeInBp() const;
 	size_t IndexToNode(size_t index) const;
+	size_t NodeStart(size_t nodeIndex) const;
+	size_t NodeEnd(size_t nodeIndex) const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
 private:
-	std::vector<bool> notInOrder;
 	std::vector<size_t> nodeStart;
-	std::vector<size_t> nodeEnd;
 	std::unordered_map<int, size_t> nodeLookup;
 	std::vector<int> nodeIDs;
-	std::vector<std::set<size_t>> inNeighbors;
-	std::vector<std::set<size_t>> outNeighbors;
+	std::vector<std::vector<size_t>> inNeighbors;
+	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::string nodeSequences;
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
 	bool finalized;
-	size_t firstInOrder;
 
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAligner;

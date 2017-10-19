@@ -14,8 +14,7 @@ nodeLookup(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
-finalized(false),
-firstInOrder(0)
+finalized(false)
 {
 	//add the start dummy node as the first node
 	dummyNodeStart = nodeSequences.size();
@@ -25,8 +24,6 @@ firstInOrder(0)
 	outNeighbors.emplace_back();
 	reverse.push_back(false);
 	nodeSequences.push_back('-');
-	nodeEnd.emplace_back(nodeSequences.size());
-	notInOrder.push_back(false);
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
@@ -40,8 +37,6 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
 	inNeighbors.reserve(numNodes);
 	outNeighbors.reserve(numNodes);
 	reverse.reserve(numNodes);
-	nodeEnd.reserve(numNodes);
-	notInOrder.reserve(numNodes);
 }
 
 void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool reverseNode)
@@ -59,12 +54,8 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
-	nodeEnd.push_back(nodeSequences.size());
-	notInOrder.push_back(false);
 	assert(nodeIDs.size() == nodeStart.size());
 	assert(nodeStart.size() == inNeighbors.size());
-	assert(inNeighbors.size() == nodeEnd.size());
-	assert(nodeEnd.size() == notInOrder.size());
 	assert(inNeighbors.size() == outNeighbors.size());
 }
 
@@ -80,12 +71,9 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(to < inNeighbors.size());
 	assert(from < nodeStart.size());
 
-	inNeighbors[to].insert(from);
-	outNeighbors[from].insert(to);
-	if (from >= to)
-	{
-		notInOrder[to] = true;
-	}
+	//don't add double edges
+	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
+	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
@@ -98,14 +86,9 @@ void AlignmentGraph::Finalize(int wordSize)
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	nodeSequences.push_back('-');
-	nodeEnd.emplace_back(nodeSequences.size());
-	notInOrder.push_back(false);
 	assert(nodeSequences.size() >= nodeStart.size());
-	assert(nodeEnd.size() == nodeStart.size());
-	assert(notInOrder.size() == nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
-	assert(notInOrder.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
@@ -115,6 +98,8 @@ void AlignmentGraph::Finalize(int wordSize)
 	size_t edges = 0;
 	for (size_t i = 0; i < inNeighbors.size(); i++)
 	{
+		inNeighbors[i].shrink_to_fit();
+		outNeighbors[i].shrink_to_fit();
 		if (inNeighbors[i].size() >= 2) specialNodes++;
 		edges += inNeighbors[i].size();
 	}
@@ -122,23 +107,12 @@ void AlignmentGraph::Finalize(int wordSize)
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 #ifndef NDEBUG
 	assert(nodeSequences.size() >= nodeStart.size());
-	assert(nodeEnd.size() == nodeStart.size());
-	assert(notInOrder.size() == nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
-	assert(notInOrder.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-	for (size_t i = 0; i < nodeStart.size(); i++)
-	{
-		assert(nodeEnd[i] > nodeStart[i]);
-		assert(nodeEnd[i] <= nodeSequences.size());
-		if (i > 0) assert(nodeStart[i] == nodeEnd[i-1]);
-	}
 #endif
-	notInOrder.shrink_to_fit();
 	nodeStart.shrink_to_fit();
-	nodeEnd.shrink_to_fit();
 	nodeIDs.shrink_to_fit();
 	inNeighbors.shrink_to_fit();
 	outNeighbors.shrink_to_fit();
@@ -162,7 +136,7 @@ std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpos
 		for (auto pos : positions[i])
 		{
 			auto nodeIndex = IndexToNode(pos);
-			auto end = nodeEnd[nodeIndex];
+			auto end = NodeEnd(nodeIndex);
 			if (pos + left < end)
 			{
 				assert(i + end - pos > amount);
@@ -202,8 +176,7 @@ size_t AlignmentGraph::GetReverseNode(size_t nodeIndex) const
 		otherNode = nodeLookup.at(bigraphNodeId * 2 + 1);
 	}
 	assert(otherNode != nodeIndex);
-	assert(nodeEnd[otherNode] - nodeStart[otherNode] == nodeEnd[nodeIndex] - nodeStart[nodeIndex]);
-	// assert(nodeSequences.substr(nodeStart[nodeIndex], nodeEnd[nodeIndex] - nodeStart[nodeIndex]) == CommonUtils::ReverseComplement(nodeSequences.substr(nodeStart[otherNode], nodeEnd[otherNode] - nodeStart[otherNode])));
+	assert(NodeEnd(otherNode) - NodeStart(otherNode) == NodeEnd(nodeIndex) - NodeStart(nodeIndex));
 	return otherNode;
 }
 
@@ -213,7 +186,7 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 	assert(pos > 0);
 	auto originalNode = IndexToNode(pos);
 	auto otherNode = GetReverseNode(originalNode);
-	size_t newPos = (nodeEnd[otherNode] - 1) - (pos - nodeStart[originalNode]);
+	size_t newPos = (NodeEnd(otherNode) - 1) - (pos - nodeStart[originalNode]);
 	// assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
 	return newPos;
 }
@@ -226,4 +199,15 @@ size_t AlignmentGraph::IndexToNode(size_t index) const
 	assert(nextindex > 0);
 	assert(nextindex <= nodeStart.size());
 	return nextindex-1;
+}
+
+size_t AlignmentGraph::NodeStart(size_t index) const
+{
+	return nodeStart[index];
+}
+
+size_t AlignmentGraph::NodeEnd(size_t index) const
+{
+	if (index == nodeStart.size()-1) return nodeSequences.size();
+	return nodeStart[index+1];
 }
