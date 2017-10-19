@@ -1179,65 +1179,51 @@ private:
 	}
 #endif
 
-	WordSlice getNodeStartSlice(Word Eq, size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice, const NodeSlice<WordSlice>& currentSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, bool previousEq) const
+	WordSlice getNodeStartSlice(const Word Eq, const size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice, const NodeSlice<WordSlice>& currentSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const bool previousEq) const
 	{
-		//todo optimization: 10% time inclusive 4% exclusive. can this be improved?
-		WordSlice previous;
-		WordSlice previousUp;
-		WordSlice current = currentSlice.node(nodeIndex)[0];
+		const WordSlice current = currentSlice.node(nodeIndex)[0];
+		WordSlice result;
+		assert(current.confirmedBeforeStart);
 		bool foundOne = false;
-		bool foundOneUp = false;
-		bool hasRealNeighbor = false;
 		for (auto neighbor : graph.inNeighbors[nodeIndex])
 		{
+			if (!currentBand[neighbor] && !previousBand[neighbor]) continue;
+			Word EqHere = Eq;
+			WordSlice previous;
+			WordSlice previousUp;
+			bool foundOneUp = false;
+			bool hasRealNeighbor = false;
 			if (currentBand[neighbor] && previousBand[neighbor]) assertSliceCorrectness(currentSlice.node(neighbor).back(), previousSlice.node(neighbor).back(), previousBand[neighbor]);
 			if (previousBand[neighbor])
 			{
-				if (!foundOneUp)
-				{
-					previousUp = previousSlice.node(neighbor).back();
-					foundOneUp = true;
-				}
-				else
-				{
-					auto competitor = previousSlice.node(neighbor).back();
-					previousUp = mergeTwoSlices(previousUp, competitor);
-				}
+				previousUp = previousSlice.node(neighbor).back();
+				foundOneUp = true;
 			}
-			if (previousBand[neighbor] && !currentBand[neighbor])
-			{
-				if (!foundOne)
-				{
-					previous = getSourceSliceFromScore(previousSlice.node(neighbor).back().scoreEnd);
-					previous.scoreBeforeExists = true;
-					foundOne = true;
-				}
-				else
-				{
-					auto competitor = getSourceSliceFromScore(previousSlice.node(neighbor).back().scoreEnd);
-					competitor.scoreBeforeExists = true;
-					previous = mergeTwoSlices(previous, competitor);
-				}
-			}
-			if (!currentBand[neighbor]) continue;
-			if (!foundOne)
+			if (currentBand[neighbor])
 			{
 				previous = currentSlice.node(neighbor).back();
-				foundOne = true;
 				hasRealNeighbor = true;
 			}
 			else
 			{
-				auto competitor = currentSlice.node(neighbor).back();
-				previous = mergeTwoSlices(previous, competitor);
-				hasRealNeighbor = true;
+				previous = getSourceSliceFromScore(previousSlice.node(neighbor).back().scoreEnd);
+				assert(previousBand[neighbor]);
+				previous.scoreBeforeExists = true;
+			}
+			assertSliceCorrectness(previous, previousUp, foundOneUp);
+			if (!hasRealNeighbor) EqHere &= 1;
+			auto resultHere = getNextSlice(EqHere, previous, current.scoreBeforeExists, current.scoreBeforeExists && foundOneUp, foundOneUp, previousEq, previousUp);
+			if (!foundOne)
+			{
+				result = resultHere;
+				foundOne = true;
+			}
+			else
+			{
+				result = mergeTwoSlices(result, resultHere);
 			}
 		}
 		assert(foundOne);
-		assertSliceCorrectness(previous, previousUp, foundOneUp);
-		if (!hasRealNeighbor) Eq &= 1;
-		assert(current.confirmedBeforeStart);
-		auto result = getNextSlice(Eq, previous, current.scoreBeforeExists, current.scoreBeforeExists && foundOneUp, foundOneUp, previousEq, previousUp);
 		return result;
 	}
 
