@@ -150,7 +150,7 @@ void outputGraph(std::string filename, const vg::Graph& graph)
 	stream::write_buffered(alignmentOut, writeVector, 0);
 }
 
-void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const std::map<int, int>& idMapper)
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const std::unordered_map<int, int>& idMapper)
 {
 	for (int i = 0; i < alignment.path().mapping_size(); i++)
 	{
@@ -161,7 +161,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const st
 	}
 }
 
-void runComponentMappings(const std::map<int, int>& newIdToOriginalIdMapper, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, int startBandwidth)
+void runComponentMappings(const std::unordered_map<int, int>& newIdToOriginalIdMapper, const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, int startBandwidth)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -245,7 +245,7 @@ void runComponentMappings(const std::map<int, int>& newIdToOriginalIdMapper, con
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
 }
 
-std::pair<AlignmentGraph, std::map<int, int>> getGraphAndIdMapper(std::string graphFile)
+std::pair<AlignmentGraph, std::unordered_map<int, int>> getGraphAndIdMapper(std::string graphFile)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "load graph from " << graphFile << std::endl;
@@ -283,7 +283,8 @@ std::pair<AlignmentGraph, std::map<int, int>> getGraphAndIdMapper(std::string gr
 	}
 	alignmentGraph.Finalize(64);
 
-	std::map<int, int> idMapper;
+	std::unordered_map<int, int> idMapper;
+	idMapper.reserve(augmentedGraph.nodes.size());
 	for (size_t j = 0; j < augmentedGraph.nodes.size(); j++)
 	{
 		if (idMapper.count(augmentedGraph.nodes[j].nodeId) > 0 && idMapper[augmentedGraph.nodes[j].nodeId] != augmentedGraph.nodes[j].originalNodeId)

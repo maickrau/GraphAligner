@@ -1066,7 +1066,6 @@ private:
 
 	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
 	{
-		//optimization: 11% time inclusive 9% exclusive. can this be improved?
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
 #ifdef EXTRABITVECTORASSERTIONS
@@ -1293,7 +1292,6 @@ private:
 
 	WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous) const
 	{
-		//optimization: 13% of time. probably can't be improved easily.
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
 
@@ -1395,7 +1393,6 @@ private:
 
 	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t totalSequenceLen) const
 	{
-		//todo optimization: 42% inclusive 15% exclusive. can this be improved?
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreIndex = 0;
@@ -2481,7 +2478,6 @@ private:
 	template <typename RowBandFunction>
 	MatrixSlice getBitvectorSliceScoresAndFinalPosition(const std::string& sequence, const NodeSlice<WordSlice>& initialSlice, ScoreType maxScore, RowBandFunction rowBandFunction, size_t totalSequenceLen) const
 	{
-		//todo optimization: 82% inclusive 17% exclusive. can this be improved?
 		MatrixSlice result;
 		result.cellsProcessed = 0;
 		result.firstEstimatedWrong = 0;

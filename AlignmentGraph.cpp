@@ -33,6 +33,7 @@ firstInOrder(0)
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
 {
+	numNodes += 2; //dummy start and end nodes
 	nodeSequences.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
 	nodeIDs.reserve(numNodes);
@@ -120,10 +121,13 @@ void AlignmentGraph::Finalize(int wordSize)
 	std::cerr << nodeSequences.size() << "bp" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
+	size_t edges = 0;
 	for (size_t i = 0; i < inNeighbors.size(); i++)
 	{
 		if (inNeighbors[i].size() >= 2) specialNodes++;
+		edges += inNeighbors[i].size();
 	}
+	std::cerr << edges << " edges" << std::endl;
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 #ifndef NDEBUG
 	assert(nodeSequences.size() >= nodeStart.size());
