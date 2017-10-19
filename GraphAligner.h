@@ -1237,7 +1237,7 @@ private:
 		assertSliceCorrectness(previous, previousUp, foundOneUp);
 		if (!hasRealNeighbor) Eq &= 1;
 		assert(current.confirmedBeforeStart);
-		auto result = getNextSlice(Eq, previous, current.scoreBeforeExists && foundOneUp, foundOneUp, previousEq, previousUp);
+		auto result = getNextSlice(Eq, previous, current.scoreBeforeExists, current.scoreBeforeExists && foundOneUp, foundOneUp, previousEq, previousUp);
 		return result;
 	}
 
@@ -1305,20 +1305,21 @@ private:
 		return 0;
 	}
 
-	WordSlice getNextSlice(Word Eq, WordSlice slice, bool previousInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous) const
+	WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous) const
 	{
 		//optimization: 13% of time. probably can't be improved easily.
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
 
+		assert(slice.confirmedBeforeStart);
 		auto oldValue = slice.scoreBeforeStart;
 		Word confirmedMask = ((Word)1) << slice.confirmedRows;
 		bool confirmOneMore = false;
 		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
-		if (slice.confirmedBeforeStart && (Eq & confirmedMask)) confirmOneMore = true;
-		slice.scoreBeforeExists = previousInsideBand;
+		if ((Eq & confirmedMask)) confirmOneMore = true;
+		slice.scoreBeforeExists = upInsideBand;
 		if (!diagonalInsideBand) Eq &= ~((Word)1);
-		if (!previousInsideBand)
+		if (!upleftInsideBand)
 		{
 			slice.scoreBeforeStart += 1;
 		}
@@ -1336,8 +1337,8 @@ private:
 		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
 		Word Ph = slice.VN | ~(Xh | slice.VP);
 		Word Mh = slice.VP & Xh;
-		if (slice.confirmedBeforeStart && slice.confirmedRows > 0 && (Mh & (((Word)1) << (slice.confirmedRows-1)))) confirmOneMore = true;
-		if (slice.confirmedBeforeStart && slice.confirmedRows == 0 && hin == -1) confirmOneMore = true;
+		if (slice.confirmedRows > 0 && (Mh & (((Word)1) << (slice.confirmedRows-1)))) confirmOneMore = true;
+		if (slice.confirmedRows == 0 && hin == -1) confirmOneMore = true;
 		// if (~Ph & confirmedMask) confirmTentative = true;
 		const Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
 		if (Ph & lastBitMask)
@@ -1473,7 +1474,7 @@ private:
 			// assert(slice[w].scoreBeforeStart < totalSequenceLen);
 			assert(slice[w].confirmedBeforeStart);
 
-			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
+			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				slice[w] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[w].scoreEnd), slice[w]);
