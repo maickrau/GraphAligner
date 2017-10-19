@@ -13,24 +13,27 @@ nodeStart(),
 nodeLookup(),
 nodeIDs(),
 inNeighbors(),
-nodeSequences(),
+nodeSequencesATorCG(),
+nodeSequencesACorTG(),
 finalized(false)
 {
 	//add the start dummy node as the first node
-	dummyNodeStart = nodeSequences.size();
+	dummyNodeStart = 0;
 	nodeIDs.push_back(0);
-	nodeStart.push_back(nodeSequences.size());
+	nodeStart.push_back(0);
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	reverse.push_back(false);
-	nodeSequences.push_back('-');
+	nodeSequencesATorCG.push_back(false);
+	nodeSequencesACorTG.push_back(false);
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
 {
 	numNodes += 2; //dummy start and end nodes
 	sequenceLength += 2; //dummy start and end nodes
-	nodeSequences.reserve(sequenceLength);
+	nodeSequencesATorCG.reserve(sequenceLength);
+	nodeSequencesACorTG.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
 	nodeIDs.reserve(numNodes);
 	nodeStart.reserve(numNodes);
@@ -46,14 +49,38 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
 
-	assert(std::numeric_limits<size_t>::max() - sequence.size() > nodeSequences.size());
+	assert(std::numeric_limits<size_t>::max() - sequence.size() > nodeSequencesATorCG.size());
 	nodeLookup[nodeId] = nodeStart.size();
 	nodeIDs.push_back(nodeId);
-	nodeStart.push_back(nodeSequences.size());
+	nodeStart.push_back(nodeSequencesATorCG.size());
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
-	nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
+	for (auto c : sequence)
+	{
+		switch(c)
+		{
+			case 'A':
+				nodeSequencesATorCG.push_back(false);
+				nodeSequencesACorTG.push_back(false);
+				break;
+			case 'T':
+				nodeSequencesATorCG.push_back(false);
+				nodeSequencesACorTG.push_back(true);
+				break;
+			case 'C':
+				nodeSequencesATorCG.push_back(true);
+				nodeSequencesACorTG.push_back(false);
+				break;
+			case 'G':
+				nodeSequencesATorCG.push_back(true);
+				nodeSequencesACorTG.push_back(true);
+				break;
+			default:
+				assert(false);
+				std::abort();
+		}
+	}
 	assert(nodeIDs.size() == nodeStart.size());
 	assert(nodeStart.size() == inNeighbors.size());
 	assert(inNeighbors.size() == outNeighbors.size());
@@ -79,20 +106,22 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 void AlignmentGraph::Finalize(int wordSize)
 {
 	//add the end dummy node as the last node
-	dummyNodeEnd = nodeSequences.size();
+	dummyNodeEnd = nodeSequencesATorCG.size();
 	nodeIDs.push_back(0);
-	nodeStart.push_back(nodeSequences.size());
+	nodeStart.push_back(nodeSequencesATorCG.size());
 	reverse.push_back(false);
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
-	nodeSequences.push_back('-');
-	assert(nodeSequences.size() >= nodeStart.size());
+	nodeSequencesATorCG.push_back(false);
+	nodeSequencesACorTG.push_back(false);
+	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
+	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
-	std::cerr << nodeSequences.size() << "bp" << std::endl;
+	std::cerr << nodeSequencesATorCG.size() << "bp" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
@@ -106,7 +135,8 @@ void AlignmentGraph::Finalize(int wordSize)
 	std::cerr << edges << " edges" << std::endl;
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
 #ifndef NDEBUG
-	assert(nodeSequences.size() >= nodeStart.size());
+	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
+	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
@@ -117,12 +147,13 @@ void AlignmentGraph::Finalize(int wordSize)
 	inNeighbors.shrink_to_fit();
 	outNeighbors.shrink_to_fit();
 	reverse.shrink_to_fit();
-	nodeSequences.shrink_to_fit();
+	nodeSequencesATorCG.shrink_to_fit();
+	nodeSequencesACorTG.shrink_to_fit();
 }
 
 size_t AlignmentGraph::SizeInBp() const
 {
-	return nodeSequences.size();
+	return nodeSequencesATorCG.size();
 }
 
 std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpositions, size_t amount) const
@@ -182,18 +213,17 @@ size_t AlignmentGraph::GetReverseNode(size_t nodeIndex) const
 
 size_t AlignmentGraph::GetReversePosition(size_t pos) const
 {
-	assert(pos < nodeSequences.size());
+	assert(pos < nodeSequencesATorCG.size());
 	assert(pos > 0);
 	auto originalNode = IndexToNode(pos);
 	auto otherNode = GetReverseNode(originalNode);
 	size_t newPos = (NodeEnd(otherNode) - 1) - (pos - nodeStart[originalNode]);
-	// assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
 	return newPos;
 }
 
 size_t AlignmentGraph::IndexToNode(size_t index) const
 {
-	assert(index < nodeSequences.size());
+	assert(index < nodeSequencesATorCG.size());
 	auto nextnode = std::upper_bound(nodeStart.begin(), nodeStart.end(), index);
 	auto nextindex = nextnode - nodeStart.begin();
 	assert(nextindex > 0);
@@ -208,6 +238,38 @@ size_t AlignmentGraph::NodeStart(size_t index) const
 
 size_t AlignmentGraph::NodeEnd(size_t index) const
 {
-	if (index == nodeStart.size()-1) return nodeSequences.size();
+	if (index == nodeStart.size()-1) return nodeSequencesATorCG.size();
 	return nodeStart[index+1];
+}
+
+char AlignmentGraph::NodeSequences(size_t index) const
+{
+	assert(index < nodeSequencesATorCG.size());
+	//dummy nodes
+	if (index == 0 || index == nodeSequencesACorTG.size()-1) return '-';
+	if (nodeSequencesATorCG[index])
+	{
+		if (nodeSequencesACorTG[index])
+		{
+			return 'G';
+		}
+		else
+		{
+			return 'C';
+		}
+	}
+	else
+	{
+		if (nodeSequencesACorTG[index])
+		{
+			return 'T';
+		}
+		else
+		{
+			return 'A';
+		}
+	}
+	assert(false);
+	std::abort();
+	return '-';
 }

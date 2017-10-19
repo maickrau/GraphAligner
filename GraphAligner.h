@@ -536,7 +536,7 @@ private:
 				{
 					LengthType u = graph.NodeEnd(neighbor)-1;
 					auto diagonalScore = getValueOrMax(slice, pos.second-1, u, sequence.size());
-					if (characterMatch(sequence[pos.second], graph.nodeSequences[pos.first]))
+					if (characterMatch(sequence[pos.second], graph.NodeSequences(pos.first)))
 					{
 						assert(diagonalScore >= scoreHere);
 						if (diagonalScore == scoreHere)
@@ -572,7 +572,7 @@ private:
 			else
 			{
 				auto diagonalScore = getValueOrMax(slice, pos.second-1, pos.first-1, sequence.size());
-				if (characterMatch(sequence[pos.second], graph.nodeSequences[pos.first]))
+				if (characterMatch(sequence[pos.second], graph.NodeSequences(pos.first)))
 				{
 					assert(diagonalScore >= scoreHere);
 					if (diagonalScore == scoreHere)
@@ -784,7 +784,7 @@ private:
 				{
 					current[i+1] = std::min(current[i+1], previous[i+1]+1);
 					current[i+1] = std::min(current[i+1], current[i]+1);
-					if (j+i > 0 && (sequence[j+i-1] == graph.nodeSequences[w] || sequence[j+i-1] == 'N'))
+					if (j+i > 0 && (sequence[j+i-1] == graph.NodeSequences(w) || sequence[j+i-1] == 'N'))
 					{
 						current[i+1] = std::min(current[i+1], previous[i]);
 					}
@@ -816,7 +816,7 @@ private:
 			{
 				current[i+1] = std::min(current[i+1], current[i]+1);
 				current[i+1] = std::min(current[i+1], previous[i+1]+1);
-				if (j+i > 0 && (sequence[j+i-1] == graph.nodeSequences[w] || sequence[j+i-1] == 'N'))
+				if (j+i > 0 && (sequence[j+i-1] == graph.NodeSequences(w) || sequence[j+i-1] == 'N'))
 				{
 					current[i+1] = std::min(current[i+1], previous[i]);
 				}
@@ -1263,7 +1263,7 @@ private:
 
 	Word getEq(Word BA, Word BT, Word BC, Word BG, LengthType w) const
 	{
-		switch(graph.nodeSequences[w])
+		switch(graph.NodeSequences(w))
 		{
 			case 'A':
 			return BA;
@@ -1426,7 +1426,7 @@ private:
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart);
 			assert(slice[0].scoreBeforeStart < totalSequenceLen);
-			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[graph.NodeStart(i)] == sequence[j-1]));
+			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && graph.NodeSequences(graph.NodeStart(i)) == sequence[j-1]));
 			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
 			{
 				slice[0] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[0].scoreEnd), slice[0]);
@@ -1455,7 +1455,7 @@ private:
 			// assert(slice[w].scoreBeforeStart < totalSequenceLen);
 			assert(slice[w].confirmedBeforeStart);
 
-			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.nodeSequences[nodeStart+w] == sequence[j-1]), oldSlice[w-1]);
+			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.NodeSequences(nodeStart+w) == sequence[j-1]), oldSlice[w-1]);
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				slice[w] = mergeTwoSlices(getSourceSliceFromScore(oldSlice[w].scoreEnd), slice[w]);
@@ -1605,7 +1605,7 @@ private:
 						auto previous = graph.NodeEnd(neighbor)-1;
 						currentRowScores[i] = std::min(previousRowScores[i] + 1, currentRowScores[i]);
 						currentRowScores[i] = std::min(currentRowScores[previous] + 1, currentRowScores[i]);
-						if (graph.nodeSequences[i] == sequence[j] || sequence[j] == 'N')
+						if (graph.NodeSequences(i) == sequence[j] || sequence[j] == 'N')
 						{
 							currentRowScores[i] = std::min(previousRowScores[previous], currentRowScores[i]);
 						}
@@ -1627,7 +1627,7 @@ private:
 						auto oldscore = currentRowScores[i];
 						currentRowScores[i] = std::min(previousRowScores[i] + 1, currentRowScores[i]);
 						currentRowScores[i] = std::min(currentRowScores[i-1] + 1, currentRowScores[i]);
-						if (graph.nodeSequences[i] == sequence[j] || sequence[j] == 'N')
+						if (graph.NodeSequences(i) == sequence[j] || sequence[j] == 'N')
 						{
 							currentRowScores[i] = std::min(previousRowScores[i-1], currentRowScores[i]);
 						}
@@ -2038,12 +2038,12 @@ private:
 			auto graphstart = graph.NodeStart(node);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
-				seq += graph.nodeSequences[graphstart+i];
+				seq += graph.NodeSequences(graphstart+i);
 				if (i < slice.size() - 1) outNeighbors[cellbycellstart+i].push_back(cellbycellstart+i+1);
 				assert(slice[i].confirmedBeforeStart);
 				if (slice[i].scoreBeforeExists)
 				{
-					if (i < slice.size() - 1) startCells.emplace_back(slice[i].scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graphstart+i+1], 0), std::make_pair(cellbycellstart+i+1, 0));
+					if (i < slice.size() - 1) startCells.emplace_back(slice[i].scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graphstart+i+1), 0), std::make_pair(cellbycellstart+i+1, 0));
 					startCells.emplace_back(slice[i].scoreBeforeStart+1, std::make_pair(cellbycellstart+i, 0));
 				}
 				for (size_t off = 0; off < slice[i].confirmedRows; off++)
@@ -2079,7 +2079,7 @@ private:
 					assert(word.confirmedBeforeStart);
 					if (word.scoreBeforeExists)
 					{
-						startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.NodeStart(node)], 0), std::make_pair(cellbycellstart, 0));
+						startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graph.NodeStart(node)), 0), std::make_pair(cellbycellstart, 0));
 					}
 					if (previousBand[neighbor])
 					{
@@ -2087,7 +2087,7 @@ private:
 						word = previousSlice.node(neighbor).back();
 						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
 						assert(word.confirmedBeforeStart);
-						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.NodeStart(node)], 0), std::make_pair(cellbycellstart, 0));
+						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graph.NodeStart(node)), 0), std::make_pair(cellbycellstart, 0));
 					}
 				}
 				else
@@ -2100,11 +2100,11 @@ private:
 						assert(word.confirmedBeforeStart);
 						if (word.scoreBeforeExists)
 						{
-							startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.NodeStart(node)], 0), std::make_pair(cellbycellstart, 0));
+							startCells.emplace_back(word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graph.NodeStart(node)), 0), std::make_pair(cellbycellstart, 0));
 						}
 						for (size_t off = 0; off < WordConfiguration<Word>::WordSize; off++)
 						{
-							startCells.emplace_back(getValue(word, off) + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.NodeStart(node)], off+1), std::make_pair(cellbycellstart, off+1));
+							startCells.emplace_back(getValue(word, off) + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graph.NodeStart(node)), off+1), std::make_pair(cellbycellstart, off+1));
 							startCells.emplace_back(getValue(word, off) + 1, std::make_pair(cellbycellstart, off));
 						}
 					}
@@ -2114,7 +2114,7 @@ private:
 						auto word = previousSlice.node(neighbor).back();
 						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
 						assert(word.confirmedBeforeStart);
-						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.nodeSequences[graph.NodeStart(node)], 0), std::make_pair(cellbycellstart, 0));
+						startCells.emplace_back(word.scoreEnd + scoreplus(BA, BT, BC, BG, graph.NodeSequences(graph.NodeStart(node)), 0), std::make_pair(cellbycellstart, 0));
 					}
 				}
 			}
