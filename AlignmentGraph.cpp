@@ -10,7 +10,6 @@
 
 AlignmentGraph::AlignmentGraph() :
 nodeStart(),
-indexToNode(),
 nodeLookup(),
 nodeIDs(),
 inNeighbors(),
@@ -26,7 +25,6 @@ firstInOrder(0)
 	outNeighbors.emplace_back();
 	reverse.push_back(false);
 	nodeSequences.push_back('-');
-	indexToNode.resize(nodeSequences.size(), nodeStart.size()-1);
 	nodeEnd.emplace_back(nodeSequences.size());
 	notInOrder.push_back(false);
 }
@@ -34,6 +32,7 @@ firstInOrder(0)
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
 {
 	numNodes += 2; //dummy start and end nodes
+	sequenceLength += 2; //dummy start and end nodes
 	nodeSequences.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
 	nodeIDs.reserve(numNodes);
@@ -41,7 +40,6 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
 	inNeighbors.reserve(numNodes);
 	outNeighbors.reserve(numNodes);
 	reverse.reserve(numNodes);
-	indexToNode.reserve(sequenceLength);
 	nodeEnd.reserve(numNodes);
 	notInOrder.reserve(numNodes);
 }
@@ -61,17 +59,12 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeSequences.insert(nodeSequences.end(), sequence.begin(), sequence.end());
-	for (size_t i = indexToNode.size(); i < nodeSequences.size(); i++)
-	{
-		indexToNode.push_back(nodeStart.size()-1);
-	}
-	nodeEnd.emplace_back(nodeSequences.size());
+	nodeEnd.push_back(nodeSequences.size());
 	notInOrder.push_back(false);
 	assert(nodeIDs.size() == nodeStart.size());
 	assert(nodeStart.size() == inNeighbors.size());
 	assert(inNeighbors.size() == nodeEnd.size());
 	assert(nodeEnd.size() == notInOrder.size());
-	assert(nodeSequences.size() == indexToNode.size());
 	assert(inNeighbors.size() == outNeighbors.size());
 }
 
@@ -105,7 +98,6 @@ void AlignmentGraph::Finalize(int wordSize)
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	nodeSequences.push_back('-');
-	indexToNode.push_back(nodeStart.size() - 1);
 	nodeEnd.emplace_back(nodeSequences.size());
 	notInOrder.push_back(false);
 	assert(nodeSequences.size() >= nodeStart.size());
@@ -116,7 +108,6 @@ void AlignmentGraph::Finalize(int wordSize)
 	assert(notInOrder.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-	assert(indexToNode.size() == nodeSequences.size());
 	std::cerr << nodeStart.size() << " nodes" << std::endl;
 	std::cerr << nodeSequences.size() << "bp" << std::endl;
 	finalized = true;
@@ -138,24 +129,16 @@ void AlignmentGraph::Finalize(int wordSize)
 	assert(notInOrder.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-	assert(indexToNode.size() == nodeSequences.size());
 	for (size_t i = 0; i < nodeStart.size(); i++)
 	{
 		assert(nodeEnd[i] > nodeStart[i]);
 		assert(nodeEnd[i] <= nodeSequences.size());
 		if (i > 0) assert(nodeStart[i] == nodeEnd[i-1]);
 	}
-	for (size_t i = 0; i < nodeSequences.size(); i++)
-	{
-		assert(indexToNode[i] < nodeStart.size());
-		assert(nodeStart[indexToNode[i]] <= i);
-		assert(nodeEnd[indexToNode[i]] > i);
-	}
 #endif
 	notInOrder.shrink_to_fit();
 	nodeStart.shrink_to_fit();
 	nodeEnd.shrink_to_fit();
-	indexToNode.shrink_to_fit();
 	nodeIDs.shrink_to_fit();
 	inNeighbors.shrink_to_fit();
 	outNeighbors.shrink_to_fit();
@@ -178,7 +161,7 @@ std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpos
 		auto left = amount - i;
 		for (auto pos : positions[i])
 		{
-			auto nodeIndex = indexToNode[pos];
+			auto nodeIndex = IndexToNode(pos);
 			auto end = nodeEnd[nodeIndex];
 			if (pos + left < end)
 			{
@@ -228,9 +211,19 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 {
 	assert(pos < nodeSequences.size());
 	assert(pos > 0);
-	auto originalNode = indexToNode[pos];
+	auto originalNode = IndexToNode(pos);
 	auto otherNode = GetReverseNode(originalNode);
 	size_t newPos = (nodeEnd[otherNode] - 1) - (pos - nodeStart[originalNode]);
 	// assert(nodeSequences.substr(pos, 1) == CommonUtils::ReverseComplement(nodeSequences.substr(newPos, 1)));
 	return newPos;
+}
+
+size_t AlignmentGraph::IndexToNode(size_t index) const
+{
+	assert(index < nodeSequences.size());
+	auto nextnode = std::upper_bound(nodeStart.begin(), nodeStart.end(), index);
+	auto nextindex = nextnode - nodeStart.begin();
+	assert(nextindex > 0);
+	assert(nextindex <= nodeStart.size());
+	return nextindex-1;
 }

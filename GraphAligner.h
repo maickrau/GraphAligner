@@ -450,14 +450,14 @@ private:
 		result.set_allocated_path(path);
 		if (trace.size() == 0) return AlignmentResult { result, false, cellsProcessed, std::numeric_limits<size_t>::max() };
 		size_t pos = 0;
-		size_t oldNode = graph.indexToNode[trace[0].first];
+		size_t oldNode = graph.IndexToNode(trace[0].first);
 		while (oldNode == graph.dummyNodeStart)
 		{
 			pos++;
 			if (pos == trace.size()) return emptyAlignment(std::numeric_limits<size_t>::max(), cellsProcessed);
 			assert(pos < trace.size());
 			assert(trace[pos].second >= trace[pos-1].second);
-			oldNode = graph.indexToNode[trace[pos].first];
+			oldNode = graph.IndexToNode(trace[pos].first);
 			assert(oldNode < graph.nodeIDs.size());
 		}
 		if (oldNode == graph.dummyNodeEnd) return emptyAlignment(std::numeric_limits<size_t>::max(), cellsProcessed);
@@ -473,21 +473,21 @@ private:
 		MatrixPosition btNodeEnd = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
-			if (graph.indexToNode[trace[pos].first] == graph.dummyNodeEnd) break;
-			if (graph.indexToNode[trace[pos].first] == oldNode)
+			if (graph.IndexToNode(trace[pos].first) == graph.dummyNodeEnd) break;
+			if (graph.IndexToNode(trace[pos].first) == oldNode)
 			{
 				btNodeEnd = trace[pos];
 				continue;
 			}
 			assert(trace[pos].second >= trace[pos-1].second);
-			assert(graph.indexToNode[btNodeEnd.first] == graph.indexToNode[btNodeStart.first]);
+			assert(graph.IndexToNode(btNodeEnd.first) == graph.IndexToNode(btNodeStart.first));
 			assert(btNodeEnd.second >= btNodeStart.second);
 			assert(btNodeEnd.first >= btNodeStart.first);
 			auto edit = vgmapping->add_edit();
 			edit->set_from_length(btNodeEnd.first - btNodeStart.first + 1);
 			edit->set_to_length(btNodeEnd.second - btNodeStart.second + 1);
 			edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btNodeStart.second + 1));
-			oldNode = graph.indexToNode[trace[pos].first];
+			oldNode = graph.IndexToNode(trace[pos].first);
 			btNodeStart = trace[pos];
 			btNodeEnd = trace[pos];
 			rank++;
@@ -519,7 +519,7 @@ private:
 		while (pos.second != 0)
 		{
 			result.push_back(pos);
-			auto nodeIndex = graph.indexToNode[pos.first];
+			auto nodeIndex = graph.IndexToNode(pos.first);
 			auto scoreHere = getValue(slice, pos.second, pos.first);
 			assert(getValueOrMax(slice, pos.second-1, pos.first, sequence.size()) >= scoreHere-1);
 			if (getValueOrMax(slice, pos.second-1, pos.first, sequence.size()) == scoreHere - 1)
@@ -629,7 +629,7 @@ private:
 		std::priority_queue<NodePosWithDistance, std::vector<NodePosWithDistance>, std::greater<NodePosWithDistance>> queue;
 		for (auto startpos : startpositions)
 		{
-			auto nodeIndex = graph.indexToNode[startpos];
+			auto nodeIndex = graph.IndexToNode(startpos);
 			bandOrder.insert(nodeIndex);
 			auto start = graph.nodeStart[nodeIndex];
 			auto end = graph.nodeEnd[nodeIndex];
@@ -697,7 +697,7 @@ private:
 	{
 		std::set<LengthType> nodes;
 		assert(previousMinimumIndex < graph.nodeSequences.size());
-		auto nodeIndex = graph.indexToNode[previousMinimumIndex];
+		auto nodeIndex = graph.IndexToNode(previousMinimumIndex);
 		std::set<size_t> positions;
 		positions.insert(previousMinimumIndex);
 		positions = graph.ProjectForward(positions, WordConfiguration<Word>::WordSize);
@@ -741,7 +741,7 @@ private:
 	{
 		const auto lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize-1);
 		WordSlice result;
-		auto nodeIndex = graph.indexToNode[w];
+		auto nodeIndex = graph.IndexToNode(w);
 		assert(currentBand[nodeIndex]);
 		const std::vector<WordSlice>& oldNode = previousBand[nodeIndex] ? previousSlice.node(nodeIndex) : currentSlice.node(nodeIndex);
 		assert(currentBand[nodeIndex]);
@@ -1518,7 +1518,7 @@ private:
 		{
 			if (band.minScoreIndexPerWordSlice[i] >= maxScore) break;
 			auto pos = band.minScoreIndexPerWordSlice[i];
-			auto node = graph.indexToNode[pos];
+			auto node = graph.IndexToNode(pos);
 			assert(band.scoreSlices[i].node(node)[pos-graph.nodeStart[node]].scoreEnd == band.minScorePerWordSlice[i]);
 			assert(band.minScorePerWordSlice[i] == slice.minScorePerWordSlice[i]);
 			// assert(band.minScoreIndexPerWordSlice[i] == slice.minScoreIndexPerWordSlice[i]);
@@ -1925,7 +1925,8 @@ private:
 			queue.pop();
 			auto w = top.node;
 			auto score = top.priority;
-			auto nodeIndex = graph.indexToNode[w];
+			//TODO FIX: instead of w, use nodeIndex+offset in the queue
+			auto nodeIndex = graph.IndexToNode(w);
 			if (partOfComponent[nodeIndex] == componentIndex)
 			{
 				auto start = nodeStarts[nodeIndex];
@@ -1967,7 +1968,7 @@ private:
 
 	ScoreType getValueOrMax(const MatrixSlice& band, LengthType j, LengthType w, ScoreType max) const
 	{
-		auto node = graph.indexToNode[w];
+		auto node = graph.IndexToNode(w);
 		auto slice = j / WordConfiguration<Word>::WordSize;
 		if (!band.scoreSlices[slice].hasNode(node)) return max;
 		auto word = band.scoreSlices[slice].node(node)[w - graph.nodeStart[node]];
@@ -1977,7 +1978,7 @@ private:
 
 	ScoreType getValue(const MatrixSlice& band, LengthType j, LengthType w) const
 	{
-		auto node = graph.indexToNode[w];
+		auto node = graph.IndexToNode(w);
 		auto slice = j / WordConfiguration<Word>::WordSize;
 		auto word = band.scoreSlices[slice].node(node)[w - graph.nodeStart[node]];
 		auto off = j % WordConfiguration<Word>::WordSize;
@@ -2534,7 +2535,7 @@ private:
 			assert(currentMinimumIndex != std::numeric_limits<LengthType>::max());
 			assert(result.minScorePerWordSlice.size() == 0 || currentMinimumScore >= result.minScorePerWordSlice.back());
 #ifndef NDEBUG
-			auto debugMinimumNode = graph.indexToNode[currentMinimumIndex];
+			auto debugMinimumNode = graph.IndexToNode(currentMinimumIndex);
 			assert(currentSlice.hasNode(debugMinimumNode));
 			auto debugslice = currentSlice.node(debugMinimumNode);
 			assert(currentMinimumIndex >= graph.nodeStart[debugMinimumNode]);
