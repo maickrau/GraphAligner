@@ -18,8 +18,9 @@ int main(int argc, char** argv)
 	int dynamicRowStart = 64;
 	int c;
 	bool initialFullBand = false;
+	bool sqrtSpace = false;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:M")) != -1)
 	{
 		switch(c)
 		{
@@ -53,6 +54,9 @@ int main(int argc, char** argv)
 			case 'd':
 				dynamicRowStart = std::stoi(optarg);
 				break;
+			case 'M':
+				sqrtSpace = true;
+				break;
 		}
 	}
 
@@ -80,7 +84,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth);
+	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth, sqrtSpace);
 
 	return 0;
 }

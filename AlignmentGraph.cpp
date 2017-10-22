@@ -273,3 +273,13 @@ char AlignmentGraph::NodeSequences(size_t index) const
 	std::abort();
 	return '-';
 }
+
+size_t AlignmentGraph::NodeSequencesSize() const
+{
+	return nodeSequencesACorTG.size();
+}
+
+size_t AlignmentGraph::NodeSize() const
+{
+	return nodeStart.size();
+}

@@ -31,9 +31,11 @@ public:
 	size_t GetReverseNode(size_t nodeIndex) const;
 	size_t SizeInBp() const;
 	size_t IndexToNode(size_t index) const;
+	size_t NodeSize() const;
 	size_t NodeStart(size_t nodeIndex) const;
 	size_t NodeEnd(size_t nodeIndex) const;
 	char NodeSequences(size_t index) const;
+	size_t NodeSequencesSize() const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 
