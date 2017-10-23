@@ -2788,7 +2788,7 @@ private:
 			}
 			auto backwardSlice = getNextNSlices(backwardPart, backwardInitialBand, backwardRowBandFunction, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			result.backward = std::move(backwardSlice);
-			score += result.backward.slices.back().minScore;
+			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
 		}
 		if (matchSequencePosition < sequence.size() - 1)
 		{
@@ -2809,7 +2809,7 @@ private:
 			}
 			auto forwardSlice = getNextNSlices(forwardPart, forwardInitialBand, forwardRowBandFunction, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			result.forward = std::move(forwardSlice);
-			score += result.forward.slices.back().minScore;
+			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
 		}
 		assert(score <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
 		return result;
@@ -2834,7 +2834,7 @@ private:
 		assert(split.sequenceSplitIndex < sequence.size());
 		std::pair<ScoreType, std::vector<MatrixPosition>> backtraceresult {0, std::vector<MatrixPosition>{}};
 		std::pair<ScoreType, std::vector<MatrixPosition>> reverseBacktraceResult {0, std::vector<MatrixPosition>{}};
-		if (split.sequenceSplitIndex < sequence.size() - 1)
+		if (split.sequenceSplitIndex < sequence.size() - 1 && split.forward.slices.size() > 0)
 		{
 			std::string backtraceSequence;
 			auto endpartsize = sequence.size() - split.sequenceSplitIndex;
@@ -2856,7 +2856,7 @@ private:
 				backtraceresult.second.pop_back();
 			}
 		}
-		if (split.sequenceSplitIndex > 0)
+		if (split.sequenceSplitIndex > 0 && split.backward.slices.size() > 0)
 		{
 			std::string backwardBacktraceSequence;
 			auto startpartsize = split.sequenceSplitIndex;
