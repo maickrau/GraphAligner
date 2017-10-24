@@ -1,22 +1,14 @@
 #ifndef BigraphToDigraph_H
 #define BigraphToDigraph_H
 
+#include <tuple>
 #include <vector>
 #include <string>
-#include "vg.pb.h"
-#include "GfaGraph.h"
+#include "AlignmentGraph.h"
 
 class DirectedGraph
 {
 public:
-	struct SeedHit
-	{
-	public:
-		SeedHit(int nodeId, size_t nodePos, size_t seqPos);
-		int nodeId;
-		size_t nodePos;
-		size_t seqPos;
-	};
 	struct Node
 	{
 		Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence);
@@ -28,23 +20,16 @@ public:
 	struct Edge
 	{
 		Edge(size_t from, size_t to);
-		size_t fromIndex;
-		size_t toIndex;
+		size_t fromId;
+		size_t toId;
 	};
-	DirectedGraph();
-	DirectedGraph(const vg::Graph& bigraph);
-	DirectedGraph(const GfaGraph& bigraph);
-	std::vector<Node> nodes;
-	std::vector<Edge> edges;
-	void ReorderByNodeIds(const std::vector<int>& nodeIdOrder);
-	void RemoveNodes(const std::set<int>& nodeIndices);
-	void AddSubgraph(const DirectedGraph& subgraph);
-	void ConnectComponents(const std::vector<int>& previousSinks, const std::vector<int>& nextSources);
-	size_t totalSequenceLength;
+	static std::pair<Node, Node> ConvertVGNodeToNodes(const vg::Node& node);
+	static std::pair<Edge, Edge> ConvertVGEdgeToEdges(const vg::Edge& edge);
+	static std::pair<Node, Node> ConvertGFANodeToNodes(const std::string& line, int edgeOverlap);
+	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(const std::string& line);
+	static AlignmentGraph StreamVGGraphFromFile(std::string filename);
+	static AlignmentGraph StreamGFAGraphFromFile(std::string filename);
 private:
-	void addReachable(std::vector<bool>& reachable, const std::vector<std::vector<size_t>>& outNeighbors, size_t current);
-	bool edgesPointToValidNodes();
-	bool nodeIdsAreValid();
 };
 
 #endif
