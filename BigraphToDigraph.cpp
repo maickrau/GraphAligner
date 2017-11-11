@@ -137,7 +137,7 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 {
 	AlignmentGraph result;
-	int edgeOverlap = 0;
+	result.DBGOverlap = 0;
 	{
 		std::ifstream graphfile { filename, std::ios::in };
 		while (graphfile.good())
@@ -151,8 +151,8 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 				std::stringstream str { line };
 				str >> dummy1 >> dummy2 >> dummy3 >> dummy4 >> dummy5 >> overlapstr;
 				int overlap = std::stoi(overlapstr.substr(0, overlapstr.size()-1));
-				assert(edgeOverlap == 0 || edgeOverlap == overlap);
-				edgeOverlap = overlap;
+				assert(result.DBGOverlap == 0 || result.DBGOverlap == overlap);
+				result.DBGOverlap = overlap;
 			}
 		}
 	}
@@ -164,7 +164,7 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 			std::getline(graphfile, line);
 			if (line[0] == 'S')
 			{
-				auto nodes = ConvertGFANodeToNodes(line, edgeOverlap);
+				auto nodes = ConvertGFANodeToNodes(line, result.DBGOverlap);
 				result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
 				result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
 			}
