@@ -4,7 +4,7 @@
 template <typename T>
 class OrderedIndexKeeper
 {
-	static const T EXTRASPACE = 4;
+	static const T EXTRASPACE = 3;
 public:
 	OrderedIndexKeeper()
 	{
@@ -33,14 +33,19 @@ public:
 		breakpoints.reserve(initial.size() + 2 * EXTRASPACE);
 		for (size_t i = 0; i < initial.size(); i++)
 		{
-			zeroscore = std::min(zeroscore, initial[i] - EXTRASPACE);
+			if (initial[i] >= EXTRASPACE) zeroscore = std::min(zeroscore, initial[i] - EXTRASPACE);
+			if (initial[i] < EXTRASPACE)
+			{
+				zeroscore = 0;
+				break;
+			}
 		}
 		//counting sort
 		breakpoints.resize(initial.size() + 2 * EXTRASPACE, 0);
 		for (size_t i = 0; i < initial.size(); i++)
 		{
-			assert(initial[i] >= (zeroscore + EXTRASPACE));
-			assert(initial[i] < (zeroscore + EXTRASPACE) + initial.size());
+			assert(initial[i] >= zeroscore);
+			assert(initial[i] < zeroscore + EXTRASPACE + initial.size());
 			breakpoints[initial[i] - zeroscore]++;
 		}
 		for (size_t i = 1; i < breakpoints.size(); i++)
@@ -50,7 +55,7 @@ public:
 		order.resize(initial.size(), std::numeric_limits<T>::max());
 		for (size_t i = 0; i < initial.size(); i++)
 		{
-			assert(initial[i]-zeroscore >= EXTRASPACE);
+			assert(initial[i] >= zeroscore);
 			assert(breakpoints[initial[i]-zeroscore] > breakpoints[initial[i]-zeroscore]-1);
 			assert(breakpoints[initial[i]-zeroscore] > 0);
 			assert(breakpoints[initial[i]-zeroscore] - 1 < initial.size());
@@ -68,7 +73,7 @@ public:
 		reverseOrder.resize(initial.size(), std::numeric_limits<T>::max());
 		for (size_t i = 0; i < order.size(); i++)
 		{
-			assert(initial[order[i]] >= (zeroscore + EXTRASPACE));
+			assert(initial[order[i]] >= zeroscore);
 			assert(initial[order[i]] < (zeroscore + EXTRASPACE) + initial.size());
 			scores[i] = initial[order[i]];
 			reverseOrder[order[i]] = i;
@@ -78,11 +83,14 @@ public:
 		assert(scores.size() == reverseOrder.size());
 		assert(breakpoints.size() == reverseOrder.size() + 2 * EXTRASPACE);
 #ifndef NDEBUG
-		for (size_t i = 0; i <= EXTRASPACE; i++)
+		assert(breakpoints[0] == 0);
+		assert(breakpoints[scores[0]-zeroscore] == 0);
+		assert(breakpoints[scores[0]-zeroscore+1] > 0);
+		for (size_t i = 0; i < scores[0]-zeroscore; i++)
 		{
 			assert(breakpoints[i] == 0);
 		}
-		for (size_t i = EXTRASPACE+1; i < breakpoints.size(); i++)
+		for (size_t i = scores[0]-zeroscore+1; i < breakpoints.size(); i++)
 		{
 			assert(breakpoints[i] <= scores.size());
 			assert(breakpoints[i] > 0);
@@ -172,15 +180,16 @@ public:
 	void FixZeroScore()
 	{
 		auto oldZeroScore = zeroscore;
-		auto newZeroScore = scores[0]-EXTRASPACE;
+		T newZeroScore = 0;
+		if (scores[0] >= EXTRASPACE) newZeroScore = scores[0]-EXTRASPACE;
 		if (newZeroScore == oldZeroScore) return;
 		zeroscore = newZeroScore;
-		for (size_t i = 0; i <= EXTRASPACE; i++)
+		auto startzeros = scores[0] - zeroscore;
+		for (size_t i = 0; i <= startzeros; i++)
 		{
 			breakpoints[i] = 0;
 		}
-		assert(scores[0] == zeroscore + EXTRASPACE);
-		size_t breakpointpos = EXTRASPACE+1;
+		size_t breakpointpos = startzeros+1;
 		for (size_t i = 1; i < scores.size(); i++)
 		{
 			if (scores[i] > scores[i-1])
