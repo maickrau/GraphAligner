@@ -9,6 +9,7 @@
 #include "CommonUtils.h"
 
 AlignmentGraph::AlignmentGraph() :
+DBGOverlap(0),
 nodeStart(),
 nodeLookup(),
 nodeIDs(),

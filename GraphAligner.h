@@ -2746,7 +2746,8 @@ private:
 		ScoreType score = 0;
 		if (matchSequencePosition > 0)
 		{
-			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, matchSequencePosition));
+			assert(sequence.size() >= matchSequencePosition + graph.DBGOverlap);
+			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, matchSequencePosition + graph.DBGOverlap));
 			int backwardpadding = (WordConfiguration<Word>::WordSize - (backwardPart.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 			assert(backwardpadding < WordConfiguration<Word>::WordSize);
 			for (int i = 0; i < backwardpadding; i++)
@@ -2814,6 +2815,8 @@ private:
 			std::string backtraceSequence;
 			auto endpartsize = sequence.size() - split.sequenceSplitIndex;
 			int endpadding = (WordConfiguration<Word>::WordSize - (endpartsize % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
+			assert(sequence.size() >= split.sequenceSplitIndex + graph.DBGOverlap);
+			size_t backtraceableSize = sequence.size() - split.sequenceSplitIndex - graph.DBGOverlap;
 			backtraceSequence = sequence.substr(split.sequenceSplitIndex);
 			backtraceSequence.reserve(sequence.size() + endpadding);
 			for (int i = 0; i < endpadding; i++)
@@ -2825,9 +2828,8 @@ private:
 			backtraceresult = getTraceFromTable(backtraceSequence, split.forward, dynamicWidth);
 			std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
 
-			while (backtraceresult.second.size() > 0 && backtraceresult.second.back().second >= backtraceSequence.size() - endpadding)
+			while (backtraceresult.second.size() > 0 && backtraceresult.second.back().second >= backtraceableSize)
 			{
-				assert(backtraceresult.second.back().second >= backtraceSequence.size() - endpadding);
 				backtraceresult.second.pop_back();
 			}
 		}
@@ -2835,8 +2837,10 @@ private:
 		{
 			std::string backwardBacktraceSequence;
 			auto startpartsize = split.sequenceSplitIndex;
-			int startpadding = (WordConfiguration<Word>::WordSize - (startpartsize % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
-			backwardBacktraceSequence = CommonUtils::ReverseComplement(sequence.substr(0, split.sequenceSplitIndex));
+			assert(sequence.size() >= split.sequenceSplitIndex + graph.DBGOverlap);
+			size_t backtraceableSize = split.sequenceSplitIndex;
+			backwardBacktraceSequence = CommonUtils::ReverseComplement(sequence.substr(0, split.sequenceSplitIndex + graph.DBGOverlap));
+			int startpadding = (WordConfiguration<Word>::WordSize - (backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 			backwardBacktraceSequence.reserve(sequence.size() + startpadding);
 			for (int i = 0; i < startpadding; i++)
 			{
@@ -2847,9 +2851,8 @@ private:
 			reverseBacktraceResult = getTraceFromTable(backwardBacktraceSequence, split.backward, dynamicWidth);
 			std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
 
-			while (reverseBacktraceResult.second.size() > 0 && reverseBacktraceResult.second.back().second >= backwardBacktraceSequence.size() - startpadding)
+			while (reverseBacktraceResult.second.size() > 0 && reverseBacktraceResult.second.back().second >= backtraceableSize)
 			{
-				assert(reverseBacktraceResult.second.back().second >= backwardBacktraceSequence.size() - startpadding);
 				reverseBacktraceResult.second.pop_back();
 			}
 			reverseBacktraceResult.second = reverseTrace(reverseBacktraceResult.second, split.sequenceSplitIndex - 1);
