@@ -2090,25 +2090,89 @@ private:
 		return 1;
 	}
 
-	void propagateScore(std::vector<ScoreType>& currentScore, const std::vector<std::vector<size_t>>& outNeighbors, const std::vector<bool>& normalOutNeighbor, size_t w) const
+	class TwoRowScore
 	{
-		if (normalOutNeighbor[w])
+	public:
+		void pushPrevious(ScoreType score)
+		{
+			previousscores.push_back(score);
+		}
+		void init()
+		{
+			previousscores.shrink_to_fit();
+			currentVP.resize(previousscores.size(), true);
+			currentVN.resize(previousscores.size(), false);
+		}
+		void setPrevious(size_t index, ScoreType val)
+		{
+			previousscores[index] = val;
+		}
+		void initNextRow()
+		{
+			for (size_t i = 0; i < previousscores.size(); i++)
+			{
+				if (currentVP[i]) previousscores[i]++;
+				if (currentVN[i]) previousscores[i]--;
+				currentVP[i] = true;
+				currentVN[i] = false;
+			}
+		}
+		ScoreType getPrevious(size_t index) const
+		{
+			return previousscores[index];
+		}
+		ScoreType getCurrent(size_t index) const
+		{
+			return previousscores[index] + (currentVP[index] ? 1 : 0) - (currentVN[index] ? 1 : 0);
+		}
+		void setCurrentMin(size_t index, ScoreType val)
+		{
+			assert(previousscores[index] == 0 || val >= previousscores[index]-1);
+			if (val == previousscores[index]-1)
+			{
+				currentVP[index] = false;
+				currentVN[index] = true;
+			}
+			else if (val == previousscores[index])
+			{
+				currentVP[index] = false;
+			}
+		}
+		bool VP(size_t index) const
+		{
+			return currentVP[index];
+		}
+		bool VN(size_t index) const
+		{
+			return currentVN[index];
+		}
+	private:
+		std::vector<ScoreType> previousscores;
+		std::vector<bool> currentVP;
+		std::vector<bool> currentVN;
+	};
+
+	void propagateScore(TwoRowScore& score, const std::vector<LengthType>& belongsToNode, const std::unordered_map<LengthType, size_t>& nodeStarts, const std::vector<size_t>& partOfComponent, size_t componentIndex, size_t w) const
+	{
+		if (w < belongsToNode.size()-1 && belongsToNode[w] == belongsToNode[w+1])
 		{
 			auto u = w+1;
-			if (currentScore[u] > currentScore[w]+1)
+			if (score.getCurrent(u) > score.getCurrent(w)+1)
 			{
-				currentScore[u] = currentScore[w]+1;
-				propagateScore(currentScore, outNeighbors, normalOutNeighbor, u);
+				score.setCurrentMin(u, score.getCurrent(w)+1);
+				propagateScore(score, belongsToNode, nodeStarts, partOfComponent, componentIndex, u);
 			}
 		}
 		else
 		{
-			for (auto u : outNeighbors[w])
+			for (auto neighbor : graph.outNeighbors[belongsToNode[w]])
 			{
-				if (currentScore[u] > currentScore[w]+1)
+				if (partOfComponent[neighbor] != componentIndex) continue;
+				auto u = nodeStarts.at(neighbor);
+				if (score.getCurrent(u) > score.getCurrent(w)+1)
 				{
-					currentScore[u] = currentScore[w]+1;
-					propagateScore(currentScore, outNeighbors, normalOutNeighbor, u);
+					score.setCurrentMin(u, score.getCurrent(w)+1);
+					propagateScore(score, belongsToNode, nodeStarts, partOfComponent, componentIndex, u);
 				}
 			}
 		}
@@ -2116,12 +2180,10 @@ private:
 
 	void fallbackCalculateComponentCellByCell(Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& component, size_t sequenceLen, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, size_t componentIndex, const std::vector<size_t>& partOfComponent) const
 	{
-		std::vector<ScoreType> previousScore;
-		std::vector<ScoreType> currentScore;
+		TwoRowScore score;
 		std::unordered_map<LengthType, size_t> nodeStarts;
-		std::vector<std::vector<size_t>> outNeighbors;
+		std::vector<LengthType> belongsToNode;
 		std::vector<std::pair<size_t, WordSlice>> outsideInNeighbors;
-		std::vector<bool> normalOutNeighbor;
 		std::vector<bool> hasBefore;
 		std::string seq;
 		size_t totalCells = 0;
@@ -2131,14 +2193,14 @@ private:
 			nodeStarts[node] = totalCells;
 			auto cellbycellstart = totalCells;
 			totalCells += graph.NodeEnd(node) - graph.NodeStart(node);
+			belongsToNode.resize(totalCells, node);
 			auto& slice = currentSlice.node(node);
 			auto graphstart = graph.NodeStart(node);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
-				previousScore.push_back(slice[i].scoreBeforeStart);
+				score.pushPrevious(slice[i].scoreBeforeStart);
 				hasBefore.push_back(slice[i].scoreBeforeExists);
 				seq += graph.NodeSequences(graphstart+i);
-				normalOutNeighbor.push_back(i < slice.size() - 1);
 			}
 #ifndef NDEBUG
 			if (previousBand[node])
@@ -2152,23 +2214,14 @@ private:
 			}
 #endif
 		}
-		previousScore.shrink_to_fit();
-		outNeighbors.resize(totalCells);
-		assert(previousScore.size() == totalCells);
-		currentScore.resize(totalCells, std::numeric_limits<ScoreType>::max());
+		score.init();
 		for (auto node : component)
 		{
-			auto cellbycellstart = nodeStarts[node];
-			assert(outNeighbors.size() > cellbycellstart);
+			auto cellbycellstart = nodeStarts.at(node);
+			assert(belongsToNode[nodeStarts.at(node)] == node);
 			for (auto neighbor : graph.inNeighbors[node])
 			{
 				if (!currentBand[neighbor] && !previousBand[neighbor]) continue;
-				if (partOfComponent[neighbor] == componentIndex)
-				{
-					assert(currentBand[neighbor]);
-					auto otherEnd = nodeStarts[neighbor] + graph.NodeEnd(neighbor) - graph.NodeStart(neighbor) - 1;
-					outNeighbors[otherEnd].push_back(cellbycellstart);
-				}
 				if (partOfComponent[neighbor] != componentIndex)
 				{
 					if (currentBand[neighbor])
@@ -2183,80 +2236,75 @@ private:
 					{
 						assert(previousSlice.hasNode(neighbor));
 						auto endslice = previousSlice.node(neighbor).back();
-						currentScore[cellbycellstart] = std::min(currentScore[cellbycellstart], endslice.scoreEnd + scoreplus(BA, BT, BC, BG, seq[cellbycellstart], 0));
+						score.setCurrentMin(cellbycellstart, endslice.scoreEnd + scoreplus(BA, BT, BC, BG, seq[cellbycellstart], 0));
 					}
 				}
 			}
 		}
 		outsideInNeighbors.shrink_to_fit();
-		assert(outNeighbors.size() == totalCells);
 		assert(hasBefore.size() == totalCells);
-		assert(normalOutNeighbor.size() == totalCells);
-#ifndef NDEBUG
-		for (size_t i = 0; i < outNeighbors.size(); i++)
-		{
-			assert(outNeighbors[i].size() > 0 || normalOutNeighbor[i]);
-		}
-#endif
 		for (int row = 0; row < WordConfiguration<Word>::WordSize; row++)
 		{
 			for (auto pair : outsideInNeighbors)
 			{
 				auto w = pair.first;
 				auto word = pair.second;
-				currentScore[w] = std::min(currentScore[w], getValue(word, row)+1);
+				score.setCurrentMin(w, getValue(word, row)+1);
 				if (row == 0 && word.scoreBeforeExists)
 				{
-					currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, seq[w], row));
+					score.setCurrentMin(w, word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, seq[w], row));
 				}
 				else if (row == 0 && !word.scoreBeforeExists)
 				{
-					currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + 1);
+					score.setCurrentMin(w, word.scoreBeforeStart + 1);
 				}
 				else if (row > 0)
 				{
-					currentScore[w] = std::min(currentScore[w], getValue(word, row-1) + scoreplus(BA, BT, BC, BG, seq[w], row));
+					score.setCurrentMin(w, getValue(word, row-1) + scoreplus(BA, BT, BC, BG, seq[w], row));
 				}
 			}
 			for (size_t w = 0; w < totalCells; w++)
 			{
-				currentScore[w] = std::min(currentScore[w], previousScore[w]+1);
-				if (normalOutNeighbor[w])
+				if (w < totalCells-1 && belongsToNode[w] == belongsToNode[w+1])
 				{
 					auto u = w+1;
 					if (row == 0 && !hasBefore[w])
 					{
-						currentScore[u] = std::min(currentScore[u], previousScore[w]+1);
+						score.setCurrentMin(u, score.getPrevious(w) + 1);
 					}
 					else
 					{
-						currentScore[u] = std::min(currentScore[u], previousScore[w]+scoreplus(BA, BT, BC, BG, seq[u], row));
+						score.setCurrentMin(u, score.getPrevious(w) + scoreplus(BA, BT, BC, BG, seq[u], row));
 					}
 				}
 				else
 				{
-					for (auto u : outNeighbors[w])
+					for (auto neighbor : graph.outNeighbors[belongsToNode[w]])
 					{
+						if (partOfComponent[neighbor] != componentIndex) continue;
+						auto u = nodeStarts.at(neighbor);
+						assert(belongsToNode[nodeStarts.at(neighbor)] == neighbor);
 						if (row == 0 && !hasBefore[w])
 						{
-							currentScore[u] = std::min(currentScore[u], previousScore[w]+1);
+							score.setCurrentMin(u, score.getPrevious(w) +1 );
 						}
 						else
 						{
-							currentScore[u] = std::min(currentScore[u], previousScore[w]+scoreplus(BA, BT, BC, BG, seq[u], row));
+							score.setCurrentMin(u, score.getPrevious(w) + scoreplus(BA, BT, BC, BG, seq[u], row));
 						}
 					}
 				}
 			}
 			for (size_t w = 0; w < totalCells; w++)
 			{
-				propagateScore(currentScore, outNeighbors, normalOutNeighbor, w);
+				propagateScore(score, belongsToNode, nodeStarts, partOfComponent, componentIndex, w);
 			}
 			Word mask = ((Word)1) << (row);
 			Word unmask = ~mask;
 			for (auto node : component)
 			{
-				auto start = nodeStarts[node];
+				auto start = nodeStarts.at(node);
+				assert(belongsToNode[nodeStarts.at(node)] == node);
 				auto size = graph.NodeEnd(node) - graph.NodeStart(node);
 				auto& slice = currentSlice.node(node);
 				for (size_t i = start; i < start+size; i++)
@@ -2266,49 +2314,29 @@ private:
 #ifndef NDEBUG
 						auto oldscore = getValue(slice[i-start], row);
 #endif
-						assert(oldscore == currentScore[i]);
+						assert(oldscore == score.getCurrent(i));
 					}
 					else
 					{
-						ScoreType oldscore;
-						if (row > 0)
-						{
-							oldscore = getValue(slice[i-start], row-1);
-						}
-						else
-						{
-							oldscore = slice[i-start].scoreBeforeStart;
-						}
-						auto newscore = currentScore[i];
-						assert(newscore >= oldscore-1);
-						assert(newscore <= oldscore+1);
-						slice[i-start].VN &= unmask;
-						slice[i-start].VP &= unmask;
-						if (newscore == oldscore-1)
-						{
-							slice[i-start].VN |= mask;
-						}
-						else if (newscore == oldscore+1)
-						{
-							slice[i-start].VP |= mask;
-						}
+						if (score.VN(i)) slice[i-start].VN |= mask; else slice[i-start].VN &= unmask;
+						if (score.VP(i)) slice[i-start].VP |= mask; else slice[i-start].VP &= unmask;
 					}
 				}
 			}
 			if (row < WordConfiguration<Word>::WordSize-1)
 			{
-				std::swap(currentScore, previousScore);
-				currentScore.assign(currentScore.size(), std::numeric_limits<ScoreType>::max());
+				score.initNextRow();
 			}
 		}
 		for (auto node : component)
 		{
-			auto start = nodeStarts[node];
+			auto start = nodeStarts.at(node);
+			assert(belongsToNode[nodeStarts.at(node)] == node);
 			auto size = graph.NodeEnd(node) - graph.NodeStart(node);
 			auto& slice = currentSlice.node(node);
 			for (size_t i = start; i < start + size; i++)
 			{
-				slice[i-start].scoreEnd = currentScore[i];
+				slice[i-start].scoreEnd = score.getCurrent(i);
 				slice[i-start].confirmedRows = WordConfiguration<Word>::WordSize;
 				slice[i-start].confirmedBeforeStart = true;
 				assertSliceCorrectness(slice[i-start], slice[i-start], false);
