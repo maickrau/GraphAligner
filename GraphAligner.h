@@ -2120,7 +2120,7 @@ private:
 		std::vector<ScoreType> currentScore;
 		std::unordered_map<LengthType, size_t> nodeStarts;
 		std::vector<std::vector<size_t>> outNeighbors;
-		std::vector<std::vector<WordSlice>> outsideInNeighbors;
+		std::vector<std::pair<size_t, WordSlice>> outsideInNeighbors;
 		std::vector<bool> normalOutNeighbor;
 		std::vector<bool> hasBefore;
 		std::string seq;
@@ -2156,7 +2156,6 @@ private:
 		outNeighbors.resize(totalCells);
 		assert(previousScore.size() == totalCells);
 		currentScore.resize(totalCells, std::numeric_limits<ScoreType>::max());
-		outsideInNeighbors.resize(totalCells);
 		for (auto node : component)
 		{
 			auto cellbycellstart = nodeStarts[node];
@@ -2178,7 +2177,7 @@ private:
 						auto word = currentSlice.node(neighbor).back();
 						assert(word.confirmedRows == WordConfiguration<Word>::WordSize);
 						assert(word.confirmedBeforeStart);
-						outsideInNeighbors[cellbycellstart].push_back(word);
+						outsideInNeighbors.emplace_back(cellbycellstart, word);
 					}
 					if (previousBand[neighbor])
 					{
@@ -2189,10 +2188,10 @@ private:
 				}
 			}
 		}
+		outsideInNeighbors.shrink_to_fit();
 		assert(outNeighbors.size() == totalCells);
 		assert(hasBefore.size() == totalCells);
 		assert(normalOutNeighbor.size() == totalCells);
-		assert(outsideInNeighbors.size() == totalCells);
 #ifndef NDEBUG
 		for (size_t i = 0; i < outNeighbors.size(); i++)
 		{
@@ -2201,24 +2200,26 @@ private:
 #endif
 		for (int row = 0; row < WordConfiguration<Word>::WordSize; row++)
 		{
+			for (auto pair : outsideInNeighbors)
+			{
+				auto w = pair.first;
+				auto word = pair.second;
+				currentScore[w] = std::min(currentScore[w], getValue(word, row)+1);
+				if (row == 0 && word.scoreBeforeExists)
+				{
+					currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, seq[w], row));
+				}
+				else if (row == 0 && !word.scoreBeforeExists)
+				{
+					currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + 1);
+				}
+				else if (row > 0)
+				{
+					currentScore[w] = std::min(currentScore[w], getValue(word, row-1) + scoreplus(BA, BT, BC, BG, seq[w], row));
+				}
+			}
 			for (size_t w = 0; w < totalCells; w++)
 			{
-				for (auto word : outsideInNeighbors[w])
-				{
-					currentScore[w] = std::min(currentScore[w], getValue(word, row)+1);
-					if (row == 0 && word.scoreBeforeExists)
-					{
-						currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + scoreplus(BA, BT, BC, BG, seq[w], row));
-					}
-					else if (row == 0 && !word.scoreBeforeExists)
-					{
-						currentScore[w] = std::min(currentScore[w], word.scoreBeforeStart + 1);
-					}
-					else if (row > 0)
-					{
-						currentScore[w] = std::min(currentScore[w], getValue(word, row-1) + scoreplus(BA, BT, BC, BG, seq[w], row));
-					}
-				}
 				currentScore[w] = std::min(currentScore[w], previousScore[w]+1);
 				if (normalOutNeighbor[w])
 				{
