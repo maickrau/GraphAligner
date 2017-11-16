@@ -1200,46 +1200,148 @@ private:
 
 	RowConfirmation confirmedRowsInMerged(WordSlice left, WordSlice right) const
 	{
+		if (left.confirmedRows == right.confirmedRows) return left.confirmedRows;
 		if (right.confirmedRows > left.confirmedRows) std::swap(left, right);
+		assert(right.confirmedRows < left.confirmedRows);
 		ScoreType leftScore = left.scoreBeforeStart;
 		ScoreType rightScore = right.scoreBeforeStart;
-		auto minConfirmed = std::min(left.confirmedRows, right.confirmedRows);
-		auto maxConfirmed = std::max(left.confirmedRows, right.confirmedRows);
-		if (maxConfirmed == minConfirmed) return minConfirmed;
-		assert(minConfirmed.rows < WordConfiguration<Word>::WordSize);
-		Word confirmedMask = ~(WordConfiguration<Word>::AllOnes << minConfirmed.rows);
+		Word confirmedMask = ~(WordConfiguration<Word>::AllOnes << right.confirmedRows.rows);
 		leftScore += WordConfiguration<Word>::popcount(left.VP & confirmedMask);
 		leftScore -= WordConfiguration<Word>::popcount(left.VN & confirmedMask);
 		rightScore += WordConfiguration<Word>::popcount(right.VP & confirmedMask);
 		rightScore -= WordConfiguration<Word>::popcount(right.VN & confirmedMask);
-		if (rightScore < leftScore) return minConfirmed;
-		assert(leftScore <= rightScore);
-		int scoreDiff = rightScore - leftScore;
-		Word partiallyConfirmedMask = WordConfiguration<Word>::AllOnes;
-		if (maxConfirmed.rows != WordConfiguration<Word>::WordSize) 
+		if (right.confirmedRows.rows == left.confirmedRows.rows)
 		{
-			int confirmEnd = maxConfirmed.rows;
-			if (maxConfirmed.partial) confirmEnd++;
-			if (confirmEnd != WordConfiguration<Word>::WordSize)
+			assert(!right.confirmedRows.partial);
+			assert(left.confirmedRows.partial);
+			auto mask = ((Word)1) << left.confirmedRows.rows;
+			rightScore -= 1;
+			if (left.VP & mask)
 			{
-				partiallyConfirmedMask = ~(WordConfiguration<Word>::AllOnes << maxConfirmed.rows);
+				return { left.confirmedRows.rows, leftScore <= rightScore };
+			}
+			else
+			{
+				leftScore -= 1;
+				return { left.confirmedRows.rows, leftScore <= rightScore };
 			}
 		}
-		Word low = left.VP & partiallyConfirmedMask;
-		Word high = (~left.VN) & partiallyConfirmedMask;
-		low |= ~partiallyConfirmedMask;
-		high |= ~partiallyConfirmedMask;
-		low &= ~confirmedMask;
-		high &= ~confirmedMask;
-		Word mortonLow = WordConfiguration<Word>::MortonLow(low, high);
-		Word mortonHigh = WordConfiguration<Word>::MortonHigh(low, high);
-		int pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, scoreDiff);
-		if (pos/2 >= left.confirmedRows.rows) return left.confirmedRows;
-		assert(pos / 2 >= minConfirmed.rows);
-		assert(pos / 2 <= maxConfirmed.rows);
-		bool resultPartial = false;
-		if (pos/2 == left.confirmedRows.rows && left.confirmedRows.partial && (!left.VP & ((Word)1 << left.confirmedRows.rows))) resultPartial = true;
-		return RowConfirmation { pos / 2, resultPartial };
+		auto premask = ((Word)1) << right.confirmedRows.rows;
+		leftScore += (left.VP & premask) ? 1 : 0;
+		leftScore -= (left.VN & premask) ? 1 : 0;
+		if (right.confirmedRows.partial && (right.VP & premask))
+		{
+		}
+		else
+		{
+			rightScore -= 1;
+		}
+		if (leftScore == rightScore + 1)
+		{
+			return { right.confirmedRows.rows, true };
+		}
+		if (leftScore > rightScore + 1)
+		{
+			return right.confirmedRows;
+		}
+		for (int i = right.confirmedRows.rows + 1; i < left.confirmedRows.rows; i++)
+		{
+			auto mask = ((Word)1) << i;
+			leftScore += (left.VP & mask) ? 1 : 0;
+			leftScore -= (left.VN & mask) ? 1 : 0;
+			rightScore -= 1;
+			if (leftScore == rightScore + 1)
+			{
+				return { i, true };
+			}
+			if (leftScore > rightScore + 1)
+			{
+				return { i, false };
+			}
+		}
+		if (!left.confirmedRows.partial) return left.confirmedRows;
+		assert(left.confirmedRows.partial);
+		assert(left.confirmedRows.rows < WordConfiguration<Word>::WordSize);
+		auto postmask = ((Word)1) << left.confirmedRows.rows;
+		rightScore -= 1;
+		if (left.VP & postmask)
+		{
+			if (leftScore <= rightScore) return left.confirmedRows;
+		}
+		else
+		{
+			leftScore -= 1;
+			assert(leftScore <= rightScore);
+			return left.confirmedRows;
+		}
+		return { left.confirmedRows.rows, false };
+		// if (left.confirmedRows == right.confirmedRows) return left.confirmedRows;
+		// if (right.confirmedRows > left.confirmedRows) std::swap(left, right);
+		// if (right.confirmedRows.rows == left.confirmedRows.rows)
+		// {
+		// 	assert(!right.confirmedRows.partial && left.confirmedRows.partial);
+		// 	auto mask = ((Word)1) << left.confirmedRows.rows;
+		// 	if (left.VP & mask)
+		// 	{
+		// 		return right.confirmedRows;
+		// 	}
+		// 	else
+		// 	{
+		// 		return left.confirmedRows;
+		// 	}
+		// }
+		// assert(right.confirmedRows < left.confirmedRows);
+		// assert(right.confirmedRows.rows < left.confirmedRows.rows);
+		// ScoreType leftScore = left.scoreBeforeStart;
+		// ScoreType rightScore = right.scoreBeforeStart;
+		// assert(right.confirmedRows.rows < WordConfiguration<Word>::WordSize);
+		// Word confirmedMask = ~(WordConfiguration<Word>::AllOnes << right.confirmedRows.rows);
+		// leftScore += WordConfiguration<Word>::popcount(left.VP & confirmedMask);
+		// leftScore -= WordConfiguration<Word>::popcount(left.VN & confirmedMask);
+		// rightScore += WordConfiguration<Word>::popcount(right.VP & confirmedMask);
+		// rightScore -= WordConfiguration<Word>::popcount(right.VN & confirmedMask);
+		// if (rightScore == leftScore - 1 && left.confirmedRows.partial && !(left.VP && ((Word)1) << right.confirmedRows.rows)) return { right.confirmedRows.rows, true };
+		// if (rightScore < leftScore) return right.confirmedRows;
+		// assert(leftScore <= rightScore);
+		// int scoreDiff = rightScore - leftScore;
+		// Word rightBorderBit = ((Word)1) << right.confirmedRows.rows;
+		// Word leftBorderBit = 0;
+		// Word partiallyConfirmedMask = WordConfiguration<Word>::AllOnes;
+		// if (left.confirmedRows.rows != WordConfiguration<Word>::WordSize)
+		// {
+		// 	partiallyConfirmedMask = ~(WordConfiguration<Word>::AllOnes << left.confirmedRows.rows);
+		// 	leftBorderBit = ((Word)1) << left.confirmedRows.rows;
+		// }
+		// Word low = left.VP & partiallyConfirmedMask;
+		// Word high = (~left.VN) & partiallyConfirmedMask;
+		// low |= ~partiallyConfirmedMask;
+		// high |= ~partiallyConfirmedMask;
+		// low &= ~confirmedMask;
+		// high &= ~confirmedMask;
+		// if (left.confirmedRows.partial && !(left.VP & leftBorderBit))
+		// {
+		// 	assert(left.confirmedRows.rows < WordConfiguration<Word>::WordSize);
+		// 	assert(leftBorderBit != 0);
+		// 	assert(high & leftBorderBit);
+		// 	high &= ~leftBorderBit;
+		// }
+		// Word mortonLow = WordConfiguration<Word>::MortonLow(low, high);
+		// Word mortonHigh = WordConfiguration<Word>::MortonHigh(low, high);
+		// if (right.confirmedRows.partial && (right.VP & rightBorderBit))
+		// {
+		// 	if (mortonLow != 0) mortonLow = mortonLow & (mortonLow - 1); else if (mortonHigh != 0) mortonHigh = mortonHigh & (mortonHigh - 1);
+		// }
+		// int pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, scoreDiff);
+		// if (pos/2 > left.confirmedRows.rows) return left.confirmedRows;
+		// assert(pos / 2 >= right.confirmedRows.rows);
+		// assert(pos / 2 <= left.confirmedRows.rows);
+		// bool partialResult = false;
+		// if (pos/2 != left.confirmedRows.rows || left.confirmedRows.partial)
+		// {
+		// 	int posplus = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, scoreDiff+1);
+		// 	if (posplus/2 > pos/2) partialResult = true;
+		// }
+		// return { pos / 2, partialResult };
 	}
 
 	WordSlice mergeTwoSlices(WordSlice left, WordSlice right) const
@@ -1250,10 +1352,9 @@ private:
 		auto correctValue = mergeTwoSlicesCellByCell(left, right);
 #endif
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
-		auto newConfirmedRows = confirmedRowsInMergedCellByCell(left, right);
-		// auto newConfirmedRows = confirmedRowsInMerged(left, right);
+		auto newConfirmedRows = confirmedRowsInMerged(left, right);
 // #ifdef EXTRACORRECTNESSASSERTIONS
-		// assert(newConfirmedRows == confirmedRowsInMergedCellByCell(left, right));
+		assert(newConfirmedRows == confirmedRowsInMergedCellByCell(left, right));
 // #endif
 		WordSlice result;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
