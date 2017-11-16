@@ -1,14 +1,33 @@
+#include <cmath>
+#include <vector>
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 
-const boost::rational<boost::multiprecision::cpp_int> AlignmentCorrectnessEstimationState::correctMismatchProbability {15, 100}; //15% from pacbio error rate
-const boost::rational<boost::multiprecision::cpp_int> AlignmentCorrectnessEstimationState::falseMismatchProbability {50, 100}; //50% empirically
-const boost::rational<boost::multiprecision::cpp_int> AlignmentCorrectnessEstimationState::falseToCorrectTransitionProbability {1, 100000}; //10^-5. one slice at <=12 mismatches or two slices at <=15 mismatchs
-const boost::rational<boost::multiprecision::cpp_int> AlignmentCorrectnessEstimationState::correctToFalseTransitionProbability {1LL, 1000000000000000LL}; //10^-15. three slices at >=25 mismatches or two slices at >=30 mismatches
+const double correctMismatchLogProbability = log(0.15); //15% from pacbio error rate
+const double correctMatchLogProbability = log(1.0 - 0.15);
+const double falseMismatchLogProbability = log(0.5); //50% empirically
+const double falseMatchLogProbability = log(1.0 - 0.5);
+const double falseToCorrectTransitionLogProbability = log(0.00001); //10^-5. one slice at <=12 mismatches or two slices at <=15 mismatchs
+const double falseToFalseTransitionLogProbability = log(1.0 - 0.00001);
+const double correctToFalseTransitionLogProbability = log(0.000000000000001); //10^-15. three slices at >=25 mismatches or two slices at >=30 mismatches
+const double correctToCorrectTransitionLogProbability = log(1.0 - 0.000000000000001);
+
+std::vector<double> getLogFactorials()
+{
+	std::vector<double> result;
+	result.push_back(0);
+	for (int i = 1; i <= 64; i++)
+	{
+		result.push_back(result.back() + log(i));
+	}
+	return result;
+}
+
+const std::vector<double> logFactorials = getLogFactorials();
 
 AlignmentCorrectnessEstimationState::AlignmentCorrectnessEstimationState() :
-correctProbability(80, 100), //80% arbitrarily
-falseProbability(20, 100), //20% arbitrarily
+correctLogOdds(log(0.8)), //80% arbitrarily
+falseLogOdds(log(0.2)), //20% arbitrarily
 correctFromCorrectTrace(false),
 falseFromCorrectTrace(false)
 {
@@ -16,7 +35,7 @@ falseFromCorrectTrace(false)
 
 bool AlignmentCorrectnessEstimationState::CurrentlyCorrect() const
 {
-	return correctProbability > falseProbability;
+	return correctLogOdds > falseLogOdds;
 }
 
 bool AlignmentCorrectnessEstimationState::CorrectFromCorrect() const
@@ -29,64 +48,32 @@ bool AlignmentCorrectnessEstimationState::FalseFromCorrect() const
 	return falseFromCorrectTrace;
 }
 
-template <typename T>
-T factorial(T n)
+double logChoose(int n, int k)
 {
-	T result {1};
-	for (int i = 2; i <= n; i += 1)
-	{
-		result *= i;
-	}
-	return result;
+	return logFactorials[n] - logFactorials[k] - logFactorials[n - k];
 }
 
-template <typename T>
-T choose(T n, T k)
+double logPowr(double logBase, int exponent)
 {
-	return factorial<T>(n) / factorial<T>(k) / factorial<T>(n - k);
-}
-
-template <typename T>
-T powr(T base, int exponent)
-{
-	assert(exponent >= 0);
-	if (exponent == 0) return T{1};
-	if (exponent == 1) return base;
-	if (exponent % 2 == 0)
-	{
-		auto part = powr(base, exponent / 2);
-		assert(part > 0);
-		return part * part;
-	}
-	if (exponent % 2 == 1)
-	{
-		auto part = powr(base, exponent / 2);
-		assert(part > 0);
-		return part * part * base;
-	}
-	assert(false);
-	std::abort();
-	return T{};
+	return exponent * logBase;
 }
 
 AlignmentCorrectnessEstimationState AlignmentCorrectnessEstimationState::NextState(int mismatches, int rowSize) const
 {
+	assert(rowSize == 64);
 	assert(mismatches >= 0);
 	assert(mismatches <= rowSize);
 	AlignmentCorrectnessEstimationState result;
-	result.correctFromCorrectTrace = correctProbability * (1 - correctToFalseTransitionProbability) >= falseProbability * falseToCorrectTransitionProbability;
-	result.falseFromCorrectTrace = correctProbability * correctToFalseTransitionProbability >= falseProbability * (1 - falseToCorrectTransitionProbability);
-	boost::rational<boost::multiprecision::cpp_int> newCorrectProbability = std::max(correctProbability * (1 - correctToFalseTransitionProbability), falseProbability * falseToCorrectTransitionProbability);
-	boost::rational<boost::multiprecision::cpp_int> newFalseProbability = std::max(correctProbability * correctToFalseTransitionProbability, falseProbability * (1 - falseToCorrectTransitionProbability));
-	auto chooseresult = choose<boost::multiprecision::cpp_int>(rowSize, mismatches);
-	auto correctMultiplier = chooseresult * powr(correctMismatchProbability, mismatches) * powr(1 - correctMismatchProbability, rowSize - mismatches);
-	auto falseMultiplier = chooseresult * powr(falseMismatchProbability, mismatches) * powr(1 - falseMismatchProbability, rowSize - mismatches);
-	newCorrectProbability *= correctMultiplier;
-	newFalseProbability *= falseMultiplier;
-	result.correctProbability = newCorrectProbability;
-	result.falseProbability = newFalseProbability;
-	auto normalizer = result.correctProbability + result.falseProbability;
-	result.correctProbability /= normalizer;
-	result.falseProbability /= normalizer;
+	result.correctFromCorrectTrace = correctLogOdds + correctToCorrectTransitionLogProbability >= falseLogOdds + falseToCorrectTransitionLogProbability;
+	result.falseFromCorrectTrace = correctLogOdds + correctToFalseTransitionLogProbability >= falseLogOdds + falseToFalseTransitionLogProbability;
+	double newCorrectProbability = std::max(correctLogOdds + correctToCorrectTransitionLogProbability, falseLogOdds + falseToCorrectTransitionLogProbability);
+	double newFalseProbability = std::max(correctLogOdds + correctToFalseTransitionLogProbability, falseLogOdds + falseToFalseTransitionLogProbability);
+	auto chooseresult = logChoose(rowSize, mismatches);
+	auto correctMultiplier = chooseresult + logPowr(correctMismatchLogProbability, mismatches) + logPowr(correctMatchLogProbability, rowSize - mismatches);
+	auto falseMultiplier = chooseresult + logPowr(falseMismatchLogProbability, mismatches) + logPowr(falseMatchLogProbability, rowSize - mismatches);
+	newCorrectProbability += correctMultiplier;
+	newFalseProbability += falseMultiplier;
+	result.correctLogOdds = newCorrectProbability;
+	result.falseLogOdds = newFalseProbability;
 	return result;
 }

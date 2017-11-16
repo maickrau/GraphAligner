@@ -8,6 +8,7 @@
 #include <cmath>
 #include <unordered_set>
 #include <queue>
+#include <iostream>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
 #include "NodeSlice.h"
