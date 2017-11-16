@@ -1994,21 +1994,19 @@ private:
 	void forceComponentZeroRow(NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<LengthType>& component, size_t componentIndex, const std::vector<size_t>& partOfComponent, size_t sequenceLen) const
 	{
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
-		std::vector<ScoreType> scoresBeforeStart;
-		std::unordered_map<LengthType, size_t> nodeStarts;
-		size_t totalCells = 0;
 		for (auto node : component)
 		{
 			assert(currentBand[node]);
-			nodeStarts[node] = totalCells;
-			totalCells += graph.NodeEnd(node) - graph.NodeStart(node);
+			assert(partOfComponent[node] == componentIndex);
+			auto& oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
+			auto& newSlice = currentSlice.node(node);
+			for (size_t i = 0; i < newSlice.size(); i++)
+			{
+				newSlice[i].scoreBeforeStart = std::numeric_limits<ScoreType>::max();
+			}
 			if (previousBand[node])
 			{
-				auto& slice = previousSlice.node(node);
-				for (size_t i = 0; i < slice.size(); i++)
-				{
-					queue.emplace(graph.NodeStart(node) + i, slice[i].scoreEnd);
-				}
+				newSlice[0].scoreBeforeStart = oldSlice[0].scoreEnd;
 			}
 			for (auto neighbor : graph.inNeighbors[node])
 			{
@@ -2017,63 +2015,68 @@ private:
 				if (currentBand[neighbor])
 				{
 					assert(currentSlice.hasNode(neighbor));
-					auto word = currentSlice.node(neighbor).back();
-					assert(word.confirmedRows.rows == WordConfiguration<Word>::WordSize);
-					queue.emplace(graph.NodeEnd(neighbor)-1, word.scoreBeforeStart);
+					assert(currentSlice.node(neighbor).back().confirmedRows.rows == WordConfiguration<Word>::WordSize);
+					newSlice[0].scoreBeforeStart = std::min(newSlice[0].scoreBeforeStart, currentSlice.node(neighbor).back().scoreBeforeStart + 1);
 				}
 				if (previousBand[neighbor])
 				{
 					assert(previousSlice.hasNode(neighbor));
-					auto word = previousSlice.node(neighbor).back();
-					assert(word.confirmedRows.rows == WordConfiguration<Word>::WordSize);
-					queue.emplace(graph.NodeEnd(neighbor)-1, word.scoreEnd);
+					assert(previousSlice.node(neighbor).back().confirmedRows.rows == WordConfiguration<Word>::WordSize);
+					newSlice[0].scoreBeforeStart = std::min(newSlice[0].scoreBeforeStart, previousSlice.node(neighbor).back().scoreEnd + 1);
 				}
 			}
+			if (newSlice[0].scoreBeforeStart == std::numeric_limits<ScoreType>::max()) continue;
+			for (size_t i = 1; i < newSlice.size(); i++)
+			{
+				assert(newSlice[i-1].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
+				newSlice[i].scoreBeforeStart = newSlice[i-1].scoreBeforeStart+1;
+				if (previousBand[node]) newSlice[i].scoreBeforeStart = std::min(newSlice[i].scoreBeforeStart, oldSlice[i].scoreEnd);
+			}
+			for (auto neighbor : graph.outNeighbors[node])
+			{
+				if (partOfComponent[neighbor] != componentIndex) continue;
+				assert(newSlice.back().scoreBeforeStart != std::numeric_limits<ScoreType>::max());
+				queue.emplace(neighbor, newSlice.back().scoreBeforeStart+1);
+			}
 		}
-		scoresBeforeStart.resize(totalCells, std::numeric_limits<ScoreType>::max());
 		while (queue.size() > 0)
 		{
 			auto top = queue.top();
 			queue.pop();
-			auto w = top.node;
+			auto nodeIndex = top.node;
 			auto score = top.priority;
-			//TODO FIX: instead of w, use nodeIndex+offset in the queue
-			auto nodeIndex = graph.IndexToNode(w);
-			if (partOfComponent[nodeIndex] == componentIndex)
+			assert(partOfComponent[nodeIndex] == componentIndex);
+			bool endUpdated = true;
+			auto& slice = currentSlice.node(nodeIndex);
+			for (size_t i = 0; i < slice.size(); i++)
 			{
-				auto start = nodeStarts[nodeIndex];
-				auto index = w - graph.NodeStart(nodeIndex) + start;
-				assert(scoresBeforeStart.size() > index);
-				if (scoresBeforeStart[index] <= score) continue;
-				scoresBeforeStart[index] = score;
+				if (slice[i].scoreBeforeStart <= score)
+				{
+					endUpdated = false;
+					break;
+				}
+				assert(slice[i].scoreBeforeStart > score);
+				slice[i].scoreBeforeStart = score;
+				score++;
 			}
-			if (w == graph.NodeEnd(nodeIndex)-1)
+			if (endUpdated)
 			{
 				for (auto neighbor : graph.outNeighbors[nodeIndex])
 				{
-					if (!currentBand[neighbor]) continue;
 					if (partOfComponent[neighbor] != componentIndex) continue;
-					queue.emplace(graph.NodeStart(neighbor), score+1);
+					queue.emplace(neighbor, score);
 				}
-			}
-			else
-			{
-				assert(partOfComponent[nodeIndex] == componentIndex);
-				queue.emplace(w+1, score+1);
 			}
 		}
 		for (auto node : component)
 		{
-			assert(nodeStarts.count(node) == 1);
 			assert(currentSlice.hasNode(node));
-			auto start = nodeStarts[node];
 			auto& slice = currentSlice.node(node);
 			auto& oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
-				assert(start+i < scoresBeforeStart.size());
-				assert(scoresBeforeStart[start+i] != std::numeric_limits<ScoreType>::max());
-				slice[i] = {WordConfiguration<Word>::AllOnes, 0, scoresBeforeStart[start+i]+WordConfiguration<Word>::WordSize, scoresBeforeStart[start+i], 0, previousBand[node] && oldSlice[i].scoreEnd == scoresBeforeStart[start+i] };
+				assert(slice[i].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
+				slice[i] = {WordConfiguration<Word>::AllOnes, 0, slice[i].scoreBeforeStart+WordConfiguration<Word>::WordSize, slice[i].scoreBeforeStart, 0, previousBand[node] && oldSlice[i].scoreEnd == slice[i].scoreBeforeStart };
 			}
 		}
 	}
