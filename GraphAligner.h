@@ -17,6 +17,7 @@
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 #include "OrderedIndexKeeper.h"
+#include "UniqueQueue.h"
 
 void printtime(const char* msg)
 {
@@ -2534,7 +2535,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& bandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& bandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		LengthType currentMinimumIndex = std::numeric_limits<LengthType>::max();
@@ -2564,13 +2565,13 @@ private:
 		for (size_t component = components.size()-1; component < components.size(); component--)
 		{
 			forceComponentZeroRow(currentSlice, previousSlice, currentBand, previousBand, components[component], component, partOfComponent, sequence.size());
-			std::set<LengthType> calculables;
+			assert(calculables.size() == 0);
 			calculables.insert(components[component].begin(), components[component].end());
 			while (calculables.size() > 0)
 			{
-				auto i = *calculables.begin();
+				auto i = calculables.top();
 				assert(currentBand[i]);
-				calculables.erase(i);
+				calculables.pop();
 				auto oldEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugOldNode = currentSlice.node(i);
@@ -2683,9 +2684,9 @@ private:
 		return result;
 	}
 
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, const std::vector<bool>& currentBand) const
+	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, const std::vector<bool>& currentBand, UniqueQueue<LengthType>& calculables) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, slice.nodes, currentBand, previousBand, partOfComponent);
+		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, slice.nodes, currentBand, previousBand, partOfComponent, calculables);
 		slice.minScoreIndex = sliceResult.minScoreIndex;
 		slice.minScore = sliceResult.minScore;
 		assert(slice.minScore >= previousSlice.minScore);
@@ -2693,7 +2694,7 @@ private:
 	}
 
 	template <typename RowBandFunction>
-	DPSlice extendAndFillSlice(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, RowBandFunction rowBandFunction) const
+	DPSlice extendAndFillSlice(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, RowBandFunction rowBandFunction, UniqueQueue<LengthType>& calculables) const
 	{
 		auto newSlice = extendDPSlice(previous, rowBandFunction, previousBand);
 		assert(sequence.size() >= newSlice.j + WordConfiguration<Word>::WordSize);
@@ -2701,7 +2702,7 @@ private:
 		{
 			currentBand[node] = true;
 		}
-		fillDPSlice(sequence, newSlice, previous, previousBand, partOfComponent, currentBand);
+		fillDPSlice(sequence, newSlice, previous, previousBand, partOfComponent, currentBand, calculables);
 		return newSlice;
 	}
 
@@ -2714,6 +2715,7 @@ private:
 		std::vector<bool> previousBand;
 		std::vector<bool> currentBand;
 		std::vector<size_t> partOfComponent;
+		UniqueQueue<LengthType> calculables { graph.NodeSize() };
 		previousBand.resize(graph.NodeSize(), false);
 		currentBand.resize(graph.NodeSize(), false);
 		partOfComponent.resize(graph.NodeSize(), std::numeric_limits<size_t>::max());
@@ -2734,7 +2736,7 @@ private:
 #ifndef NDEBUG
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
-			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, rowBandFunction);
+			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, rowBandFunction, calculables);
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
 				std::cerr << "broke at slice " << slice << "/" << numSlices << ", score " << newSlice.minScore << std::endl;
