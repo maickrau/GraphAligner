@@ -252,7 +252,8 @@ private:
 		scores(),
 		nodes(),
 		correctness(),
-		j(std::numeric_limits<LengthType>::max())
+		j(std::numeric_limits<LengthType>::max()),
+		cellsProcessed(0)
 		{}
 		ScoreType minScore;
 		LengthType minScoreIndex;
@@ -260,6 +261,7 @@ private:
 		std::vector<size_t> nodes;
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
+		size_t cellsProcessed;
 	};
 	class DPTable
 	{
@@ -1512,7 +1514,6 @@ private:
 		Word prevConfirmedMask = ((Word)1) << (slice.confirmedRows.rows - 1);
 		bool confirmOneMore = false;
 		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
-		if ((Eq & confirmedMask)) confirmOneMore = true;
 		slice.scoreBeforeExists = upInsideBand;
 		if (!diagonalInsideBand) Eq &= ~((Word)1);
 		if (!upleftInsideBand)
@@ -1536,7 +1537,7 @@ private:
 		int diagonalDiff = hin;
 		if (slice.confirmedRows.rows > 0) diagonalDiff = ((Ph & prevConfirmedMask) ? 1 : 0) - ((Mh & prevConfirmedMask) ? 1 : 0);
 		if (slice.confirmedRows.rows > 0 && (Mh & prevConfirmedMask)) confirmOneMore = true;
-		if (slice.confirmedRows.rows == 0 && hin == -1) confirmOneMore = true;
+		else if (slice.confirmedRows.rows == 0 && hin == -1) confirmOneMore = true;
 		// if (~Ph & confirmedMask) confirmTentative = true;
 		const Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
 		if (Ph & lastBitMask)
@@ -1556,7 +1557,7 @@ private:
 		slice.VN = Ph & Xv;
 		diagonalDiff += ((slice.VP & confirmedMask) ? 1 : 0) - ((slice.VN & confirmedMask) ? 1 : 0);
 		if (diagonalDiff <= 0) confirmOneMore = true;
-		if (slice.VN & confirmedMask) confirmOneMore = true;
+		else if (slice.VN & confirmedMask) confirmOneMore = true;
 
 		if (confirmOneMore)
 		{
@@ -2687,6 +2688,7 @@ private:
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, const std::vector<bool>& currentBand, UniqueQueue<LengthType>& calculables) const
 	{
 		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, slice.nodes, currentBand, previousBand, partOfComponent, calculables);
+		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreIndex = sliceResult.minScoreIndex;
 		slice.minScore = sliceResult.minScore;
 		assert(slice.minScore >= previousSlice.minScore);
@@ -2710,6 +2712,8 @@ private:
 	DPTable getNextNSlices(const std::string& sequence, const DPSlice& initialSlice, RowBandFunction rowBandFunction, size_t numSlices, size_t samplingFrequency) const
 	{
 		DPTable result;
+		size_t realCells = 0;
+		size_t cellsProcessed = 0;
 		result.startj = initialSlice.j + WordConfiguration<Word>::WordSize;
 		result.samplingFrequency = samplingFrequency;
 		std::vector<bool> previousBand;
@@ -2737,6 +2741,12 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, rowBandFunction, calculables);
+			cellsProcessed += newSlice.cellsProcessed;
+			for (auto node : newSlice.nodes)
+			{
+				realCells += graph.NodeEnd(node) - graph.NodeStart(node);
+			}
+
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
 				std::cerr << "broke at slice " << slice << "/" << numSlices << ", score " << newSlice.minScore << std::endl;
@@ -2777,6 +2787,9 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 		if (samplingFrequency == 1) verifySlice(sequence, result, initialSlice);
 #endif
+		std::cerr << "real cells: " << realCells << std::endl;
+		std::cerr << "cells processed: " << cellsProcessed << std::endl;
+		std::cerr << "redundency: " << (cellsProcessed - realCells) << std::endl;
 		return result;
 	}
 
