@@ -772,7 +772,8 @@ private:
 	template <typename Container>
 	void expandBandFromPositionsFromPrevious(const Container& startpositions, LengthType dynamicWidth, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand) const
 	{
-		std::priority_queue<NodePosWithDistance, std::vector<NodePosWithDistance>, std::greater<NodePosWithDistance>> queue;
+		std::vector<std::vector<std::pair<LengthType, bool>>> queue;
+		queue.resize(dynamicWidth);
 		for (auto startpos : startpositions)
 		{
 			auto nodeIndex = graph.IndexToNode(startpos);
@@ -783,56 +784,48 @@ private:
 			assert(startpos >= start);
 			assert(startpos - start >= 0);
 			assert(end - startpos - 1 >= 0);
-			queue.emplace(nodeIndex, false, startpos - start);
-			queue.emplace(nodeIndex, true, end - startpos - 1);
+			if (startpos - start < queue.size()) queue[startpos - start].emplace_back(nodeIndex, false);
+			if (end - startpos - 1 < queue.size()) queue[end - startpos - 1].emplace_back(nodeIndex, true);
 		}
-		int oldDistance = 0;
-		while (queue.size() > 0)
+		for (size_t distance = 0; distance < queue.size(); distance++)
 		{
-			NodePosWithDistance top = queue.top();
-			assert(top.distance >= oldDistance);
-			oldDistance = top.distance;
-			assert(top.node < graph.nodeStart.size());
-			queue.pop();
-			assert(top.node < graph.nodeStart.size());
-			if (top.distance > dynamicWidth) continue;
-			if (top.end)
+			for (size_t i = 0; i < queue[distance].size(); i++)
 			{
-				auto found = distanceAtNodeEnd.find(top.node);
-				if (found != distanceAtNodeEnd.end() && found->second <= top.distance) continue;
-				distanceAtNodeEnd[top.node] = top.distance;
-			}
-			else
-			{
-				auto found = distanceAtNodeStart.find(top.node);
-				if (found != distanceAtNodeStart.end() && found->second <= top.distance) continue;
-				distanceAtNodeStart[top.node] = top.distance;
-			}
-			auto nodeIndex = top.node;
-			bandOrder.insert(nodeIndex);
-			assert(nodeIndex < graph.nodeStart.size());
-			auto size = graph.NodeEnd(nodeIndex) - graph.NodeStart(nodeIndex);
-			if (top.end)
-			{
-				assert(top.distance + size - 1 >= top.distance);
-				queue.emplace(nodeIndex, false, top.distance + size - 1);
-				assert(nodeIndex < graph.outNeighbors.size());
-				for (auto neighbor : graph.outNeighbors[nodeIndex])
+				bool end = queue[distance][i].second;
+				LengthType node = queue[distance][i].first;
+				if (end)
 				{
-					assert(top.distance + 1 >= top.distance);
-					queue.emplace(neighbor, false, top.distance + 1);
+					auto found = distanceAtNodeEnd.find(node);
+					if (found != distanceAtNodeEnd.end() && found->second <= distance) continue;
+					distanceAtNodeEnd[node] = distance;
 				}
-			}
-			else
-			{
-				assert(top.distance + size - 1 >= top.distance);
-				queue.emplace(nodeIndex, true, top.distance + size - 1);
-				assert(nodeIndex < graph.inNeighbors.size());
-				for (auto neighbor : graph.inNeighbors[nodeIndex])
+				else
 				{
-					if (!previousBand[neighbor]) continue;
-					assert(top.distance + 1 >= top.distance);
-					queue.emplace(neighbor, true, top.distance + 1);
+					auto found = distanceAtNodeStart.find(node);
+					if (found != distanceAtNodeStart.end() && found->second <= distance) continue;
+					distanceAtNodeStart[node] = distance;
+				}
+				bandOrder.insert(node);
+				assert(node < graph.nodeStart.size());
+				auto size = graph.NodeEnd(node) - graph.NodeStart(node);
+				if (end)
+				{
+					assert(distance + size - 1 >= distance);
+					if (distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, false);
+					for (auto neighbor : graph.outNeighbors[node])
+					{
+						if (distance + 1 < queue.size()) queue[distance + 1].emplace_back(neighbor, false);
+					}
+				}
+				else
+				{
+					assert(distance + size - 1 >= distance);
+					if (distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, true);
+					for (auto neighbor : graph.inNeighbors[node])
+					{
+						if (!previousBand[neighbor]) continue;
+						if (distance + 1 < queue.size()) queue[distance + 1].emplace_back(neighbor, true);
+					}
 				}
 			}
 		}

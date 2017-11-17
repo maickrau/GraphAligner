@@ -34,6 +34,7 @@ public:
 	size_t NodeSize() const;
 	size_t NodeStart(size_t nodeIndex) const;
 	size_t NodeEnd(size_t nodeIndex) const;
+	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t index) const;
 	size_t NodeSequencesSize() const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;

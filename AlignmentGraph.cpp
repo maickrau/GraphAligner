@@ -248,31 +248,9 @@ char AlignmentGraph::NodeSequences(size_t index) const
 	assert(index < nodeSequencesATorCG.size());
 	//dummy nodes
 	if (index == 0 || index == nodeSequencesACorTG.size()-1) return '-';
-	if (nodeSequencesATorCG[index])
-	{
-		if (nodeSequencesACorTG[index])
-		{
-			return 'G';
-		}
-		else
-		{
-			return 'C';
-		}
-	}
-	else
-	{
-		if (nodeSequencesACorTG[index])
-		{
-			return 'T';
-		}
-		else
-		{
-			return 'A';
-		}
-	}
-	assert(false);
-	std::abort();
-	return '-';
+	int first = nodeSequencesATorCG[index];
+	int second = nodeSequencesACorTG[index];
+	return "ATCG"[first*2+second];
 }
 
 size_t AlignmentGraph::NodeSequencesSize() const
