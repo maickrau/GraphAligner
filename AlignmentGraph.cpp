@@ -298,6 +298,15 @@ size_t AlignmentGraph::MinDistance(size_t pos, const std::vector<size_t>& target
 		auto node = IndexToNode(pos);
 		queue.emplace(node, true, pos - NodeStart(node));
 		queue.emplace(node, false, NodeEnd(node) - 1 - pos);
+		if (validNodes.count(node) == 1)
+		{
+			for (auto target : targets)
+			{
+				if (IndexToNode(target) != node) continue;
+				if (pos <= target) mindist = std::min(mindist, target - pos);
+				if (target <= pos) mindist = std::min(mindist, pos - target);
+			}
+		}
 	}
 	size_t lastdist = 0;
 	while (queue.size() > 0)

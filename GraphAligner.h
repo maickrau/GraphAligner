@@ -567,7 +567,8 @@ private:
 		}
 		assert(slice.samplingFrequency > 1);
 		std::pair<ScoreType, std::vector<MatrixPosition>> result {0, {}};
-		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+		// auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 		for (size_t i = slice.slices.size()-1; i < slice.slices.size(); i--)
 		{
 			auto remains = slice.samplingFrequency - 1;
@@ -708,6 +709,8 @@ private:
 		MatrixPosition pos = std::make_pair(startColumn, slice.j + WordConfiguration<Word>::WordSize - 1);
 		auto distance = graph.MinDistance(startColumn, slice.minScoreIndex);
 		std::cerr << "distance from min: " << distance << std::endl;
+		auto score = getValue(slice, WordConfiguration<Word>::WordSize-1, startColumn);
+		std::cerr << "score from min: " << (score - slice.minScore) << std::endl;
 		std::vector<MatrixPosition> result;
 		while (pos.second != slice.j)
 		{
@@ -885,6 +888,71 @@ private:
 				}
 			}
 		}
+	}
+
+	class NodeWithPriority
+	{
+	public:
+		NodeWithPriority(LengthType node, int priority) : node(node), priority(priority) {}
+		bool operator>(const NodeWithPriority& other) const
+		{
+			return priority > other.priority;
+		}
+		bool operator<(const NodeWithPriority& other) const
+		{
+			return priority < other.priority;
+		}
+		LengthType node;
+		int priority;
+	};
+
+	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, LengthType dynamicWidth, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
+	{
+		std::unordered_map<size_t, size_t> distances;
+		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
+		for (auto node : previousSlice.nodes)
+		{
+			bool valid = false;
+			for (auto slice : previousSlice.scores.node(node))
+			{
+				if (slice.scoreEnd <= minScore + dynamicWidth)
+				{
+					valid = true;
+					break;
+				}
+			}
+			if (valid)
+			{
+				distances[node] = 0;
+				auto endscore = previousSlice.scores.node(node).back().scoreEnd;
+				assert(endscore >= minScore);
+				if (endscore > minScore + dynamicWidth + WordConfiguration<Word>::WordSize) continue;
+				for (auto neighbor : graph.outNeighbors[node])
+				{
+					queue.emplace(neighbor, endscore-minScore+1);
+				}
+			}
+		}
+		while (queue.size() > 0)
+		{
+			NodeWithPriority top = queue.top();
+			if (top.priority > dynamicWidth + WordConfiguration<Word>::WordSize) break;
+			queue.pop();
+			if (distances.count(top.node) == 1 && distances[top.node] <= top.priority) continue;
+			distances[top.node] = top.priority;
+			auto size = graph.NodeLength(top.node);
+			for (auto neighbor : graph.outNeighbors[top.node])
+			{
+				queue.emplace(neighbor, top.priority + size);
+			}
+		}
+		std::vector<LengthType> result;
+		for (auto pair : distances)
+		{
+			assert(pair.second <= dynamicWidth + WordConfiguration<Word>::WordSize);
+			result.push_back(pair.first);
+		}
+		return result;
 	}
 
 	template <typename Container>
@@ -1782,6 +1850,11 @@ private:
 		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, dynamicWidth, previousBand);
 	}
 
+	std::vector<LengthType> forwardFromMinScoreBandFunction(const std::vector<bool>& previousBand, LengthType dynamicWidth, const DPSlice& previousSlice) const
+	{
+		return projectForwardFromMinScore(previousSlice.minScore, dynamicWidth, previousSlice, previousBand);
+	}
+
 #ifdef EXTRACORRECTNESSASSERTIONS
 
 	void verifySlice(const std::string& sequence, const DPTable& band, const DPSlice& initialSlice) const
@@ -2086,22 +2159,6 @@ private:
 #endif
 		return result;
 	}
-
-	class NodeWithPriority
-	{
-	public:
-		NodeWithPriority(LengthType node, int priority) : node(node), priority(priority) {}
-		bool operator>(const NodeWithPriority& other) const
-		{
-			return priority > other.priority;
-		}
-		bool operator<(const NodeWithPriority& other) const
-		{
-			return priority < other.priority;
-		}
-		LengthType node;
-		int priority;
-	};
 
 	void forceComponentZeroRow(NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, const std::vector<LengthType>& component, size_t componentIndex, const std::vector<size_t>& partOfComponent, size_t sequenceLen) const
 	{
@@ -2567,9 +2624,6 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 		if (samplingFrequency == 1) verifySlice(sequence, result, initialSlice);
 #endif
-		std::cerr << "real cells: " << realCells << std::endl;
-		std::cerr << "cells processed: " << cellsProcessed << std::endl;
-		std::cerr << "redundency: " << (cellsProcessed - realCells) << " (" << ((double)(cellsProcessed - realCells) / (double)(cellsProcessed) * 100.0) << "%)" << std::endl;
 		return result;
 	}
 
@@ -2620,7 +2674,8 @@ private:
 				backwardPart += 'N';
 			}
 			auto backwardInitialBand = getInitialSliceOnlyOneNode(backwardNode);
-			auto backwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+			// auto backwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+			auto backwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 			size_t samplingFrequency = 1;
 			if (sqrtSpace)
 			{
@@ -2641,7 +2696,8 @@ private:
 				forwardPart += 'N';
 			}
 			auto forwardInitialBand = getInitialSliceOnlyOneNode(forwardNode);
-			auto forwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+			// auto forwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+			auto forwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 			size_t samplingFrequency = 1;
 			if (sqrtSpace)
 			{
@@ -2749,7 +2805,8 @@ private:
 				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
 			}
 		}
-		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+		// auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
+		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 		size_t samplingFrequency = 1;
 		if (sqrtSpace)
 		{
