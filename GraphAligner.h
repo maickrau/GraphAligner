@@ -319,24 +319,37 @@ public:
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
 		assert(seedHits.size() > 0);
-		TwoDirectionalSplitAlignment bestAlignment;
+		size_t bestAlignmentEstimatedCorrectlyAligned;
 		std::tuple<int, size_t, bool> bestSeed;
+		std::vector<std::set<size_t>> triedAlignmentNodes;
+		triedAlignmentNodes.resize(sequence.size());
+		std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> bestTrace;
 		bool hasAlignment = false;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			std::cerr << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]) << std::endl;
-			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
+			auto nodeIndex = graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
+			if (triedAlignmentNodes[std::get<1>(seedHits[i])].count(nodeIndex) == 1)
+			{
+				std::cerr << "seed " << i << " already aligned" << std::endl;
+				continue;
+			}
+			auto alignment = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
+			auto trace = getPiecewiseTracesFromSplit(alignment, sequence, dynamicWidth);
+			addAlignmentNodes(triedAlignmentNodes, trace, alignment.sequenceSplitIndex);
 			if (!hasAlignment)
 			{
-				bestAlignment = std::move(result);
+				bestTrace = std::move(trace);
 				bestSeed = seedHits[i];
 				hasAlignment = true;
+				bestAlignmentEstimatedCorrectlyAligned = alignment.EstimatedCorrectlyAligned();
 			}
 			else
 			{
-				if (result.EstimatedCorrectlyAligned() > bestAlignment.EstimatedCorrectlyAligned())
+				if (alignment.EstimatedCorrectlyAligned() > bestAlignmentEstimatedCorrectlyAligned)
 				{
-					bestAlignment = std::move(result);
+					bestTrace = std::move(trace);
+					bestAlignmentEstimatedCorrectlyAligned = alignment.EstimatedCorrectlyAligned();
 					bestSeed = seedHits[i];
 				}
 			}
@@ -348,7 +361,6 @@ public:
 		{
 			return emptyAlignment(time, 0);
 		}
-		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence, dynamicWidth);
 		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() || std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
 		{
 			return emptyAlignment(time, 0);
@@ -374,7 +386,7 @@ public:
 		}
 		result.alignment.set_query_position(lastAligned);
 		result.alignmentStart = lastAligned;
-		result.alignmentEnd = result.alignmentStart + bestAlignment.EstimatedCorrectlyAligned();
+		result.alignmentEnd = result.alignmentStart + bestAlignmentEstimatedCorrectlyAligned;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
@@ -382,6 +394,24 @@ public:
 	}
 
 private:
+
+	void addAlignmentNodes(std::vector<std::set<LengthType>>& tried, const std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>>& trace, LengthType sequenceSplitIndex) const
+	{
+		assert(std::get<1>(trace.first).back().second >= 0);
+		assert(std::get<1>(trace.first).back().second < tried.size());
+		assert(std::get<1>(trace.second).back().second >= 0);
+		assert(std::get<1>(trace.second).back().second < tried.size());
+		for (size_t i = 0; i < std::get<1>(trace.first).size(); i++)
+		{
+			auto nodeIndex = graph.IndexToNode(std::get<1>(trace.first)[i].first);
+			tried[std::get<1>(trace.first)[i].second].insert(nodeIndex);
+		}
+		for (size_t i = 0; i < std::get<1>(trace.second).size(); i++)
+		{
+			auto nodeIndex = graph.IndexToNode(std::get<1>(trace.second)[i].first);
+			tried[std::get<1>(trace.second)[i].second].insert(nodeIndex);
+		}
+	}
 
 	AlignmentResult emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed) const
 	{
