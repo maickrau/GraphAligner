@@ -250,7 +250,7 @@ private:
 	public:
 		DPSlice() :
 		minScore(std::numeric_limits<ScoreType>::min()),
-		minScoreIndex(0),
+		minScoreIndex(),
 		scores(),
 		nodes(),
 		correctness(),
@@ -258,7 +258,7 @@ private:
 		cellsProcessed(0)
 		{}
 		ScoreType minScore;
-		LengthType minScoreIndex;
+		std::vector<LengthType> minScoreIndex;
 		NodeSlice<WordSlice> scores;
 		std::vector<size_t> nodes;
 		AlignmentCorrectnessEstimationState correctness;
@@ -556,7 +556,8 @@ private:
 		{
 			assert(slice.slices.size() * WordConfiguration<Word>::WordSize <= sequence.size());
 			auto startRow = slice.slices.size() * WordConfiguration<Word>::WordSize - 1;
-			auto startColumn = slice.slices.back().minScoreIndex;
+			assert(slice.slices.back().minScoreIndex.size() > 0);
+			auto startColumn = slice.slices.back().minScoreIndex.back();
 			auto trace = getTraceFromTableInner(sequence, slice, startColumn);
 			std::reverse(trace.begin(), trace.end());
 #ifndef NDEBUG
@@ -579,7 +580,8 @@ private:
 			if (i == slice.slices.size() - 1)
 			{
 				result.first = partTable.slices.back().minScore;
-				result.second.emplace_back(partTable.slices.back().minScoreIndex, partTable.slices.back().j + WordConfiguration<Word>::WordSize - 1);
+				assert(partTable.slices.back().minScoreIndex.size() > 0);
+				result.second.emplace_back(partTable.slices.back().minScoreIndex.back(), partTable.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 			}
 			if (i < slice.slices.size() - 1)
 			{
@@ -704,6 +706,8 @@ private:
 	std::vector<MatrixPosition> getTraceFromSlice(const std::string& sequence, const DPSlice& slice, LengthType startColumn) const
 	{
 		MatrixPosition pos = std::make_pair(startColumn, slice.j + WordConfiguration<Word>::WordSize - 1);
+		auto distance = graph.MinDistance(startColumn, slice.minScoreIndex);
+		std::cerr << "distance from min: " << distance << std::endl;
 		std::vector<MatrixPosition> result;
 		while (pos.second != slice.j)
 		{
@@ -774,6 +778,53 @@ private:
 		}
 	};
 
+	void filterReachableRec(std::set<LengthType>& result, const std::set<LengthType>& current, const std::vector<bool>& previousBand, LengthType node) const
+	{
+		if (result.count(node) == 1) return;
+		if (current.count(node) == 0) return;
+		result.insert(node);
+		for (auto neighbor : graph.outNeighbors[node])
+		{
+			filterReachableRec(result, current, previousBand, neighbor);
+		}
+	}
+
+	std::set<LengthType> filterOnlyReachable(const std::set<LengthType>& nodes, const std::vector<bool>& previousBand) const
+	{
+		std::set<LengthType> result;
+		for (auto node : nodes)
+		{
+			if (result.count(node) == 1) continue;
+			bool inserted = false;
+			if (previousBand[node])
+			{
+				result.insert(node);
+				inserted = true;
+			}
+			else
+			{
+				for (auto neighbor : graph.inNeighbors[node])
+				{
+					if (previousBand[neighbor])
+					{
+						result.insert(node);
+						inserted = true;
+						break;
+					}
+				}
+			}
+			if (inserted)
+			{
+				for (auto neighbor : graph.outNeighbors[node])
+				{
+					filterReachableRec(result, nodes, previousBand, neighbor);
+				}
+			}
+		}
+
+		return result;
+	}
+
 	template <typename Container>
 	void expandBandFromPositionsFromPrevious(const Container& startpositions, LengthType dynamicWidth, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand) const
 	{
@@ -798,13 +849,14 @@ private:
 			{
 				bool end = queue[distance][i].second;
 				LengthType node = queue[distance][i].first;
-				if (end)
+				auto size = graph.NodeEnd(node) - graph.NodeStart(node);
+				if (end || size == 1)
 				{
 					auto found = distanceAtNodeEnd.find(node);
 					if (found != distanceAtNodeEnd.end() && found->second <= distance) continue;
 					distanceAtNodeEnd[node] = distance;
 				}
-				else
+				if (!end || size == 1)
 				{
 					auto found = distanceAtNodeStart.find(node);
 					if (found != distanceAtNodeStart.end() && found->second <= distance) continue;
@@ -812,23 +864,22 @@ private:
 				}
 				bandOrder.insert(node);
 				assert(node < graph.nodeStart.size());
-				auto size = graph.NodeEnd(node) - graph.NodeStart(node);
-				if (end)
+				if (end || size == 1)
 				{
 					assert(distance + size - 1 >= distance);
-					if (distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, false);
+					if (size > 1 && distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, false);
 					for (auto neighbor : graph.outNeighbors[node])
 					{
 						if (distance + 1 < queue.size()) queue[distance + 1].emplace_back(neighbor, false);
 					}
 				}
-				else
+				if (!end || size == 1)
 				{
 					assert(distance + size - 1 >= distance);
-					if (distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, true);
+					if (size > 1 && distance + size - 1 < queue.size()) queue[distance + size - 1].emplace_back(node, true);
 					for (auto neighbor : graph.inNeighbors[node])
 					{
-						if (!previousBand[neighbor]) continue;
+						// if (!previousBand[neighbor]) continue;
 						if (distance + 1 < queue.size()) queue[distance + 1].emplace_back(neighbor, true);
 					}
 				}
@@ -836,20 +887,30 @@ private:
 		}
 	}
 
-	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(LengthType previousMinimumIndex, LengthType dynamicWidth, const std::vector<bool>& previousBand) const
+	template <typename Container>
+	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(const Container& previousMinimumIndex, LengthType dynamicWidth, const std::vector<bool>& previousBand) const
 	{
-		std::set<LengthType> nodes;
-		assert(previousMinimumIndex < graph.NodeSequencesSize());
-		auto nodeIndex = graph.IndexToNode(previousMinimumIndex);
+		assert(previousMinimumIndex.size() > 0);
 		std::set<size_t> positions;
-		positions.insert(previousMinimumIndex);
-		positions = graph.ProjectForward(positions, WordConfiguration<Word>::WordSize);
-		positions.insert(previousMinimumIndex);
+		positions.insert(previousMinimumIndex.begin(), previousMinimumIndex.end());
+		// positions = graph.ProjectForward(positions, WordConfiguration<Word>::WordSize);
+		// positions.insert(previousMinimumIndex.begin(), previousMinimumIndex.end());
 		assert(positions.size() >= 1);
-		nodes.insert(nodeIndex);
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 		std::unordered_map<size_t, size_t> distanceAtNodeStart;
-		expandBandFromPositionsFromPrevious(positions, dynamicWidth, distanceAtNodeStart, distanceAtNodeEnd, nodes, previousBand);
+		std::set<LengthType> expanded;
+		expandBandFromPositionsFromPrevious(positions, dynamicWidth, distanceAtNodeStart, distanceAtNodeEnd, expanded, previousBand);
+		auto nodes = filterOnlyReachable(expanded, previousBand);
+// #ifndef NDEBUG
+// 		std::vector<size_t> debugPositions;
+// 		debugPositions.insert(debugPositions.end(), positions.begin(), positions.end());
+// 		for (auto node : nodes)
+// 		{
+// 			volatile auto startdist = graph.MinDistance(graph.NodeStart(node), debugPositions);
+// 			volatile auto enddist = graph.MinDistance(graph.NodeEnd(node)-1, debugPositions);
+// 			assert(startdist <= dynamicWidth || enddist <= dynamicWidth);
+// 		}
+// #endif
 		std::vector<LengthType> result;
 		result.reserve(nodes.size());
 		result.insert(result.end(), nodes.begin(), nodes.end());
@@ -1579,7 +1640,7 @@ private:
 	{
 	public:
 		ScoreType minScore;
-		LengthType minScoreIndex;
+		std::vector<LengthType> minScoreIndex;
 		size_t cellsProcessed;
 	};
 
@@ -1607,7 +1668,6 @@ private:
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
-		result.minScoreIndex = 0;
 		result.cellsProcessed = 0;
 		std::vector<WordSlice>& slice = currentSlice.node(i);
 		const std::vector<WordSlice>& oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
@@ -1618,6 +1678,9 @@ private:
 		WordSlice correctstart;
 		correctstart = getWordSliceCellByCell(j, graph.NodeStart(i), sequence, currentSlice, previousSlice, currentBand, previousBand);
 #endif
+
+		auto oldConfirmation = slice[0].confirmedRows;
+		if (oldConfirmation.rows == WordConfiguration<Word>::WordSize) return result;
 
 		if (isSource(i, currentBand, previousBand))
 		{
@@ -1632,7 +1695,11 @@ private:
 			if (slice[0].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[0].scoreEnd < result.minScore)
 			{
 				result.minScore = slice[0].scoreEnd;
-				result.minScoreIndex = nodeStart;
+				result.minScoreIndex.clear();
+			}
+			if (slice[0].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[0].scoreEnd == result.minScore)
+			{
+				result.minScoreIndex.push_back(nodeStart);
 			}
 			assertSliceCorrectness(slice[0], oldSlice[0], previousBand[i]);
 		}
@@ -1648,11 +1715,18 @@ private:
 			if (slice[0].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[0].scoreEnd < result.minScore)
 			{
 				result.minScore = slice[0].scoreEnd;
-				result.minScoreIndex = nodeStart;
+				result.minScoreIndex.clear();
+			}
+			if (slice[0].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[0].scoreEnd == result.minScore)
+			{
+				result.minScoreIndex.push_back(nodeStart);
 			}
 			assertSliceCorrectness(slice[0], oldSlice[0], previousBand[i]);
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 		}
+
+		assert(slice[0].confirmedRows >= oldConfirmation);
+		if (slice[0].confirmedRows == oldConfirmation) return result;
 
 #ifdef EXTRABITVECTORASSERTIONS
 		assert(slice[0].scoreBeforeStart == correctstart.scoreBeforeStart);
@@ -1665,6 +1739,9 @@ private:
 		{
 			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
 
+			oldConfirmation = slice[w].confirmedRows;
+			if (oldConfirmation.rows == WordConfiguration<Word>::WordSize) return result;
+
 			slice[w] = getNextSlice(Eq, slice[w-1], slice[w].scoreBeforeExists, slice[w].scoreBeforeExists, slice[w-1].scoreBeforeExists, (j == 0 && previousBand[i]) || (j > 0 && graph.NodeSequences(nodeStart+w) == sequence[j-1]), oldSlice[w-1]);
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
@@ -1675,11 +1752,17 @@ private:
 			assert(previousBand[i] || slice[w].scoreBeforeStart == j || slice[w].scoreBeforeStart == slice[w-1].scoreBeforeStart + 1);
 			assertSliceCorrectness(slice[w], oldSlice[w], previousBand[i]);
 
-			if (slice[w].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[w].scoreEnd <= result.minScore)
+			if (slice[w].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[w].scoreEnd < result.minScore)
 			{
 				result.minScore = slice[w].scoreEnd;
-				result.minScoreIndex = nodeStart + w;
+				result.minScoreIndex.clear();
 			}
+			if (slice[w].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[w].scoreEnd == result.minScore)
+			{
+				result.minScoreIndex.push_back(nodeStart + w);
+			}
+
+			if (slice[w].confirmedRows == oldConfirmation) return result;
 
 #ifdef EXTRABITVECTORASSERTIONS
 			auto correctslice = getWordSliceCellByCell(j, nodeStart+w, sequence, currentSlice, previousSlice, currentBand, previousBand);
@@ -1695,7 +1778,7 @@ private:
 
 	std::vector<LengthType> defaultForwardRowBandFunction(const std::vector<bool>& previousBand, LengthType dynamicWidth, const DPSlice& previousSlice) const
 	{
-		assert(previousSlice.minScoreIndex != std::numeric_limits<LengthType>::max());
+		assert(previousSlice.minScoreIndex.size() > 0);
 		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, dynamicWidth, previousBand);
 	}
 
@@ -1811,7 +1894,7 @@ private:
 			{
 				result.slices.emplace_back();
 				result.slices.back().minScore = minscore;
-				result.slices.back().minScoreIndex = minindex;
+				result.slices.back().minScoreIndex.push_back(minindex);
 				for (auto node : bandOrder)
 				{
 					result.slices.back().scores.addNode(node, graph.NodeEnd(node) - graph.NodeStart(node));
@@ -2254,7 +2337,7 @@ private:
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& bandOrder, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
-		LengthType currentMinimumIndex = std::numeric_limits<LengthType>::max();
+		std::vector<LengthType> currentMinimumIndex;
 		size_t cellsProcessed = 0;
 
 		//preprocessed bitvectors for character equality
@@ -2319,17 +2402,22 @@ private:
 				auto debugslice = currentSlice.node(i);
 				if (nodeCalc.minScore != std::numeric_limits<ScoreType>::max())
 				{
-					assert(nodeCalc.minScoreIndex >= graph.NodeStart(i));
-					assert(nodeCalc.minScoreIndex < graph.NodeEnd(i));
-					assert(debugslice[nodeCalc.minScoreIndex - graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
+					for (auto index : nodeCalc.minScoreIndex)
+					{
+						assert(index >= graph.NodeStart(i));
+						assert(index < graph.NodeEnd(i));
+						assert(debugslice[index - graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
+					}
 				}
 #endif
 				if (nodeCalc.minScore < currentMinimumScore)
 				{
-					assert(nodeCalc.minScoreIndex >= graph.NodeStart(i));
-					assert(nodeCalc.minScoreIndex < graph.NodeEnd(i));
 					currentMinimumScore = nodeCalc.minScore;
-					currentMinimumIndex = nodeCalc.minScoreIndex;
+					currentMinimumIndex.clear();
+				}
+				if (nodeCalc.minScore == currentMinimumScore)
+				{
+					currentMinimumIndex.insert(currentMinimumIndex.end(), nodeCalc.minScoreIndex.begin(), nodeCalc.minScoreIndex.end());
 				}
 				cellsProcessed += nodeCalc.cellsProcessed;
 			}
@@ -2433,7 +2521,7 @@ private:
 			cellsProcessed += newSlice.cellsProcessed;
 			for (auto node : newSlice.nodes)
 			{
-				realCells += graph.NodeEnd(node) - graph.NodeStart(node);
+				realCells += (graph.NodeEnd(node) - graph.NodeStart(node)) * WordConfiguration<Word>::WordSize;
 			}
 
 			if (!newSlice.correctness.CurrentlyCorrect())
@@ -2457,12 +2545,15 @@ private:
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
 #ifndef NDEBUG
-			auto debugMinimumNode = graph.IndexToNode(newSlice.minScoreIndex);
-			assert(newSlice.scores.hasNode(debugMinimumNode));
-			auto debugslice = newSlice.scores.node(debugMinimumNode);
-			assert(newSlice.minScoreIndex >= graph.NodeStart(debugMinimumNode));
-			assert(newSlice.minScoreIndex < graph.NodeEnd(debugMinimumNode));
-			assert(debugslice[newSlice.minScoreIndex - graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
+			for (auto index : newSlice.minScoreIndex)
+			{
+				auto debugMinimumNode = graph.IndexToNode(index);
+				assert(newSlice.scores.hasNode(debugMinimumNode));
+				auto debugslice = newSlice.scores.node(debugMinimumNode);
+				assert(index >= graph.NodeStart(debugMinimumNode));
+				assert(index < graph.NodeEnd(debugMinimumNode));
+				assert(debugslice[index - graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
+			}
 #endif
 			lastSlice = newSlice;
 			std::swap(previousBand, currentBand);
@@ -2478,7 +2569,7 @@ private:
 #endif
 		std::cerr << "real cells: " << realCells << std::endl;
 		std::cerr << "cells processed: " << cellsProcessed << std::endl;
-		std::cerr << "redundency: " << (cellsProcessed - realCells) << std::endl;
+		std::cerr << "redundency: " << (cellsProcessed - realCells) << " (" << ((double)(cellsProcessed - realCells) / (double)(cellsProcessed) * 100.0) << "%)" << std::endl;
 		return result;
 	}
 
@@ -2488,7 +2579,7 @@ private:
 		result.j = -WordConfiguration<Word>::WordSize;
 		result.scores.addNode(nodeIndex, graph.NodeEnd(nodeIndex) - graph.NodeStart(nodeIndex));
 		result.minScore = 0;
-		result.minScoreIndex = graph.NodeEnd(nodeIndex) - 1;
+		result.minScoreIndex.push_back(graph.NodeEnd(nodeIndex) - 1);
 		result.nodes.push_back(nodeIndex);
 		auto& slice = result.scores.node(nodeIndex);
 		for (size_t i = 0; i < slice.size(); i++)
