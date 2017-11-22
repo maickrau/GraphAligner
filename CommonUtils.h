@@ -3,12 +3,33 @@
 
 #include <string>
 #include <vector>
+#include <sstream>
 #include "vg.pb.h"
 
 namespace CommonUtils
 {
 	vg::Graph LoadVGGraph(std::string filename);
 	std::string ReverseComplement(std::string original);
+
 }
+
+class BufferedWriter : std::ostream
+{
+public:
+	class FlushClass {};
+	BufferedWriter(std::ostream& stream);
+	template <typename T>
+	BufferedWriter& operator<<(T obj)
+	{
+		stringstream << obj;
+		return *this;
+	}
+	BufferedWriter& operator<<(FlushClass f);
+	void flush();
+	static FlushClass Flush;
+private:
+	std::ostream& stream;
+	std::stringstream stringstream;
+};
 
 #endif

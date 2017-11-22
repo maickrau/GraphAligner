@@ -19,8 +19,9 @@ int main(int argc, char** argv)
 	int c;
 	bool initialFullBand = false;
 	bool sqrtSpace = false;
+	bool stats = false;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:M")) != -1)
+	while ((c = getopt(argc, argv, "g:f:a:t:B:A:b:is:d:MS")) != -1)
 	{
 		switch(c)
 		{
@@ -57,6 +58,9 @@ int main(int argc, char** argv)
 			case 'M':
 				sqrtSpace = true;
 				break;
+			case 'S':
+				stats = true;
+				break;
 		}
 	}
 
@@ -84,7 +88,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth, sqrtSpace);
+	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, startBandwidth, sqrtSpace, stats);
 
 	return 0;
 }

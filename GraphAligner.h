@@ -186,6 +186,8 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
+	mutable bool statsmode;
+	mutable BufferedWriter logger;
 	const AlignmentGraph& graph;
 	class RowConfirmation
 	{
@@ -291,6 +293,8 @@ private:
 public:
 
 	GraphAligner(const AlignmentGraph& graph) :
+	statsmode(false),
+	logger(std::cerr),
 	graph(graph)
 	{
 	}
@@ -314,6 +318,23 @@ public:
 		return result;
 	}
 
+	AlignmentResult GetAlignmentStats(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth) const
+	{
+		statsmode = true;
+		for (size_t i = 0; i < seedHits.size(); i++)
+		{
+			logger << "stats read " << seq_id << " seed " << i << " node " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << " readpos " << std::get<1>(seedHits[i]) << " ";
+			auto timeStart = std::chrono::system_clock::now();
+			auto nodeIndex = graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
+			auto alignment = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
+			auto timeEnd = std::chrono::system_clock::now();
+			logger << "time " << std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count() << "ms ";
+			logger << BufferedWriter::Flush;
+		}
+		statsmode = false;
+		return emptyAlignment(0, 0);
+	}
+
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
@@ -327,13 +348,14 @@ public:
 		bool hasAlignment = false;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::cerr << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]) << std::endl;
+			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
 			auto nodeIndex = graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
 			if (triedAlignmentNodes[std::get<1>(seedHits[i])].count(nodeIndex) == 1)
 			{
-				std::cerr << "seed " << i << " already aligned" << std::endl;
+				logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
 				continue;
 			}
+			logger << BufferedWriter::Flush;
 			auto alignment = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
 			auto trace = getPiecewiseTracesFromSplit(alignment, sequence, dynamicWidth);
 			addAlignmentNodes(triedAlignmentNodes, trace, alignment.sequenceSplitIndex);
@@ -455,9 +477,9 @@ private:
 		}
 		else
 		{
-			std::cerr << "Piecewise alignments can't be merged!";
-			std::cerr << " first end: " << firstEndPos.node_id() << " " << (firstEndPos.is_reverse() ? "-" : "+");
-			std::cerr << " second start: " << secondStartPos.node_id() << " " << (secondStartPos.is_reverse() ? "-" : "+") << std::endl;
+			logger << "Piecewise alignments can't be merged!";
+			logger << " first end: " << firstEndPos.node_id() << " " << (firstEndPos.is_reverse() ? "-" : "+");
+			logger << " second start: " << secondStartPos.node_id() << " " << (secondStartPos.is_reverse() ? "-" : "+") << BufferedWriter::Flush;
 		}
 		for (int i = start; i < second.alignment.path().mapping_size(); i++)
 		{
@@ -2419,9 +2441,15 @@ private:
 	{
 		auto newSlice = extendDPSlice(previous, rowBandFunction, previousBand);
 		assert(sequence.size() >= newSlice.j + WordConfiguration<Word>::WordSize);
+		size_t cells = 0;
 		for (auto node : newSlice.nodes)
 		{
 			currentBand[node] = true;
+			cells += graph.NodeEnd(node) - graph.NodeStart(node);
+		}
+		if (statsmode && cells > 1000000)
+		{
+			return newSlice;
 		}
 		fillDPSlice(sequence, newSlice, previous, previousBand, partOfComponent, currentBand, calculables);
 		return newSlice;
@@ -2430,6 +2458,7 @@ private:
 	template <typename RowBandFunction>
 	DPTable getNextNSlices(const std::string& sequence, const DPSlice& initialSlice, RowBandFunction rowBandFunction, size_t numSlices, size_t samplingFrequency) const
 	{
+		if (statsmode) samplingFrequency = numSlices+1;
 		DPTable result;
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
@@ -2460,20 +2489,27 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, rowBandFunction, calculables);
-			cellsProcessed += newSlice.cellsProcessed;
+			size_t sliceCells = 0;
 			for (auto node : newSlice.nodes)
 			{
-				realCells += graph.NodeEnd(node) - graph.NodeStart(node);
+				sliceCells += graph.NodeEnd(node) - graph.NodeStart(node);
 			}
+			if (statsmode && newSlice.minScore == std::numeric_limits<ScoreType>::min())
+			{
+				logger << "cellbroke " << slice << ", cells " << sliceCells << ", score " << lastSlice.minScore;
+				break;
+			}
+			realCells += sliceCells;
+			cellsProcessed += newSlice.cellsProcessed;
 
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
-				std::cerr << "broke at slice " << slice << "/" << numSlices << ", score " << newSlice.minScore << std::endl;
+				logger << "scorebroke " << slice << ", score " << newSlice.minScore << " ";
 				break;
 			}
 			if (slice == numSlices - 1)
 			{
-				std::cerr << "finished with " << numSlices << " slices, score " << newSlice.minScore << std::endl;
+				logger << "finished " << numSlices << ", score " << newSlice.minScore << " ";
 			}
 			if (slice % samplingFrequency == 0)
 			{
@@ -2506,9 +2542,9 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 		if (samplingFrequency == 1) verifySlice(sequence, result, initialSlice);
 #endif
-		std::cerr << "real cells: " << realCells << std::endl;
-		std::cerr << "cells processed: " << cellsProcessed << std::endl;
-		std::cerr << "redundency: " << (cellsProcessed - realCells) << std::endl;
+		logger << "realcells " << (realCells * WordConfiguration<Word>::WordSize) << " ";
+		logger << "cellsprocessed " << cellsProcessed << " ";
+		logger << "redundency " << (cellsProcessed - realCells) << " ";
 		return result;
 	}
 
@@ -2630,7 +2666,7 @@ private:
 			assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
 			backtraceresult = getTraceFromTable(backtraceSequence, split.forward, dynamicWidth);
-			std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
+			// std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
 
 			while (backtraceresult.second.size() > 0 && backtraceresult.second.back().second >= backtraceableSize)
 			{
@@ -2653,7 +2689,7 @@ private:
 			assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
 			reverseBacktraceResult = getTraceFromTable(backwardBacktraceSequence, split.backward, dynamicWidth);
-			std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
+			// std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
 
 			while (reverseBacktraceResult.second.size() > 0 && reverseBacktraceResult.second.back().second >= backtraceableSize)
 			{
@@ -2695,7 +2731,7 @@ private:
 			samplingFrequency = sqrt(sequence.size() / WordConfiguration<Word>::WordSize);
 		}
 		auto slice = getNextNSlices(sequence, startSlice, rowBandFunction, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
-		std::cerr << "score: " << slice.slices.back().minScore << std::endl;
+		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
 		auto backtraceresult = getTraceFromTable(sequence, slice, dynamicWidth);
 		while (backtraceresult.second.back().second >= sequence.size() - padding)
