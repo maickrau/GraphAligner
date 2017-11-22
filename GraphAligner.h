@@ -912,16 +912,7 @@ private:
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
 		for (auto node : previousSlice.nodes)
 		{
-			bool valid = false;
-			for (auto slice : previousSlice.scores.node(node))
-			{
-				if (slice.scoreEnd <= minScore + dynamicWidth)
-				{
-					valid = true;
-					break;
-				}
-			}
-			if (valid)
+			if (previousSlice.scores.minScore(node) <= minScore + dynamicWidth)
 			{
 				distances[node] = 0;
 				auto endscore = previousSlice.scores.node(node).back().scoreEnd;
@@ -933,6 +924,7 @@ private:
 				}
 			}
 		}
+		assert(distances.size() > 0);
 		while (queue.size() > 0)
 		{
 			NodeWithPriority top = queue.top();
@@ -2433,6 +2425,7 @@ private:
 				auto debugOldNode = currentSlice.node(i);
 #endif
 				auto nodeCalc = calculateNode(i, j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
+				currentSlice.setMinScore(i, nodeCalc.minScore);
 				auto newEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugNewNode = currentSlice.node(i);
@@ -2632,6 +2625,7 @@ private:
 		DPSlice result;
 		result.j = -WordConfiguration<Word>::WordSize;
 		result.scores.addNode(nodeIndex, graph.NodeEnd(nodeIndex) - graph.NodeStart(nodeIndex));
+		result.scores.setMinScore(nodeIndex, 0);
 		result.minScore = 0;
 		result.minScoreIndex.push_back(graph.NodeEnd(nodeIndex) - 1);
 		result.nodes.push_back(nodeIndex);
@@ -2797,6 +2791,7 @@ private:
 		for (size_t i = 0; i < graph.nodeStart.size(); i++)
 		{
 			startSlice.scores.addNode(i, graph.NodeEnd(i) - graph.NodeStart(i));
+			startSlice.scores.setMinScore(i, 0);
 			startSlice.j = -WordConfiguration<Word>::WordSize;
 			startSlice.nodes.push_back(i);
 			auto& slice = startSlice.scores.node(i);
