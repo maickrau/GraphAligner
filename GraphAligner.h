@@ -186,6 +186,8 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
+	const LengthType dynamicWidth;
+	const int bandFunction;
 	const AlignmentGraph& graph;
 	class RowConfirmation
 	{
@@ -290,16 +292,18 @@ private:
 	};
 public:
 
-	GraphAligner(const AlignmentGraph& graph) :
+	GraphAligner(const AlignmentGraph& graph, LengthType dynamicWidth, int bandFunction) :
+	dynamicWidth(dynamicWidth),
+	bandFunction(bandFunction),
 	graph(graph)
 	{
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, bool sqrtSpace) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, bool sqrtSpace) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
-		auto trace = getBacktraceFullStart(sequence, dynamicWidth, sqrtSpace);
+		auto trace = getBacktraceFullStart(sequence, sqrtSpace);
 		auto timeEnd = std::chrono::system_clock::now();
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output
@@ -314,7 +318,7 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, int dynamicWidth, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits, int startBandwidth) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
@@ -325,7 +329,7 @@ public:
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			std::cerr << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]) << std::endl;
-			auto result = getSplitAlignment(sequence, dynamicWidth, startBandwidth, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
+			auto result = getSplitAlignment(sequence, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace);
 			if (!hasAlignment)
 			{
 				bestAlignment = std::move(result);
@@ -348,7 +352,7 @@ public:
 		{
 			return emptyAlignment(time, 0);
 		}
-		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence, dynamicWidth);
+		auto bestTrace = getPiecewiseTracesFromSplit(bestAlignment, sequence);
 		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() || std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
 		{
 			return emptyAlignment(time, 0);
@@ -545,7 +549,7 @@ private:
 	}
 #endif
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromTable(const std::string& sequence, const DPTable& slice, LengthType dynamicWidth) const
+	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromTable(const std::string& sequence, const DPTable& slice) const
 	{
 		assert(sequence.size() % WordConfiguration<Word>::WordSize == 0);
 		if (slice.slices.size() == 0)
@@ -567,8 +571,6 @@ private:
 		}
 		assert(slice.samplingFrequency > 1);
 		std::pair<ScoreType, std::vector<MatrixPosition>> result {0, {}};
-		// auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
-		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 		for (size_t i = slice.slices.size()-1; i < slice.slices.size(); i--)
 		{
 			auto remains = slice.samplingFrequency - 1;
@@ -576,7 +578,7 @@ private:
 			{
 				remains = (sequence.size() - slice.slices[i].j - WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
 			}
-			auto partTable = getNextNSlices(sequence, slice.slices[i], rowBandFunction, remains, 1);
+			auto partTable = getNextNSlices(sequence, slice.slices[i], remains, 1);
 			assert(partTable.slices.size() < slice.samplingFrequency);
 			if (i == slice.slices.size() - 1)
 			{
@@ -829,7 +831,7 @@ private:
 	}
 
 	template <typename Container>
-	void expandBandFromPositionsFromPrevious(const Container& startpositions, LengthType dynamicWidth, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand) const
+	void expandBandFromPositionsFromPrevious(const Container& startpositions, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand) const
 	{
 		std::vector<std::vector<std::pair<LengthType, bool>>> queue;
 		queue.resize(dynamicWidth);
@@ -906,7 +908,7 @@ private:
 		int priority;
 	};
 
-	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, LengthType dynamicWidth, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
 	{
 		std::unordered_map<size_t, size_t> distances;
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
@@ -948,7 +950,7 @@ private:
 	}
 
 	template <typename Container>
-	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(const Container& previousMinimumIndex, LengthType dynamicWidth, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(const Container& previousMinimumIndex, const std::vector<bool>& previousBand) const
 	{
 		assert(previousMinimumIndex.size() > 0);
 		std::set<size_t> positions;
@@ -959,7 +961,7 @@ private:
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 		std::unordered_map<size_t, size_t> distanceAtNodeStart;
 		std::set<LengthType> expanded;
-		expandBandFromPositionsFromPrevious(positions, dynamicWidth, distanceAtNodeStart, distanceAtNodeEnd, expanded, previousBand);
+		expandBandFromPositionsFromPrevious(positions, distanceAtNodeStart, distanceAtNodeEnd, expanded, previousBand);
 		auto nodes = filterOnlyReachable(expanded, previousBand);
 // #ifndef NDEBUG
 // 		std::vector<size_t> debugPositions;
@@ -1836,15 +1838,29 @@ private:
 		return result;
 	}
 
-	std::vector<LengthType> defaultForwardRowBandFunction(const std::vector<bool>& previousBand, LengthType dynamicWidth, const DPSlice& previousSlice) const
+	std::vector<LengthType> defaultForwardRowBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice) const
 	{
 		assert(previousSlice.minScoreIndex.size() > 0);
-		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, dynamicWidth, previousBand);
+		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, previousBand);
 	}
 
-	std::vector<LengthType> forwardFromMinScoreBandFunction(const std::vector<bool>& previousBand, LengthType dynamicWidth, const DPSlice& previousSlice) const
+	std::vector<LengthType> forwardFromMinScoreBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice) const
 	{
-		return projectForwardFromMinScore(previousSlice.minScore, dynamicWidth, previousSlice, previousBand);
+		return projectForwardFromMinScore(previousSlice.minScore, previousSlice, previousBand);
+	}
+
+	std::vector<LengthType> rowBandFunction(const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
+	{
+		if (bandFunction == 1)
+		{
+			return defaultForwardRowBandFunction(previousBand, previousSlice);
+		}
+		if (bandFunction == 2)
+		{
+			return forwardFromMinScoreBandFunction(previousBand, previousSlice);
+		}
+		assert(false);
+		return std::vector<LengthType>{};
 	}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
@@ -2493,8 +2509,7 @@ private:
 		return result;
 	}
 
-	template <typename RowBandFunction>
-	DPSlice extendDPSlice(const DPSlice& previous, RowBandFunction rowBandFunction, const std::vector<bool>& previousBand) const
+	DPSlice extendDPSlice(const DPSlice& previous, const std::vector<bool>& previousBand) const
 	{
 		DPSlice result;
 		result.j = previous.j + WordConfiguration<Word>::WordSize;
@@ -2522,10 +2537,9 @@ private:
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 	}
 
-	template <typename RowBandFunction>
-	DPSlice extendAndFillSlice(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, RowBandFunction rowBandFunction, UniqueQueue<LengthType>& calculables) const
+	DPSlice extendAndFillSlice(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables) const
 	{
-		auto newSlice = extendDPSlice(previous, rowBandFunction, previousBand);
+		auto newSlice = extendDPSlice(previous, previousBand);
 		assert(sequence.size() >= newSlice.j + WordConfiguration<Word>::WordSize);
 		for (auto node : newSlice.nodes)
 		{
@@ -2535,8 +2549,7 @@ private:
 		return newSlice;
 	}
 
-	template <typename RowBandFunction>
-	DPTable getNextNSlices(const std::string& sequence, const DPSlice& initialSlice, RowBandFunction rowBandFunction, size_t numSlices, size_t samplingFrequency) const
+	DPTable getNextNSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency) const
 	{
 		DPTable result;
 		size_t realCells = 0;
@@ -2567,7 +2580,7 @@ private:
 #ifndef NDEBUG
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
-			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, rowBandFunction, calculables);
+			auto newSlice = extendAndFillSlice(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables);
 			cellsProcessed += newSlice.cellsProcessed;
 			for (auto node : newSlice.nodes)
 			{
@@ -2637,7 +2650,7 @@ private:
 		return result;
 	}
 
-	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, int dynamicWidth, int startExtensionWidth, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore, bool sqrtSpace) const
+	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore, bool sqrtSpace) const
 	{
 		assert(matchSequencePosition >= 0);
 		assert(matchSequencePosition < sequence.size());
@@ -2668,15 +2681,13 @@ private:
 				backwardPart += 'N';
 			}
 			auto backwardInitialBand = getInitialSliceOnlyOneNode(backwardNode);
-			// auto backwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
-			auto backwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 			size_t samplingFrequency = 1;
 			if (sqrtSpace)
 			{
 				samplingFrequency = sqrt(backwardPart.size() / WordConfiguration<Word>::WordSize);
 				assert(samplingFrequency > 0);
 			}
-			auto backwardSlice = getNextNSlices(backwardPart, backwardInitialBand, backwardRowBandFunction, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+			auto backwardSlice = getNextNSlices(backwardPart, backwardInitialBand, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			result.backward = std::move(backwardSlice);
 			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
 		}
@@ -2690,15 +2701,13 @@ private:
 				forwardPart += 'N';
 			}
 			auto forwardInitialBand = getInitialSliceOnlyOneNode(forwardNode);
-			// auto forwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
-			auto forwardRowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 			size_t samplingFrequency = 1;
 			if (sqrtSpace)
 			{
 				samplingFrequency = sqrt(forwardPart.size() / WordConfiguration<Word>::WordSize);
 				assert(samplingFrequency > 0);
 			}
-			auto forwardSlice = getNextNSlices(forwardPart, forwardInitialBand, forwardRowBandFunction, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+			auto forwardSlice = getNextNSlices(forwardPart, forwardInitialBand, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			result.forward = std::move(forwardSlice);
 			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
 		}
@@ -2719,7 +2728,7 @@ private:
 		return trace;
 	}
 
-	std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence, LengthType dynamicWidth) const
+	std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
 	{
 		assert(split.sequenceSplitIndex >= 0);
 		assert(split.sequenceSplitIndex < sequence.size());
@@ -2740,7 +2749,7 @@ private:
 			}
 			assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
-			backtraceresult = getTraceFromTable(backtraceSequence, split.forward, dynamicWidth);
+			backtraceresult = getTraceFromTable(backtraceSequence, split.forward);
 			std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
 
 			while (backtraceresult.second.size() > 0 && backtraceresult.second.back().second >= backtraceableSize)
@@ -2763,7 +2772,7 @@ private:
 			}
 			assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
-			reverseBacktraceResult = getTraceFromTable(backwardBacktraceSequence, split.backward, dynamicWidth);
+			reverseBacktraceResult = getTraceFromTable(backwardBacktraceSequence, split.backward);
 			std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
 
 			while (reverseBacktraceResult.second.size() > 0 && reverseBacktraceResult.second.back().second >= backtraceableSize)
@@ -2780,7 +2789,7 @@ private:
 		return std::make_pair(backtraceresult, reverseBacktraceResult);
 	}
 
-	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktraceFullStart(std::string sequence, int dynamicWidth, bool sqrtSpace) const
+	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktraceFullStart(std::string sequence, bool sqrtSpace) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 		for (int i = 0; i < padding; i++)
@@ -2800,17 +2809,15 @@ private:
 				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
 			}
 		}
-		// auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return defaultForwardRowBandFunction(previousBand, dynamicWidth, previousSlice); };
-		auto rowBandFunction = [this, dynamicWidth](const DPSlice& previousSlice, const std::vector<bool>& previousBand) { return forwardFromMinScoreBandFunction(previousBand, dynamicWidth, previousSlice); };
 		size_t samplingFrequency = 1;
 		if (sqrtSpace)
 		{
 			samplingFrequency = sqrt(sequence.size() / WordConfiguration<Word>::WordSize);
 		}
-		auto slice = getNextNSlices(sequence, startSlice, rowBandFunction, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+		auto slice = getNextNSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 		std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
-		auto backtraceresult = getTraceFromTable(sequence, slice, dynamicWidth);
+		auto backtraceresult = getTraceFromTable(sequence, slice);
 		while (backtraceresult.second.back().second >= sequence.size() - padding)
 		{
 			backtraceresult.second.pop_back();

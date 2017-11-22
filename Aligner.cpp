@@ -118,7 +118,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, int startBandwidth, bool sqrtSpace)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int dynamicWidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, bool sqrtSpace, bool alternateBand)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -142,7 +142,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		if (graphAlignerSeedHits == nullptr)
 		{
-			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace);
+			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand);
 		}
 		else
 		{
@@ -154,7 +154,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 				continue;
 			}
-			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, graphAlignerSeedHits->at(fastq), startBandwidth);
+			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
 		}
 
 		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;
@@ -226,7 +226,7 @@ AlignmentGraph getGraph(std::string graphFile)
 	}
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, int startBandwidth, bool sqrtSpace)
+void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int dynamicWidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile, bool sqrtSpace, bool alternateBand)
 {
 	assertSetRead("Preprocessing");
 
@@ -287,7 +287,7 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 
 	for (int i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth, sqrtSpace]() { runComponentMappings(alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, startBandwidth, sqrtSpace); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, dynamicWidth, dynamicRowStart, seedHitsToThreads, sqrtSpace, alternateBand]() { runComponentMappings(alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, dynamicWidth, dynamicRowStart, seedHitsToThreads, sqrtSpace, alternateBand); });
 	}
 
 	for (int i = 0; i < numThreads; i++)
