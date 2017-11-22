@@ -37,6 +37,7 @@ public:
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t index) const;
 	size_t NodeSequencesSize() const;
+	size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 	int DBGOverlap;
