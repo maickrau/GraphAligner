@@ -835,14 +835,21 @@ private:
 		}
 	};
 
-	void filterReachableRec(std::set<LengthType>& result, const std::set<LengthType>& current, const std::vector<bool>& previousBand, LengthType node) const
+	void filterReachableRec(std::set<LengthType>& result, const std::set<LengthType>& current, const std::vector<bool>& previousBand, LengthType start) const
 	{
-		if (result.count(node) == 1) return;
-		if (current.count(node) == 0) return;
-		result.insert(node);
-		for (auto neighbor : graph.outNeighbors[node])
+		std::vector<LengthType> stack;
+		stack.push_back(start);
+		while (stack.size() > 0)
 		{
-			filterReachableRec(result, current, previousBand, neighbor);
+			auto node = stack.back();
+			stack.pop_back();
+			if (result.count(node) == 1) continue;
+			if (current.count(node) == 0) continue;
+			result.insert(node);
+			for (auto neighbor : graph.outNeighbors[node])
+			{
+				stack.push_back(neighbor);
+			}
 		}
 	}
 
