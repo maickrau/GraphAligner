@@ -113,6 +113,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		if (stats)
 		{
+			if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+			{
+				continue;
+			}
 			alignment = CollectStats(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
 		}
 		else if (graphAlignerSeedHits == nullptr)
