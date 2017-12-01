@@ -262,7 +262,8 @@ private:
 		nodes(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
-		cellsProcessed(0)
+		cellsProcessed(0),
+		numCells(0)
 		{}
 		ScoreType minScore;
 		std::vector<LengthType> minScoreIndex;
@@ -271,18 +272,21 @@ private:
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
 		size_t cellsProcessed;
+		size_t numCells;
+		size_t EstimatedMemoryUsage() const
+		{
+			return numCells * sizeof(WordSlice) + scores.size() * (sizeof(size_t) * 2 + sizeof(std::vector<WordSlice>) + sizeof(int));
+		}
 	};
 	class DPTable
 	{
 	public:
 		DPTable() :
 		slices(),
-		samplingFrequency(0),
-		startj(0)
+		samplingFrequency(0)
 		{}
 		std::vector<DPSlice> slices;
 		size_t samplingFrequency;
-		LengthType startj;
 	};
 	class TwoDirectionalSplitAlignment
 	{
@@ -349,15 +353,15 @@ public:
 		assert(seedHits.size() > 0);
 		size_t bestAlignmentEstimatedCorrectlyAligned;
 		std::tuple<int, size_t, bool> bestSeed;
-		std::vector<std::set<size_t>> triedAlignmentNodes;
-		triedAlignmentNodes.resize(sequence.size());
+		std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> bestTrace;
 		bool hasAlignment = false;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
 			auto nodeIndex = graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
-			if (triedAlignmentNodes[std::get<1>(seedHits[i])].count(nodeIndex) == 1)
+			auto pos = std::get<1>(seedHits[i]);
+			if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
 			{
 				logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
 				continue;
@@ -424,27 +428,45 @@ public:
 
 private:
 
-	void addAlignmentNodes(std::vector<std::set<LengthType>>& tried, const std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>>& trace, LengthType sequenceSplitIndex) const
+	void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>>& trace, LengthType sequenceSplitIndex) const
 	{
 		if (std::get<1>(trace.first).size() > 0)
 		{
-			assert(std::get<1>(trace.first).back().second >= 0);
-			assert(std::get<1>(trace.first).back().second < tried.size());
-			for (size_t i = 0; i < std::get<1>(trace.first).size(); i++)
+			size_t oldNodeIndex = graph.IndexToNode(std::get<1>(trace.first)[0].first);
+			size_t startIndex = std::get<1>(trace.first)[0].second;
+			size_t endIndex = std::get<1>(trace.first)[0].second;
+			for (size_t i = 1; i < std::get<1>(trace.first).size(); i++)
 			{
-				auto nodeIndex = graph.IndexToNode(std::get<1>(trace.first)[i].first);
-				tried[std::get<1>(trace.first)[i].second].insert(nodeIndex);
+				size_t nodeIndex = graph.IndexToNode(std::get<1>(trace.first)[i].first);
+				size_t index = std::get<1>(trace.first)[i].second;
+				if (nodeIndex != oldNodeIndex)
+				{
+					tried.emplace_back(startIndex, endIndex, oldNodeIndex);
+					startIndex = index;
+					oldNodeIndex = nodeIndex;
+				}
+				endIndex = index;
 			}
+			tried.emplace_back(startIndex, endIndex, oldNodeIndex);
 		}
 		if (std::get<1>(trace.second).size() > 0)
 		{
-			assert(std::get<1>(trace.second).back().second >= 0);
-			assert(std::get<1>(trace.second).back().second < tried.size());
-			for (size_t i = 0; i < std::get<1>(trace.second).size(); i++)
+			size_t oldNodeIndex = graph.IndexToNode(std::get<1>(trace.second)[0].first);
+			size_t startIndex = std::get<1>(trace.second)[0].second;
+			size_t endIndex = std::get<1>(trace.second)[0].second;
+			for (size_t i = 1; i < std::get<1>(trace.second).size(); i++)
 			{
-				auto nodeIndex = graph.IndexToNode(std::get<1>(trace.second)[i].first);
-				tried[std::get<1>(trace.second)[i].second].insert(nodeIndex);
+				size_t nodeIndex = graph.IndexToNode(std::get<1>(trace.second)[i].first);
+				size_t index = std::get<1>(trace.second)[i].second;
+				if (nodeIndex != oldNodeIndex)
+				{
+					tried.emplace_back(startIndex, endIndex, oldNodeIndex);
+					startIndex = index;
+					oldNodeIndex = nodeIndex;
+				}
+				endIndex = index;
 			}
+			tried.emplace_back(startIndex, endIndex, oldNodeIndex);
 		}
 	}
 
@@ -634,13 +656,18 @@ private:
 		std::pair<ScoreType, std::vector<MatrixPosition>> result {0, {}};
 		for (size_t i = slice.slices.size()-1; i < slice.slices.size(); i--)
 		{
-			auto remains = slice.samplingFrequency - 1;
+			size_t remains;
 			if (i == slice.slices.size() - 1)
 			{
 				remains = (sequence.size() - slice.slices[i].j - WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
 			}
+			else
+			{
+				remains = (slice.slices[i+1].j - slice.slices[i].j) / WordConfiguration<Word>::WordSize - 1;
+				assert(remains > 0);
+			}
 			auto partTable = getNextNSlices(sequence, slice.slices[i], remains, 1);
-			assert(partTable.slices.size() < slice.samplingFrequency);
+			assert(partTable.slices.size() <= remains);
 			if (i == slice.slices.size() - 1)
 			{
 				result.first = partTable.slices.back().minScore;
@@ -806,7 +833,7 @@ private:
 	{
 		assert(table.samplingFrequency == 1);
 		std::vector<MatrixPosition> result;
-		result.emplace_back(startColumn, table.startj + table.slices.size() * WordConfiguration<Word>::WordSize - 1);
+		result.emplace_back(startColumn, table.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 		for (size_t slice = table.slices.size()-1; slice < table.slices.size(); slice--)
 		{
 			assert(table.slices[slice].j <= result.back().second);
@@ -2886,6 +2913,7 @@ private:
 			if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
 			{
 				fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables);
+				bandTest.numCells = cells;
 				return bandTest;
 			}
 			else
@@ -2931,6 +2959,7 @@ private:
 				word.confirmedRows.rows = WordConfiguration<Word>::WordSize;
 				minScore = std::min(minScore, word.scoreEnd);
 			}
+			slice.numCells += pair.second.size();
 			slice.scores.setMinScore(node, minScore);
 		}
 	}
@@ -2941,7 +2970,6 @@ private:
 		DPTable result;
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
-		result.startj = initialSlice.j + WordConfiguration<Word>::WordSize;
 		result.samplingFrequency = samplingFrequency;
 		std::vector<bool> previousBand;
 		std::vector<bool> currentBand;
@@ -2960,6 +2988,7 @@ private:
 #ifndef NDEBUG
 		debugLastRowMinScore = 0;
 #endif
+		DPSlice storeSlice;
 		DPSlice lastSlice = initialSlice;
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		std::vector<bool> processed;
@@ -2970,6 +2999,7 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed);
+			if (samplingFrequency > 1 && (slice == 0 || slice % samplingFrequency == 1 || newSlice.EstimatedMemoryUsage() < storeSlice.EstimatedMemoryUsage())) storeSlice = newSlice;
 			size_t sliceCells = 0;
 			for (auto node : newSlice.nodes)
 			{
@@ -2994,7 +3024,7 @@ private:
 			}
 			if (slice % samplingFrequency == 0)
 			{
-				result.slices.push_back(newSlice);
+				if (samplingFrequency > 1) result.slices.push_back(storeSlice); else result.slices.push_back(newSlice);
 			}
 			for (auto node : lastSlice.nodes)
 			{
