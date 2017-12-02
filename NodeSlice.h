@@ -77,6 +77,12 @@ public:
 		Word VN;
 		unsigned char plusMinScore;
 	};
+	class TinySlice
+	{
+	public:
+		unsigned char plusMinScore;
+		char VPVNLastBit;
+	};
 	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
 	{
 	public:
@@ -170,28 +176,32 @@ public:
 	WordContainer() :
 	minEndScore(0),
 	minStartScore(0),
-	frozen(false)
+	frozen(0)
 	{
 	}
 	WordSlice& operator[](size_t index)
 	{
-		assert(!frozen);
+		assert(frozen == 0);
 		return mutableSlices[index];
 	}
 	const WordSlice operator[](size_t index) const
 	{
-		if (frozen)
+		if (frozen == 1)
 		{
 			return { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 0, false };
+		}
+		else if (frozen == 2)
+		{
+			return { (frozenSqrtSlices[index].VPVNLastBit & 1) << 63, (frozenSqrtSlices[index].VPVNLastBit & 2) << 62, 0, minEndScore + frozenSqrtSlices[index].plusMinScore, 0, false };
 		}
 		else
 		{
 			return mutableSlices[index];
 		}
 	}
-	void freeze()
+	void freezeScores()
 	{
-		assert(!frozen);
+		assert(frozen == 0);
 		frozenSlices.resize(mutableSlices.size());
 		minStartScore = mutableSlices[0].scoreBeforeStart;
 		for (size_t i = 1; i < mutableSlices.size(); i++)
@@ -210,7 +220,26 @@ public:
 			std::vector<WordSlice> empty;
 			std::swap(mutableSlices, empty);
 		}
-		frozen = true;
+		frozen = 1;
+	}
+	void freezeSqrtEndscores()
+	{
+		assert(frozen == 0);
+		frozenSqrtSlices.resize(mutableSlices.size());
+		for (size_t i = 0; i < mutableSlices.size(); i++)
+		{
+			frozenSqrtSlices[i].VPVNLastBit = 0;
+			frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
+			frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VP >> 62) & 2;
+			assert(mutableSlices[i].scoreEnd >= minEndScore);
+			assert(mutableSlices[i].scoreEnd - minEndScore < 256);
+			frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - minEndScore;
+		}
+		{
+			std::vector<WordSlice> empty;
+			std::swap(mutableSlices, empty);
+		}
+		frozen = 2;
 	}
 	iterator begin()
 	{
@@ -222,16 +251,16 @@ public:
 	}
 	size_t size() const
 	{
-		return frozen ? frozenSlices.size() : mutableSlices.size();
+		return frozen == 0 ? mutableSlices.size() : frozen == 1 ? frozenSlices.size() : frozenSqrtSlices.size();
 	}
 	void resize(size_t size)
 	{
-		assert(!frozen);
+		assert(frozen == 0);
 		mutableSlices.resize(size);
 	}
 	WordSlice& back()
 	{
-		assert(!frozen);
+		assert(frozen == 0);
 		return mutableSlices.back();
 	}
 	const WordSlice back() const
@@ -241,9 +270,10 @@ public:
 	ScoreType minEndScore;
 private:
 	ScoreType minStartScore;
-	bool frozen;
+	int frozen;
 	std::vector<WordSlice> mutableSlices;
 	std::vector<SmallSlice> frozenSlices;
+	std::vector<TinySlice> frozenSqrtSlices;
 };
 
 template <typename T>
@@ -301,11 +331,18 @@ public:
 	{
 		return nodes.end();
 	}
-	void freeze()
+	void freezeSqrtEndScores()
 	{
 		for (auto& pair : nodes)
 		{
-			pair.second.freeze();
+			pair.second.freezeSqrtEndscores();
+		}
+	}
+	void freezeScores()
+	{
+		for (auto& pair : nodes)
+		{
+			pair.second.freezeScores();
 		}
 	}
 private:

@@ -2969,12 +2969,13 @@ private:
 				if (samplingFrequency > 1)
 				{
 					result.slices.push_back(storeSlice);
+					result.slices.back().scores.freezeSqrtEndScores();
 				}
 				else
 				{
 					result.slices.push_back(newSlice);
+					result.slices.back().scores.freezeScores();
 				}
-				result.slices.back().scores.freeze();
 			}
 			for (auto node : lastSlice.nodes)
 			{
