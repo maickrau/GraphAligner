@@ -6,21 +6,262 @@
 #include <vector>
 #include "ThreadReadAssertion.h"
 
+template <typename LengthType, typename ScoreType, typename Word>
+class WordContainer
+{
+public:
+	class RowConfirmation
+	{
+	public:
+		RowConfirmation(char rows, bool partial) : rows(rows), partial(partial) {};
+		char rows;
+		bool partial;
+		bool operator>(const RowConfirmation& other) const
+		{
+			return rows > other.rows || (rows == other.rows && partial && !other.partial);
+		}
+		bool operator<(const RowConfirmation& other) const
+		{
+			return rows < other.rows || (rows == other.rows && !partial && other.partial);
+		}
+		bool operator==(const RowConfirmation& other) const
+		{
+			return rows == other.rows && partial == other.partial;
+		}
+		bool operator!=(const RowConfirmation& other) const
+		{
+			return !(*this == other);
+		}
+		bool operator>=(const RowConfirmation& other) const
+		{
+			return !(*this < other);
+		}
+		bool operator<=(const RowConfirmation& other) const
+		{
+			return !(*this > other);
+		}
+	};
+	class WordSlice
+	{
+	public:
+		WordSlice() :
+		VP(0),
+		VN(0),
+		scoreEnd(0),
+		scoreBeforeStart(0),
+		confirmedRows(0, false),
+		scoreBeforeExists(false),
+		scoreEndExists(true)
+		{}
+		WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool scoreBeforeExists) :
+		VP(VP),
+		VN(VN),
+		scoreEnd(scoreEnd),
+		scoreBeforeStart(scoreBeforeStart),
+		confirmedRows(confirmedRows, false),
+		scoreBeforeExists(scoreBeforeExists),
+		scoreEndExists(true)
+		{}
+		Word VP;
+		Word VN;
+		ScoreType scoreEnd;
+		ScoreType scoreBeforeStart;
+		RowConfirmation confirmedRows;
+		bool scoreBeforeExists;
+		bool scoreEndExists;
+	};
+	class SmallSlice
+	{
+	public:
+		Word VP;
+		Word VN;
+		unsigned char plusMinScore;
+	};
+	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
+	{
+	public:
+		WordContainerIterator(WordContainer* container, size_t pos) :
+		container(container),
+		pos(pos)
+		{
+		}
+		WordSlice& operator*()
+		{
+			return (*container)[pos];
+		}
+		const WordSlice operator*() const
+		{
+			return (*container)[pos];
+		}
+		WordSlice& operator[](size_t index)
+		{
+			return (*container)[pos + index];
+		}
+		const WordSlice operator[](size_t index) const
+		{
+			return (*container)[pos + index];
+		}
+		WordContainerIterator& operator++()
+		{
+			pos++;
+			return *this;
+		}
+		WordContainerIterator operator++(int)
+		{
+			auto result = *this;
+			pos++;
+			return result;
+		}
+		WordContainerIterator& operator--()
+		{
+			pos--;
+			return *this;
+		}
+		WordContainerIterator operator--(int)
+		{
+			auto result = *this;
+			pos--;
+			return result;
+		}
+		bool operator==(const WordContainerIterator& other) const
+		{
+			return container == other.container && pos == other.pos;
+		}
+		bool operator!=(const WordContainerIterator& other) const
+		{
+			return !(*this == other);
+		}
+		bool operator<(const WordContainerIterator& other) const
+		{
+			return pos < other.pos;
+		}
+		WordContainerIterator operator+(size_t off) const
+		{
+			WordContainerIterator result;
+			result.container = container;
+			result.pos = pos + off;
+			return result;
+		}
+		WordContainerIterator operator-(size_t off) const
+		{
+			WordContainerIterator result;
+			result.container = container;
+			result.pos = pos - off;
+			return result;
+		}
+		WordContainerIterator& operator+=(size_t off)
+		{
+			pos += off;
+		}
+		WordContainerIterator& operator-=(size_t off)
+		{
+			pos -= off;
+		}
+		size_t operator-(const WordContainerIterator& other) const
+		{
+			return pos - other.pos;
+		}
+	private:
+		WordContainer* container;
+		size_t pos;
+	};
+	using iterator = WordContainerIterator;
+	using const_iterator = const WordContainerIterator;
+	WordContainer() :
+	minEndScore(0),
+	minStartScore(0),
+	frozen(false)
+	{
+	}
+	WordSlice& operator[](size_t index)
+	{
+		assert(!frozen);
+		return mutableSlices[index];
+	}
+	const WordSlice operator[](size_t index) const
+	{
+		if (frozen)
+		{
+			return { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 0, false };
+		}
+		else
+		{
+			return mutableSlices[index];
+		}
+	}
+	void freeze()
+	{
+		assert(!frozen);
+		frozenSlices.resize(mutableSlices.size());
+		minStartScore = mutableSlices[0].scoreBeforeStart;
+		for (size_t i = 1; i < mutableSlices.size(); i++)
+		{
+			minStartScore = std::min(minStartScore, mutableSlices[i].scoreBeforeStart);
+		}
+		for (size_t i = 0; i < mutableSlices.size(); i++)
+		{
+			frozenSlices[i].VP = mutableSlices[i].VP;
+			frozenSlices[i].VN = mutableSlices[i].VN;
+			assert(mutableSlices[i].scoreBeforeStart >= minStartScore);
+			assert(mutableSlices[i].scoreBeforeStart - minStartScore < 256);
+			frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - minStartScore;
+		}
+		{
+			std::vector<WordSlice> empty;
+			std::swap(mutableSlices, empty);
+		}
+		frozen = true;
+	}
+	iterator begin()
+	{
+		return iterator { this, 0 };
+	}
+	iterator end()
+	{
+		return iterator { this, size() };
+	}
+	size_t size() const
+	{
+		return frozen ? frozenSlices.size() : mutableSlices.size();
+	}
+	void resize(size_t size)
+	{
+		assert(!frozen);
+		mutableSlices.resize(size);
+	}
+	WordSlice& back()
+	{
+		assert(!frozen);
+		return mutableSlices.back();
+	}
+	const WordSlice back() const
+	{
+		return (*this)[size()-1];
+	}
+	ScoreType minEndScore;
+private:
+	ScoreType minStartScore;
+	bool frozen;
+	std::vector<WordSlice> mutableSlices;
+	std::vector<SmallSlice> frozenSlices;
+};
+
 template <typename T>
 class NodeSlice
 {
 public:
+	using Container = WordContainer<size_t, int, uint64_t>;
 	void addNode(size_t nodeIndex, size_t size)
 	{
 		nodes[nodeIndex].resize(size);
 	}
-	std::vector<T>& node(size_t nodeIndex)
+	Container& node(size_t nodeIndex)
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
 		return found->second;
 	}
-	const std::vector<T>& node(size_t nodeIndex) const
+	const Container& node(size_t nodeIndex) const
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
@@ -32,13 +273,13 @@ public:
 	}
 	int minScore(size_t nodeIndex) const
 	{
-		auto found = minScores.find(nodeIndex);
-		if (found == minScores.end()) return std::numeric_limits<int>::max();
-		return found->second;
+		auto found = nodes.find(nodeIndex);
+		assert(found != nodes.end());
+		return found->second.minEndScore;
 	}
 	void setMinScore(size_t nodeIndex, int score)
 	{
-		minScores[nodeIndex] = score;
+		nodes[nodeIndex].minEndScore = score;
 	}
 	size_t size() const
 	{
@@ -60,9 +301,15 @@ public:
 	{
 		return nodes.end();
 	}
+	void freeze()
+	{
+		for (auto& pair : nodes)
+		{
+			pair.second.freeze();
+		}
+	}
 private:
-	std::unordered_map<size_t, std::vector<T>> nodes;
-	std::unordered_map<size_t, int> minScores;
+	std::unordered_map<size_t, Container> nodes;
 };
 
 #endif

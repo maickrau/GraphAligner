@@ -186,71 +186,13 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
+	using RowConfirmation = typename WordContainer<LengthType, ScoreType, Word>::RowConfirmation;
+	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::WordSlice;
 	mutable bool statsmode;
 	mutable BufferedWriter logger;
 	const LengthType dynamicWidth;
 	const int bandFunction;
 	const AlignmentGraph& graph;
-	class RowConfirmation
-	{
-	public:
-		RowConfirmation(char rows, bool partial) : rows(rows), partial(partial) {};
-		char rows;
-		bool partial;
-		bool operator>(const RowConfirmation& other) const
-		{
-			return rows > other.rows || (rows == other.rows && partial && !other.partial);
-		}
-		bool operator<(const RowConfirmation& other) const
-		{
-			return rows < other.rows || (rows == other.rows && !partial && other.partial);
-		}
-		bool operator==(const RowConfirmation& other) const
-		{
-			return rows == other.rows && partial == other.partial;
-		}
-		bool operator!=(const RowConfirmation& other) const
-		{
-			return !(*this == other);
-		}
-		bool operator>=(const RowConfirmation& other) const
-		{
-			return !(*this < other);
-		}
-		bool operator<=(const RowConfirmation& other) const
-		{
-			return !(*this > other);
-		}
-	};
-	class WordSlice
-	{
-	public:
-		WordSlice() :
-		VP(WordConfiguration<Word>::AllZeros),
-		VN(WordConfiguration<Word>::AllZeros),
-		scoreEnd(0),
-		scoreBeforeStart(0),
-		confirmedRows(0, false),
-		scoreBeforeExists(false),
-		scoreEndExists(true)
-		{}
-		WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool scoreBeforeExists) :
-		VP(VP),
-		VN(VN),
-		scoreEnd(scoreEnd),
-		scoreBeforeStart(scoreBeforeStart),
-		confirmedRows(confirmedRows, false),
-		scoreBeforeExists(scoreBeforeExists),
-		scoreEndExists(true)
-		{}
-		Word VP;
-		Word VN;
-		ScoreType scoreEnd;
-		ScoreType scoreBeforeStart;
-		RowConfirmation confirmedRows;
-		bool scoreBeforeExists;
-		bool scoreEndExists;
-	};
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
 	class DPSlice
 	{
@@ -1826,8 +1768,8 @@ private:
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.cellsProcessed = 0;
-		std::vector<WordSlice>& slice = currentSlice.node(i);
-		const std::vector<WordSlice>& oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
+		auto& slice = currentSlice.node(i);
+		const auto& oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
 		assert(slice.size() == graph.NodeEnd(i) - graph.NodeStart(i));
 		auto nodeStart = graph.NodeStart(i);
 
@@ -3024,7 +2966,15 @@ private:
 			}
 			if (slice % samplingFrequency == 0)
 			{
-				if (samplingFrequency > 1) result.slices.push_back(storeSlice); else result.slices.push_back(newSlice);
+				if (samplingFrequency > 1)
+				{
+					result.slices.push_back(storeSlice);
+				}
+				else
+				{
+					result.slices.push_back(newSlice);
+				}
+				result.slices.back().scores.freeze();
 			}
 			for (auto node : lastSlice.nodes)
 			{
