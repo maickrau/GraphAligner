@@ -605,7 +605,7 @@ private:
 			}
 			else
 			{
-				remains = (slice.slices[i+1].j - slice.slices[i].j) / WordConfiguration<Word>::WordSize - 1;
+				remains = (slice.slices[i+1].j - slice.slices[i].j) / WordConfiguration<Word>::WordSize;
 				assert(remains > 0);
 			}
 			auto partTable = getNextNSlices(sequence, slice.slices[i], remains, 1);
@@ -616,19 +616,15 @@ private:
 				assert(partTable.slices.back().minScoreIndex.size() > 0);
 				result.second.emplace_back(partTable.slices.back().minScoreIndex.back(), partTable.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 			}
-			if (i < slice.slices.size() - 1)
-			{
-				auto boundaryTrace = getSliceBoundaryTrace(sequence, slice.slices[i+1], partTable.slices.back(), result.second.back().first);
-				result.second.insert(result.second.end(), boundaryTrace.begin(), boundaryTrace.end());
-			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.second.back().first);
 			assert(partTrace.size() > 1);
 			//begin()+1 because the starting position was already inserted earlier
 			result.second.insert(result.second.end(), partTrace.begin()+1, partTrace.end());
-			auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable.slices[0], slice.slices[i], result.second.back().first);
-			result.second.insert(result.second.end(), boundaryTrace.begin(), boundaryTrace.end());
-			auto sliceTrace = getTraceFromSlice(sequence, slice.slices[i], result.second.back().first);
-			result.second.insert(result.second.end(), sliceTrace.begin(), sliceTrace.end());
+			if (i > 0)
+			{
+				auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable.slices[0], slice.slices[i], result.second.back().first);
+				result.second.insert(result.second.end(), boundaryTrace.begin(), boundaryTrace.end());
+			}
 		}
 		std::reverse(result.second.begin(), result.second.end());
 #ifndef NDEBUG
@@ -2852,7 +2848,8 @@ private:
 				currentBand[node] = true;
 				cells += graph.NodeEnd(node) - graph.NodeStart(node);
 			}
-			if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
+			if (true)
+			// if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
 			{
 				fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables);
 				bandTest.numCells = cells;
@@ -2910,6 +2907,11 @@ private:
 	{
 		if (statsmode) samplingFrequency = numSlices+1;
 		DPTable result;
+		if (samplingFrequency > 1)
+		{
+			result.slices.push_back(initialSlice);
+			result.slices.back().scores.freezeSqrtEndScores();
+		}
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
 		result.samplingFrequency = samplingFrequency;

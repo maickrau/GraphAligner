@@ -75,12 +75,12 @@ public:
 	public:
 		Word VP;
 		Word VN;
-		unsigned char plusMinScore;
+		uint16_t plusMinScore;
 	};
 	class TinySlice
 	{
 	public:
-		unsigned char plusMinScore;
+		uint16_t plusMinScore;
 		char VPVNLastBit;
 	};
 	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
@@ -188,11 +188,15 @@ public:
 	{
 		if (frozen == 1)
 		{
-			return { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 0, false };
+			return { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
 		}
 		else if (frozen == 2)
 		{
-			return { (frozenSqrtSlices[index].VPVNLastBit & 1) << 63, (frozenSqrtSlices[index].VPVNLastBit & 2) << 62, 0, minEndScore + frozenSqrtSlices[index].plusMinScore, 0, false };
+			bool VP = frozenSqrtSlices[index].VPVNLastBit & 1;
+			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
+			WordSlice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), 64, false };
+			result.scoreEndExists = frozenSqrtSlices[index].VPVNLastBit & 4;
+			return result;
 		}
 		else
 		{
@@ -213,7 +217,7 @@ public:
 			frozenSlices[i].VP = mutableSlices[i].VP;
 			frozenSlices[i].VN = mutableSlices[i].VN;
 			assert(mutableSlices[i].scoreBeforeStart >= minStartScore);
-			assert(mutableSlices[i].scoreBeforeStart - minStartScore < 256);
+			assert(mutableSlices[i].scoreBeforeStart - minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
 			frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - minStartScore;
 		}
 		{
@@ -226,13 +230,19 @@ public:
 	{
 		assert(frozen == 0);
 		frozenSqrtSlices.resize(mutableSlices.size());
+		minEndScore = mutableSlices[0].scoreEnd;
+		for (size_t i = 1; i < mutableSlices.size(); i++)
+		{
+			minEndScore = std::min(minEndScore, mutableSlices[i].scoreEnd);
+		}
 		for (size_t i = 0; i < mutableSlices.size(); i++)
 		{
 			frozenSqrtSlices[i].VPVNLastBit = 0;
 			frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
-			frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VP >> 62) & 2;
+			frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VN >> 62) & 2;
+			frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].scoreEndExists << 2;
 			assert(mutableSlices[i].scoreEnd >= minEndScore);
-			assert(mutableSlices[i].scoreEnd - minEndScore < 256);
+			assert(mutableSlices[i].scoreEnd - minEndScore < std::numeric_limits<decltype(frozenSqrtSlices[i].plusMinScore)>::max());
 			frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - minEndScore;
 		}
 		{
@@ -267,8 +277,9 @@ public:
 	{
 		return (*this)[size()-1];
 	}
-	ScoreType minEndScore;
+	ScoreType minScore;
 private:
+	ScoreType minEndScore;
 	ScoreType minStartScore;
 	int frozen;
 	std::vector<WordSlice> mutableSlices;
@@ -305,11 +316,11 @@ public:
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return found->second.minEndScore;
+		return found->second.minScore;
 	}
 	void setMinScore(size_t nodeIndex, int score)
 	{
-		nodes[nodeIndex].minEndScore = score;
+		nodes[nodeIndex].minScore = score;
 	}
 	size_t size() const
 	{
