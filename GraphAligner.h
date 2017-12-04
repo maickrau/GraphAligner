@@ -2840,16 +2840,8 @@ private:
 		DPSlice result;
 		result.j = previous.j + WordConfiguration<Word>::WordSize;
 		result.correctness = previous.correctness;
-		auto bandOrder = rowBandFunction(previous, previousBand);
-		assert(bandOrder.size() > 0);
-		for (auto i : bandOrder)
-		{
-			assert(i < graph.NodeSize());
-			assert(i >= 0);
-			assert(graph.NodeEnd(i) > graph.NodeStart(i));
-			result.scores.addNode(i, graph.NodeEnd(i) - graph.NodeStart(i));
-			result.nodes.push_back(i);
-		}
+		result.nodes = rowBandFunction(previous, previousBand);
+		assert(result.nodes.size() > 0);
 		return result;
 	}
 
@@ -2871,22 +2863,18 @@ private:
 			size_t cells = 0;
 			for (auto node : bandTest.nodes)
 			{
-				currentBand[node] = true;
-				cells += graph.NodeEnd(node) - graph.NodeStart(node);
+				cells += graph.NodeLength(node);
 			}
-			if (true)
-			// if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
-			{
-				fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables);
-				bandTest.numCells = cells;
-				return bandTest;
-			}
-			else
+			if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
 			{
 				for (auto node : bandTest.nodes)
 				{
-					currentBand[node] = false;
+					bandTest.scores.addNode(node, graph.NodeLength(node));
+					currentBand[node] = true;
 				}
+				fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables);
+				bandTest.numCells = cells;
+				return bandTest;
 			}
 		}
 		{
@@ -2901,13 +2889,13 @@ private:
 			assert(result.minScore >= previous.minScore);
 			result.correctness = result.correctness.NextState(result.minScore - previous.minScore, WordConfiguration<Word>::WordSize);
 
-			finalizeAlternateSlice(result, currentBand);
+			finalizeAlternateSlice(result, currentBand, sequence.size());
 
 			return result;
 		}
 	}
 
-	void finalizeAlternateSlice(DPSlice& slice, std::vector<bool>& currentBand) const
+	void finalizeAlternateSlice(DPSlice& slice, std::vector<bool>& currentBand, ScoreType uninitializedValue) const
 	{
 		for (auto pair : slice.scores)
 		{
@@ -2923,6 +2911,14 @@ private:
 				word.scoreEndExists = word.confirmedRows.rows == WordConfiguration<Word>::WordSize - 1;
 				word.confirmedRows.rows = WordConfiguration<Word>::WordSize;
 				minScore = std::min(minScore, word.scoreEnd);
+			}
+			for (auto& word : pair.second)
+			{
+				if (word.scoreEnd == uninitializedValue)
+				{
+					word.scoreEnd = minScore + pair.second.size() + 10;
+					word.scoreBeforeStart = minScore + pair.second.size() + 10;
+				}
 			}
 			slice.numCells += pair.second.size();
 			slice.scores.setMinScore(node, minScore);
