@@ -2998,6 +2998,7 @@ private:
 			}
 #endif
 			lastSlice = newSlice;
+			lastSlice.scores.freezeSqrtEndScores();
 			std::swap(previousBand, currentBand);
 		}
 #ifndef NDEBUG
