@@ -217,7 +217,7 @@ private:
 		size_t numCells;
 		size_t EstimatedMemoryUsage() const
 		{
-			return numCells * sizeof(WordSlice) + scores.size() * (sizeof(size_t) * 2 + sizeof(std::vector<WordSlice>) + sizeof(int));
+			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 2 + sizeof(std::vector<WordSlice>) + sizeof(int));
 		}
 	};
 	class DPTable
