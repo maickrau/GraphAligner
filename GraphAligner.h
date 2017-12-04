@@ -217,7 +217,7 @@ private:
 		size_t numCells;
 		size_t EstimatedMemoryUsage() const
 		{
-			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 2 + sizeof(std::vector<WordSlice>) + sizeof(int));
+			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 3 + sizeof(int));
 		}
 	};
 	class DPTable
@@ -1764,8 +1764,8 @@ private:
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.cellsProcessed = 0;
-		auto& slice = currentSlice.node(i);
-		const auto& oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
+		auto slice = currentSlice.node(i);
+		const auto oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
 		assert(slice.size() == graph.NodeEnd(i) - graph.NodeStart(i));
 		auto nodeStart = graph.NodeStart(i);
 
@@ -2014,7 +2014,7 @@ private:
 				for (auto node : bandOrder)
 				{
 					result.slices.back().scores.addNode(node, graph.NodeEnd(node) - graph.NodeStart(node));
-					auto& slice = result.slices.back().scores.node(node);
+					auto slice = result.slices.back().scores.node(node);
 					for (size_t i = graph.NodeStart(node); i < graph.NodeEnd(node); i++)
 					{
 						slice[i - graph.NodeStart(node)] = {0, 0, currentRowScores[i], 0, 64, false};
@@ -2212,8 +2212,8 @@ private:
 		{
 			assert(currentBand[node]);
 			assert(partOfComponent[node] == componentIndex);
-			auto& oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
-			auto& newSlice = currentSlice.node(node);
+			const auto oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
+			auto newSlice = currentSlice.node(node);
 			for (size_t i = 0; i < newSlice.size(); i++)
 			{
 				newSlice[i].scoreBeforeStart = std::numeric_limits<ScoreType>::max();
@@ -2262,7 +2262,7 @@ private:
 			auto score = top.priority;
 			assert(partOfComponent[nodeIndex] == componentIndex);
 			bool endUpdated = true;
-			auto& slice = currentSlice.node(nodeIndex);
+			auto slice = currentSlice.node(nodeIndex);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
 				if (slice[i].scoreBeforeStart <= score)
@@ -2286,8 +2286,8 @@ private:
 		for (auto node : component)
 		{
 			assert(currentSlice.hasNode(node));
-			auto& slice = currentSlice.node(node);
-			auto& oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
+			auto slice = currentSlice.node(node);
+			const auto oldSlice = previousBand[node] ? previousSlice.node(node) : currentSlice.node(node);
 			for (size_t i = 0; i < slice.size(); i++)
 			{
 				assert(slice[i].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
@@ -2442,14 +2442,14 @@ private:
 		if (!slice.hasNode(node))
 		{
 			slice.addNode(node, graph.NodeLength(node));
-			auto& nodeslice = slice.node(node);
+			auto nodeslice = slice.node(node);
 			for (size_t i = 0; i < nodeslice.size(); i++)
 			{
 				nodeslice[i] = {0, 0, uninitializedValue, uninitializedValue, 0, false};
 			}
 		}
 		assert(slice.hasNode(node));
-		auto& nodeslice = slice.node(node);
+		auto nodeslice = slice.node(node);
 		assert(nodeslice.size() > index);
 		auto& wordslice = nodeslice[index];
 		if (!wordslice.scoreBeforeExists)
@@ -2570,7 +2570,7 @@ private:
 		calculables.resize(dynamicWidth+1);
 		nextCalculables.resize(dynamicWidth+1);
 
-		for (const auto& pair : previousSlice.scores)
+		for (const auto pair : previousSlice.scores)
 		{
 			auto start = graph.NodeStart(pair.first);
 			for (size_t i = 0; i < pair.second.size() - 1; i++)
@@ -2883,7 +2883,7 @@ private:
 
 	void finalizeAlternateSlice(DPSlice& slice, std::vector<bool>& currentBand) const
 	{
-		for (auto& pair : slice.scores)
+		for (auto pair : slice.scores)
 		{
 			auto node = pair.first;
 			slice.nodes.push_back(node);
@@ -3024,7 +3024,7 @@ private:
 		result.minScore = 0;
 		result.minScoreIndex.push_back(graph.NodeEnd(nodeIndex) - 1);
 		result.nodes.push_back(nodeIndex);
-		auto& slice = result.scores.node(nodeIndex);
+		auto slice = result.scores.node(nodeIndex);
 		for (size_t i = 0; i < slice.size(); i++)
 		{
 			slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
@@ -3185,7 +3185,7 @@ private:
 			startSlice.scores.setMinScore(i, 0);
 			startSlice.j = -WordConfiguration<Word>::WordSize;
 			startSlice.nodes.push_back(i);
-			auto& slice = startSlice.scores.node(i);
+			auto slice = startSlice.scores.node(i);
 			for (size_t ii = 0; ii < slice.size(); ii++)
 			{
 				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};

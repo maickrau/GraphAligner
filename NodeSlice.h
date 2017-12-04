@@ -86,6 +86,11 @@ public:
 	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
 	{
 	public:
+		WordContainerIterator() :
+		container(nullptr),
+		pos(0)
+		{
+		}
 		WordContainerIterator(WordContainer* container, size_t pos) :
 		container(container),
 		pos(pos)
@@ -143,41 +148,196 @@ public:
 		}
 		WordContainerIterator operator+(size_t off) const
 		{
-			WordContainerIterator result;
-			result.container = container;
+			WordContainerIterator result { *this };
 			result.pos = pos + off;
 			return result;
 		}
 		WordContainerIterator operator-(size_t off) const
 		{
-			WordContainerIterator result;
-			result.container = container;
+			WordContainerIterator result { *this };
 			result.pos = pos - off;
 			return result;
 		}
 		WordContainerIterator& operator+=(size_t off)
 		{
 			pos += off;
+			return *this;
 		}
 		WordContainerIterator& operator-=(size_t off)
 		{
 			pos -= off;
+			return *this;
 		}
 		size_t operator-(const WordContainerIterator& other) const
 		{
 			return pos - other.pos;
 		}
-	private:
 		WordContainer* container;
+		size_t pos;
+	private:
+	};
+	class WordContainerConstIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
+	{
+	public:
+		WordContainerConstIterator() :
+		container(nullptr),
+		pos(0)
+		{
+		}
+		WordContainerConstIterator(const WordContainer* container, size_t pos) :
+		container(container),
+		pos(pos)
+		{
+		}
+		WordContainerConstIterator(const WordContainerIterator& iter) :
+		container(iter.container),
+		pos(iter.pos)
+		{
+		}
+		const WordSlice operator*() const
+		{
+			return (*container)[pos];
+		}
+		const WordSlice operator[](size_t index) const
+		{
+			return (*container)[pos + index];
+		}
+		WordContainerConstIterator& operator++()
+		{
+			pos++;
+			return *this;
+		}
+		WordContainerConstIterator operator++(int)
+		{
+			auto result = *this;
+			pos++;
+			return result;
+		}
+		WordContainerConstIterator& operator--()
+		{
+			pos--;
+			return *this;
+		}
+		WordContainerConstIterator operator--(int)
+		{
+			auto result = *this;
+			pos--;
+			return result;
+		}
+		bool operator==(const WordContainerConstIterator& other) const
+		{
+			return container == other.container && pos == other.pos;
+		}
+		bool operator!=(const WordContainerConstIterator& other) const
+		{
+			return !(*this == other);
+		}
+		bool operator<(const WordContainerConstIterator& other) const
+		{
+			return pos < other.pos;
+		}
+		WordContainerConstIterator operator+(size_t off) const
+		{
+			WordContainerConstIterator result { *this };
+			result.pos = pos + off;
+			return result;
+		}
+		WordContainerConstIterator operator-(size_t off) const
+		{
+			WordContainerConstIterator result { *this };
+			result.pos = pos - off;
+			return result;
+		}
+		WordContainerConstIterator& operator+=(size_t off)
+		{
+			pos += off;
+			return *this;
+		}
+		WordContainerConstIterator& operator-=(size_t off)
+		{
+			pos -= off;
+			return *this;
+		}
+		size_t operator-(const WordContainerConstIterator& other) const
+		{
+			return pos - other.pos;
+		}
+	private:
+		const WordContainer* container;
 		size_t pos;
 	};
 	using iterator = WordContainerIterator;
-	using const_iterator = const WordContainerIterator;
+	using const_iterator = WordContainerConstIterator;
+	class ContainerView
+	{
+	public:
+		ContainerView(iterator begin, iterator end) :
+		_begin(begin),
+		_end(end),
+		_cbegin(begin),
+		_cend(end)
+		{
+		}
+		ContainerView(const_iterator begin, const_iterator end) :
+		_cbegin(begin),
+		_cend(end)
+		{
+		}
+		iterator begin()
+		{
+			return _begin;
+		}
+		iterator end()
+		{
+			return _end;
+		}
+		const_iterator begin() const
+		{
+			return _cbegin;
+		}
+		const_iterator end() const
+		{
+			return _cend;
+		}
+		WordSlice& back()
+		{
+			return *(_end - 1);
+		}
+		const WordSlice back() const
+		{
+			return *(_cend - 1);
+		}
+		size_t size() const
+		{
+			return _cend - _cbegin;
+		}
+		WordSlice& operator[](size_t pos)
+		{
+			return *(_begin + pos);
+		}
+		const WordSlice operator[](size_t pos) const
+		{
+			return *(_cbegin + pos);
+		}
+	private:
+		iterator _begin;
+		iterator _end;
+		const_iterator _cbegin;
+		const_iterator _cend;
+	};
 	WordContainer() :
 	minEndScore(0),
 	minStartScore(0),
 	frozen(0)
 	{
+	}
+	ContainerView getView(size_t start, size_t end)
+	{
+		return ContainerView { begin() + start, begin() + end };
+	}
+	const ContainerView getView(size_t start, size_t end) const
+	{
+		return ContainerView { begin() + start, begin() + end };
 	}
 	WordSlice& operator[](size_t index)
 	{
@@ -226,7 +386,7 @@ public:
 		}
 		frozen = 1;
 	}
-	void freezeSqrtEndscores()
+	void freezeSqrtEndScores()
 	{
 		assert(frozen == 0);
 		frozenSqrtSlices.resize(mutableSlices.size());
@@ -258,6 +418,14 @@ public:
 	iterator end()
 	{
 		return iterator { this, size() };
+	}
+	const_iterator begin() const
+	{
+		return const_iterator { this, 0 };
+	}
+	const_iterator end() const
+	{
+		return const_iterator { this, size() };
 	}
 	size_t size() const
 	{
@@ -292,21 +460,96 @@ class NodeSlice
 {
 public:
 	using Container = WordContainer<size_t, int, uint64_t>;
+	using View = Container::ContainerView;
+	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, View>>
+	{
+		using map_iterator = typename std::unordered_map<size_t, std::tuple<size_t, size_t, int>>::iterator;
+	public:
+		NodeSliceIterator(NodeSlice* slice, map_iterator pos) :
+		slice(slice),
+		mappos(pos)
+		{
+		}
+		std::pair<size_t, View> operator*()
+		{
+			auto nodeindex = mappos->first;
+			auto start = std::get<0>(mappos->second);
+			auto end = std::get<1>(mappos->second);
+			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+		}
+		const std::pair<size_t, View> operator*() const
+		{
+			auto nodeindex = mappos->first;
+			auto start = std::get<0>(mappos->second);
+			auto end = std::get<1>(mappos->second);
+			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+		}
+		NodeSliceIterator& operator++()
+		{
+			++mappos;
+			return *this;
+		}
+		bool operator==(const NodeSliceIterator& other) const
+		{
+			return slice == other.slice && mappos == other.mappos;
+		}
+		bool operator!=(const NodeSliceIterator& other) const
+		{
+			return !(*this == other);
+		}
+	private:
+		NodeSlice* slice;
+		map_iterator mappos;
+	};
+	class NodeSliceConstIterator : std::iterator<std::forward_iterator_tag, const std::pair<size_t, View>>
+	{
+		using map_iterator = typename std::unordered_map<size_t, std::tuple<size_t, size_t, int>>::const_iterator;
+	public:
+		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos) :
+		slice(slice),
+		mappos(pos)
+		{
+		}
+		const std::pair<size_t, View> operator*() const
+		{
+			auto nodeindex = mappos->first;
+			auto start = std::get<0>(mappos->second);
+			auto end = std::get<1>(mappos->second);
+			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+		}
+		NodeSliceConstIterator& operator++()
+		{
+			++mappos;
+			return *this;
+		}
+		bool operator==(const NodeSliceConstIterator& other) const
+		{
+			return slice == other.slice && mappos == other.mappos;
+		}
+		bool operator!=(const NodeSliceConstIterator& other) const
+		{
+			return !(*this == other);
+		}
+	private:
+		const NodeSlice* slice;
+		map_iterator mappos;
+	};
 	void addNode(size_t nodeIndex, size_t size)
 	{
-		nodes[nodeIndex].resize(size);
+		nodes[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+		slices.resize(slices.size() + size);
 	}
-	Container& node(size_t nodeIndex)
+	View node(size_t nodeIndex)
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return found->second;
+		return slices.getView(std::get<0>(found->second), std::get<1>(found->second));
 	}
-	const Container& node(size_t nodeIndex) const
+	const View node(size_t nodeIndex) const
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return found->second;
+		return slices.getView(std::get<0>(found->second), std::get<1>(found->second));
 	}
 	bool hasNode(size_t nodeIndex) const
 	{
@@ -316,48 +559,43 @@ public:
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return found->second.minScore;
+		return std::get<2>(found->second);
 	}
 	void setMinScore(size_t nodeIndex, int score)
 	{
-		nodes[nodeIndex].minScore = score;
+		std::get<2>(nodes[nodeIndex]) = score;
 	}
 	size_t size() const
 	{
 		return nodes.size();
 	}
-	auto begin()
+	NodeSliceIterator begin()
 	{
-		return nodes.begin();
+		return NodeSliceIterator { this, nodes.begin() };
 	}
-	auto end()
+	NodeSliceIterator end()
 	{
-		return nodes.end();
+		return NodeSliceIterator { this, nodes.end() };
 	}
-	auto begin() const
+	NodeSliceConstIterator begin() const
 	{
-		return nodes.begin();
+		return NodeSliceConstIterator { this, nodes.begin() };
 	}
-	auto end() const
+	NodeSliceConstIterator end() const
 	{
-		return nodes.end();
+		return NodeSliceConstIterator { this, nodes.end() };
 	}
 	void freezeSqrtEndScores()
 	{
-		for (auto& pair : nodes)
-		{
-			pair.second.freezeSqrtEndscores();
-		}
+		slices.freezeSqrtEndScores();
 	}
 	void freezeScores()
 	{
-		for (auto& pair : nodes)
-		{
-			pair.second.freezeScores();
-		}
+		slices.freezeScores();
 	}
 private:
-	std::unordered_map<size_t, Container> nodes;
+	std::unordered_map<size_t, std::tuple<size_t, size_t, int>> nodes;
+	Container slices;
 };
 
 #endif
