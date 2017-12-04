@@ -363,53 +363,51 @@ public:
 			return mutableSlices[index];
 		}
 	}
-	void freezeScores()
+	WordContainer getFrozenScores() const
 	{
+		if (frozen == 1) return *this;
 		assert(frozen == 0);
-		frozenSlices.resize(mutableSlices.size());
-		minStartScore = mutableSlices[0].scoreBeforeStart;
+		WordContainer result;
+		result.frozen = 1;
+		result.frozenSlices.resize(mutableSlices.size());
+		result.minStartScore = mutableSlices[0].scoreBeforeStart;
 		for (size_t i = 1; i < mutableSlices.size(); i++)
 		{
-			minStartScore = std::min(minStartScore, mutableSlices[i].scoreBeforeStart);
+			result.minStartScore = std::min(result.minStartScore, mutableSlices[i].scoreBeforeStart);
 		}
 		for (size_t i = 0; i < mutableSlices.size(); i++)
 		{
-			frozenSlices[i].VP = mutableSlices[i].VP;
-			frozenSlices[i].VN = mutableSlices[i].VN;
-			assert(mutableSlices[i].scoreBeforeStart >= minStartScore);
-			assert(mutableSlices[i].scoreBeforeStart - minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
-			frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - minStartScore;
+			result.frozenSlices[i].VP = mutableSlices[i].VP;
+			result.frozenSlices[i].VN = mutableSlices[i].VN;
+			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
+			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
+			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
 		}
-		{
-			std::vector<WordSlice> empty;
-			std::swap(mutableSlices, empty);
-		}
-		frozen = 1;
+		return result;
 	}
-	void freezeSqrtEndScores()
+	WordContainer getFrozenSqrtEndScores() const
 	{
+		if (frozen == 2) return *this;
 		assert(frozen == 0);
-		frozenSqrtSlices.resize(mutableSlices.size());
-		minEndScore = mutableSlices[0].scoreEnd;
+		WordContainer result;
+		result.frozen = 2;
+		result.frozenSqrtSlices.resize(mutableSlices.size());
+		result.minEndScore = mutableSlices[0].scoreEnd;
 		for (size_t i = 1; i < mutableSlices.size(); i++)
 		{
-			minEndScore = std::min(minEndScore, mutableSlices[i].scoreEnd);
+			result.minEndScore = std::min(result.minEndScore, mutableSlices[i].scoreEnd);
 		}
 		for (size_t i = 0; i < mutableSlices.size(); i++)
 		{
-			frozenSqrtSlices[i].VPVNLastBit = 0;
-			frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
-			frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VN >> 62) & 2;
-			frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].scoreEndExists << 2;
-			assert(mutableSlices[i].scoreEnd >= minEndScore);
-			assert(mutableSlices[i].scoreEnd - minEndScore < std::numeric_limits<decltype(frozenSqrtSlices[i].plusMinScore)>::max());
-			frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - minEndScore;
+			result.frozenSqrtSlices[i].VPVNLastBit = 0;
+			result.frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
+			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VN >> 62) & 2;
+			result.frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].scoreEndExists << 2;
+			assert(mutableSlices[i].scoreEnd >= result.minEndScore);
+			assert(mutableSlices[i].scoreEnd - result.minEndScore < std::numeric_limits<decltype(frozenSqrtSlices[i].plusMinScore)>::max());
+			result.frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - result.minEndScore;
 		}
-		{
-			std::vector<WordSlice> empty;
-			std::swap(mutableSlices, empty);
-		}
-		frozen = 2;
+		return result;
 	}
 	iterator begin()
 	{
@@ -585,13 +583,19 @@ public:
 	{
 		return NodeSliceConstIterator { this, nodes.end() };
 	}
-	void freezeSqrtEndScores()
+	NodeSlice getFrozenSqrtEndScores() const
 	{
-		slices.freezeSqrtEndScores();
+		NodeSlice result;
+		result.slices = slices.getFrozenSqrtEndScores();
+		result.nodes = nodes;
+		return result;
 	}
-	void freezeScores()
+	NodeSlice getFrozenScores() const
 	{
-		slices.freezeScores();
+		NodeSlice result;
+		result.slices = slices.getFrozenScores();
+		result.nodes = nodes;
+		return result;
 	}
 private:
 	std::unordered_map<size_t, std::tuple<size_t, size_t, int>> nodes;

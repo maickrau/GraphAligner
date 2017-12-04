@@ -219,6 +219,32 @@ private:
 		{
 			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 3 + sizeof(int));
 		}
+		DPSlice getFrozenSqrtEndScores() const
+		{
+			DPSlice result;
+			result.scores = scores.getFrozenSqrtEndScores();
+			result.minScore = minScore;
+			result.minScoreIndex = minScoreIndex;
+			result.nodes = nodes;
+			result.correctness = correctness;
+			result.j = j;
+			result.cellsProcessed = cellsProcessed;
+			result.numCells = numCells;
+			return result;
+		}
+		DPSlice getFrozenScores() const
+		{
+			DPSlice result;
+			result.scores = scores.getFrozenScores();
+			result.minScore = minScore;
+			result.minScoreIndex = minScoreIndex;
+			result.nodes = nodes;
+			result.correctness = correctness;
+			result.j = j;
+			result.cellsProcessed = cellsProcessed;
+			result.numCells = numCells;
+			return result;
+		}
 	};
 	class DPTable
 	{
@@ -2909,8 +2935,7 @@ private:
 		DPTable result;
 		if (samplingFrequency > 1)
 		{
-			result.slices.push_back(initialSlice);
-			result.slices.back().scores.freezeSqrtEndScores();
+			result.slices.push_back(initialSlice.getFrozenSqrtEndScores());
 		}
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
@@ -2933,7 +2958,7 @@ private:
 		debugLastRowMinScore = 0;
 #endif
 		DPSlice storeSlice;
-		DPSlice lastSlice = initialSlice;
+		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();;
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		std::vector<bool> processed;
 		processed.resize(graph.SizeInBp(), false);
@@ -2970,13 +2995,11 @@ private:
 			{
 				if (samplingFrequency > 1)
 				{
-					result.slices.push_back(storeSlice);
-					result.slices.back().scores.freezeSqrtEndScores();
+					result.slices.push_back(storeSlice.getFrozenSqrtEndScores());
 				}
 				else
 				{
-					result.slices.push_back(newSlice);
-					result.slices.back().scores.freezeScores();
+					result.slices.push_back(newSlice.getFrozenScores());
 				}
 			}
 			for (auto node : lastSlice.nodes)
@@ -2997,8 +3020,7 @@ private:
 				assert(debugslice[index - graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
 			}
 #endif
-			lastSlice = newSlice;
-			lastSlice.scores.freezeSqrtEndScores();
+			lastSlice = newSlice.getFrozenSqrtEndScores();
 			std::swap(previousBand, currentBand);
 		}
 #ifndef NDEBUG
