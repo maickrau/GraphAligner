@@ -14,6 +14,6 @@ namespace ThreadReadAssertion
 		std::stringstream msg;
 		msg << file << ":" << line << ": Assertion '" << expression << "' failed. Read: " << currentRead;
 		std::cerr << msg.str() << std::endl;
-		std::abort();
+		throw AssertionFailure {};
 	}	
 }

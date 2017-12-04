@@ -5,6 +5,9 @@
 
 namespace ThreadReadAssertion
 {
+	class AssertionFailure
+	{
+	};
 	void setRead(const std::string& readName);
 	void assertFailed(const char* expression, const char* file, int line);
 }

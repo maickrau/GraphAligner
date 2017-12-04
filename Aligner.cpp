@@ -111,29 +111,36 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		AlignmentResult alignment;
 
-		if (stats)
+		try
 		{
-			if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+			if (stats)
 			{
-				continue;
+				if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+				{
+					continue;
+				}
+				alignment = CollectStats(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
 			}
-			alignment = CollectStats(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
-		}
-		else if (graphAlignerSeedHits == nullptr)
-		{
-			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand);
-		}
-		else
-		{
-			if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+			else if (graphAlignerSeedHits == nullptr)
 			{
-				coutoutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-				cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-				coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-				cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-				continue;
+				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand);
 			}
-			alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
+			else
+			{
+				if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+				{
+					coutoutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+					cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+					coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					continue;
+				}
+				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, dynamicWidth, dynamicRowStart, sqrtSpace, alternateBand, graphAlignerSeedHits->at(fastq));
+			}
+		}
+		catch (const ThreadReadAssertion::AssertionFailure& a)
+		{
+			continue;
 		}
 
 		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;
