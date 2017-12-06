@@ -2413,12 +2413,13 @@ private:
 			return;
 		}
 		assert(wordslice.confirmedRows.rows < row);
-		auto oldscore = getValue(wordslice, wordslice.confirmedRows.rows);
 		if (wordslice.confirmedRows.rows == row - 1)
 		{
+			auto oldscore = wordslice.scoreEnd - (WordConfiguration<Word>::WordSize - wordslice.confirmedRows.rows - 1);
+			assert(oldscore == getValue(wordslice, wordslice.confirmedRows.rows));
 			assert(value >= oldscore - 1);
 			assert(value <= oldscore + 1);
-			auto mask = ((Word)1) << row;
+			Word mask = ((Word)1) << row;
 			if (value == oldscore - 1)
 			{
 				wordslice.VN |= mask;
@@ -2439,6 +2440,7 @@ private:
 			wordslice.confirmedRows.rows = row;
 			return;
 		}
+		auto oldscore = getValue(wordslice, wordslice.confirmedRows.rows);
 		std::vector<ScoreType> scores;
 		scores.resize(WordConfiguration<Word>::WordSize, wordslice.scoreBeforeStart);
 		scores[0] = wordslice.scoreBeforeStart + (wordslice.VP & 1) - (wordslice.VN & 1);
@@ -2520,14 +2522,14 @@ private:
 				if (pair.second[i].scoreEnd < previousSlice.minScore + dynamicWidth)
 				{
 					assert(pair.second[i].scoreEnd >= previousSlice.minScore);
-					calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, i);
+					calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+i);
 					if (characterMatch(sequence[startj], graph.NodeSequences(start + i + 1)))
 					{
-						calculables[pair.second[i].scoreEnd - previousSlice.minScore].emplace_back(pair.first, i+1);
+						calculables[pair.second[i].scoreEnd - previousSlice.minScore].emplace_back(pair.first, start+i+1);
 					}
 					else
 					{
-						calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, i+1);
+						calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+i+1);
 					}
 				}
 			}
@@ -2538,11 +2540,11 @@ private:
 					auto u = graph.NodeStart(neighbor);
 					if (characterMatch(sequence[startj], graph.NodeSequences(u)))
 					{
-						calculables[pair.second.back().scoreEnd - previousSlice.minScore].emplace_back(neighbor, 0);
+						calculables[pair.second.back().scoreEnd - previousSlice.minScore].emplace_back(neighbor, u);
 					}
 					else
 					{
-						calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(neighbor, 0);
+						calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(neighbor, u);
 					}
 				}
 			}
@@ -2563,48 +2565,50 @@ private:
 			{
 				for (auto pair : calculables[scoreplus])
 				{
-					auto cell = graph.NodeStart(pair.first) + pair.second;
-					if (processed[cell]) continue;
+					if (processed[pair.second]) continue;
 					cellsProcessed++;
-					processed[cell] = true;
-					processedlist.push_back(cell);
-					setValue(currentSlice, pair.first, pair.second, j, minScore + scoreplus, sequence.size());
-					assert(getValue(currentSlice.node(pair.first)[pair.second], j) == minScore + scoreplus);
+					processed[pair.second] = true;
+					processedlist.push_back(pair.second);
+					auto nodeStart = graph.NodeStart(pair.first);
 					auto nodeEnd = graph.NodeEnd(pair.first);
+					assert(pair.second >= nodeStart);
+					assert(pair.second < nodeEnd);
+					setValue(currentSlice, pair.first, pair.second - nodeStart, j, minScore + scoreplus, sequence.size());
+					assert(getValue(currentSlice.node(pair.first)[pair.second - nodeStart], j) == minScore + scoreplus);
 					nextCalculables[scoreplus + 1 + scoreIndexPlus].emplace_back(pair.first, pair.second);
-					if (cell + 1 == nodeEnd)
+					if (pair.second + 1 == nodeEnd)
 					{
 						for (auto neighbor : graph.outNeighbors[pair.first])
 						{
 							auto u = graph.NodeStart(neighbor);
-							calculables[scoreplus+1].emplace_back(neighbor, 0);
+							if (!processed[u]) calculables[scoreplus+1].emplace_back(neighbor, u);
 							if (j < WordConfiguration<Word>::WordSize - 1)
 							{
 								if (characterMatch(sequence[startj+j+1], graph.NodeSequences(u)))
 								{
-									nextCalculables[scoreplus + scoreIndexPlus].emplace_back(neighbor, 0);
+									nextCalculables[scoreplus + scoreIndexPlus].emplace_back(neighbor, u);
 								}
 								else
 								{
-									nextCalculables[scoreplus + scoreIndexPlus + 1].emplace_back(neighbor, 0);
+									nextCalculables[scoreplus + scoreIndexPlus + 1].emplace_back(neighbor, u);
 								}
 							}
 						}
 					}
 					else
 					{
-						auto u = cell+1;
+						auto u = pair.second+1;
 						assert(u < nodeEnd);
-						calculables[scoreplus+1].emplace_back(pair.first, pair.second+1);
+						if (!processed[u]) calculables[scoreplus+1].emplace_back(pair.first, u);
 						if (j < WordConfiguration<Word>::WordSize - 1)
 						{
 							if (characterMatch(sequence[startj+j+1], graph.NodeSequences(u)))
 							{
-								nextCalculables[scoreplus + scoreIndexPlus].emplace_back(pair.first, pair.second+1);
+								nextCalculables[scoreplus + scoreIndexPlus].emplace_back(pair.first, u);
 							}
 							else
 							{
-								nextCalculables[scoreplus + scoreIndexPlus + 1].emplace_back(pair.first, pair.second+1);
+								nextCalculables[scoreplus + scoreIndexPlus + 1].emplace_back(pair.first, u);
 							}
 						}
 					}
@@ -2635,7 +2639,7 @@ private:
 		result.minScore = minScore;
 		for (auto pair : calculables[0])
 		{
-			result.minScoreIndex.push_back(graph.NodeStart(pair.first) + pair.second);
+			result.minScoreIndex.push_back(pair.second);
 		}
 		result.cellsProcessed = cellsProcessed;
 		return result;
