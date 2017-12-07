@@ -3,10 +3,18 @@
 #include <fstream>
 #include "Aligner.h"
 #include "stream.hpp"
+#include "ThreadReadAssertion.h"
 
 int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+    struct sigaction act;
+    act.sa_handler = ThreadReadAssertion::signal;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    sigaction(SIGSEGV, &act, 0);
+
 	std::string graphFile = "";
 	std::string fastqFile = "";
 	std::string alignmentFile = "";

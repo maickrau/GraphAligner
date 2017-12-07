@@ -10,6 +10,7 @@ namespace ThreadReadAssertion
 	};
 	void setRead(const std::string& readName);
 	void assertFailed(const char* expression, const char* file, int line);
+	void signal(int signal);
 }
 
 #endif
