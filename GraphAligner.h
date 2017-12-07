@@ -983,14 +983,16 @@ private:
 
 	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
 	{
+		const auto expandWidth = dynamicWidth + WordConfiguration<Word>::WordSize;
 		std::unordered_map<size_t, size_t> distances;
 		std::vector<LengthType> result;
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
 		size_t bandWidth = 0;
-		for (auto node : previousSlice.nodes)
+		for (const auto pair : previousSlice.scores)
 		{
-			if (previousSlice.scores.minScore(node) <= minScore + dynamicWidth)
+			if (pair.second.minScore() <= minScore + dynamicWidth)
 			{
+				auto node = pair.first;
 				distances[node] = 0;
 				result.push_back(node);
 				bandWidth += graph.NodeLength(node);
@@ -998,9 +1000,9 @@ private:
 				{
 					return result;
 				}
-				auto endscore = previousSlice.scores.node(node).back().scoreEnd;
+				auto endscore = pair.second.back().scoreEnd;
 				assert(endscore >= minScore);
-				if (endscore > minScore + dynamicWidth + WordConfiguration<Word>::WordSize) continue;
+				if (endscore > minScore + expandWidth) continue;
 				for (auto neighbor : graph.outNeighbors[node])
 				{
 					queue.emplace(neighbor, endscore-minScore+1);
@@ -1011,7 +1013,7 @@ private:
 		while (queue.size() > 0)
 		{
 			NodeWithPriority top = queue.top();
-			if (top.priority > dynamicWidth + WordConfiguration<Word>::WordSize) break;
+			if (top.priority > expandWidth) break;
 			queue.pop();
 			if (distances.count(top.node) == 1 && distances[top.node] <= top.priority) continue;
 			bandWidth += graph.NodeLength(top.node);
@@ -2855,8 +2857,8 @@ private:
 			{
 				if (word.scoreEnd == uninitializedValue)
 				{
-					word.scoreEnd = minScore + pair.second.size() + 10;
-					word.scoreBeforeStart = minScore + pair.second.size() + 10;
+					word.scoreEnd = minScore + pair.second.size() + dynamicWidth + 1;
+					word.scoreBeforeStart = minScore + pair.second.size() + dynamicWidth + 1;
 				}
 			}
 			slice.numCells += pair.second.size();

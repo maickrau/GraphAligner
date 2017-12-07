@@ -271,16 +271,18 @@ public:
 	class ContainerView
 	{
 	public:
-		ContainerView(iterator begin, iterator end) :
+		ContainerView(iterator begin, iterator end, int minScore) :
 		_begin(begin),
 		_end(end),
 		_cbegin(begin),
-		_cend(end)
+		_cend(end),
+		_minScore(minScore)
 		{
 		}
-		ContainerView(const_iterator begin, const_iterator end) :
+		ContainerView(const_iterator begin, const_iterator end, int minScore) :
 		_cbegin(begin),
-		_cend(end)
+		_cend(end),
+		_minScore(minScore)
 		{
 		}
 		iterator begin()
@@ -319,11 +321,16 @@ public:
 		{
 			return *(_cbegin + pos);
 		}
+		int minScore() const
+		{
+			return _minScore;
+		}
 	private:
 		iterator _begin;
 		iterator _end;
 		const_iterator _cbegin;
 		const_iterator _cend;
+		int _minScore;
 	};
 	WordContainer() :
 	minEndScore(0),
@@ -331,13 +338,13 @@ public:
 	frozen(0)
 	{
 	}
-	ContainerView getView(size_t start, size_t end)
+	ContainerView getView(size_t start, size_t end, int minScore)
 	{
-		return ContainerView { begin() + start, begin() + end };
+		return ContainerView { begin() + start, begin() + end, minScore };
 	}
-	const ContainerView getView(size_t start, size_t end) const
+	const ContainerView getView(size_t start, size_t end, int minScore) const
 	{
-		return ContainerView { begin() + start, begin() + end };
+		return ContainerView { begin() + start, begin() + end, minScore };
 	}
 	WordSlice& operator[](size_t index)
 	{
@@ -473,14 +480,14 @@ public:
 			auto nodeindex = mappos->first;
 			auto start = std::get<0>(mappos->second);
 			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
 		}
 		const std::pair<size_t, View> operator*() const
 		{
 			auto nodeindex = mappos->first;
 			auto start = std::get<0>(mappos->second);
 			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
 		}
 		NodeSliceIterator& operator++()
 		{
@@ -513,7 +520,7 @@ public:
 			auto nodeindex = mappos->first;
 			auto start = std::get<0>(mappos->second);
 			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end));
+			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
 		}
 		NodeSliceConstIterator& operator++()
 		{
@@ -541,13 +548,13 @@ public:
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return slices.getView(std::get<0>(found->second), std::get<1>(found->second));
+		return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
 	}
 	const View node(size_t nodeIndex) const
 	{
 		auto found = nodes.find(nodeIndex);
 		assert(found != nodes.end());
-		return slices.getView(std::get<0>(found->second), std::get<1>(found->second));
+		return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
 	}
 	bool hasNode(size_t nodeIndex) const
 	{
