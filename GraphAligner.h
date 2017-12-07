@@ -186,6 +186,9 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
+	//band size in bp when the alternate method is used instead of the bitvector method
+	//empirically, two hundred thousand is (close to) the fastest cutoff for aligning ONT's to human DBG
+	static constexpr size_t AlternateMethodCutoff = 200000;
 	using RowConfirmation = typename WordContainer<LengthType, ScoreType, Word>::RowConfirmation;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::WordSlice;
 	mutable bool statsmode;
@@ -981,12 +984,20 @@ private:
 	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
 	{
 		std::unordered_map<size_t, size_t> distances;
+		std::vector<LengthType> result;
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
+		size_t bandWidth = 0;
 		for (auto node : previousSlice.nodes)
 		{
 			if (previousSlice.scores.minScore(node) <= minScore + dynamicWidth)
 			{
 				distances[node] = 0;
+				result.push_back(node);
+				bandWidth += graph.NodeLength(node);
+				if (bandWidth >= AlternateMethodCutoff)
+				{
+					return result;
+				}
 				auto endscore = previousSlice.scores.node(node).back().scoreEnd;
 				assert(endscore >= minScore);
 				if (endscore > minScore + dynamicWidth + WordConfiguration<Word>::WordSize) continue;
@@ -1003,18 +1014,18 @@ private:
 			if (top.priority > dynamicWidth + WordConfiguration<Word>::WordSize) break;
 			queue.pop();
 			if (distances.count(top.node) == 1 && distances[top.node] <= top.priority) continue;
+			bandWidth += graph.NodeLength(top.node);
 			distances[top.node] = top.priority;
+			result.push_back(top.node);
+			if (bandWidth >= AlternateMethodCutoff)
+			{
+				return result;
+			}
 			auto size = graph.NodeLength(top.node);
 			for (auto neighbor : graph.outNeighbors[top.node])
 			{
 				queue.emplace(neighbor, top.priority + size);
 			}
-		}
-		std::vector<LengthType> result;
-		for (auto pair : distances)
-		{
-			assert(pair.second <= dynamicWidth + WordConfiguration<Word>::WordSize);
-			result.push_back(pair.first);
 		}
 		return result;
 	}
@@ -2514,6 +2525,14 @@ private:
 		calculables.resize(dynamicWidth+1);
 		nextCalculables.resize(dynamicWidth+1);
 
+		//usually the calculable lists contain a ton of entries
+		//so just preallocate a large block so we don't need to resize too often
+		for (size_t i = 0; i < dynamicWidth+1; i++)
+		{
+			calculables[i].reserve(AlternateMethodCutoff); //semi-arbitrary guess based on the bitvector/alternate cutoff
+			nextCalculables[i].reserve(AlternateMethodCutoff);
+		}
+
 		for (const auto pair : previousSlice.scores)
 		{
 			auto start = graph.NodeStart(pair.first);
@@ -2785,7 +2804,7 @@ private:
 			{
 				cells += graph.NodeLength(node);
 			}
-			if (cells < 200000) //two hundred thousand, empirically from aligning to human genomes
+			if (cells < AlternateMethodCutoff)
 			{
 				for (auto node : bandTest.nodes)
 				{
