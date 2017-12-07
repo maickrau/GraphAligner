@@ -2926,12 +2926,12 @@ private:
 
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
-				logger << "scorebroke " << slice << ", score " << newSlice.minScore << " ";
+				if (statsmode) logger << "scorebroke " << slice << ", score " << newSlice.minScore << " ";
 				break;
 			}
 			if (slice == numSlices - 1)
 			{
-				logger << "finished " << numSlices << ", score " << newSlice.minScore << " ";
+				if (statsmode) logger << "finished " << numSlices << ", score " << newSlice.minScore << " ";
 			}
 			if (slice % samplingFrequency == 0)
 			{
@@ -2971,9 +2971,12 @@ private:
 			assert(result.slices[i].minScore >= result.slices[i-1].minScore);
 		}
 #endif
-		logger << "realcells " << (realCells * WordConfiguration<Word>::WordSize) << " ";
-		logger << "cellsprocessed " << cellsProcessed << " ";
-		logger << "redundency " << (cellsProcessed - realCells) << " ";
+		if (statsmode)
+		{
+			logger << "realcells " << (realCells * WordConfiguration<Word>::WordSize) << " ";
+			logger << "cellsprocessed " << cellsProcessed << " ";
+			logger << "redundency " << (cellsProcessed - realCells) << " ";
+		}
 		return result;
 	}
 
