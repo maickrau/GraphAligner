@@ -2433,91 +2433,81 @@ private:
 			assert(value >= oldscore - 1);
 			assert(value <= oldscore + 1);
 			Word mask = ((Word)1) << row;
-			if (value == oldscore - 1)
+			switch (value + 1 - oldscore)
 			{
-				wordslice.VN |= mask;
-				wordslice.VP &= ~mask;
-				wordslice.scoreEnd -= 2;
-			}
-			else if (value == oldscore)
-			{
-				wordslice.VN &= ~mask;
-				wordslice.VP &= ~mask;
-				wordslice.scoreEnd--;
-			}
-			else if (value == oldscore + 1)
-			{
-				wordslice.VP |= mask;
-				wordslice.VN &= ~mask;
+				case 0:
+					wordslice.VN |= mask;
+					wordslice.VP &= ~mask;
+					wordslice.scoreEnd -= 2;
+					break;
+				case 1:
+					wordslice.VN &= ~mask;
+					wordslice.VP &= ~mask;
+					wordslice.scoreEnd--;
+					break;
+				case 2:
+					wordslice.VP |= mask;
+					wordslice.VN &= ~mask;
+					break;
 			}
 			wordslice.confirmedRows.rows = row;
 			return;
 		}
-		auto oldscore = getValue(wordslice, wordslice.confirmedRows.rows);
-		std::vector<ScoreType> scores;
-		scores.resize(WordConfiguration<Word>::WordSize, wordslice.scoreBeforeStart);
+		ScoreType scores[WordConfiguration<Word>::WordSize];
 		scores[0] = wordslice.scoreBeforeStart + (wordslice.VP & 1) - (wordslice.VN & 1);
-		for (int i = 1; i < WordConfiguration<Word>::WordSize; i++)
+		for (int i = 1; i <= wordslice.confirmedRows.rows; i++)
 		{
 			auto mask = ((Word)1) << i;
 			scores[i] = scores[i-1] + ((wordslice.VP & mask) ? 1 : 0) - ((wordslice.VN & mask) ? 1 : 0);
 		}
-		for (int i = row; i < WordConfiguration<Word>::WordSize; i++)
+		for (int i = wordslice.confirmedRows.rows+1; i <= row; i++)
 		{
-			scores[i] = std::min(scores[i], value + i - row);
+			scores[i] = scores[i-1] + 1;
 		}
-		for (int i = 0; i < row; i++)
+		for (int i = 0; i <= row; i++)
 		{
 			scores[i] = std::min(scores[i], value + row - i);
 		}
 		assert(scores[0] >= wordslice.scoreBeforeStart - 1);
 		assert(scores[0] <= wordslice.scoreBeforeStart + 1);
-		if (scores[0] == wordslice.scoreBeforeStart - 1)
+		switch(scores[0] + 1 - wordslice.scoreBeforeStart)
 		{
-			wordslice.VP &= ~(Word)1;
-			wordslice.VN |= 1;
+			case 0:
+				wordslice.VP &= ~(Word)1;
+				wordslice.VN |= 1;
+				break;
+			case 1:
+				wordslice.VP &= ~(Word)1;
+				wordslice.VN &= ~(Word)1;
+				break;
+			case 2:
+				wordslice.VP |= 1;
+				wordslice.VN &= ~(Word)1;
+				break;
 		}
-		else if (scores[0] == wordslice.scoreBeforeStart)
-		{
-			wordslice.VP &= ~(Word)1;
-			wordslice.VN &= ~(Word)1;
-		}
-		else if (scores[0] == wordslice.scoreBeforeStart + 1)
-		{
-			wordslice.VP |= 1;
-			wordslice.VN &= ~(Word)1;
-		}
-		else
-		{
-			assert(false);
-		}
-		for (int i = 1; i < WordConfiguration<Word>::WordSize; i++)
+		for (int i = 1; i <= row; i++)
 		{
 			assert(scores[i] >= scores[i-1] - 1);
 			assert(scores[i] <= scores[i-1] + 1);
 			Word mask = ((Word)1) << i;
-			if (scores[i] == scores[i-1] - 1)
+			switch(scores[i] + 1 - scores[i-1])
 			{
-				wordslice.VP &= ~mask;
-				wordslice.VN |= mask;
-			}
-			else if (scores[i] == scores[i-1])
-			{
-				wordslice.VP &= ~mask;
-				wordslice.VN &= ~mask;
-			}
-			else if (scores[i] == scores[i-1] + 1)
-			{
-				wordslice.VP |= mask;
-				wordslice.VN &= ~mask;
-			}
-			else
-			{
-				assert(false);
+				case 0:
+					wordslice.VP &= ~mask;
+					wordslice.VN |= mask;
+					break;
+				case 1:
+					wordslice.VP &= ~mask;
+					wordslice.VN &= ~mask;
+					break;
+				case 2:
+					wordslice.VP |= mask;
+					wordslice.VN &= ~mask;
+					break;
 			}
 		}
+		wordslice.scoreEnd = scores[row] + WordConfiguration<Word>::WordSize - 1 - row;
 		wordslice.confirmedRows.rows = row;
-		wordslice.scoreEnd = scores.back();
 	}
 
 	NodeCalculationResult calculateSliceAlternate(const std::string& sequence, size_t startj, NodeSlice<WordSlice>& currentSlice, const DPSlice& previousSlice, std::vector<bool>& processed) const
