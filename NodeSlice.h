@@ -450,6 +450,11 @@ public:
 	{
 		return (*this)[size()-1];
 	}
+	void reserve(size_t size)
+	{
+		assert(frozen == 0);
+		mutableSlices.reserve(size);
+	}
 	ScoreType minScore;
 private:
 	ScoreType minEndScore;
@@ -539,6 +544,10 @@ public:
 		const NodeSlice* slice;
 		map_iterator mappos;
 	};
+	void reserve(size_t size)
+	{
+		slices.reserve(size);
+	}
 	void addNode(size_t nodeIndex, size_t size)
 	{
 		nodes[nodeIndex] = { slices.size(), slices.size() + size, 0 };

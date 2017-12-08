@@ -2808,6 +2808,7 @@ private:
 			}
 			if (cells < AlternateMethodCutoff)
 			{
+				bandTest.scores.reserve(cells);
 				for (auto node : bandTest.nodes)
 				{
 					bandTest.scores.addNode(node, graph.NodeLength(node));
@@ -2822,6 +2823,7 @@ private:
 			DPSlice result;
 			result.j = previous.j + WordConfiguration<Word>::WordSize;
 			result.correctness = previous.correctness;
+			result.scores.reserve(AlternateMethodCutoff);
 
 			auto sliceResult = calculateSliceAlternate(sequence, result.j, result.scores, previous, processed);
 			result.cellsProcessed = sliceResult.cellsProcessed;
