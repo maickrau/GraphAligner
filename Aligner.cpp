@@ -140,6 +140,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
 		{
+			coutoutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
+			cerroutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
 			continue;
 		}
 
