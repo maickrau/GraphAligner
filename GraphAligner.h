@@ -1971,9 +1971,11 @@ private:
 		for (auto pair : current.scores)
 		{
 			auto start = graph.NodeStart(pair.first);
+			auto uninitializedValue = pair.second.minScore() + pair.second.size() + dynamicWidth + 1;
 			for (size_t i = 1; i < pair.second.size(); i++)
 			{
 				bool match = characterMatch(sequence[current.j], graph.NodeSequences(start+i));
+				bool diagonalExists = false;
 				ScoreType vertscore = sequence.size();
 				ScoreType diagscore = sequence.size();
 				ScoreType horiscore = getValue(current, 0, start+i-1);
@@ -1981,41 +1983,80 @@ private:
 				{
 					vertscore = getValue(previous, WordConfiguration<Word>::WordSize-1, start+i);
 					diagscore = getValue(previous, WordConfiguration<Word>::WordSize-1, start+i-1);
+					diagonalExists = previous.scores.node(pair.first)[i].scoreEndExists;
 				}
-				assert(getValue(current, 0, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+				if (pair.second[i].confirmedRows.start <= 0 && pair.second[i].confirmedRows.rows > 0)
+				{
+					assert(getValue(current, 0, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + ((diagonalExists && match) ? 0 : 1)));
+				}
 				for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
 				{
 					match = characterMatch(sequence[current.j+j], graph.NodeSequences(start+i));
 					vertscore = getValue(current, j-1, start+i);
 					diagscore = getValue(current, j-1, start+i-1);
 					horiscore = getValue(current, j, start+i-1);
-					assert(getValue(current, j, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+					diagonalExists = pair.second[i-1].confirmedRows.start <= j-1 && pair.second[i].confirmedRows.rows > j-1;
+					if (pair.second[i].confirmedRows.start <= j && pair.second[i].confirmedRows.rows > j)
+					{
+						assert(getValue(current, j, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + ((diagonalExists && match) ? 0 : 1)));
+					}
 				}
 			}
 			ScoreType vertscore = sequence.size();
 			ScoreType diagscore = sequence.size();
 			ScoreType horiscore = sequence.size();
+			bool diagonalExists = false;
 			if (previous.scores.hasNode(pair.first)) vertscore = getValue(previous, WordConfiguration<Word>::WordSize-1, start);
 			for (auto neighbor : graph.inNeighbors[pair.first])
 			{
 				if (current.scores.hasNode(neighbor)) horiscore = std::min(horiscore, getValue(current, 0, graph.NodeEnd(neighbor)-1));
-				if (previous.scores.hasNode(neighbor)) diagscore = std::min(diagscore, getValue(previous, WordConfiguration<Word>::WordSize-1, graph.NodeEnd(neighbor)-1));
+				if (previous.scores.hasNode(neighbor))
+				{
+					auto newDiag = getValue(previous, WordConfiguration<Word>::WordSize-1, graph.NodeEnd(neighbor)-1);
+					bool diagonalExistsHere = previous.scores.node(neighbor).back().scoreEndExists;
+					if (newDiag < diagscore)
+					{
+						diagscore = newDiag;
+						diagonalExists = diagonalExistsHere;
+					}
+					else if (newDiag == diagscore)
+					{
+						diagonalExists |= diagonalExistsHere;
+					}
+				}
 			}
 			bool match = characterMatch(sequence[current.j], graph.NodeSequences(start));
-			assert(getValue(current, 0, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+			if (pair.second[0].confirmedRows.start <= 0 && pair.second[0].confirmedRows.rows > 0)
+			{
+				assert(getValue(current, 0, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + ((diagonalExists && match) ? 0 : 1)));
+			}
 			for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
 			{
 				vertscore = getValue(current, j-1, start);
 				horiscore = sequence.size();
 				diagscore = sequence.size();
+				diagonalExists = false;
 				for (auto neighbor : graph.inNeighbors[pair.first])
 				{
 					if (!current.scores.hasNode(neighbor)) continue;
 					horiscore = std::min(horiscore, getValue(current, j, graph.NodeEnd(neighbor)-1));
-					diagscore = std::min(diagscore, getValue(current, j-1, graph.NodeEnd(neighbor)-1));
+					bool diagonalExistsHere = current.scores.node(neighbor).back().confirmedRows.start <= j-1 && current.scores.node(neighbor).back().confirmedRows.rows > j-1;
+					auto newDiag = getValue(current, j-1, graph.NodeEnd(neighbor)-1);
+					if (newDiag < diagscore)
+					{
+						diagscore = newDiag;
+						diagonalExists = diagonalExistsHere;
+					}
+					else if (newDiag == diagscore)
+					{
+						diagonalExists |= diagonalExistsHere;
+					}
 				}
 				match = characterMatch(sequence[current.j+j], graph.NodeSequences(start));
-				assert(getValue(current, j, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+				if (pair.second[0].confirmedRows.start <= j && pair.second[0].confirmedRows.rows > j)
+				{
+					assert(getValue(current, j, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + ((diagonalExists && match) ? 0 : 1)));
+				}
 			}
 		}
 	}
@@ -2417,15 +2458,16 @@ private:
 			for (size_t i = 0; i < nodeslice.size(); i++)
 			{
 				nodeslice[i] = {0, 0, uninitializedValue, uninitializedValue, 0, false};
+				nodeslice[i].confirmedRows.start = WordConfiguration<Word>::WordSize;
 			}
 		}
 		assert(slice.hasNode(node));
 		auto nodeslice = slice.node(node);
 		assert(nodeslice.size() > index);
 		auto& wordslice = nodeslice[index];
-		if (!wordslice.scoreBeforeExists)
+		if (wordslice.confirmedRows.start == WordConfiguration<Word>::WordSize)
 		{
-			wordslice.scoreBeforeExists = true;
+			wordslice.confirmedRows.start = row;
 			wordslice.scoreBeforeStart = value + row + 1;
 			if (row < WordConfiguration<Word>::WordSize-1)
 			{
@@ -2562,6 +2604,7 @@ private:
 			}
 			if (pair.second.back().scoreEnd < previousSlice.minScore + dynamicWidth)
 			{
+				calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+pair.second.size()-1);
 				for (auto neighbor : graph.outNeighbors[pair.first])
 				{
 					auto u = graph.NodeStart(neighbor);
@@ -2822,6 +2865,10 @@ private:
 				}
 				fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables);
 				bandTest.numCells = cells;
+
+#ifdef EXTRACORRECTNESSASSERTIONS
+				verifySlice(sequence, bandTest, previous);
+#endif
 				return bandTest;
 			}
 		}
@@ -2837,6 +2884,10 @@ private:
 			result.minScore = sliceResult.minScore;
 			assert(result.minScore >= previous.minScore);
 			result.correctness = result.correctness.NextState(result.minScore - previous.minScore, WordConfiguration<Word>::WordSize);
+
+#ifdef EXTRACORRECTNESSASSERTIONS
+			verifySlice(sequence, result, previous);
+#endif
 
 			finalizeAlternateSlice(result, currentBand, sequence.size());
 
@@ -2859,6 +2910,7 @@ private:
 				assert(word.confirmedRows.rows >= 0);
 				word.scoreEndExists = word.confirmedRows.rows == WordConfiguration<Word>::WordSize - 1;
 				word.confirmedRows.rows = WordConfiguration<Word>::WordSize;
+				word.confirmedRows.start = 0;
 				minScore = std::min(minScore, word.scoreEnd);
 			}
 			for (auto& word : pair.second)
@@ -2915,9 +2967,6 @@ private:
 #endif
 			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, nodesliceMap);
 
-#ifdef EXTRACORRECTNESSASSERTIONS
-			verifySlice(sequence, newSlice, lastSlice);
-#endif
 			if (samplingFrequency > 1 && (slice == 0 || slice % samplingFrequency == 1 || newSlice.EstimatedMemoryUsage() < storeSlice.EstimatedMemoryUsage())) storeSlice = newSlice.getFrozenSqrtEndScores();
 			size_t sliceCells = 0;
 			for (auto node : newSlice.nodes)

@@ -13,7 +13,8 @@ public:
 	class RowConfirmation
 	{
 	public:
-		RowConfirmation(char rows, bool partial) : rows(rows), partial(partial) {};
+		RowConfirmation(char rows, bool partial) : start(0), rows(rows), partial(partial) {};
+		char start;
 		char rows;
 		bool partial;
 		bool operator>(const RowConfirmation& other) const
@@ -26,7 +27,7 @@ public:
 		}
 		bool operator==(const RowConfirmation& other) const
 		{
-			return rows == other.rows && partial == other.partial;
+			return start == other.start && rows == other.rows && partial == other.partial;
 		}
 		bool operator!=(const RowConfirmation& other) const
 		{
@@ -504,7 +505,7 @@ public:
 				return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
 			}
 		}
-		const std::pair<size_t, View> operator*() const
+		const std::pair<size_t, const View> operator*() const
 		{
 			if (indexPos != -1)
 			{
@@ -561,7 +562,7 @@ public:
 		indexPos(indexPos)
 		{
 		}
-		const std::pair<size_t, View> operator*() const
+		const std::pair<size_t, const View> operator*() const
 		{
 			if (indexPos != -1)
 			{
