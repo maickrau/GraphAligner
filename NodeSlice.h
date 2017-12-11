@@ -469,6 +469,7 @@ template <typename T>
 class NodeSlice
 {
 public:
+	using MapItem = std::tuple<size_t, size_t, int>;
 	using Container = WordContainer<size_t, int, uint64_t>;
 	using View = Container::ContainerView;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, View>>
@@ -477,31 +478,63 @@ public:
 	public:
 		NodeSliceIterator(NodeSlice* slice, map_iterator pos) :
 		slice(slice),
-		mappos(pos)
+		mappos(pos),
+		indexPos(-1)
+		{
+		}
+		NodeSliceIterator(NodeSlice* slice, map_iterator pos, size_t indexPos) :
+		slice(slice),
+		mappos(pos),
+		indexPos(indexPos)
 		{
 		}
 		std::pair<size_t, View> operator*()
 		{
-			auto nodeindex = mappos->first;
-			auto start = std::get<0>(mappos->second);
-			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			if (indexPos != -1)
+			{
+				auto nodeindex = slice->activeVectorMapIndices[indexPos];
+				auto info = (*(slice->vectorMap))[nodeindex];
+				return std::make_pair(nodeindex, slice->slices.getView(std::get<0>(info), std::get<1>(info), std::get<2>(info)));
+			}
+			else
+			{
+				auto nodeindex = mappos->first;
+				auto start = std::get<0>(mappos->second);
+				auto end = std::get<1>(mappos->second);
+				return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			}
 		}
 		const std::pair<size_t, View> operator*() const
 		{
-			auto nodeindex = mappos->first;
-			auto start = std::get<0>(mappos->second);
-			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			if (indexPos != -1)
+			{
+				auto nodeindex = slice->activeVectorMapIndices[indexPos];
+				auto info = (*(slice->vectorMap))[nodeindex];
+				return std::make_pair(nodeindex, slice->slices.getView(std::get<0>(info), std::get<1>(info), std::get<2>(info)));
+			}
+			else
+			{
+				auto nodeindex = mappos->first;
+				auto start = std::get<0>(mappos->second);
+				auto end = std::get<1>(mappos->second);
+				return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			}
 		}
 		NodeSliceIterator& operator++()
 		{
-			++mappos;
+			if (indexPos != -1)
+			{
+				indexPos++;
+			}
+			else
+			{
+				++mappos;
+			}
 			return *this;
 		}
 		bool operator==(const NodeSliceIterator& other) const
 		{
-			return slice == other.slice && mappos == other.mappos;
+			return slice == other.slice && mappos == other.mappos && indexPos == other.indexPos;
 		}
 		bool operator!=(const NodeSliceIterator& other) const
 		{
@@ -510,6 +543,7 @@ public:
 	private:
 		NodeSlice* slice;
 		map_iterator mappos;
+		size_t indexPos;
 	};
 	class NodeSliceConstIterator : std::iterator<std::forward_iterator_tag, const std::pair<size_t, View>>
 	{
@@ -517,24 +551,47 @@ public:
 	public:
 		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos) :
 		slice(slice),
-		mappos(pos)
+		mappos(pos),
+		indexPos(-1)
+		{
+		}
+		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos, size_t indexPos) :
+		slice(slice),
+		mappos(pos),
+		indexPos(indexPos)
 		{
 		}
 		const std::pair<size_t, View> operator*() const
 		{
-			auto nodeindex = mappos->first;
-			auto start = std::get<0>(mappos->second);
-			auto end = std::get<1>(mappos->second);
-			return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			if (indexPos != -1)
+			{
+				auto nodeindex = slice->activeVectorMapIndices[indexPos];
+				auto info = (*(slice->vectorMap))[nodeindex];
+				return std::make_pair(nodeindex, slice->slices.getView(std::get<0>(info), std::get<1>(info), std::get<2>(info)));
+			}
+			else
+			{
+				auto nodeindex = mappos->first;
+				auto start = std::get<0>(mappos->second);
+				auto end = std::get<1>(mappos->second);
+				return std::make_pair(nodeindex, slice->slices.getView(start, end, std::get<2>(mappos->second)));
+			}
 		}
 		NodeSliceConstIterator& operator++()
 		{
-			++mappos;
+			if (indexPos != -1)
+			{
+				indexPos++;
+			}
+			else
+			{
+				++mappos;
+			}
 			return *this;
 		}
 		bool operator==(const NodeSliceConstIterator& other) const
 		{
-			return slice == other.slice && mappos == other.mappos;
+			return slice == other.slice && mappos == other.mappos && indexPos == other.indexPos;
 		}
 		bool operator!=(const NodeSliceConstIterator& other) const
 		{
@@ -543,79 +600,210 @@ public:
 	private:
 		const NodeSlice* slice;
 		map_iterator mappos;
+		size_t indexPos;
 	};
+	NodeSlice() :
+	vectorMap(nullptr)
+	{
+	}
+	NodeSlice(std::vector<MapItem>* vectorMap) :
+	vectorMap(vectorMap)
+	{
+	}
+	void clearVectorMap()
+	{
+		assert(vectorMap != nullptr);
+		for (auto index : activeVectorMapIndices)
+		{
+			(*vectorMap)[index] = std::make_tuple(0, 0, 0);
+		}
+		activeVectorMapIndices.clear();
+	}
 	void reserve(size_t size)
 	{
 		slices.reserve(size);
 	}
 	void addNode(size_t nodeIndex, size_t size)
 	{
-		nodes[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) == std::get<1>((*vectorMap)[nodeIndex]));
+			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+			activeVectorMapIndices.push_back(nodeIndex);
+		}
+		else
+		{
+			assert(nodes.find(nodeIndex) == nodes.end());
+			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+		}
 		slices.resize(slices.size() + size);
 	}
 	View node(size_t nodeIndex)
 	{
-		auto found = nodes.find(nodeIndex);
-		assert(found != nodes.end());
-		return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]));
+			return slices.getView(std::get<0>((*vectorMap)[nodeIndex]), std::get<1>((*vectorMap)[nodeIndex]), std::get<2>((*vectorMap)[nodeIndex]));
+		}
+		else
+		{
+			auto found = nodes.find(nodeIndex);
+			assert(found != nodes.end());
+			return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
+		}
 	}
 	const View node(size_t nodeIndex) const
 	{
-		auto found = nodes.find(nodeIndex);
-		assert(found != nodes.end());
-		return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]));
+			return slices.getView(std::get<0>((*vectorMap)[nodeIndex]), std::get<1>((*vectorMap)[nodeIndex]), std::get<2>((*vectorMap)[nodeIndex]));
+		}
+		else
+		{
+			auto found = nodes.find(nodeIndex);
+			assert(found != nodes.end());
+			return slices.getView(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
+		}
 	}
 	bool hasNode(size_t nodeIndex) const
 	{
-		return nodes.find(nodeIndex) != nodes.end();
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			return std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]);
+		}
+		else
+		{
+			return nodes.find(nodeIndex) != nodes.end();
+		}
 	}
 	int minScore(size_t nodeIndex) const
 	{
-		auto found = nodes.find(nodeIndex);
-		assert(found != nodes.end());
-		return std::get<2>(found->second);
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]));
+			return std::get<2>((*vectorMap)[nodeIndex]);
+		}
+		else
+		{
+			auto found = nodes.find(nodeIndex);
+			assert(found != nodes.end());
+			return std::get<2>(found->second);
+		}
 	}
 	void setMinScore(size_t nodeIndex, int score)
 	{
-		std::get<2>(nodes[nodeIndex]) = score;
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			std::get<2>((*vectorMap)[nodeIndex]) = score;
+		}
+		else
+		{
+			std::get<2>(nodes[nodeIndex]) = score;
+		}
 	}
 	size_t size() const
 	{
-		return nodes.size();
+		if (vectorMap != nullptr)
+		{
+			return activeVectorMapIndices.size();
+		}
+		else
+		{
+			return nodes.size();
+		}
 	}
 	NodeSliceIterator begin()
 	{
-		return NodeSliceIterator { this, nodes.begin() };
+		if (vectorMap != nullptr)
+		{
+			return NodeSliceIterator { this, nodes.end(), 0 };
+		}
+		else
+		{
+			return NodeSliceIterator { this, nodes.begin() };
+		}
 	}
 	NodeSliceIterator end()
 	{
-		return NodeSliceIterator { this, nodes.end() };
+		if (vectorMap != nullptr)
+		{
+			return NodeSliceIterator { this, nodes.end(), activeVectorMapIndices.size() };
+		}
+		else
+		{
+			return NodeSliceIterator { this, nodes.end() };
+		}
 	}
 	NodeSliceConstIterator begin() const
 	{
-		return NodeSliceConstIterator { this, nodes.begin() };
+		if (vectorMap != nullptr)
+		{
+			return NodeSliceConstIterator { this, nodes.end(), 0 };
+		}
+		else
+		{
+			return NodeSliceConstIterator { this, nodes.begin() };
+		}
 	}
 	NodeSliceConstIterator end() const
 	{
-		return NodeSliceConstIterator { this, nodes.end() };
+		if (vectorMap != nullptr)
+		{
+			return NodeSliceConstIterator { this, nodes.end(), activeVectorMapIndices.size() };
+		}
+		else
+		{
+			return NodeSliceConstIterator { this, nodes.end() };
+		}
 	}
 	NodeSlice getFrozenSqrtEndScores() const
 	{
 		NodeSlice result;
 		result.slices = slices.getFrozenSqrtEndScores();
-		result.nodes = nodes;
+		if (vectorMap != nullptr)
+		{
+			for (auto index : activeVectorMapIndices)
+			{
+				result.nodes[index] = (*vectorMap)[index];
+			}
+		}
+		else
+		{
+			result.nodes = nodes;
+		}
 		return result;
 	}
 	NodeSlice getFrozenScores() const
 	{
 		NodeSlice result;
 		result.slices = slices.getFrozenScores();
-		result.nodes = nodes;
+		if (vectorMap != nullptr)
+		{
+			for (auto index : activeVectorMapIndices)
+			{
+				result.nodes[index] = (*vectorMap)[index];
+			}
+		}
+		else
+		{
+			result.nodes = nodes;
+		}
 		return result;
 	}
 private:
-	std::unordered_map<size_t, std::tuple<size_t, size_t, int>> nodes;
+	std::vector<MapItem>* vectorMap;
+	std::vector<size_t> activeVectorMapIndices;
+	std::unordered_map<size_t, MapItem> nodes;
 	Container slices;
+	friend class NodeSliceIterator;
+	friend class NodeSliceConstIterator;
 };
 
 #endif
