@@ -13,10 +13,17 @@ public:
 	class RowConfirmation
 	{
 	public:
-		RowConfirmation(char rows, bool partial) : start(0), rows(rows), partial(partial) {};
+		RowConfirmation(char rows, bool partial) : start(0), rows(rows), partial(partial)
+#ifdef EXTRACORRECTNESSASSERTIONS
+		,exists(0)
+#endif
+		{};
 		char start;
 		char rows;
 		bool partial;
+#ifdef EXTRACORRECTNESSASSERTIONS
+		Word exists;
+#endif
 		bool operator>(const RowConfirmation& other) const
 		{
 			return rows > other.rows || (rows == other.rows && partial && !other.partial);
@@ -77,6 +84,9 @@ public:
 		Word VP;
 		Word VN;
 		uint16_t plusMinScore;
+#ifdef EXTRACORRECTNESSASSERTIONS
+		Word exists;
+#endif
 	};
 	class TinySlice
 	{
@@ -356,7 +366,11 @@ public:
 	{
 		if (frozen == 1)
 		{
-			return { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
+			WordSlice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
+#ifdef EXTRACORRECTNESSASSERTIONS
+			result.confirmedRows.exists = frozenSlices[index].exists;
+#endif
+			return result;
 		}
 		else if (frozen == 2)
 		{
@@ -364,6 +378,9 @@ public:
 			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
 			WordSlice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), 64, false };
 			result.scoreEndExists = frozenSqrtSlices[index].VPVNLastBit & 4;
+#ifdef EXTRACORRECTNESSASSERTIONS
+			result.confirmedRows.exists = result.scoreEndExists ? (((Word)1) << 63) : 0;
+#endif
 			return result;
 		}
 		else
@@ -390,6 +407,9 @@ public:
 			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
 			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
 			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
+#ifdef EXTRACORRECTNESSASSERTIONS
+			result.frozenSlices[i].exists = mutableSlices[i].confirmedRows.exists;
+#endif
 		}
 		return result;
 	}
