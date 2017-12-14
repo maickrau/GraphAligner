@@ -13,12 +13,11 @@ public:
 	class RowConfirmation
 	{
 	public:
-		RowConfirmation(char rows, bool partial) : start(0), rows(rows), partial(partial)
+		RowConfirmation(char rows, bool partial) : rows(rows), partial(partial)
 #ifdef EXTRACORRECTNESSASSERTIONS
 		,exists(0)
 #endif
 		{};
-		char start;
 		char rows;
 		bool partial;
 #ifdef EXTRACORRECTNESSASSERTIONS
@@ -34,7 +33,7 @@ public:
 		}
 		bool operator==(const RowConfirmation& other) const
 		{
-			return start == other.start && rows == other.rows && partial == other.partial;
+			return rows == other.rows && partial == other.partial;
 		}
 		bool operator!=(const RowConfirmation& other) const
 		{

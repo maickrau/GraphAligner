@@ -682,7 +682,10 @@ private:
 			assert(boundaryTrace.size() > 0);
 			//at zeroth slice, boundarytrace's last cell will be in row -1 so remove that
 			//the other cells are still valid so only the last one needs to be removed
+			assert(i != 0 || result.second.back().second == -1);
 			if (i == 0) result.second.pop_back();
+			assert(result.second.back().second != -1);
+			assert(i != 0 || result.second.back().second == 0);
 		}
 		std::reverse(result.second.begin(), result.second.end());
 #ifndef NDEBUG
@@ -691,12 +694,14 @@ private:
 		return result;
 	}
 
-	MatrixPosition pickBacktracePredecessor(const std::string& sequence, const DPSlice& slice, MatrixPosition pos, const DPSlice& previousSlice) const
+	MatrixPosition pickBacktracePredecessor(const std::string& sequence, const DPSlice& slice, const MatrixPosition pos, const DPSlice& previousSlice) const
 	{
 		assert(pos.second >= slice.j);
 		assert(pos.second < slice.j + WordConfiguration<Word>::WordSize);
 		auto nodeIndex = graph.IndexToNode(pos.first);
+		assert(slice.scores.hasNode(nodeIndex));
 		auto scoreHere = getValue(slice, pos.second - slice.j, pos.first);
+		if (pos.second == 0 && previousSlice.scores.hasNode(nodeIndex) && (scoreHere == 0 || scoreHere == 1)) return { pos.first, pos.second - 1 };
 		if (pos.first == graph.NodeStart(nodeIndex))
 		{
 			for (auto neighbor : graph.inNeighbors[nodeIndex])
@@ -1679,13 +1684,13 @@ private:
 	WordSlice getSourceSliceFromStartMatch(char sequenceChar, char graphChar, ScoreType previousScore) const
 	{
 		Word firstVP = characterMatch(sequenceChar, graphChar) ? 0 : 1;
-		return { WordConfiguration<Word>::AllOnes & ~(Word)1 | firstVP, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize - 1 + firstVP, previousScore, WordConfiguration<Word>::WordSize, false };
+		return { WordConfiguration<Word>::AllOnes & ~(Word)1 | firstVP, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize - 1 + firstVP, previousScore, WordConfiguration<Word>::WordSize, true };
 	}
 
 	WordSlice getSourceSliceFromBefore(size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice) const
 	{
-		auto previousScore = previousSlice.node(nodeIndex)[0].scoreEnd;
-		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, WordConfiguration<Word>::WordSize, true };
+		auto previousWordSlice = previousSlice.node(nodeIndex)[0];
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousWordSlice.scoreEnd+WordConfiguration<Word>::WordSize, previousWordSlice.scoreEnd, WordConfiguration<Word>::WordSize, previousWordSlice.scoreEndExists };
 	}
 
 	bool isSource(size_t nodeIndex, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
@@ -1998,7 +2003,86 @@ private:
 		return std::min((T)a, b);
 	}
 
-	void verifySlice(const std::string& sequence, const DPSlice& current, const DPSlice& previous) const
+	void verifySliceBitvector(const std::string& sequence, const DPSlice& current, const DPSlice& previous) const
+	{
+		const auto lastrow = WordConfiguration<Word>::WordSize - 1;
+		for (auto pair : current.scores)
+		{
+			auto start = graph.NodeStart(pair.first);
+			for (size_t i = 1; i < pair.second.size(); i++)
+			{
+				volatile bool match = characterMatch(sequence[current.j], graph.NodeSequences(start+i));
+				volatile ScoreType foundMinScore = sequence.size();
+				foundMinScore = volmin(foundMinScore, getValue(current, 0, start+i-1)+1);
+				if (previous.scores.hasNode(pair.first))
+				{
+					foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, start+i)+1);
+					if (previous.scores.node(pair.first)[i-1].scoreEndExists)
+					{
+						foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, start+i-1) + (match ? 0 : 1));
+					}
+					else
+					{
+						foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, start+i-1) + 1);
+					}
+				}
+				assert(getValue(current, 0, start+i) == foundMinScore);
+				for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
+				{
+					match = characterMatch(sequence[current.j+j], graph.NodeSequences(start+i));
+					foundMinScore = sequence.size();
+					foundMinScore = volmin(foundMinScore, getValue(current, j-1, start+i)+1);
+					foundMinScore = volmin(foundMinScore, getValue(current, j, start+i-1)+1);
+					foundMinScore = volmin(foundMinScore, getValue(current, j-1, start+i-1)+(match ? 0 : 1));
+					assert(getValue(current, j, start+i) == foundMinScore);
+				}
+			}
+			volatile ScoreType foundMinScore = sequence.size();
+			volatile bool match = characterMatch(sequence[current.j], graph.NodeSequences(start));
+			if (current.j == 0 && previous.scores.hasNode(pair.first))
+			{
+				foundMinScore = volmin(foundMinScore, match ? 0 : 1);
+			}
+			if (previous.scores.hasNode(pair.first))
+			{
+				foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, start)+1);
+			}
+			for (auto neighbor : graph.inNeighbors[pair.first])
+			{
+				if (current.scores.hasNode(neighbor))
+				{
+					foundMinScore = volmin(foundMinScore, getValue(current, 0, graph.NodeEnd(neighbor)-1)+1);
+				}
+				if (previous.scores.hasNode(neighbor))
+				{
+					if (previous.scores.node(neighbor).back().scoreEndExists)
+					{
+						foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, graph.NodeEnd(neighbor)-1) + (match ? 0 : 1));
+					}
+					else
+					{
+						foundMinScore = volmin(foundMinScore, getValue(previous, lastrow, graph.NodeEnd(neighbor)-1)+1);
+					}
+				}
+			}
+			assert(getValue(current, 0, start) == foundMinScore);
+			for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
+			{
+				foundMinScore = sequence.size();
+				match = characterMatch(sequence[current.j+j], graph.NodeSequences(start));
+				foundMinScore = volmin(foundMinScore, getValue(current, j-1, start)+1);
+				for (auto neighbor : graph.inNeighbors[pair.first])
+				{
+					if (!current.scores.hasNode(neighbor)) continue;
+					foundMinScore = volmin(foundMinScore, getValue(current, j, graph.NodeEnd(neighbor)-1)+1);
+					foundMinScore = volmin(foundMinScore, getValue(current, j-1, graph.NodeEnd(neighbor)-1)+(match ? 0 : 1));
+				}
+				assert(getValue(current, j, start) == foundMinScore);
+			}
+		}
+	}
+
+	void verifySliceAlternate(const std::string& sequence, const DPSlice& current, const DPSlice& previous, bool includeAll) const
 	{
 		for (auto pair : current.scores)
 		{
@@ -2007,6 +2091,7 @@ private:
 			for (size_t i = 1; i < pair.second.size(); i++)
 			{
 				volatile bool match = characterMatch(sequence[current.j], graph.NodeSequences(start+i));
+				volatile ScoreType foundMinScore = sequence.size();
 				volatile ScoreType vertscore = getValueIfExists(previous, WordConfiguration<Word>::WordSize-1, start+i, sequence.size());
 				volatile ScoreType diagscore = getValueIfExists(previous, WordConfiguration<Word>::WordSize-1, start+i-1, sequence.size());
 				volatile ScoreType horiscore = getValueIfExists(current, 0, start+i-1, sequence.size());
@@ -2463,7 +2548,7 @@ private:
 			for (size_t i = 0; i < nodeslice.size(); i++)
 			{
 				nodeslice[i] = {0, 0, uninitializedValue, uninitializedValue, 0, false};
-				nodeslice[i].confirmedRows.start = WordConfiguration<Word>::WordSize;
+				nodeslice[i].confirmedRows.partial = false;
 			}
 		}
 		assert(slice.hasNode(node));
@@ -2473,9 +2558,9 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 		wordslice.confirmedRows.exists |= ((Word)1) << row;
 #endif
-		if (wordslice.confirmedRows.start == WordConfiguration<Word>::WordSize)
+		if (!wordslice.confirmedRows.partial)
 		{
-			wordslice.confirmedRows.start = row;
+			wordslice.confirmedRows.partial = true;
 			wordslice.scoreBeforeStart = value + row + 1;
 			if (row < WordConfiguration<Word>::WordSize-1)
 			{
@@ -2862,6 +2947,16 @@ private:
 			}
 		}
 
+#ifdef EXTRACORRECTNESSASSERTIONS
+		for (auto pair : currentSlice)
+		{
+			for (auto& word : pair.second)
+			{
+				word.confirmedRows.exists = -1;
+			}
+		}
+#endif
+
 		NodeCalculationResult result;
 		result.minScore = currentMinimumScore;
 		result.minScoreIndex = currentMinimumIndex;
@@ -2911,7 +3006,7 @@ private:
 				bandTest.numCells = cells;
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-				verifySlice(sequence, bandTest, previous);
+				verifySliceBitvector(sequence, bandTest, previous);
 #endif
 				return bandTest;
 			}
@@ -2930,7 +3025,7 @@ private:
 			result.correctness = result.correctness.NextState(result.minScore - previous.minScore, WordConfiguration<Word>::WordSize);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-			verifySlice(sequence, result, previous);
+			verifySliceAlternate(sequence, result, previous, false);
 #endif
 
 			finalizeAlternateSlice(result, currentBand, sequence.size());
@@ -2954,7 +3049,7 @@ private:
 				assert(word.confirmedRows.rows >= 0);
 				word.scoreEndExists = word.confirmedRows.rows == WordConfiguration<Word>::WordSize - 1;
 				word.confirmedRows.rows = WordConfiguration<Word>::WordSize;
-				word.confirmedRows.start = 0;
+				word.confirmedRows.partial = false;
 				minScore = std::min(minScore, word.scoreEnd);
 			}
 			for (auto& word : pair.second)
