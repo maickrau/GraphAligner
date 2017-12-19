@@ -21,15 +21,15 @@ int main(int argc, char** argv)
 	std::string auggraphFile = "";
 	std::string seedFile = "";
 	int numThreads = 0;
-	int dynamicWidth = 0;
+	int initialBandwidth = 0;
+	int rampBandwidth = 0;
 	int dynamicRowStart = 64;
 	int c;
 	bool initialFullBand = false;
 	bool sqrtSpace = false;
 	bool stats = false;
-	bool alternateBand = false;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:is:d:MSb")) != -1)
+	while ((c = getopt(argc, argv, "g:f:a:t:B:A:is:d:MSb:")) != -1)
 	{
 		switch(c)
 		{
@@ -45,11 +45,11 @@ int main(int argc, char** argv)
 			case 't':
 				numThreads = std::stoi(optarg);
 				break;
-			case 'B':
-				dynamicWidth = std::stoi(optarg);
-				break;
 			case 'b':
-				alternateBand = true;
+				initialBandwidth = std::stoi(optarg);
+				break;
+			case 'B':
+				rampBandwidth = std::stoi(optarg);
 				break;
 			case 'A':
 				auggraphFile = std::string(optarg);
@@ -84,9 +84,15 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	if (dynamicWidth < 2)
+	if (initialBandwidth < 2)
 	{
-		std::cerr << "dynamic bandwidth must be >= 2" << std::endl;
+		std::cerr << "bandwidth must be >= 2" << std::endl;
+		std::exit(0);
+	}
+
+	if (rampBandwidth != 0 && rampBandwidth <= initialBandwidth)
+	{
+		std::cerr << "backup bandwidth must be higher than initial bandwidth" << std::endl;
 		std::exit(0);
 	}
 
@@ -96,7 +102,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	alignReads(graphFile, fastqFile, numThreads, dynamicWidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, sqrtSpace, alternateBand, stats);
+	alignReads(graphFile, fastqFile, numThreads, initialBandwidth, rampBandwidth, alignmentFile, auggraphFile, dynamicRowStart, seedFile, sqrtSpace, stats);
 
 	return 0;
 }

@@ -193,7 +193,8 @@ private:
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::WordSlice;
 	mutable bool statsmode;
 	mutable BufferedWriter logger;
-	const LengthType dynamicWidth;
+	const LengthType initialBandwidth;
+	const LengthType rampBandwidth;
 	const int bandFunction;
 	const AlignmentGraph& graph;
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
@@ -282,11 +283,12 @@ private:
 	};
 public:
 
-	GraphAligner(const AlignmentGraph& graph, LengthType dynamicWidth, int bandFunction) :
+	GraphAligner(const AlignmentGraph& graph, int initialBandwidth, int rampBandwidth) :
 	statsmode(false),
 	logger(std::cerr),
-	dynamicWidth(dynamicWidth),
-	bandFunction(bandFunction),
+	initialBandwidth(initialBandwidth),
+	rampBandwidth(rampBandwidth),
+	bandFunction(2),
 	graph(graph)
 	{
 	}
@@ -927,10 +929,10 @@ private:
 	}
 
 	template <typename Container>
-	void expandBandFromPositionsFromPrevious(const Container& startpositions, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand) const
+	void expandBandFromPositionsFromPrevious(const Container& startpositions, std::unordered_map<size_t, size_t>& distanceAtNodeStart, std::unordered_map<size_t, size_t>& distanceAtNodeEnd, std::set<size_t>& bandOrder, const std::vector<bool>& previousBand, int bandwidth) const
 	{
 		std::vector<std::vector<std::pair<LengthType, bool>>> queue;
-		queue.resize(dynamicWidth);
+		queue.resize(bandwidth);
 		for (auto startpos : startpositions)
 		{
 			auto nodeIndex = graph.IndexToNode(startpos);
@@ -1004,22 +1006,22 @@ private:
 		int priority;
 	};
 
-	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> projectForwardFromMinScore(ScoreType minScore, const DPSlice& previousSlice, const std::vector<bool>& previousBand, int bandwidth) const
 	{
-		const auto expandWidth = dynamicWidth + WordConfiguration<Word>::WordSize;
+		const auto expandWidth = bandwidth + WordConfiguration<Word>::WordSize;
 		std::unordered_map<size_t, size_t> distances;
 		std::vector<LengthType> result;
 		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> queue;
-		size_t bandWidth = 0;
+		size_t currentWidth = 0;
 		for (const auto pair : previousSlice.scores)
 		{
-			if (pair.second.minScore() <= minScore + dynamicWidth)
+			if (pair.second.minScore() <= minScore + bandwidth)
 			{
 				auto node = pair.first;
 				distances[node] = 0;
 				result.push_back(node);
-				bandWidth += graph.NodeLength(node);
-				if (bandWidth >= AlternateMethodCutoff)
+				currentWidth += graph.NodeLength(node);
+				if (currentWidth >= AlternateMethodCutoff)
 				{
 					return result;
 				}
@@ -1039,10 +1041,10 @@ private:
 			if (top.priority > expandWidth) break;
 			queue.pop();
 			if (distances.count(top.node) == 1 && distances[top.node] <= top.priority) continue;
-			bandWidth += graph.NodeLength(top.node);
+			currentWidth += graph.NodeLength(top.node);
 			distances[top.node] = top.priority;
 			result.push_back(top.node);
-			if (bandWidth >= AlternateMethodCutoff)
+			if (currentWidth >= AlternateMethodCutoff)
 			{
 				return result;
 			}
@@ -1056,7 +1058,7 @@ private:
 	}
 
 	template <typename Container>
-	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(const Container& previousMinimumIndex, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> projectForwardAndExpandBandFromPrevious(const Container& previousMinimumIndex, const std::vector<bool>& previousBand, int bandwidth) const
 	{
 		assert(previousMinimumIndex.size() > 0);
 		std::set<size_t> positions;
@@ -1067,7 +1069,7 @@ private:
 		std::unordered_map<size_t, size_t> distanceAtNodeEnd;
 		std::unordered_map<size_t, size_t> distanceAtNodeStart;
 		std::set<LengthType> expanded;
-		expandBandFromPositionsFromPrevious(positions, distanceAtNodeStart, distanceAtNodeEnd, expanded, previousBand);
+		expandBandFromPositionsFromPrevious(positions, distanceAtNodeStart, distanceAtNodeEnd, expanded, previousBand, bandwidth);
 		auto nodes = filterOnlyReachable(expanded, previousBand);
 // #ifndef NDEBUG
 // 		std::vector<size_t> debugPositions;
@@ -1076,7 +1078,7 @@ private:
 // 		{
 // 			volatile auto startdist = graph.MinDistance(graph.NodeStart(node), debugPositions);
 // 			volatile auto enddist = graph.MinDistance(graph.NodeEnd(node)-1, debugPositions);
-// 			assert(startdist <= dynamicWidth || enddist <= dynamicWidth);
+// 			assert(startdist <= bandwidth || enddist <= bandwidth);
 // 		}
 // #endif
 		std::vector<LengthType> result;
@@ -1956,26 +1958,26 @@ private:
 		return result;
 	}
 
-	std::vector<LengthType> defaultForwardRowBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice) const
+	std::vector<LengthType> defaultForwardRowBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice, int bandwidth) const
 	{
 		assert(previousSlice.minScoreIndex.size() > 0);
-		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, previousBand);
+		return projectForwardAndExpandBandFromPrevious(previousSlice.minScoreIndex, previousBand, bandwidth);
 	}
 
-	std::vector<LengthType> forwardFromMinScoreBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice) const
+	std::vector<LengthType> forwardFromMinScoreBandFunction(const std::vector<bool>& previousBand, const DPSlice& previousSlice, int bandwidth) const
 	{
-		return projectForwardFromMinScore(previousSlice.minScore, previousSlice, previousBand);
+		return projectForwardFromMinScore(previousSlice.minScore, previousSlice, previousBand, bandwidth);
 	}
 
-	std::vector<LengthType> rowBandFunction(const DPSlice& previousSlice, const std::vector<bool>& previousBand) const
+	std::vector<LengthType> rowBandFunction(const DPSlice& previousSlice, const std::vector<bool>& previousBand, int bandwidth) const
 	{
 		if (bandFunction == 1)
 		{
-			return defaultForwardRowBandFunction(previousBand, previousSlice);
+			return defaultForwardRowBandFunction(previousBand, previousSlice, bandwidth);
 		}
 		if (bandFunction == 2)
 		{
-			return forwardFromMinScoreBandFunction(previousBand, previousSlice);
+			return forwardFromMinScoreBandFunction(previousBand, previousSlice, bandwidth);
 		}
 		assert(false);
 		return std::vector<LengthType>{};
@@ -2082,12 +2084,12 @@ private:
 		}
 	}
 
-	void verifySliceAlternate(const std::string& sequence, const DPSlice& current, const DPSlice& previous, bool includeAll) const
+	void verifySliceAlternate(const std::string& sequence, const DPSlice& current, const DPSlice& previous, bool includeAll, int bandwidth) const
 	{
 		for (auto pair : current.scores)
 		{
 			auto start = graph.NodeStart(pair.first);
-			auto uninitializedValue = pair.second.minScore() + pair.second.size() + dynamicWidth + 1;
+			auto uninitializedValue = pair.second.minScore() + pair.second.size() + bandwidth + 1;
 			for (size_t i = 1; i < pair.second.size(); i++)
 			{
 				volatile bool match = characterMatch(sequence[current.j], graph.NodeSequences(start+i));
@@ -2661,16 +2663,16 @@ private:
 		wordslice.confirmedRows.rows = row;
 	}
 
-	NodeCalculationResult calculateSliceAlternate(const std::string& sequence, size_t startj, NodeSlice<WordSlice>& currentSlice, const DPSlice& previousSlice, std::vector<bool>& processed) const
+	NodeCalculationResult calculateSliceAlternate(const std::string& sequence, size_t startj, NodeSlice<WordSlice>& currentSlice, const DPSlice& previousSlice, std::vector<bool>& processed, int bandwidth) const
 	{
 		std::vector<std::vector<std::pair<LengthType, LengthType>>> calculables;
 		std::vector<std::vector<std::pair<LengthType, LengthType>>> nextCalculables;
-		calculables.resize(dynamicWidth+1);
-		nextCalculables.resize(dynamicWidth+1);
+		calculables.resize(bandwidth+1);
+		nextCalculables.resize(bandwidth+1);
 
 		//usually the calculable lists contain a ton of entries
 		//so just preallocate a large block so we don't need to resize too often
-		for (size_t i = 0; i < dynamicWidth+1; i++)
+		for (size_t i = 0; i < bandwidth+1; i++)
 		{
 			calculables[i].reserve(AlternateMethodCutoff); //semi-arbitrary guess based on the bitvector/alternate cutoff
 			nextCalculables[i].reserve(AlternateMethodCutoff);
@@ -2683,7 +2685,7 @@ private:
 			{
 				for (size_t i = 0; i < pair.second.size(); i++)
 				{
-					if (pair.second[i].scoreEnd < previousSlice.minScore + dynamicWidth && pair.second[i].scoreEndExists)
+					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists)
 					{
 						if (characterMatch(sequence[startj], graph.NodeSequences(start + i)))
 						{
@@ -2700,7 +2702,7 @@ private:
 			{
 				for (size_t i = 0; i < pair.second.size() - 1; i++)
 				{
-					if (pair.second[i].scoreEnd < previousSlice.minScore + dynamicWidth && pair.second[i].scoreEndExists)
+					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists)
 					{
 						assert(pair.second[i].scoreEnd >= previousSlice.minScore);
 						calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+i);
@@ -2714,7 +2716,7 @@ private:
 						}
 					}
 				}
-				if (pair.second.back().scoreEnd < previousSlice.minScore + dynamicWidth && pair.second.back().scoreEndExists)
+				if (pair.second.back().scoreEnd < previousSlice.minScore + bandwidth && pair.second.back().scoreEndExists)
 				{
 					calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+pair.second.size()-1);
 					for (auto neighbor : graph.outNeighbors[pair.first])
@@ -2744,7 +2746,7 @@ private:
 			{
 				scoreIndexPlus = -1;
 			}
-			for (int scoreplus = 0; scoreplus < dynamicWidth; scoreplus++)
+			for (int scoreplus = 0; scoreplus < bandwidth; scoreplus++)
 			{
 				for (auto pair : calculables[scoreplus])
 				{
@@ -2964,12 +2966,12 @@ private:
 		return result;
 	}
 
-	DPSlice extendDPSlice(const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
+	DPSlice extendDPSlice(const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap, int bandwidth) const
 	{
 		DPSlice result { &nodesliceMap };
 		result.j = previous.j + WordConfiguration<Word>::WordSize;
 		result.correctness = previous.correctness;
-		result.nodes = rowBandFunction(previous, previousBand);
+		result.nodes = rowBandFunction(previous, previousBand, bandwidth);
 		assert(result.nodes.size() > 0);
 		return result;
 	}
@@ -2984,10 +2986,10 @@ private:
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables, std::vector<bool>& processed, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables, std::vector<bool>& processed, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap, int bandwidth) const
 	{
 		{ //braces so bandTest doesn't take memory later
-			auto bandTest = extendDPSlice(previous, previousBand, nodesliceMap);
+			auto bandTest = extendDPSlice(previous, previousBand, nodesliceMap, bandwidth);
 			assert(sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize);
 			size_t cells = 0;
 			for (auto node : bandTest.nodes)
@@ -3017,7 +3019,7 @@ private:
 			result.correctness = previous.correctness;
 			result.scores.reserve(AlternateMethodCutoff);
 
-			auto sliceResult = calculateSliceAlternate(sequence, result.j, result.scores, previous, processed);
+			auto sliceResult = calculateSliceAlternate(sequence, result.j, result.scores, previous, processed, bandwidth);
 			result.cellsProcessed = sliceResult.cellsProcessed;
 			result.minScoreIndex = sliceResult.minScoreIndex;
 			result.minScore = sliceResult.minScore;
@@ -3028,13 +3030,13 @@ private:
 			verifySliceAlternate(sequence, result, previous, false);
 #endif
 
-			finalizeAlternateSlice(result, currentBand, sequence.size());
+			finalizeAlternateSlice(result, currentBand, sequence.size(), bandwidth);
 
 			return result;
 		}
 	}
 
-	void finalizeAlternateSlice(DPSlice& slice, std::vector<bool>& currentBand, ScoreType uninitializedValue) const
+	void finalizeAlternateSlice(DPSlice& slice, std::vector<bool>& currentBand, ScoreType uninitializedValue, int bandwidth) const
 	{
 		for (auto pair : slice.scores)
 		{
@@ -3056,8 +3058,8 @@ private:
 			{
 				if (word.scoreEnd == uninitializedValue)
 				{
-					word.scoreEnd = minScore + pair.second.size() + dynamicWidth + 1;
-					word.scoreBeforeStart = minScore + pair.second.size() + dynamicWidth + 1;
+					word.scoreEnd = minScore + pair.second.size() + bandwidth + 1;
+					word.scoreBeforeStart = minScore + pair.second.size() + bandwidth + 1;
 				}
 			}
 			slice.numCells += pair.second.size();
@@ -3066,6 +3068,11 @@ private:
 	}
 
 	DPTable getNextNSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
+	{
+		return getNextNSlicesInner(sequence, initialSlice, numSlices, samplingFrequency, nodesliceMap, initialBandwidth);
+	}
+
+	DPTable getNextNSlicesInner(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap, int bandwidth) const
 	{
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size());
 		if (statsmode) samplingFrequency = numSlices+1;
@@ -3104,7 +3111,7 @@ private:
 #ifndef NDEBUG
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, nodesliceMap);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, nodesliceMap, bandwidth);
 
 			if (samplingFrequency > 1 && (slice == 0 || slice % samplingFrequency == 1 || newSlice.EstimatedMemoryUsage() < storeSlice.EstimatedMemoryUsage())) storeSlice = newSlice.getFrozenSqrtEndScores();
 			size_t sliceCells = 0;
