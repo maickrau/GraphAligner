@@ -194,7 +194,6 @@ private:
 	static constexpr int RampRedoSize = 5;
 	using RowConfirmation = typename WordContainer<LengthType, ScoreType, Word>::RowConfirmation;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::WordSlice;
-	mutable bool statsmode;
 	mutable BufferedWriter logger;
 	const LengthType initialBandwidth;
 	const LengthType rampBandwidth;
@@ -288,7 +287,6 @@ private:
 public:
 
 	GraphAligner(const AlignmentGraph& graph, int initialBandwidth, int rampBandwidth) :
-	statsmode(false),
 	logger(std::cerr),
 	initialBandwidth(initialBandwidth),
 	rampBandwidth(rampBandwidth),
@@ -316,25 +314,6 @@ public:
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
 		return result;
-	}
-
-	AlignmentResult GetAlignmentStats(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
-	{
-		statsmode = true;
-		std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
-		nodesliceMap.resize(graph.NodeSize(), {0, 0, 0});
-		for (size_t i = 0; i < seedHits.size(); i++)
-		{
-			logger << "stats read " << seq_id << " seed " << i << " node " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << " readpos " << std::get<1>(seedHits[i]) << " ";
-			auto timeStart = std::chrono::system_clock::now();
-			auto nodeIndex = graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
-			auto alignment = getSplitAlignment(sequence, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, false, nodesliceMap);
-			auto timeEnd = std::chrono::system_clock::now();
-			logger << "time " << std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count() << "ms ";
-			logger << BufferedWriter::Flush;
-		}
-		statsmode = false;
-		return emptyAlignment(0, 0);
 	}
 
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
