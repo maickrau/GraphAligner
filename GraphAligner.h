@@ -295,13 +295,13 @@ public:
 	{
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, bool sqrtSpace) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart) const
 	{
 		std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 		nodesliceMap.resize(graph.NodeSize(), {0, 0, 0});
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
-		auto trace = getBacktraceFullStart(sequence, sqrtSpace, nodesliceMap);
+		auto trace = getBacktraceFullStart(sequence, nodesliceMap);
 		auto timeEnd = std::chrono::system_clock::now();
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output
@@ -316,7 +316,7 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, bool sqrtSpace, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(graph.finalized);
@@ -339,7 +339,7 @@ public:
 				continue;
 			}
 			logger << BufferedWriter::Flush;
-			auto alignment = getSplitAlignment(sequence, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, sqrtSpace, nodesliceMap);
+			auto alignment = getSplitAlignment(sequence, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, nodesliceMap);
 			auto trace = getPiecewiseTracesFromSplit(alignment, sequence, nodesliceMap);
 			addAlignmentNodes(triedAlignmentNodes, trace, alignment.sequenceSplitIndex);
 			if (!hasAlignment)
@@ -3309,19 +3309,16 @@ private:
 		return result;
 	}
 
-	int getSamplingFrequency(size_t sequenceLen, bool sqrtSpace) const
+	int getSamplingFrequency(size_t sequenceLen) const
 	{
 		size_t samplingFrequency = 1;
-		if (sqrtSpace)
-		{
-			samplingFrequency = ((int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize) + RampRedoSize - 1) / RampRedoSize) * RampRedoSize;
-			assert(samplingFrequency >= RampRedoSize);
-			assert(samplingFrequency % RampRedoSize == 0);
-		}
+		samplingFrequency = ((int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize) + RampRedoSize - 1) / RampRedoSize) * RampRedoSize;
+		assert(samplingFrequency >= RampRedoSize);
+		assert(samplingFrequency % RampRedoSize == 0);
 		return samplingFrequency;
 	}
 
-	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore, bool sqrtSpace, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
+	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
 		assert(matchSequencePosition >= 0);
 		assert(matchSequencePosition < sequence.size());
@@ -3352,7 +3349,7 @@ private:
 				backwardPart += 'N';
 			}
 			auto backwardInitialBand = getInitialSliceOnlyOneNode(backwardNode);
-			size_t samplingFrequency = getSamplingFrequency(backwardPart.size(), sqrtSpace);
+			size_t samplingFrequency = getSamplingFrequency(backwardPart.size());
 			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
 			result.backward = std::move(backwardSlice);
 			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
@@ -3367,7 +3364,7 @@ private:
 				forwardPart += 'N';
 			}
 			auto forwardInitialBand = getInitialSliceOnlyOneNode(forwardNode);
-			size_t samplingFrequency = getSamplingFrequency(forwardPart.size(), sqrtSpace);
+			size_t samplingFrequency = getSamplingFrequency(forwardPart.size());
 			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
 			result.forward = std::move(forwardSlice);
 			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
@@ -3450,7 +3447,7 @@ private:
 		return std::make_pair(backtraceresult, reverseBacktraceResult);
 	}
 
-	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktraceFullStart(std::string sequence, bool sqrtSpace, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
+	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktraceFullStart(std::string sequence, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 		for (int i = 0; i < padding; i++)
@@ -3470,7 +3467,7 @@ private:
 				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
 			}
 		}
-		size_t samplingFrequency = getSamplingFrequency(sequence.size(), sqrtSpace);
+		size_t samplingFrequency = getSamplingFrequency(sequence.size());
 		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
 		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
