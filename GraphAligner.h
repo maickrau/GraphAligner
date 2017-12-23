@@ -3105,7 +3105,7 @@ private:
 					lastSlice = rampSlice;
 					currentlyRamped = true;
 					slice = rampRedoIndex;
-					size_t newStoreSliceIndex = (slice + samplingFrequency) / samplingFrequency;
+					size_t newStoreSliceIndex = (slice + 1) / samplingFrequency + 1;
 					assert(newStoreSliceIndex < hasStoreSlice.size());
 					assert(newStoreSliceIndex < storeSlices.size());
 					if (hasStoreSlice[newStoreSliceIndex] && storeSlices[newStoreSliceIndex].j >= lastSlice.j)
