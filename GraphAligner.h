@@ -3062,7 +3062,7 @@ private:
 		DPSlice notYetRampSlice = lastSlice;
 		std::vector<bool> processed;
 		processed.resize(graph.SizeInBp(), false);
-		bool currentlyRamped = false;
+		int rampStatus = 0;
 		size_t rampRedoIndex = -1;
 		size_t notYetRampRedoIndex = -1;
 #ifndef NDEBUG
@@ -3070,7 +3070,7 @@ private:
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = currentlyRamped ? rampBandwidth : initialBandwidth;
+			int bandwidth = rampStatus > 0 ? rampBandwidth : initialBandwidth;
 			size_t storeSliceIndex = slice / samplingFrequency + 1;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
@@ -3090,7 +3090,7 @@ private:
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
 				newSlice.scores.clearVectorMap();
-				if (!currentlyRamped && rampBandwidth > 0)
+				if (rampStatus == 0 && rampBandwidth > 0)
 				{
 					for (auto node : newSlice.nodes)
 					{
@@ -3103,7 +3103,7 @@ private:
 						previousBand[node] = false;
 					}
 					lastSlice = rampSlice;
-					currentlyRamped = true;
+					rampStatus = 2;
 					slice = rampRedoIndex;
 					size_t newStoreSliceIndex = (slice + 1) / samplingFrequency + 1;
 					assert(newStoreSliceIndex < hasStoreSlice.size());
@@ -3141,17 +3141,20 @@ private:
 			result.bandwidthPerSlice.push_back(bandwidth);
 			if (slice % RampRedoSize == RampRedoSize - 1)
 			{
-				std::swap(rampSlice, notYetRampSlice);
-				notYetRampSlice = newSlice.getFrozenSqrtEndScores();
-				rampRedoIndex = notYetRampRedoIndex;
-				notYetRampRedoIndex = slice;
-				currentlyRamped = false;
-				assert(hasStoreSlice.size() > storeSliceIndex);
-				assert(storeSlices.size() > storeSliceIndex);
-				if (!hasStoreSlice[storeSliceIndex] || notYetRampSlice.EstimatedMemoryUsage() < storeSlices[storeSliceIndex].EstimatedMemoryUsage())
+				if (rampStatus > 0) rampStatus--;
+				if (rampStatus == 0)
 				{
-					storeSlices[storeSliceIndex] = notYetRampSlice;
-					hasStoreSlice[storeSliceIndex] = true;
+					std::swap(rampSlice, notYetRampSlice);
+					notYetRampSlice = newSlice.getFrozenSqrtEndScores();
+					rampRedoIndex = notYetRampRedoIndex;
+					notYetRampRedoIndex = slice;
+					assert(hasStoreSlice.size() > storeSliceIndex);
+					assert(storeSlices.size() > storeSliceIndex);
+					if (!hasStoreSlice[storeSliceIndex] || notYetRampSlice.EstimatedMemoryUsage() < storeSlices[storeSliceIndex].EstimatedMemoryUsage())
+					{
+						storeSlices[storeSliceIndex] = notYetRampSlice;
+						hasStoreSlice[storeSliceIndex] = true;
+					}
 				}
 			}
 			for (auto node : lastSlice.nodes)
