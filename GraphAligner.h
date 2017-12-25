@@ -3025,6 +3025,7 @@ private:
 
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
+		enum RampStatus { CanRedoTwo, CanRedoOne, RedoingTwo, RedoingOne };
 		assert(samplingFrequency % RampRedoSize == 0);
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size());
@@ -3062,7 +3063,7 @@ private:
 		DPSlice notYetRampSlice = lastSlice;
 		std::vector<bool> processed;
 		processed.resize(graph.SizeInBp(), false);
-		int rampStatus = 0;
+		RampStatus rampStatus = RampStatus::CanRedoTwo;
 		size_t rampRedoIndex = -1;
 		size_t notYetRampRedoIndex = -1;
 #ifndef NDEBUG
@@ -3070,7 +3071,7 @@ private:
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = rampStatus > 0 ? rampBandwidth : initialBandwidth;
+			int bandwidth = (rampStatus == RampStatus::RedoingOne || rampStatus == RampStatus::RedoingTwo) ? rampBandwidth : initialBandwidth;
 			size_t storeSliceIndex = slice / samplingFrequency + 1;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
@@ -3090,7 +3091,7 @@ private:
 			if (!newSlice.correctness.CurrentlyCorrect())
 			{
 				newSlice.scores.clearVectorMap();
-				if (rampStatus == 0 && rampBandwidth > 0)
+				if ((rampStatus == CanRedoOne || rampStatus == CanRedoTwo) && rampBandwidth > 0)
 				{
 					for (auto node : newSlice.nodes)
 					{
@@ -3103,7 +3104,15 @@ private:
 						previousBand[node] = false;
 					}
 					lastSlice = rampSlice;
-					rampStatus = 2;
+					if (rampStatus == CanRedoTwo)
+					{
+						rampStatus = RedoingTwo;
+					}
+					else
+					{
+						assert(rampStatus == CanRedoOne);
+						rampStatus = RedoingOne;
+					}
 					slice = rampRedoIndex;
 					size_t newStoreSliceIndex = (slice + 1) / samplingFrequency + 1;
 					assert(newStoreSliceIndex < hasStoreSlice.size());
@@ -3141,8 +3150,10 @@ private:
 			result.bandwidthPerSlice.push_back(bandwidth);
 			if (slice % RampRedoSize == RampRedoSize - 1)
 			{
-				if (rampStatus > 0) rampStatus--;
-				if (rampStatus == 0)
+				if (rampStatus == RedoingTwo) rampStatus = RedoingOne;
+				else if (rampStatus == RedoingOne) rampStatus = CanRedoOne;
+				else if (rampStatus == CanRedoOne) rampStatus = CanRedoTwo;
+				if (rampStatus == CanRedoOne || rampStatus == CanRedoTwo)
 				{
 					std::swap(rampSlice, notYetRampSlice);
 					notYetRampSlice = newSlice.getFrozenSqrtEndScores();
