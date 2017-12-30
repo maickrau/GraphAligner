@@ -613,6 +613,10 @@ private:
 		{
 			return std::make_pair(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{});
 		}
+		if (slice.bandwidthPerSlice.size() == 0)
+		{
+			return std::make_pair(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{});
+		}
 		assert(slice.samplingFrequency > 1);
 		std::pair<ScoreType, std::vector<MatrixPosition>> result {0, {}};
 		for (size_t i = slice.slices.size()-1; i < slice.slices.size(); i--)
