@@ -278,7 +278,7 @@ private:
 	public:
 		size_t EstimatedCorrectlyAligned() const
 		{
-			return (forward.slices.size() * forward.samplingFrequency + backward.slices.size() * backward.samplingFrequency) * WordConfiguration<Word>::WordSize;
+			return (forward.bandwidthPerSlice.size() + backward.bandwidthPerSlice.size()) * WordConfiguration<Word>::WordSize;
 		}
 		size_t sequenceSplitIndex;
 		DPTable forward;
