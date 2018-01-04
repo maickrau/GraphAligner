@@ -5,6 +5,7 @@
 #include <functional>
 #include <algorithm>
 #include <thread>
+#include "Aligner.h"
 #include "CommonUtils.h"
 #include "vg.pb.h"
 #include "stream.hpp"
@@ -89,7 +90,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, int initialBandwidth, int rampBandwidth, int dynamicRowStart, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -115,7 +116,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		{
 			if (graphAlignerSeedHits == nullptr)
 			{
-				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, initialBandwidth, rampBandwidth, dynamicRowStart);
+				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.dynamicRowStart);
 			}
 			else
 			{
@@ -127,7 +128,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, initialBandwidth, rampBandwidth, dynamicRowStart, graphAlignerSeedHits->at(fastq));
+				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.dynamicRowStart, graphAlignerSeedHits->at(fastq));
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -206,13 +207,13 @@ AlignmentGraph getGraph(std::string graphFile)
 	}
 }
 
-void alignReads(std::string graphFile, std::string fastqFile, int numThreads, int initialBandwidth, int rampBandwidth, std::string alignmentFile, std::string auggraphFile, int dynamicRowStart, std::string seedFile)
+void alignReads(AlignerParams params)
 {
 	assertSetRead("Preprocessing");
 
 	std::vector<FastQ> fastqs;
-	if (is_file_exist(fastqFile)){
-		fastqs = loadFastqFromFile(fastqFile);
+	if (is_file_exist(params.fastqFile)){
+		fastqs = loadFastqFromFile(params.fastqFile);
 		std::cout << fastqs.size() << " reads" << std::endl;
 	}
 	else{
@@ -223,12 +224,12 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 	const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* seedHitsToThreads = nullptr;
 	std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>> seedHits;
 
-	if (seedFile != "")
+	if (params.seedFile != "")
 	{
 		std::map<std::string, std::vector<vg::Alignment>> seeds;
 		{
-			if (is_file_exist(seedFile)){
-				std::ifstream seedfile { seedFile, std::ios::in | std::ios::binary };
+			if (is_file_exist(params.seedFile)){
+				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
 				std::function<void(vg::Alignment&)> alignmentLambda = [&seeds](vg::Alignment& a) {
 					seeds[a.name()].push_back(a);
 				};
@@ -252,25 +253,25 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 
 	std::vector<const FastQ*> readPointers;
 	std::vector<std::vector<vg::Alignment>> resultsPerThread;
-	resultsPerThread.resize(numThreads);
+	resultsPerThread.resize(params.numThreads);
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
 		readPointers.push_back(&(fastqs[i]));
 	}
 
-	auto alignmentGraph = getGraph(graphFile);
+	auto alignmentGraph = getGraph(params.graphFile);
 
 	std::vector<std::thread> threads;
 
 	assertSetRead("Running alignments");
 	std::mutex readMutex;
 
-	for (int i = 0; i < numThreads; i++)
+	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, initialBandwidth, rampBandwidth, dynamicRowStart, seedHitsToThreads]() { runComponentMappings(alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, initialBandwidth, rampBandwidth, dynamicRowStart, seedHitsToThreads); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, seedHitsToThreads, params]() { runComponentMappings(alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, seedHitsToThreads, params); });
 	}
 
-	for (int i = 0; i < numThreads; i++)
+	for (int i = 0; i < params.numThreads; i++)
 	{
 		threads[i].join();
 	}
@@ -278,20 +279,23 @@ void alignReads(std::string graphFile, std::string fastqFile, int numThreads, in
 
 	std::vector<vg::Alignment> alignments;
 
-	for (int i = 0; i < numThreads; i++)
+	for (int i = 0; i < params.numThreads; i++)
 	{
 		alignments.insert(alignments.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
 	}
 
 	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
 
-	std::ofstream alignmentOut { alignmentFile, std::ios::out | std::ios::binary };
-	stream::write_buffered(alignmentOut, alignments, 0);
-	if (auggraphFile != "")
+	if (params.alignmentFile != "")
+	{
+		std::ofstream alignmentOut { params.alignmentFile, std::ios::out | std::ios::binary };
+		stream::write_buffered(alignmentOut, alignments, 0);
+	}
+	if (params.auggraphFile != "")
 	{
 		vg::Graph augmentedGraphAllReads;
-		vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
+		vg::Graph graph = CommonUtils::LoadVGGraph(params.graphFile);
 		augmentedGraphAllReads = augmentGraphwithAlignment(graph, alignments);
-		outputGraph(auggraphFile, augmentedGraphAllReads);
+		outputGraph(params.auggraphFile, augmentedGraphAllReads);
 	}
 }
