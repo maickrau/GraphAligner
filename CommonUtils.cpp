@@ -35,6 +35,16 @@ namespace CommonUtils
 		return result;
 	}
 
+	vg::Alignment LoadVGAlignment(std::string filename)
+	{
+		vg::Alignment result;
+		std::ifstream graphfile { filename, std::ios::in | std::ios::binary };
+		std::function<void(vg::Alignment&)> lambda = [&result](vg::Alignment& g) {
+			result = g;
+		};
+		stream::for_each(graphfile, lambda);
+		return result;
+	}
 
 	std::string ReverseComplement(std::string str)
 	{

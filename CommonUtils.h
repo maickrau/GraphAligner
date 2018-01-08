@@ -10,7 +10,7 @@ namespace CommonUtils
 {
 	vg::Graph LoadVGGraph(std::string filename);
 	std::string ReverseComplement(std::string original);
-
+	vg::Alignment LoadVGAlignment(std::string filename);
 }
 
 class BufferedWriter : std::ostream

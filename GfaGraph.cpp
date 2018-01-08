@@ -3,6 +3,33 @@
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
 
+NodePos::NodePos() :
+id(0),
+end(false)
+{
+}
+
+NodePos::NodePos(int id, bool end) :
+id(id),
+end(end)
+{
+}
+
+bool NodePos::operator==(const NodePos& other) const
+{
+	return id == other.id && end == other.end;
+}
+
+bool NodePos::operator!=(const NodePos& other) const
+{
+	return !(*this == other);
+}
+
+NodePos NodePos::Reverse() const
+{
+	return NodePos { id, !end };
+}
+
 GfaGraph::GfaGraph() :
 nodes(),
 edges(),
@@ -10,6 +37,66 @@ edgeOverlap(-1)
 {
 }
 
+GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
+{
+	GfaGraph result;
+	result.edgeOverlap = edgeOverlap;
+	for (auto node : ids)
+	{
+		if (nodes.count(node) == 0) continue;
+		result.nodes[node] = nodes.at(node);
+		NodePos end {node, true};
+		if (edges.count(end) == 1)
+		{
+			for (auto target : edges.at(end))
+			{
+				if (ids.count(target.id) == 0) continue;
+				result.edges[end].push_back(target);
+			}
+		}
+		NodePos start {node, false};
+		if (edges.count(start) == 1)
+		{
+			for (auto target : edges.at(start))
+			{
+				result.edges[start].push_back(target);
+			}
+		}
+	}
+	return result;
+}
+
+void GfaGraph::SaveToFile(std::string filename) const
+{
+	std::ofstream file {filename};
+	for (auto node : nodes)
+	{
+		file << "S\t" << node.first << "\t" << node.second << std::endl;
+	}
+	for (auto edge : edges)
+	{
+		for (auto target : edge.second)
+		{
+			file << "L\t" << edge.first.id << "\t" << (edge.first.end ? "+" : "-") << "\t" << target.id << "\t" << (target.end ? "+" : "-") << "\t" << edgeOverlap << "M" << std::endl;
+		}
+	}
+}
+
+void GfaGraph::AddSubgraph(const GfaGraph& other)
+{
+	for (auto node : other.nodes)
+	{
+		assert(nodes.count(node.first) == 0 || nodes.at(node.first) == node.second);
+		nodes[node.first] = node.second;
+	}
+	for (auto edge : other.edges)
+	{
+		for (auto target : edge.second)
+		{
+			edges[edge.first].push_back(target);
+		}
+	}
+}
 
 GfaGraph GfaGraph::LoadFromFile(std::string filename)
 {
@@ -32,10 +119,7 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 			assert(dummy == "S");
 			sstr >> id;
 			sstr >> seq;
-			Node newnode;
-			newnode.id = id;
-			newnode.sequence = seq;
-			result.nodes.push_back(newnode);
+			result.nodes[id] = seq;
 		}
 		if (line[0] == 'L')
 		{
@@ -56,12 +140,9 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 			assert(overlap >= 0);
 			assert(result.edgeOverlap == -1 || overlap == result.edgeOverlap);
 			result.edgeOverlap = overlap;
-			Edge newedge;
-			newedge.from = from;
-			newedge.to = to;
-			newedge.fromStart = fromstart == "-";
-			newedge.toEnd = toend == "-";
-			result.edges.push_back(newedge);
+			NodePos frompos {from, fromstart == "+"};
+			NodePos topos {to, toend == "+"};
+			result.edges[frompos].push_back(topos);
 		}
 	}
 	return result;

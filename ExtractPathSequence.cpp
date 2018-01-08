@@ -48,11 +48,11 @@ void printPath(const vg::Graph& g, const vg::Alignment& v)
 void printPath(const GfaGraph& g, const vg::Alignment& v)
 {
 	std::map<int, int> ids;
-	for (int i = 0; i < g.nodes.size(); i++)
+	for (auto node : g.nodes)
 	{
-		ids[g.nodes[i].id] = i;
+		ids[node.first] = node.first;
 	}
-	printPath(ids, [&g](int id) {return g.nodes[id].sequence;}, v);
+	printPath(ids, [&g](int id) {return g.nodes.at(id);}, v);
 }
 
 int main(int argc, char** argv)
