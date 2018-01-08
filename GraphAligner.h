@@ -366,7 +366,7 @@ public:
 		{
 			return emptyAlignment(time, 0);
 		}
-		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() || std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
+		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() && std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
 		{
 			return emptyAlignment(time, 0);
 		}
