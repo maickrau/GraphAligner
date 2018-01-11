@@ -41,10 +41,13 @@ int main(int argc, char** argv)
 		if (top.priority > length) break;
 		if (distance.count(top.pos) == 1 && distance[top.pos] <= top.priority) continue;
 		distance[top.pos] = top.priority;
-		for (auto edge : graph.edges.at(top.pos))
+		if (graph.edges.count(top.pos) == 1)
 		{
-			assert(graph.nodes.at(top.pos.id).size() > graph.edgeOverlap);
-			queue.emplace(edge, top.priority + graph.nodes.at(top.pos.id).size() - graph.edgeOverlap);
+			for (auto edge : graph.edges.at(top.pos))
+			{
+				assert(graph.nodes.at(top.pos.id).size() > graph.edgeOverlap);
+				queue.emplace(edge, top.priority + graph.nodes.at(top.pos.id).size() - graph.edgeOverlap);
+			}
 		}
 	}
 	std::unordered_set<int> picked;

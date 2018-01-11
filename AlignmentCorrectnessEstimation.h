@@ -8,6 +8,8 @@ public:
 	bool CurrentlyCorrect() const;
 	bool CorrectFromCorrect() const;
 	bool FalseFromCorrect() const;
+	double CorrectLogOdds() const;
+	double FalseLogOdds() const;
 	AlignmentCorrectnessEstimationState NextState(int mismatches, int rowSize) const;
 private:
 	double correctLogOdds;

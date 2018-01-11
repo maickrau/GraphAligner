@@ -59,6 +59,7 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
 		{
 			for (auto target : edges.at(start))
 			{
+				if (ids.count(target.id) == 0) continue;
 				result.edges[start].push_back(target);
 			}
 		}

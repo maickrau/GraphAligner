@@ -90,6 +90,15 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
 	}
 }
 
+void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std::string& filename)
+{
+	std::ofstream file { filename };
+	for (size_t i = 0; i < trace.size(); i++)
+	{
+		file << trace[i].nodeID << " " << trace[i].offset << " " << (trace[i].reverse ? 1 : 0) << " " << trace[i].readpos << " " << (int)trace[i].type << " " << trace[i].graphChar << " " << trace[i].readChar << std::endl;
+	}
+}
+
 void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params)
 {
 	assertSetRead("Before any read");
@@ -174,10 +183,22 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		filename += fastq->seq_id;
 		filename += ".gam";
 		std::replace(filename.begin(), filename.end(), '/', '_');
-		coutoutput << "write to " << filename << BufferedWriter::Flush;
+		std::replace(filename.begin(), filename.end(), ':', '_');
+		coutoutput << "write alignment to " << filename << BufferedWriter::Flush;
 		std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
 		stream::write_buffered(alignmentOut, alignmentvec, 0);
-		coutoutput << "write finished" << BufferedWriter::Flush;
+		coutoutput << "alignment write finished" << BufferedWriter::Flush;
+		std::string tracefilename;
+		tracefilename = "trace_";
+		tracefilename += std::to_string(threadnum);
+		tracefilename += "_";
+		tracefilename += fastq->seq_id;
+		tracefilename += ".trace";
+		std::replace(tracefilename.begin(), tracefilename.end(), '/', '_');
+		std::replace(tracefilename.begin(), tracefilename.end(), ':', '_');
+		coutoutput << "write trace to " << tracefilename << BufferedWriter::Flush;
+		writeTrace(alignment.trace, tracefilename);
+		coutoutput << "trace write finished" << BufferedWriter::Flush;
 	}
 	assertSetRead("After all reads");
 	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;

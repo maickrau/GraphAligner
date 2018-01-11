@@ -58,9 +58,19 @@ double logPowr(double logBase, int exponent)
 	return exponent * logBase;
 }
 
+double AlignmentCorrectnessEstimationState::CorrectLogOdds() const
+{
+	return correctLogOdds;
+}
+
+double AlignmentCorrectnessEstimationState::FalseLogOdds() const
+{
+	return falseLogOdds;
+}
+
 AlignmentCorrectnessEstimationState AlignmentCorrectnessEstimationState::NextState(int mismatches, int rowSize) const
 {
-	assert(rowSize == 64);
+	assert(rowSize == 64 || rowSize == 1);
 	assert(mismatches >= 0);
 	assert(mismatches <= rowSize);
 	AlignmentCorrectnessEstimationState result;
