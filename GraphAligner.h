@@ -189,9 +189,6 @@ private:
 	//band size in bp when the alternate method is used instead of the bitvector method
 	//empirically, two hundred thousand is (close to) the fastest cutoff for aligning ONT's to human DBG
 	static constexpr size_t AlternateMethodCutoff = 200000;
-	//when ramping bandwidth, go RampRedoSize-2*RampRedoSize slices backwards, to return to a correct alignment position
-	//arbitrary, hopefully 320-640bp is enough to return to correct but not too far back
-	static constexpr int RampRedoSize = 5;
 	using RowConfirmation = typename WordContainer<LengthType, ScoreType, Word>::RowConfirmation;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::WordSlice;
 	mutable BufferedWriter logger;
@@ -272,6 +269,7 @@ private:
 		std::vector<DPSlice> slices;
 		size_t samplingFrequency;
 		std::vector<LengthType> bandwidthPerSlice;
+		std::vector<AlignmentCorrectnessEstimationState> correctness;
 	};
 	class TwoDirectionalSplitAlignment
 	{
@@ -699,12 +697,13 @@ private:
 				realscore++;
 			}
 		}
-		assert(score == realscore);
+		// assert(score == realscore);
 	}
 #endif
 
 	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromTable(const std::string& sequence, const DPTable& slice, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
+		assert(slice.bandwidthPerSlice.size() == slice.correctness.size());
 		assert(sequence.size() % WordConfiguration<Word>::WordSize == 0);
 		if (slice.slices.size() == 0)
 		{
@@ -3126,13 +3125,27 @@ private:
 		}
 	}
 
+	void removeWronglyAlignedEnd(DPTable& table) const
+	{
+		bool currentlyCorrect = table.correctness.back().CurrentlyCorrect();
+		while (!currentlyCorrect)
+		{
+			table.correctness.pop_back();
+			table.bandwidthPerSlice.pop_back();
+			if (table.correctness.size() == 0) break;
+			currentlyCorrect = table.correctness.back().FalseFromCorrect();
+		}
+		if (table.correctness.size() == 0)
+		{
+			table.slices.clear();
+		}
+		while (table.slices.size() > 1 && table.slices.back().j >= table.correctness.size() * WordConfiguration<Word>::WordSize) table.slices.pop_back();
+	}
+
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
-		enum RampStatus { CanRedoTwo, CanRedoOne, RedoingTwo, RedoingOne };
-		assert(samplingFrequency % RampRedoSize == 0);
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size());
-		assert((initialSlice.j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize % RampRedoSize == 0);
 		DPTable result;
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
@@ -3154,33 +3167,35 @@ private:
 #ifndef NDEBUG
 		debugLastRowMinScore = 0;
 #endif
-		std::vector<DPSlice> storeSlices;
-		std::vector<bool> hasStoreSlice;
-		storeSlices.resize(numSlices / samplingFrequency + 2);
-		hasStoreSlice.resize(numSlices / samplingFrequency + 2, false);
-		hasStoreSlice[0] = true;
-		storeSlices[0] = initialSlice;
 		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();
+		DPSlice storeSlice = lastSlice;
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
-		DPSlice notYetRampSlice = lastSlice;
 		std::vector<bool> processed;
 		processed.resize(graph.SizeInBp(), false);
-		RampStatus rampStatus = RampStatus::CanRedoTwo;
 		size_t rampRedoIndex = -1;
-		size_t notYetRampRedoIndex = -1;
+		size_t rampUntil = 0;
 #ifndef NDEBUG
 		volatile size_t debugLastProcessedSlice;
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = (rampStatus == RampStatus::RedoingOne || rampStatus == RampStatus::RedoingTwo) ? rampBandwidth : initialBandwidth;
+			int bandwidth = (rampUntil >= slice) ? rampBandwidth : initialBandwidth;
 			size_t storeSliceIndex = slice / samplingFrequency + 1;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
+			auto timeStart = std::chrono::system_clock::now();
 			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, nodesliceMap, bandwidth);
+			auto timeEnd = std::chrono::system_clock::now();
+			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+
+			if (rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect()))
+			{
+				rampSlice = lastSlice;
+				rampRedoIndex = slice-1;
+			}
 			assert(newSlice.j == lastSlice.j + WordConfiguration<Word>::WordSize);
 
 			size_t sliceCells = 0;
@@ -3191,85 +3206,60 @@ private:
 			realCells += sliceCells;
 			cellsProcessed += newSlice.cellsProcessed;
 
-			if (!newSlice.correctness.CurrentlyCorrect())
+// 			if (slice > 10)
+// 			{
+// 				bool totallyWrong = true;
+// 				for (size_t pos = slice - 10; pos < result.correctness.size(); pos++)
+// 				{
+// 					if (result.correctness[pos].CurrentlyCorrect()) totallyWrong = false;
+// 				}
+// 				if (totallyWrong)
+// 				{
+// 					newSlice.scores.clearVectorMap();
+// #ifndef NDEBUG
+// 					debugLastProcessedSlice = slice-1;
+// #endif
+// 					break;
+// 				}
+// 			}
+			if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && rampBandwidth > initialBandwidth)
 			{
-				newSlice.scores.clearVectorMap();
-				if ((rampStatus == CanRedoOne || rampStatus == CanRedoTwo) && rampBandwidth > 0)
+				for (auto node : newSlice.nodes)
 				{
-					for (auto node : newSlice.nodes)
-					{
-						assert(currentBand[node]);
-						currentBand[node] = false;
-					}
-					for (auto node : lastSlice.nodes)
-					{
-						assert(previousBand[node]);
-						previousBand[node] = false;
-					}
-					lastSlice = rampSlice;
-					if (rampStatus == CanRedoTwo)
-					{
-						rampStatus = RedoingTwo;
-					}
-					else
-					{
-						assert(rampStatus == CanRedoOne);
-						rampStatus = RedoingOne;
-					}
-					slice = rampRedoIndex;
-					size_t newStoreSliceIndex = (slice + 1) / samplingFrequency + 1;
-					assert(newStoreSliceIndex < hasStoreSlice.size());
-					assert(newStoreSliceIndex < storeSlices.size());
-					if (hasStoreSlice[newStoreSliceIndex] && storeSlices[newStoreSliceIndex].j >= lastSlice.j)
-					{
-						for (size_t i = newStoreSliceIndex; i < hasStoreSlice.size(); i++)
-						{
-							hasStoreSlice[i] = false;
-						}
-					}
-					if (slice == -1)
-					{
-						result.bandwidthPerSlice.clear();
-					}
-					else
-					{
-						assert(slice < result.bandwidthPerSlice.size());
-						result.bandwidthPerSlice.erase(result.bandwidthPerSlice.begin()+slice+1, result.bandwidthPerSlice.end());
-						assert(result.bandwidthPerSlice.size() == slice+1);
-					}
-					for (auto node : lastSlice.nodes)
-					{
-						assert(!previousBand[node]);
-						previousBand[node] = true;
-					}
-					continue;
+					assert(currentBand[node]);
+					currentBand[node] = false;
 				}
-#ifndef NDEBUG
-				debugLastProcessedSlice = slice-1;
-#endif
-				break;
+				for (auto node : lastSlice.nodes)
+				{
+					assert(previousBand[node]);
+					previousBand[node] = false;
+				}
+				newSlice.scores.clearVectorMap();
+				rampUntil = slice;
+				std::swap(slice, rampRedoIndex);
+				std::swap(lastSlice, rampSlice);
+				for (auto node : lastSlice.nodes)
+				{
+					assert(!previousBand[node]);
+					previousBand[node] = true;
+				}
+				while (result.bandwidthPerSlice.size() > slice+1) result.bandwidthPerSlice.pop_back();
+				while (result.correctness.size() > slice+1) result.correctness.pop_back();
+				while (result.slices.size() > 1 && result.slices.back().j >= slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
+				continue;
 			}
+
 			assert(result.bandwidthPerSlice.size() == slice);
 			result.bandwidthPerSlice.push_back(bandwidth);
-			if (slice % RampRedoSize == RampRedoSize - 1)
+			result.correctness.push_back(newSlice.correctness);
+			if (slice % samplingFrequency == 0)
 			{
-				if (rampStatus == RedoingTwo) rampStatus = RedoingOne;
-				else if (rampStatus == RedoingOne) rampStatus = CanRedoOne;
-				else if (rampStatus == CanRedoOne) rampStatus = CanRedoTwo;
-				if (rampStatus == CanRedoOne || rampStatus == CanRedoTwo)
-				{
-					std::swap(rampSlice, notYetRampSlice);
-					notYetRampSlice = newSlice.getFrozenSqrtEndScores();
-					rampRedoIndex = notYetRampRedoIndex;
-					notYetRampRedoIndex = slice;
-					assert(hasStoreSlice.size() > storeSliceIndex);
-					assert(storeSlices.size() > storeSliceIndex);
-					if (!hasStoreSlice[storeSliceIndex] || notYetRampSlice.EstimatedMemoryUsage() < storeSlices[storeSliceIndex].EstimatedMemoryUsage())
-					{
-						storeSlices[storeSliceIndex] = notYetRampSlice;
-						hasStoreSlice[storeSliceIndex] = true;
-					}
-				}
+				result.slices.push_back(storeSlice);
+				storeSlice = newSlice.getFrozenSqrtEndScores();
+			}
+			if (newSlice.EstimatedMemoryUsage() < storeSlice.EstimatedMemoryUsage())
+			{
+				storeSlice = newSlice.getFrozenSqrtEndScores();
 			}
 			for (auto node : lastSlice.nodes)
 			{
@@ -3293,15 +3283,10 @@ private:
 			newSlice.scores.clearVectorMap();
 			std::swap(previousBand, currentBand);
 		}
-		assert(hasStoreSlice[0]);
 #ifndef NDEBUF
 		volatile
 #endif
 		size_t lastExisting = 0;
-		for (size_t i = 0; i < storeSlices.size(); i++)
-		{
-			if (hasStoreSlice[i]) result.slices.push_back(storeSlices[i]);
-		}
 		// assert(debugLastProcessedSlice == -1 || lastExisting == debugLastProcessedSlice / samplingFrequency || lastExisting == debugLastProcessedSlice / samplingFrequency + 1);
 		// storeSlices.erase(storeSlices.begin() + lastExisting + 1, storeSlices.end());
 		// result.slices = storeSlices;
@@ -3310,9 +3295,7 @@ private:
 		assert(result.slices.size() > 0);
 		for (size_t i = 0; i < result.slices.size(); i++)
 		{
-			assert((result.slices[i].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize % RampRedoSize == 0);
 			// assert(i == 0 || result.slices[i].j / WordConfiguration<Word>::WordSize / samplingFrequency == i-1);
-			// assert(hasStoreSlice[i]);
 			assert(i <= 1 || result.slices[i].j > result.slices[i-1].j);
 			// assert(i != 1 || result.slices[i].j >= 0);
 		}
@@ -3355,7 +3338,7 @@ private:
 		debugLastRowMinScore = 0;
 #endif
 		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();
-		assert(lastSlice.correctness.CurrentlyCorrect());
+		// assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
 		std::vector<bool> processed;
 		processed.resize(graph.SizeInBp(), false);
@@ -3376,7 +3359,7 @@ private:
 			realCells += sliceCells;
 			cellsProcessed += newSlice.cellsProcessed;
 
-			assert(slice == endSlice-1 || newSlice.correctness.CurrentlyCorrect());
+			// assert(slice == endSlice-1 || newSlice.correctness.CurrentlyCorrect());
 			result.push_back(newSlice.getFrozenScores());
 			for (auto node : lastSlice.nodes)
 			{
@@ -3429,9 +3412,7 @@ private:
 	int getSamplingFrequency(size_t sequenceLen) const
 	{
 		size_t samplingFrequency = 1;
-		samplingFrequency = ((int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize) + RampRedoSize - 1) / RampRedoSize) * RampRedoSize;
-		assert(samplingFrequency >= RampRedoSize);
-		assert(samplingFrequency % RampRedoSize == 0);
+		samplingFrequency = (int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize));
 		return samplingFrequency;
 	}
 
@@ -3468,6 +3449,7 @@ private:
 			auto backwardInitialBand = getInitialSliceOnlyOneNode(backwardNode);
 			size_t samplingFrequency = getSamplingFrequency(backwardPart.size());
 			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
+			removeWronglyAlignedEnd(backwardSlice);
 			result.backward = std::move(backwardSlice);
 			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
 		}
@@ -3483,6 +3465,7 @@ private:
 			auto forwardInitialBand = getInitialSliceOnlyOneNode(forwardNode);
 			size_t samplingFrequency = getSamplingFrequency(forwardPart.size());
 			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
+			removeWronglyAlignedEnd(forwardSlice);
 			result.forward = std::move(forwardSlice);
 			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
 		}
@@ -3586,6 +3569,7 @@ private:
 		}
 		size_t samplingFrequency = getSamplingFrequency(sequence.size());
 		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency, nodesliceMap);
+		removeWronglyAlignedEnd(slice);
 		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
 		auto backtraceresult = getTraceFromTable(sequence, slice, nodesliceMap);
