@@ -49,12 +49,16 @@ int main(int argc, char** argv)
 	std::string alignmentinfo;
 	std::string readinfo;
 	std::string readpath;
+	std::string slicewiseCorrectInfo;
 	AlignmentCorrectnessEstimationState charwiseCorrect;
+	AlignmentCorrectnessEstimationState slicewiseCorrect;
 	std::vector<bool> charwiseCorrectCorrectTrace;
 	std::vector<bool> charwiseCorrectFalseTrace;
 	int oldNodeId = trace[0].nodeID;
 	bool oldReverse = trace[0].reverse;
 	int oldReadPos = trace[0].readpos;
+	int readcharsUntilSlicewiseCheck = 64;
+	int mismatches = 0;
 	for (int i = 0; i < trace.size(); i++)
 	{
 		auto type = trace[i].type;
@@ -94,21 +98,27 @@ int main(int argc, char** argv)
 				readpath += readChar;
 				alignmentinfo += "|";
 				assert(graphChar == readChar);
+				readcharsUntilSlicewiseCheck--;
 				break;
 			case AlignmentResult::TraceMatchType::MISMATCH:
 				graphpath += graphChar;
 				readpath += readChar;
 				alignmentinfo += " ";
 				assert(graphChar != readChar);
+				mismatches++;
+				readcharsUntilSlicewiseCheck--;
 				break;
 			case AlignmentResult::TraceMatchType::INSERTION:
 				graphpath += ' ';
 				readpath += readChar;
 				alignmentinfo += " ";
+				mismatches++;
+				readcharsUntilSlicewiseCheck--;
 				break;
 			case AlignmentResult::TraceMatchType::DELETION:
 				graphpath += graphChar;
 				readpath += ' ';
+				mismatches++;
 				alignmentinfo += " ";
 				break;
 			case AlignmentResult::TraceMatchType::FORWARDBACKWARDSPLIT:
@@ -116,6 +126,18 @@ int main(int argc, char** argv)
 				readpath += readChar;
 				alignmentinfo += graphChar == readChar ? '|' : ' ';
 				break;
+		}
+
+		if (readcharsUntilSlicewiseCheck == 0)
+		{
+			slicewiseCorrect = slicewiseCorrect.NextState(mismatches, 64);
+			char addchar = slicewiseCorrect.CurrentlyCorrect() ? '#' : ' ';
+			for (int i = 0; i < 64; i++)
+			{
+				slicewiseCorrectInfo += addchar;
+			}
+			mismatches = 0;
+			readcharsUntilSlicewiseCheck = 64;
 		}
 
 		if (type == AlignmentResult::TraceMatchType::MATCH)
@@ -130,6 +152,10 @@ int main(int argc, char** argv)
 			charwiseCorrect = AlignmentCorrectnessEstimationState {};
 			charwiseCorrectCorrectTrace.push_back(oldCorrect);
 			charwiseCorrectFalseTrace.push_back(oldCorrect);
+			pad(slicewiseCorrectInfo, alignmentinfo.size());
+			mismatches = 0;
+			readcharsUntilSlicewiseCheck = 64;
+			slicewiseCorrect = AlignmentCorrectnessEstimationState {};
 		}
 		else
 		{
@@ -138,19 +164,11 @@ int main(int argc, char** argv)
 			charwiseCorrectFalseTrace.push_back(charwiseCorrect.FalseFromCorrect());
 		}
 	}
+	pad(slicewiseCorrectInfo, alignmentinfo.size());
 	bool charwiseCurrentlyCorrect = charwiseCorrect.CurrentlyCorrect();
 	std::string charwiseCorrectInfo = "";
-	std::string extrainfo = "";
 	for (size_t i = charwiseCorrectCorrectTrace.size()-1; i < charwiseCorrectCorrectTrace.size(); i--)
 	{
-		if (charwiseCorrectFalseTrace[i])
-		{
-			extrainfo += "#";
-		}
-		else
-		{
-			extrainfo += "_";
-		}
 		if (charwiseCurrentlyCorrect)
 		{
 			charwiseCorrectInfo += "#";
@@ -158,17 +176,16 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			charwiseCorrectInfo += "_";
+			charwiseCorrectInfo += " ";
 			charwiseCurrentlyCorrect = charwiseCorrectFalseTrace[i];
 		}
 	}
 	std::reverse(charwiseCorrectInfo.begin(), charwiseCorrectInfo.end());
-	std::reverse(extrainfo.begin(), extrainfo.end());
 	std::cout << "       " << graphinfo << std::endl;
 	std::cout << "GRAPH: " << graphpath << std::endl;
 	std::cout << "       " << alignmentinfo << std::endl;
 	std::cout << "READ:  " << readpath << std::endl;
 	std::cout << "       " << readinfo << std::endl;
 	std::cout << "       " << charwiseCorrectInfo << std::endl;
-	std::cout << "       " << extrainfo << std::endl;
+	std::cout << "       " << slicewiseCorrectInfo << std::endl;
 }
