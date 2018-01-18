@@ -205,6 +205,137 @@ public:
 		return mergeTwoSlices(*this, other);
 	}
 
+#ifdef EXTRACORRECTNESSASSERTIONS
+
+	bool cellExists(int row) const
+	{
+		return confirmedRows.exists & (((Word)1) << row);
+	}
+
+	ScoreType getValueIfExists(int row, ScoreType defaultValue) const
+	{
+		if (cellExists(row)) return getValue(row);
+		return defaultValue;
+	}
+
+#endif
+
+	ScoreType getValue(int row) const
+	{
+		auto mask = WordConfiguration<Word>::AllOnes;
+		if (row < WordConfiguration<Word>::WordSize-1) mask = ~(WordConfiguration<Word>::AllOnes << (row + 1));
+		auto value = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & mask) - WordConfiguration<Word>::popcount(VN & mask);
+		return value;
+	}
+
+	void setValue(int row, ScoreType value)
+	{
+#ifdef EXTRACORRECTNESSASSERTIONS
+		confirmedRows.exists |= ((Word)1) << row;
+#endif
+		if (!confirmedRows.partial)
+		{
+			confirmedRows.partial = true;
+			scoreBeforeStart = value + row + 1;
+			if (row < WordConfiguration<Word>::WordSize-1)
+			{
+				VN = ~(WordConfiguration<Word>::AllOnes << (row + 1));
+				VP = WordConfiguration<Word>::AllOnes << (row + 1);
+			}
+			else
+			{
+				VN = WordConfiguration<Word>::AllOnes;
+				VP = WordConfiguration<Word>::AllZeros;
+			}
+			confirmedRows.rows = row;
+			scoreEnd = value + WordConfiguration<Word>::WordSize - row - 1;
+			return;
+		}
+		assert(confirmedRows.rows < row);
+		if (confirmedRows.rows == row - 1)
+		{
+			auto oldscore = scoreEnd - (WordConfiguration<Word>::WordSize - confirmedRows.rows - 1);
+			assert(oldscore == getValue(confirmedRows.rows));
+			assert(value >= oldscore - 1);
+			assert(value <= oldscore + 1);
+			Word mask = ((Word)1) << row;
+			switch (value + 1 - oldscore)
+			{
+				case 0:
+					VN |= mask;
+					VP &= ~mask;
+					scoreEnd -= 2;
+					break;
+				case 1:
+					VN &= ~mask;
+					VP &= ~mask;
+					scoreEnd--;
+					break;
+				case 2:
+					VP |= mask;
+					VN &= ~mask;
+					break;
+			}
+			confirmedRows.rows = row;
+			return;
+		}
+		ScoreType scores[WordConfiguration<Word>::WordSize];
+		scores[0] = scoreBeforeStart + (VP & 1) - (VN & 1);
+		for (int i = 1; i <= confirmedRows.rows; i++)
+		{
+			auto mask = ((Word)1) << i;
+			scores[i] = scores[i-1] + ((VP & mask) ? 1 : 0) - ((VN & mask) ? 1 : 0);
+		}
+		for (int i = confirmedRows.rows+1; i <= row; i++)
+		{
+			scores[i] = scores[i-1] + 1;
+		}
+		for (int i = 0; i <= row; i++)
+		{
+			scores[i] = std::min(scores[i], value + row - i);
+		}
+		assert(scores[0] >= scoreBeforeStart - 1);
+		assert(scores[0] <= scoreBeforeStart + 1);
+		switch(scores[0] + 1 - scoreBeforeStart)
+		{
+			case 0:
+				VP &= ~(Word)1;
+				VN |= 1;
+				break;
+			case 1:
+				VP &= ~(Word)1;
+				VN &= ~(Word)1;
+				break;
+			case 2:
+				VP |= 1;
+				VN &= ~(Word)1;
+				break;
+		}
+		for (int i = 1; i <= row; i++)
+		{
+			assert(scores[i] >= scores[i-1] - 1);
+			assert(scores[i] <= scores[i-1] + 1);
+			Word mask = ((Word)1) << i;
+			switch(scores[i] + 1 - scores[i-1])
+			{
+				case 0:
+					VP &= ~mask;
+					VN |= mask;
+					break;
+				case 1:
+					VP &= ~mask;
+					VN &= ~mask;
+					break;
+				case 2:
+					VP |= mask;
+					VN &= ~mask;
+					break;
+			}
+		}
+		scoreEnd = scores[row] + WordConfiguration<Word>::WordSize - 1 - row;
+		confirmedRows.rows = row;
+	}
+
 private:
 
 
