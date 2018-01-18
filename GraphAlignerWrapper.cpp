@@ -6,12 +6,14 @@
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t dynamicRowStart)
 {
-	GraphAligner<size_t, int32_t, uint64_t> aligner {graph, initialBandwidth, rampBandwidth};
+	GraphAlignerParams<size_t, int32_t, uint64_t> params {initialBandwidth, rampBandwidth, graph};
+	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, dynamicRowStart);
 }
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits)
 {
-	GraphAligner<size_t, int32_t, uint64_t> aligner {graph, initialBandwidth, rampBandwidth};
+	GraphAlignerParams<size_t, int32_t, uint64_t> params {initialBandwidth, rampBandwidth, graph};
+	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, dynamicRowStart, seedHits);
 }
