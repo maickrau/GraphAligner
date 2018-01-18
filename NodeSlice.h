@@ -83,6 +83,7 @@ public:
 		Word VP;
 		Word VN;
 		uint16_t plusMinScore;
+		bool scoreEndExists;
 #ifdef EXTRACORRECTNESSASSERTIONS
 		Word exists;
 #endif
@@ -366,6 +367,7 @@ public:
 		if (frozen == 1)
 		{
 			WordSlice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
+			result.scoreEndExists = frozenSlices[index].scoreEndExists;
 #ifdef EXTRACORRECTNESSASSERTIONS
 			result.confirmedRows.exists = frozenSlices[index].exists;
 #endif
@@ -406,6 +408,7 @@ public:
 			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
 			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
 			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
+			result.frozenSlices[i].scoreEndExists = mutableSlices[i].scoreEndExists;
 #ifdef EXTRACORRECTNESSASSERTIONS
 			result.frozenSlices[i].exists = mutableSlices[i].confirmedRows.exists;
 #endif
