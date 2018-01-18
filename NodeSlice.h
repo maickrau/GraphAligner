@@ -5,78 +5,13 @@
 #include <unordered_map>
 #include <vector>
 #include "ThreadReadAssertion.h"
+#include "WordSlice.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class WordContainer
 {
 public:
-	class RowConfirmation
-	{
-	public:
-		RowConfirmation(char rows, bool partial) : rows(rows), partial(partial)
-#ifdef EXTRACORRECTNESSASSERTIONS
-		,exists(0)
-#endif
-		{};
-		char rows;
-		bool partial;
-#ifdef EXTRACORRECTNESSASSERTIONS
-		Word exists;
-#endif
-		bool operator>(const RowConfirmation& other) const
-		{
-			return rows > other.rows || (rows == other.rows && partial && !other.partial);
-		}
-		bool operator<(const RowConfirmation& other) const
-		{
-			return rows < other.rows || (rows == other.rows && !partial && other.partial);
-		}
-		bool operator==(const RowConfirmation& other) const
-		{
-			return rows == other.rows && partial == other.partial;
-		}
-		bool operator!=(const RowConfirmation& other) const
-		{
-			return !(*this == other);
-		}
-		bool operator>=(const RowConfirmation& other) const
-		{
-			return !(*this < other);
-		}
-		bool operator<=(const RowConfirmation& other) const
-		{
-			return !(*this > other);
-		}
-	};
-	class WordSlice
-	{
-	public:
-		WordSlice() :
-		VP(0),
-		VN(0),
-		scoreEnd(0),
-		scoreBeforeStart(0),
-		confirmedRows(0, false),
-		scoreBeforeExists(false),
-		scoreEndExists(true)
-		{}
-		WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool scoreBeforeExists) :
-		VP(VP),
-		VN(VN),
-		scoreEnd(scoreEnd),
-		scoreBeforeStart(scoreBeforeStart),
-		confirmedRows(confirmedRows, false),
-		scoreBeforeExists(scoreBeforeExists),
-		scoreEndExists(true)
-		{}
-		Word VP;
-		Word VN;
-		ScoreType scoreEnd;
-		ScoreType scoreBeforeStart;
-		RowConfirmation confirmedRows;
-		bool scoreBeforeExists;
-		bool scoreEndExists;
-	};
+	typedef WordSlice<LengthType, ScoreType, Word> Slice;
 	class SmallSlice
 	{
 	public:
@@ -94,7 +29,7 @@ public:
 		uint16_t plusMinScore;
 		char VPVNLastBit;
 	};
-	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
+	class WordContainerIterator : std::iterator<std::random_access_iterator_tag, Slice>
 	{
 	public:
 		WordContainerIterator() :
@@ -107,19 +42,19 @@ public:
 		pos(pos)
 		{
 		}
-		WordSlice& operator*()
+		Slice& operator*()
 		{
 			return (*container)[pos];
 		}
-		const WordSlice operator*() const
+		const Slice operator*() const
 		{
 			return (*container)[pos];
 		}
-		WordSlice& operator[](size_t index)
+		Slice& operator[](size_t index)
 		{
 			return (*container)[pos + index];
 		}
-		const WordSlice operator[](size_t index) const
+		const Slice operator[](size_t index) const
 		{
 			return (*container)[pos + index];
 		}
@@ -187,7 +122,7 @@ public:
 		size_t pos;
 	private:
 	};
-	class WordContainerConstIterator : std::iterator<std::random_access_iterator_tag, WordSlice>
+	class WordContainerConstIterator : std::iterator<std::random_access_iterator_tag, Slice>
 	{
 	public:
 		WordContainerConstIterator() :
@@ -205,11 +140,11 @@ public:
 		pos(iter.pos)
 		{
 		}
-		const WordSlice operator*() const
+		const Slice operator*() const
 		{
 			return (*container)[pos];
 		}
-		const WordSlice operator[](size_t index) const
+		const Slice operator[](size_t index) const
 		{
 			return (*container)[pos + index];
 		}
@@ -312,11 +247,11 @@ public:
 		{
 			return _cend;
 		}
-		WordSlice& back()
+		Slice& back()
 		{
 			return *(_end - 1);
 		}
-		const WordSlice back() const
+		const Slice back() const
 		{
 			return *(_cend - 1);
 		}
@@ -324,11 +259,11 @@ public:
 		{
 			return _cend - _cbegin;
 		}
-		WordSlice& operator[](size_t pos)
+		Slice& operator[](size_t pos)
 		{
 			return *(_begin + pos);
 		}
-		const WordSlice operator[](size_t pos) const
+		const Slice operator[](size_t pos) const
 		{
 			return *(_cbegin + pos);
 		}
@@ -357,16 +292,16 @@ public:
 	{
 		return ContainerView { begin() + start, begin() + end, minScore };
 	}
-	WordSlice& operator[](size_t index)
+	Slice& operator[](size_t index)
 	{
 		assert(frozen == 0);
 		return mutableSlices[index];
 	}
-	const WordSlice operator[](size_t index) const
+	const Slice operator[](size_t index) const
 	{
 		if (frozen == 1)
 		{
-			WordSlice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
+			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
 			result.scoreEndExists = frozenSlices[index].scoreEndExists;
 #ifdef EXTRACORRECTNESSASSERTIONS
 			result.confirmedRows.exists = frozenSlices[index].exists;
@@ -377,7 +312,7 @@ public:
 		{
 			bool VP = frozenSqrtSlices[index].VPVNLastBit & 1;
 			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
-			WordSlice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), 64, false };
+			Slice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), 64, false };
 			result.scoreEndExists = frozenSqrtSlices[index].VPVNLastBit & 4;
 #ifdef EXTRACORRECTNESSASSERTIONS
 			result.confirmedRows.exists = result.scoreEndExists ? (((Word)1) << 63) : 0;
@@ -464,12 +399,12 @@ public:
 		assert(frozen == 0);
 		mutableSlices.resize(size);
 	}
-	WordSlice& back()
+	Slice& back()
 	{
 		assert(frozen == 0);
 		return mutableSlices.back();
 	}
-	const WordSlice back() const
+	const Slice back() const
 	{
 		return (*this)[size()-1];
 	}
@@ -483,7 +418,7 @@ private:
 	ScoreType minEndScore;
 	ScoreType minStartScore;
 	int frozen;
-	std::vector<WordSlice> mutableSlices;
+	std::vector<Slice> mutableSlices;
 	std::vector<SmallSlice> frozenSlices;
 	std::vector<TinySlice> frozenSqrtSlices;
 };
