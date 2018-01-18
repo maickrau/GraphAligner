@@ -417,7 +417,7 @@ public:
 		bool hasAlignment = false;
 		std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0});
-		for (size_t i = 0; i < seedHits.size() && i < 1; i++)
+		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
 			auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
