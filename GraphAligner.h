@@ -73,6 +73,44 @@ private:
 	const int bandFunction;
 	const AlignmentGraph& graph;
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	class EqVector
+	{
+	public:
+		EqVector(Word BA, Word BT, Word BC, Word BG) :
+		BA(BA),
+		BT(BT),
+		BC(BC),
+		BG(BG)
+		{
+		}
+		Word getEq(char c) const
+		{
+			switch(c)
+			{
+				case 'A':
+				case 'a':
+					return BA;
+				case 'T':
+				case 't':
+					return BT;
+				case 'C':
+				case 'c':
+					return BC;
+				case 'G':
+				case 'g':
+					return BG;
+				case '-':
+				default:
+					assert(false);
+			}
+			assert(false);
+			return 0;
+		}
+		Word BA;
+		Word BT;
+		Word BC;
+		Word BG;
+	};
 	class DPSlice
 	{
 	public:
@@ -1409,33 +1447,6 @@ private:
 		return true;
 	}
 
-	Word getEq(Word BA, Word BT, Word BC, Word BG, LengthType w) const
-	{
-		switch(graph.NodeSequences(w))
-		{
-			case 'A':
-			return BA;
-			break;
-			case 'T':
-			return BT;
-			break;
-			case 'C':
-			return BC;
-			break;
-			case 'G':
-			return BG;
-			break;
-			case '-':
-			assert(false);
-			break;
-			default:
-			assert(false);
-			break;
-		}
-		assert(false);
-		return 0;
-	}
-
 	WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous) const
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
@@ -1544,7 +1555,7 @@ private:
 #endif
 	}
 
-	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, Word BA, Word BT, Word BC, Word BG, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
+	NodeCalculationResult calculateNode(size_t i, size_t j, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
@@ -1589,7 +1600,7 @@ private:
 		}
 		else
 		{
-			Word Eq = getEq(BA, BT, BC, BG, nodeStart);
+			Word Eq = EqV.getEq(graph.NodeSequences(nodeStart));
 			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && graph.NodeSequences(graph.NodeStart(i)) == sequence[j-1]));
 			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
 			{
@@ -1622,7 +1633,7 @@ private:
 
 		for (LengthType w = 1; w < graph.NodeEnd(i) - graph.NodeStart(i); w++)
 		{
-			Word Eq = getEq(BA, BT, BC, BG, nodeStart+w);
+			Word Eq = EqV.getEq(graph.NodeSequences(nodeStart+w));
 
 			oldConfirmation = slice[w].confirmedRows;
 			if (oldConfirmation.rows == WordConfiguration<Word>::WordSize) return result;
@@ -2571,6 +2582,7 @@ private:
 			if (characterMatch(sequence[j+i], 'G')) BG |= mask;
 		}
 		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		EqVector EqV {BA, BT, BC, BG};
 		auto components = getStronglyConnectedComponents(bandOrder, currentBand);
 		for (size_t i = 0; i < components.size(); i++)
 		{
@@ -2593,7 +2605,7 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugOldNode = currentSlice.node(i);
 #endif
-				auto nodeCalc = calculateNode(i, j, sequence, BA, BT, BC, BG, currentSlice, previousSlice, currentBand, previousBand);
+				auto nodeCalc = calculateNode(i, j, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand);
 				currentSlice.setMinScore(i, nodeCalc.minScore);
 				auto newEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
