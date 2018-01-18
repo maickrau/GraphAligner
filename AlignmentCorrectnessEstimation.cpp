@@ -3,8 +3,8 @@
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 
-const double correctMismatchLogProbability = log(0.15); //15% from pacbio error rate
-const double correctMatchLogProbability = log(1.0 - 0.15);
+const double correctMismatchLogProbability = log(0.2); //20% from observed ONT error rate when aligning ONT's to human DBG
+const double correctMatchLogProbability = log(1.0 - 0.2);
 const double falseMismatchLogProbability = log(0.5); //50% empirically
 const double falseMatchLogProbability = log(1.0 - 0.5);
 const double falseToCorrectTransitionLogProbability = log(0.00001); //10^-5. one slice at <=12 mismatches or two slices at <=15 mismatchs
