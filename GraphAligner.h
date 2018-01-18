@@ -922,12 +922,6 @@ private:
 				result.second.emplace_back(slice.slices.back().minScoreIndex.back(), slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 				continue;
 			}
-			if (i < slice.slices.size()-1 && slice.slices[i].j == nextBacktraceOverrideEndJ + WordConfiguration<Word>::WordSize)
-			{
-				auto trace = slice.backtraceOverrides[backtraceOverrideIndex].GetBacktrace(result.second.back());
-				result.second.insert(result.second.end(), trace.begin()+1, trace.end());
-				continue;
-			}
 			auto partTable = getSlicesFromTable(sequence, lastBacktraceOverrideStartJ, slice, i, nodesliceMap);
 			assert(partTable.size() > 0);
 			if (i == slice.slices.size() - 1)
@@ -936,20 +930,25 @@ private:
 				assert(partTable.back().minScoreIndex.size() > 0);
 				result.second.emplace_back(partTable.back().minScoreIndex.back(), partTable.back().j + WordConfiguration<Word>::WordSize - 1);
 			}
-			auto partTrace = getTraceFromTableInner(sequence, partTable, result.second.back().first);
+			auto partTrace = getTraceFromTableInner(sequence, partTable, result.second.back());
 			assert(partTrace.size() > 1);
 			//begin()+1 because the starting position was already inserted earlier
 			result.second.insert(result.second.end(), partTrace.begin()+1, partTrace.end());
 			auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.second.back().first);
 			result.second.insert(result.second.end(), boundaryTrace.begin(), boundaryTrace.end());
 			assert(boundaryTrace.size() > 0);
-			//at zeroth slice, boundarytrace's last cell will be in row -1 so remove that
-			//the other cells are still valid so only the last one needs to be removed
-			assert(i != 0 || result.second.back().second == -1);
-			if (i == 0) result.second.pop_back();
-			assert(result.second.back().second != -1);
-			assert(i != 0 || result.second.back().second == 0);
+			if (slice.slices[i].j == nextBacktraceOverrideEndJ)
+			{
+				auto trace = slice.backtraceOverrides[backtraceOverrideIndex].GetBacktrace(result.second.back());
+				result.second.insert(result.second.end(), trace.begin()+1, trace.end());
+				lastBacktraceOverrideStartJ = slice.backtraceOverrides[backtraceOverrideIndex].startj;
+				backtraceOverrideIndex--;
+				if (backtraceOverrideIndex != -1) nextBacktraceOverrideEndJ = slice.backtraceOverrides[backtraceOverrideIndex].endj;
+			}
 		}
+		assert(result.second.back().second == -1);
+		result.second.pop_back();
+		assert(result.second.back().second == 0);
 		std::reverse(result.second.begin(), result.second.end());
 #ifndef NDEBUG
 		verifyTrace(result.second, sequence, result.first, slice);
@@ -958,9 +957,10 @@ private:
 	}
 
 	//returns the trace backwards, aka result[0] is at the bottom of the slice and result.back() at the top
-	std::vector<MatrixPosition> getTraceFromSlice(const std::string& sequence, const DPSlice& slice, LengthType startColumn) const
+	std::vector<MatrixPosition> getTraceFromSlice(const std::string& sequence, const DPSlice& slice, MatrixPosition pos) const
 	{
-		MatrixPosition pos = std::make_pair(startColumn, slice.j + WordConfiguration<Word>::WordSize - 1);
+		assert(pos.second >= slice.j);
+		assert(pos.second < slice.j + WordConfiguration<Word>::WordSize);
 		// auto distance = params.graph.MinDistance(startColumn, slice.minScoreIndex);
 		// std::cerr << "distance from min: " << distance << std::endl;
 		// auto score = getValue(slice, WordConfiguration<Word>::WordSize-1, startColumn);
@@ -993,15 +993,18 @@ private:
 	}
 
 	//returns the trace backwards, aka result[0] is at the bottom of the table and result.back() at the top
-	std::vector<MatrixPosition> getTraceFromTableInner(const std::string& sequence, const std::vector<DPSlice>& table, LengthType startColumn) const
+	std::vector<MatrixPosition> getTraceFromTableInner(const std::string& sequence, const std::vector<DPSlice>& table, MatrixPosition pos) const
 	{
+		assert(table.size() > 0);
+		assert(pos.second >= table.back().j);
+		assert(pos.second < table.back().j + WordConfiguration<Word>::WordSize);
 		std::vector<MatrixPosition> result;
-		result.emplace_back(startColumn, table.back().j + WordConfiguration<Word>::WordSize - 1);
+		result.push_back(pos);
 		for (size_t slice = table.size()-1; slice < table.size(); slice--)
 		{
 			assert(table[slice].j <= result.back().second);
 			assert(table[slice].j + WordConfiguration<Word>::WordSize > result.back().second);
-			auto partialTrace = getTraceFromSlice(sequence, table[slice], result.back().first);
+			auto partialTrace = getTraceFromSlice(sequence, table[slice], result.back());
 			assert(partialTrace.size() >= WordConfiguration<Word>::WordSize - 1);
 			result.insert(result.end(), partialTrace.begin(), partialTrace.end());
 			assert(result.back().second == table[slice].j);
@@ -2707,6 +2710,10 @@ private:
 				}
 #ifdef SLICEVERBOSE
 				std::cerr << std::endl;
+				std::cerr << "bandwidthPerSlice.size() " << result.bandwidthPerSlice.size();
+				if (result.slices.size() > 0) std::cerr << " slices.back().j " << result.slices.back().j; else std::cerr << " slices.size() 0";
+				if (result.backtraceOverrides.size() > 0) std::cerr << " backtraceOverrides.back().endj " << result.backtraceOverrides.back().endj; else std::cerr << " backtraceOverrides.size() 0";
+				std::cerr << std::endl;
 #endif
 				continue;
 			}
@@ -2737,6 +2744,9 @@ private:
 						result.slices.pop_back();
 					}
 					result.slices.push_back(lastSlice);
+#ifdef SLICEVERBOSE
+					std::cerr << " push slice j " << lastSlice.j;
+#endif
 					storeSlice = newSlice.getFrozenSqrtEndScores();
 					//empty memory
 					{
@@ -2764,6 +2774,9 @@ private:
 				if (result.slices.size() == 0 || storeSlice.j != result.slices.back().j)
 				{
 					result.slices.push_back(storeSlice);
+#ifdef SLICEVERBOSE
+					std::cerr << " push slice j " << storeSlice.j;
+#endif
 					storeSlice = newSlice.getFrozenSqrtEndScores();
 				}
 			}
@@ -2846,8 +2859,10 @@ private:
 	{
 		assert(startIndex < table.slices.size());
 		size_t startSlice = (table.slices[startIndex].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
+		assert(overrideLastJ > startSlice * WordConfiguration<Word>::WordSize);
 		size_t endSlice;
 		if (startIndex == table.slices.size()-1) endSlice = table.bandwidthPerSlice.size(); else endSlice = (table.slices[startIndex+1].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
+		if (endSlice * WordConfiguration<Word>::WordSize >= overrideLastJ) endSlice = (overrideLastJ / WordConfiguration<Word>::WordSize);
 		assert(endSlice > startSlice);
 		assert(endSlice <= table.bandwidthPerSlice.size());
 		assert(startIndex < table.slices.size());
