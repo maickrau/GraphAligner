@@ -35,6 +35,17 @@ namespace CommonUtils
 		return result;
 	}
 
+	std::vector<vg::Alignment> LoadVGAlignments(std::string filename)
+	{
+		std::vector<vg::Alignment> result;
+		std::ifstream graphfile { filename, std::ios::in | std::ios::binary };
+		std::function<void(vg::Alignment&)> lambda = [&result](vg::Alignment& g) {
+			result.push_back(g);
+		};
+		stream::for_each(graphfile, lambda);
+		return result;
+	}
+
 	vg::Alignment LoadVGAlignment(std::string filename)
 	{
 		vg::Alignment result;
