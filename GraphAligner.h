@@ -2620,7 +2620,7 @@ private:
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
-			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " time " << time << " cells " << newSlice.numCells;
+			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " cells " << newSlice.numCells;
 #endif
 
 			if (rampUntil == slice && newSlice.numCells >= params.BacktraceOverrideCutoff)
