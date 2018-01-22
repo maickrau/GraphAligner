@@ -2609,7 +2609,7 @@ private:
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = (rampUntil >= slice) ? params.rampBandwidth : params.initialBandwidth;
+			int bandwidth = (params.rampBandwidth > params.initialBandwidth && rampUntil >= slice) ? params.rampBandwidth : params.initialBandwidth;
 			size_t storeSliceIndex = slice / samplingFrequency + 1;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
