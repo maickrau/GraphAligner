@@ -961,6 +961,7 @@ private:
 				result.second.emplace_back(slice.slices.back().minScoreIndex.back(), slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 				continue;
 			}
+			if (lastBacktraceOverrideStartJ == slice.slices[i].j + WordConfiguration<Word>::WordSize) continue;
 			auto partTable = getSlicesFromTable(sequence, lastBacktraceOverrideStartJ, slice, i, nodesliceMap);
 			assert(partTable.size() > 0);
 			if (i == slice.slices.size() - 1)
@@ -2735,6 +2736,7 @@ private:
 				while (result.bandwidthPerSlice.size() > slice+1) result.bandwidthPerSlice.pop_back();
 				while (result.correctness.size() > slice+1) result.correctness.pop_back();
 				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
+				storeSlice = lastSlice;
 #ifdef SLICEVERBOSE
 				std::cerr << " ramp to " << slice;
 #endif
@@ -2839,6 +2841,7 @@ private:
 			{
 				if (result.slices.size() == 0 || storeSlice.j != result.slices.back().j)
 				{
+					assert(result.slices.size() == 0 || result.slices.back().j == -WordConfiguration<Word>::WordSize || storeSlice.j > result.slices.back().j);
 					result.slices.push_back(storeSlice);
 #ifdef SLICEVERBOSE
 					std::cerr << " push slice j " << storeSlice.j;
@@ -3030,6 +3033,7 @@ private:
 	{
 		size_t samplingFrequency = 1;
 		samplingFrequency = (int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize));
+		if (samplingFrequency <= 1) samplingFrequency = sequenceLen / WordConfiguration<Word>::WordSize + 1;
 		return samplingFrequency;
 	}
 
