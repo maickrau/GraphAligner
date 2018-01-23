@@ -16,6 +16,7 @@ public:
 	static constexpr int ChunkBits = 8;
 	static constexpr uint64_t AllZeros = 0x0000000000000000;
 	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
+	static constexpr uint64_t LastBit = 0x8000000000000000;
 	//positions of the sign bits for each chunk
 	static constexpr uint64_t SignMask = 0x8080808080808080;
 	//constant for multiplying the chunk popcounts into prefix sums
@@ -134,15 +135,9 @@ class RowConfirmation
 {
 public:
 	RowConfirmation(char rows, bool partial) : rows(rows), partial(partial)
-#ifdef EXTRACORRECTNESSASSERTIONS
-	,exists(0)
-#endif
 	{};
 	char rows;
 	bool partial;
-#ifdef EXTRACORRECTNESSASSERTIONS
-	Word exists;
-#endif
 	bool operator>(const RowConfirmation& other) const
 	{
 		return rows > other.rows || (rows == other.rows && partial && !other.partial);
@@ -180,7 +175,7 @@ public:
 	scoreBeforeStart(0),
 	confirmedRows(0, false),
 	scoreBeforeExists(false),
-	scoreEndExists(true)
+	exists(0)
 	{}
 	WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool scoreBeforeExists) :
 	VP(VP),
@@ -189,7 +184,7 @@ public:
 	scoreBeforeStart(scoreBeforeStart),
 	confirmedRows(confirmedRows, false),
 	scoreBeforeExists(scoreBeforeExists),
-	scoreEndExists(true)
+	exists(0)
 	{}
 	Word VP;
 	Word VN;
@@ -197,7 +192,12 @@ public:
 	ScoreType scoreBeforeStart;
 	RowConfirmation confirmedRows;
 	bool scoreBeforeExists;
-	bool scoreEndExists;
+	uint64_t exists;
+
+	bool scoreEndExists() const
+	{
+		return exists & WordConfiguration<Word>::LastBit;
+	}
 
 	WordSlice mergeWith(const WordSlice& other) const
 	{
@@ -205,11 +205,9 @@ public:
 		return mergeTwoSlices(*this, other);
 	}
 
-#ifdef EXTRACORRECTNESSASSERTIONS
-
 	bool cellExists(int row) const
 	{
-		return confirmedRows.exists & (((Word)1) << row);
+		return exists & (((Word)1) << row);
 	}
 
 	ScoreType getValueIfExists(int row, ScoreType defaultValue) const
@@ -217,8 +215,6 @@ public:
 		if (cellExists(row)) return getValue(row);
 		return defaultValue;
 	}
-
-#endif
 
 	ScoreType getValue(int row) const
 	{
@@ -230,9 +226,7 @@ public:
 
 	void setValue(int row, ScoreType value)
 	{
-#ifdef EXTRACORRECTNESSASSERTIONS
-		confirmedRows.exists |= ((Word)1) << row;
-#endif
+		exists |= ((Word)1) << row;
 		if (!confirmedRows.partial)
 		{
 			confirmedRows.partial = true;
@@ -362,15 +356,13 @@ private:
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
-#ifdef EXTRABITVECTORASSERTIONS
-		auto correctValue = mergeTwoSlicesCellByCell(left, right);
-#endif
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
 		auto newConfirmedRows = confirmedRowsInMerged(left, right);
-#ifdef EXTRACORRECTNESSASSERTIONS
-		assert(newConfirmedRows == confirmedRowsInMergedCellByCell(left, right));
-#endif
 		WordSlice result;
+		//todo fix:
+		//"currently" this is only called from the bitvector calculation, where every cell always exists
+		//what if it's called from somewhere where cells are missing?
+		result.exists = left.exists & right.exists;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
 		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
@@ -411,12 +403,6 @@ private:
 		assert(result.confirmedRows >= std::min(left.confirmedRows, right.confirmedRows));
 		assert(result.confirmedRows <= std::max(left.confirmedRows, right.confirmedRows));
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
-#ifdef EXTRABITVECTORASSERTIONS
-		assert(result.VP == correctValue.VP);
-		assert(result.VN == correctValue.VN);
-		assert(result.scoreBeforeStart == correctValue.scoreBeforeStart);
-		assert(result.scoreEnd == correctValue.scoreEnd);
-#endif
 		return result;
 	}
 
@@ -511,9 +497,6 @@ private:
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-#ifdef EXTRABITVECTORASSERTIONS
-		auto correctValue = differenceMasksCellByCell(leftVP, leftVN, rightVP, rightVN, scoreDifference);
-#endif
 		assert(scoreDifference >= 0);
 		const uint64_t signmask = WordConfiguration<Word>::SignMask;
 		const uint64_t lsbmask = WordConfiguration<Word>::LSBMask;
@@ -607,10 +590,6 @@ private:
 			//right > left when the prefix sum difference is positive (not zero and not negative)
 			resultRightSmallerThanLeft |= (notEqualToZero & ~negative) >> (WordConfiguration<Word>::ChunkBits - 1 - bit);
 		}
-#ifdef EXTRABITVECTORASSERTIONS
-		assert(resultLeftSmallerThanRight == correctValue.first);
-		assert(resultRightSmallerThanLeft == correctValue.second);
-#endif
 		return std::make_pair(resultLeftSmallerThanRight, resultRightSmallerThanLeft);
 	}
 

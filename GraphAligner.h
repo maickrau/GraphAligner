@@ -175,11 +175,17 @@ private:
 			previousInSameRow(previousInSameRow),
 			previousIndex(previousIndex),
 			pos(pos)
+#ifdef SLICEVERBOSE
+			,score(0)
+#endif
 			{}
 			bool end;
 			bool previousInSameRow;
 			size_t previousIndex;
 			MatrixPosition pos;
+#ifdef SLICEVERBOSE
+			ScoreType score;
+#endif
 		};
 		BacktraceOverride()
 		{
@@ -212,11 +218,20 @@ private:
 				}
 			}
 			assert(currentIndex != -1);
+#ifdef SLICEVERBOSE
+			std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
+#endif
 			while (true)
 			{
 				auto current = items[currentRow][currentIndex];
 				assert(!current.end);
 				result.push_back(current.pos);
+#ifdef SLICEVERBOSE
+				if (current.pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+				{
+					std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
+				}
+#endif
 				size_t nextIndex = current.previousIndex;
 				size_t nextRow = current.previousInSameRow ? currentRow : currentRow - 1;
 				if (nextRow == -1)
@@ -246,7 +261,7 @@ private:
 				assert(slices[sliceIndex].scores.hasNode(nodeIndex));
 				auto nodeStart = params.graph.NodeStart(nodeIndex);
 				auto offset = pos.first - nodeStart;
-				if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists) return;
+				if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists()) return;
 			}
 			assert(row == pos.second - slices[0].j);
 			size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
@@ -281,7 +296,7 @@ private:
 				LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
 				for (size_t i = 0; i < pair.second.size(); i++)
 				{
-					if (pair.second[i].scoreEndExists)
+					if (pair.second[i].scoreEndExists())
 					{
 #ifdef SLICEVERBOSE
 						numEndCells++;
@@ -303,6 +318,17 @@ private:
 					auto index = pair.second;
 					MatrixPosition pos { w, slices[0].j + row };
 					items[row][index].pos = pos;
+#ifdef SLICEVERBOSE
+					if (pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+					{
+						auto sliceIndex = row / WordConfiguration<Word>::WordSize;
+						auto node = params.graph.IndexToNode(pos.first);
+						auto offset = pos.first - params.graph.NodeStart(node);
+						assert(sliceIndex < slices.size());
+						assert(slices[sliceIndex].scores.hasNode(node));
+						items[row][index].score = slices[sliceIndex].scores.node(node)[offset].scoreEnd;
+					}
+#endif
 					MatrixPosition predecessor;
 					size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
 					if (row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
@@ -310,7 +336,7 @@ private:
 						auto nodeIndex = params.graph.IndexToNode(w);
 						auto offset = w - params.graph.NodeStart(nodeIndex);
 						assert(slices[sliceIndex].scores.hasNode(nodeIndex));
-						if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists)
+						if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists())
 						{
 							items[row][index].end = true;
 							continue;
@@ -492,6 +518,7 @@ public:
 
 	static MatrixPosition pickBacktracePredecessor(const Params& params, const std::string& sequence, const DPSlice& slice, const MatrixPosition pos, const DPSlice& previousSlice)
 	{
+		assert(cellExists(params, slice, pos.second - slice.j, pos.first));
 		assert(pos.second >= slice.j);
 		assert(pos.second < slice.j + WordConfiguration<Word>::WordSize);
 		auto nodeIndex = params.graph.IndexToNode(pos.first);
@@ -503,26 +530,29 @@ public:
 			for (auto neighbor : params.graph.inNeighbors[nodeIndex])
 			{
 				LengthType u = params.graph.NodeEnd(neighbor)-1;
-				auto horizontalScore = getValueOrMax(params, slice, pos.second - slice.j, u, sequence.size());
+				auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, u, sequence.size());
 				assert(horizontalScore >= scoreHere-1);
 				if (horizontalScore == scoreHere-1)
 				{
+					assert(cellExists(params, slice, pos.second - slice.j, u));
 					return { u, pos.second };
 				}
 				ScoreType diagonalScore;
 				if (pos.second == slice.j)
 				{
-					diagonalScore = getValueOrMax(params, previousSlice, WordConfiguration<Word>::WordSize - 1, u, sequence.size());
+					diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, u, sequence.size());
 				}
 				else
 				{
-					diagonalScore = getValueOrMax(params, slice, pos.second - 1 - slice.j, u, sequence.size());
+					diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, u, sequence.size());
 				}
 				if (characterMatch(sequence[pos.second], params.graph.NodeSequences(pos.first)))
 				{
 					assert(diagonalScore >= scoreHere);
 					if (diagonalScore == scoreHere)
 					{
+						assert(pos.second == slice.j || cellExists(params, slice, pos.second - slice.j - 1, u));
+						assert(pos.second != slice.j || cellExists(params, previousSlice, pos.second - previousSlice.j - 1, u));
 						return { u, pos.second - 1 };
 					}
 				}
@@ -531,6 +561,8 @@ public:
 					assert(diagonalScore >= scoreHere-1);
 					if (diagonalScore == scoreHere-1)
 					{
+						assert(pos.second == slice.j || cellExists(params, slice, pos.second - slice.j - 1, u));
+						assert(pos.second != slice.j || cellExists(params, previousSlice, pos.second - previousSlice.j - 1, u));
 						return { u, pos.second - 1 };
 					}
 				}
@@ -538,26 +570,29 @@ public:
 		}
 		else
 		{
-			auto horizontalScore = getValueOrMax(params, slice, pos.second - slice.j, pos.first-1, sequence.size());
+			auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, pos.first-1, sequence.size());
 			assert(horizontalScore >= scoreHere-1);
 			if (horizontalScore == scoreHere-1)
 			{
+				assert(cellExists(params, slice, pos.second - slice.j, pos.first - 1));
 				return { pos.first - 1, pos.second };
 			}
 			ScoreType diagonalScore;
 			if (pos.second == slice.j)
 			{
-				diagonalScore = getValueOrMax(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first-1, sequence.size());
+				diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first-1, sequence.size());
 			}
 			else
 			{
-				diagonalScore = getValueOrMax(params, slice, pos.second - 1 - slice.j, pos.first-1, sequence.size());
+				diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first-1, sequence.size());
 			}
 			if (characterMatch(sequence[pos.second], params.graph.NodeSequences(pos.first)))
 			{
 				assert(diagonalScore >= scoreHere);
 				if (diagonalScore == scoreHere)
 				{
+					assert(pos.second == slice.j || cellExists(params, slice, pos.second - slice.j - 1, pos.first - 1));
+					assert(pos.second != slice.j || cellExists(params, previousSlice, pos.second - previousSlice.j - 1, pos.first - 1));
 					return { pos.first - 1, pos.second - 1 };
 				}
 			}
@@ -566,6 +601,8 @@ public:
 				assert(diagonalScore >= scoreHere-1);
 				if (diagonalScore == scoreHere-1)
 				{
+					assert(pos.second == slice.j || cellExists(params, slice, pos.second - slice.j - 1, pos.first - 1));
+					assert(pos.second != slice.j || cellExists(params, previousSlice, pos.second - previousSlice.j - 1, pos.first - 1));
 					return { pos.first - 1, pos.second - 1 };
 				}
 			}
@@ -574,15 +611,17 @@ public:
 		if (pos.second == slice.j)
 		{
 			assert(previousSlice.j + WordConfiguration<Word>::WordSize == slice.j);
-			scoreUp = getValueOrMax(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first, sequence.size());
+			scoreUp = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first, sequence.size());
 		}
 		else
 		{
-			scoreUp = getValueOrMax(params, slice, pos.second - 1 - slice.j, pos.first, sequence.size());
+			scoreUp = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first, sequence.size());
 		}
 		assert(scoreUp >= scoreHere-1);
 		if (scoreUp == scoreHere - 1)
 		{
+			assert(pos.second == slice.j || cellExists(params, slice, pos.second - slice.j - 1, pos.first));
+			assert(pos.second != slice.j || cellExists(params, previousSlice, pos.second - previousSlice.j - 1, pos.first));
 			return { pos.first, pos.second - 1 };
 		}
 		assert(false);
@@ -944,6 +983,7 @@ private:
 				lastBacktraceOverrideStartJ = slice.backtraceOverrides[backtraceOverrideIndex].startj;
 				backtraceOverrideIndex--;
 				if (backtraceOverrideIndex != -1) nextBacktraceOverrideEndJ = slice.backtraceOverrides[backtraceOverrideIndex].endj;
+				if (lastBacktraceOverrideStartJ == 0) break;
 			}
 		}
 		assert(result.second.back().second == -1);
@@ -1002,6 +1042,13 @@ private:
 		result.push_back(pos);
 		for (size_t slice = table.size()-1; slice < table.size(); slice--)
 		{
+			assert(result.back().second == table[slice].j + WordConfiguration<Word>::WordSize - 1);
+#ifdef SLICEVERBOSE
+			auto node = params.graph.IndexToNode(result.back().first);
+			auto offset = result.back().first - params.graph.NodeStart(node);
+			assert(table[slice].scores.hasNode(node));
+			std::cerr << "1: j " << result.back().second << " score " << table[slice].scores.node(node)[offset].scoreEnd << std::endl;
+#endif
 			assert(table[slice].j <= result.back().second);
 			assert(table[slice].j + WordConfiguration<Word>::WordSize > result.back().second);
 			auto partialTrace = getTraceFromSlice(sequence, table[slice], result.back());
@@ -1333,7 +1380,7 @@ private:
 	WordSlice getSourceSliceFromBefore(size_t nodeIndex, const NodeSlice<WordSlice>& previousSlice) const
 	{
 		auto previousWordSlice = previousSlice.node(nodeIndex)[0];
-		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousWordSlice.scoreEnd+WordConfiguration<Word>::WordSize, previousWordSlice.scoreEnd, WordConfiguration<Word>::WordSize, previousWordSlice.scoreEndExists };
+		return { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousWordSlice.scoreEnd+WordConfiguration<Word>::WordSize, previousWordSlice.scoreEnd, WordConfiguration<Word>::WordSize, previousWordSlice.scoreEndExists() };
 	}
 
 	bool isSource(size_t nodeIndex, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand) const
@@ -1504,7 +1551,7 @@ private:
 			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
 			{
 				auto mergable = getSourceSliceFromScore(oldSlice[0].scoreEnd);
-				mergable.scoreBeforeExists = oldSlice[0].scoreEndExists;
+				mergable.scoreBeforeExists = oldSlice[0].scoreEndExists();
 				slice[0] = slice[0].mergeWith(mergable);
 			}
 			if (slice[0].confirmedRows.rows == WordConfiguration<Word>::WordSize && slice[0].scoreEnd < result.minScore)
@@ -1541,7 +1588,7 @@ private:
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				auto mergable = getSourceSliceFromScore(oldSlice[w].scoreEnd);
-				mergable.scoreBeforeExists = oldSlice[w].scoreEndExists;
+				mergable.scoreBeforeExists = oldSlice[w].scoreEndExists();
 				slice[w] = slice[w].mergeWith(mergable);
 			}
 
@@ -1582,15 +1629,34 @@ private:
 		return forwardFromMinScoreBandFunction(previousBand, previousSlice, bandwidth);
 	}
 
-#ifdef EXTRACORRECTNESSASSERTIONS
+	static bool cellExists(const Params& params, const DPSlice& slice, LengthType row, LengthType w)
+	{
+		auto node = params.graph.IndexToNode(w);
+		auto offset = w - params.graph.NodeStart(node);
+		assert(slice.scores.hasNode(node));
+		auto wordslice = slice.scores.node(node)[offset];
+		return wordslice.cellExists(row);
+	}
 
-	ScoreType getValueIfExists(const DPSlice& slice, int row, LengthType cell, ScoreType defaultValue) const
+	bool cellExists(const DPSlice& slice, LengthType row, LengthType w) const
+	{
+		return cellExists(params, slice, row, w);
+	}
+
+	static ScoreType getValueIfExists(const Params& params, const DPSlice& slice, int row, LengthType cell, ScoreType defaultValue)
 	{
 		auto nodeIndex = params.graph.IndexToNode(cell);
 		if (!slice.scores.hasNode(nodeIndex)) return defaultValue;
 		auto wordslice = slice.scores.node(nodeIndex)[cell - params.graph.NodeStart(nodeIndex)];
-		return wordslice.getValueIfExists(row);
+		return wordslice.getValueIfExists(row, defaultValue);
 	}
+
+	ScoreType getValueIfExists(const DPSlice& slice, int row, LengthType cell, ScoreType defaultValue) const
+	{
+		return getValueIfExists(params, slice, row, cell, defaultValue);
+	}
+
+#ifdef EXTRACORRECTNESSASSERTIONS
 
 	template <typename T>
 	T volmin(volatile T& a, T b) const
@@ -1609,28 +1675,28 @@ private:
 			{
 				volatile bool match = characterMatch(sequence[current.j], params.graph.NodeSequences(start+i));
 				volatile ScoreType foundMinScore = uninitScore;
-				foundMinScore = volmin(foundMinScore, getValue(params.graph, current, 0, start+i-1)+1);
+				foundMinScore = volmin(foundMinScore, getValue(params, current, 0, start+i-1)+1);
 				if (previous.scores.hasNode(pair.first))
 				{
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, start+i)+1);
-					if (previous.scores.node(pair.first)[i-1].scoreEndExists)
+					foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, start+i)+1);
+					if (previous.scores.node(pair.first)[i-1].scoreEndExists())
 					{
-						foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, start+i-1) + (match ? 0 : 1));
+						foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, start+i-1) + (match ? 0 : 1));
 					}
 					else
 					{
-						foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, start+i-1) + 1);
+						foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, start+i-1) + 1);
 					}
 				}
-				assert(getValue(params.graph, current, 0, start+i) == foundMinScore);
+				assert(getValue(params, current, 0, start+i) == foundMinScore);
 				for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
 				{
 					match = characterMatch(sequence[current.j+j], params.graph.NodeSequences(start+i));
 					foundMinScore = uninitScore;
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j-1, start+i)+1);
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j, start+i-1)+1);
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j-1, start+i-1)+(match ? 0 : 1));
-					assert(getValue(params.graph, current, j, start+i) == foundMinScore);
+					foundMinScore = volmin(foundMinScore, getValue(params, current, j-1, start+i)+1);
+					foundMinScore = volmin(foundMinScore, getValue(params, current, j, start+i-1)+1);
+					foundMinScore = volmin(foundMinScore, getValue(params, current, j-1, start+i-1)+(match ? 0 : 1));
+					assert(getValue(params, current, j, start+i) == foundMinScore);
 				}
 			}
 			volatile ScoreType foundMinScore = uninitScore;
@@ -1641,39 +1707,39 @@ private:
 			}
 			if (previous.scores.hasNode(pair.first))
 			{
-				foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, start)+1);
+				foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, start)+1);
 			}
 			for (auto neighbor : params.graph.inNeighbors[pair.first])
 			{
 				if (current.scores.hasNode(neighbor))
 				{
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, 0, params.graph.NodeEnd(neighbor)-1)+1);
+					foundMinScore = volmin(foundMinScore, getValue(params, current, 0, params.graph.NodeEnd(neighbor)-1)+1);
 				}
 				if (previous.scores.hasNode(neighbor))
 				{
-					if (previous.scores.node(neighbor).back().scoreEndExists)
+					if (previous.scores.node(neighbor).back().scoreEndExists())
 					{
-						foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, params.graph.NodeEnd(neighbor)-1) + (match ? 0 : 1));
+						foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, params.graph.NodeEnd(neighbor)-1) + (match ? 0 : 1));
 					}
 					else
 					{
-						foundMinScore = volmin(foundMinScore, getValue(params.graph, previous, lastrow, params.graph.NodeEnd(neighbor)-1)+1);
+						foundMinScore = volmin(foundMinScore, getValue(params, previous, lastrow, params.graph.NodeEnd(neighbor)-1)+1);
 					}
 				}
 			}
-			assert(getValue(params.graph, current, 0, start) == foundMinScore);
+			assert(getValue(params, current, 0, start) == foundMinScore);
 			for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
 			{
 				foundMinScore = uninitScore;
 				match = characterMatch(sequence[current.j+j], params.graph.NodeSequences(start));
-				foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j-1, start)+1);
+				foundMinScore = volmin(foundMinScore, getValue(params, current, j-1, start)+1);
 				for (auto neighbor : params.graph.inNeighbors[pair.first])
 				{
 					if (!current.scores.hasNode(neighbor)) continue;
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j, params.graph.NodeEnd(neighbor)-1)+1);
-					foundMinScore = volmin(foundMinScore, getValue(params.graph, current, j-1, params.graph.NodeEnd(neighbor)-1)+(match ? 0 : 1));
+					foundMinScore = volmin(foundMinScore, getValue(params, current, j, params.graph.NodeEnd(neighbor)-1)+1);
+					foundMinScore = volmin(foundMinScore, getValue(params, current, j-1, params.graph.NodeEnd(neighbor)-1)+(match ? 0 : 1));
 				}
-				assert(getValue(params.graph, current, j, start) == foundMinScore);
+				assert(getValue(params, current, j, start) == foundMinScore);
 			}
 		}
 	}
@@ -1693,7 +1759,7 @@ private:
 				volatile ScoreType horiscore = getValueIfExists(current, 0, start+i-1, sequence.size());
 				if (cellExists(current, 0, start+i))
 				{
-					assert(getValue(params.graph, current, 0, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+					assert(getValue(params, current, 0, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
 				}
 				for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
 				{
@@ -1703,14 +1769,14 @@ private:
 					diagscore = getValueIfExists(current, j-1, start+i-1, sequence.size());
 					if (cellExists(current, j, start+i))
 					{
-						assert(getValue(params.graph, current, j, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+						assert(getValue(params, current, j, start+i) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
 					}
 				}
 			}
 			volatile ScoreType vertscore = sequence.size();
 			volatile ScoreType diagscore = sequence.size();
 			volatile ScoreType horiscore = sequence.size();
-			if (previous.scores.hasNode(pair.first)) vertscore = getValue(params.graph, previous, WordConfiguration<Word>::WordSize-1, start);
+			if (previous.scores.hasNode(pair.first)) vertscore = getValue(params, previous, WordConfiguration<Word>::WordSize-1, start);
 			for (auto neighbor : params.graph.inNeighbors[pair.first])
 			{
 				horiscore = volmin(horiscore, getValueIfExists(current, 0, params.graph.NodeEnd(neighbor)-1, sequence.size()));
@@ -1719,11 +1785,11 @@ private:
 			volatile bool match = characterMatch(sequence[current.j], params.graph.NodeSequences(start));
 			if (current.j == 0 && previous.scores.hasNode(pair.first))
 			{
-				assert(getValue(params.graph, current, 0, start) == match ? 0 : 1);
+				assert(getValue(params, current, 0, start) == match ? 0 : 1);
 			}
 			else if (cellExists(current, 0, start))
 			{
-				assert(getValue(params.graph, current, 0, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+				assert(getValue(params, current, 0, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
 			}
 			for (size_t j = 1; j < WordConfiguration<Word>::WordSize; j++)
 			{
@@ -1738,7 +1804,7 @@ private:
 				match = characterMatch(sequence[current.j+j], params.graph.NodeSequences(start));
 				if (cellExists(current, j, start))
 				{
-					assert(getValue(params.graph, current, j, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
+					assert(getValue(params, current, j, start) == std::min(std::min(vertscore + 1, horiscore + 1), diagscore + (match ? 0 : 1)));
 				}
 			}
 		}
@@ -1986,10 +2052,8 @@ private:
 			for (size_t i = 0; i < slice.size(); i++)
 			{
 				assert(slice[i].scoreBeforeStart != std::numeric_limits<ScoreType>::max());
-				slice[i] = {WordConfiguration<Word>::AllOnes, 0, slice[i].scoreBeforeStart+WordConfiguration<Word>::WordSize, slice[i].scoreBeforeStart, 0, previousBand[node] && oldSlice[i].scoreEnd == slice[i].scoreBeforeStart && oldSlice[i].scoreEndExists };
-#ifdef EXTRACORRECTNESSASSERTIONS
-				slice[i].confirmedRows.exists = -1;
-#endif
+				slice[i] = {WordConfiguration<Word>::AllOnes, 0, slice[i].scoreBeforeStart+WordConfiguration<Word>::WordSize, slice[i].scoreBeforeStart, 0, previousBand[node] && oldSlice[i].scoreEnd == slice[i].scoreBeforeStart && oldSlice[i].scoreEndExists() };
+				slice[i].exists = WordConfiguration<Word>::AllOnes;
 			}
 		}
 	}
@@ -2167,7 +2231,7 @@ private:
 			{
 				for (size_t i = 0; i < pair.second.size(); i++)
 				{
-					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists)
+					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists())
 					{
 						if (characterMatch(sequence[startj], params.graph.NodeSequences(start + i)))
 						{
@@ -2184,7 +2248,7 @@ private:
 			{
 				for (size_t i = 0; i < pair.second.size() - 1; i++)
 				{
-					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists)
+					if (pair.second[i].scoreEnd < previousSlice.minScore + bandwidth && pair.second[i].scoreEndExists())
 					{
 						assert(pair.second[i].scoreEnd >= previousSlice.minScore);
 						calculables[pair.second[i].scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+i);
@@ -2198,7 +2262,7 @@ private:
 						}
 					}
 				}
-				if (pair.second.back().scoreEnd < previousSlice.minScore + bandwidth && pair.second.back().scoreEndExists)
+				if (pair.second.back().scoreEnd < previousSlice.minScore + bandwidth && pair.second.back().scoreEndExists())
 				{
 					calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(pair.first, start+pair.second.size()-1);
 					for (auto neighbor : params.graph.outNeighbors[pair.first])
@@ -2433,15 +2497,16 @@ private:
 			}
 		}
 
-#ifdef EXTRACORRECTNESSASSERTIONS
+// #ifndef NDEBUG
 		for (auto pair : currentSlice)
 		{
 			for (auto& word : pair.second)
 			{
-				word.confirmedRows.exists = -1;
+				word.exists = WordConfiguration<Word>::AllOnes;
+				// assert(word.exists == WordConfiguration<Word>::AllOnes);
 			}
 		}
-#endif
+// #endif
 
 		NodeCalculationResult result;
 		result.minScore = currentMinimumScore;
@@ -2533,7 +2598,8 @@ private:
 			{
 				assert(word.confirmedRows.rows <= WordConfiguration<Word>::WordSize - 1);
 				assert(word.confirmedRows.rows >= 0);
-				word.scoreEndExists = word.confirmedRows.rows == WordConfiguration<Word>::WordSize - 1;
+				assert(word.confirmedRows.rows == 0 || word.exists != 0);
+				assert((word.scoreEndExists()) == (word.confirmedRows.rows == WordConfiguration<Word>::WordSize - 1));
 				word.confirmedRows.rows = WordConfiguration<Word>::WordSize;
 				word.confirmedRows.partial = false;
 				minScore = std::min(minScore, word.scoreEnd);
@@ -2955,6 +3021,7 @@ private:
 		for (size_t i = 0; i < slice.size(); i++)
 		{
 			slice[i] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
+			slice[i].exists = WordConfiguration<Word>::LastBit;
 		}
 		return result;
 	}
