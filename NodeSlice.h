@@ -11,6 +11,7 @@ template <typename LengthType, typename ScoreType, typename Word>
 class WordContainer
 {
 public:
+	enum FrozenType { FullyMutable, FrozenScores, FrozenLastRow };
 	typedef WordSlice<LengthType, ScoreType, Word> Slice;
 	class SmallSlice
 	{
@@ -278,7 +279,7 @@ public:
 	WordContainer() :
 	minEndScore(0),
 	minStartScore(0),
-	frozen(0)
+	frozen(FullyMutable)
 	{
 	}
 	ContainerView getView(size_t start, size_t end, int minScore)
@@ -291,19 +292,19 @@ public:
 	}
 	Slice& operator[](size_t index)
 	{
-		assert(frozen == 0);
+		assert(frozen == FullyMutable);
 		return mutableSlices[index];
 	}
 	const Slice operator[](size_t index) const
 	{
-		if (frozen == 1)
+		if (frozen == FrozenScores)
 		{
 			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, 64, false };
 			result.scoreEnd = result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN);
 			result.exists = frozenSlices[index].exists;
 			return result;
 		}
-		else if (frozen == 2)
+		else if (frozen == FrozenLastRow)
 		{
 			bool VP = frozenSqrtSlices[index].VPVNLastBit & 1;
 			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
@@ -323,10 +324,10 @@ public:
 	}
 	WordContainer getFrozenScores() const
 	{
-		if (frozen == 1) return *this;
-		assert(frozen == 0);
+		if (frozen == FrozenScores) return *this;
+		assert(frozen == FullyMutable);
 		WordContainer result;
-		result.frozen = 1;
+		result.frozen = FrozenScores;
 		result.frozenSlices.resize(mutableSlices.size());
 		result.minStartScore = mutableSlices[0].scoreBeforeStart;
 		for (size_t i = 1; i < mutableSlices.size(); i++)
@@ -346,10 +347,10 @@ public:
 	}
 	WordContainer getFrozenSqrtEndScores() const
 	{
-		if (frozen == 2) return *this;
-		assert(frozen == 0);
+		if (frozen == FrozenLastRow) return *this;
+		assert(frozen == FullyMutable);
 		WordContainer result;
-		result.frozen = 2;
+		result.frozen = FrozenLastRow;
 		result.frozenSqrtSlices.resize(mutableSlices.size());
 		result.minEndScore = mutableSlices[0].scoreEnd;
 		for (size_t i = 1; i < mutableSlices.size(); i++)
@@ -386,16 +387,16 @@ public:
 	}
 	size_t size() const
 	{
-		return frozen == 0 ? mutableSlices.size() : frozen == 1 ? frozenSlices.size() : frozenSqrtSlices.size();
+		return frozen == FullyMutable ? mutableSlices.size() : frozen == FrozenScores ? frozenSlices.size() : frozenSqrtSlices.size();
 	}
 	void resize(size_t size)
 	{
-		assert(frozen == 0);
+		assert(frozen == FullyMutable);
 		mutableSlices.resize(size);
 	}
 	Slice& back()
 	{
-		assert(frozen == 0);
+		assert(frozen == FullyMutable);
 		return mutableSlices.back();
 	}
 	const Slice back() const
@@ -404,14 +405,14 @@ public:
 	}
 	void reserve(size_t size)
 	{
-		assert(frozen == 0);
+		assert(frozen == FullyMutable);
 		mutableSlices.reserve(size);
 	}
 	ScoreType minScore;
 private:
 	ScoreType minEndScore;
 	ScoreType minStartScore;
-	int frozen;
+	FrozenType frozen;
 	std::vector<Slice> mutableSlices;
 	std::vector<SmallSlice> frozenSlices;
 	std::vector<TinySlice> frozenSqrtSlices;
