@@ -410,37 +410,33 @@ public:
 	{
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart) const
-	{
-		std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
-		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0});
-		auto timeStart = std::chrono::system_clock::now();
-		assert(params.graph.finalized);
-		auto trace = getBacktraceFullStart(sequence, nodesliceMap);
-		auto timeEnd = std::chrono::system_clock::now();
-		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		//failed alignment, don't output
-		if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
-		if (std::get<1>(trace).size() == 0) return emptyAlignment(time, std::get<2>(trace));
-		auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
-		result.alignmentStart = std::get<1>(trace)[0].second;
-		result.alignmentEnd = std::get<1>(trace).back().second;
-		timeEnd = std::chrono::system_clock::now();
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		result.elapsedMilliseconds = time;
-		return result;
-	}
+	// AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence) const
+	// {
+	// 	std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
+	// 	nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0});
+	// 	auto timeStart = std::chrono::system_clock::now();
+	// 	assert(params.graph.finalized);
+	// 	auto trace = getBacktraceFullStart(sequence, nodesliceMap);
+	// 	auto timeEnd = std::chrono::system_clock::now();
+	// 	size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+	// 	//failed alignment, don't output
+	// 	if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
+	// 	if (std::get<1>(trace).size() == 0) return emptyAlignment(time, std::get<2>(trace));
+	// 	auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
+	// 	result.alignmentStart = std::get<1>(trace)[0].second;
+	// 	result.alignmentEnd = std::get<1>(trace).back().second;
+	// 	timeEnd = std::chrono::system_clock::now();
+	// 	time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+	// 	result.elapsedMilliseconds = time;
+	// 	return result;
+	// }
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, LengthType dynamicRowStart, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
 	{
-		auto timeStart = std::chrono::system_clock::now();
 		assert(params.graph.finalized);
+		AlignmentResult result;
 		assert(seedHits.size() > 0);
-		size_t bestAlignmentEstimatedCorrectlyAligned;
-		std::tuple<int, size_t, bool> bestSeed;
 		std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
-		std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> bestTrace;
-		bool hasAlignment = false;
 		std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0});
 		for (size_t i = 0; i < seedHits.size(); i++)
@@ -448,71 +444,18 @@ public:
 			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
 			auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
 			auto pos = std::get<1>(seedHits[i]);
-			if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
-			{
-				logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
-				continue;
-			}
+			// if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
+			// {
+			// 	logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
+			// 	continue;
+			// }
 			logger << BufferedWriter::Flush;
-			auto alignment = getSplitAlignment(sequence, std::get<0>(seedHits[i]), std::get<2>(seedHits[i]), std::get<1>(seedHits[i]), sequence.size() * 0.4, nodesliceMap);
-			auto trace = getPiecewiseTracesFromSplit(alignment, sequence, nodesliceMap);
-			addAlignmentNodes(triedAlignmentNodes, trace, alignment.sequenceSplitIndex);
-			if (!hasAlignment)
-			{
-				bestTrace = std::move(trace);
-				bestSeed = seedHits[i];
-				hasAlignment = true;
-				bestAlignmentEstimatedCorrectlyAligned = alignment.EstimatedCorrectlyAligned();
-			}
-			else
-			{
-				if (alignment.EstimatedCorrectlyAligned() > bestAlignmentEstimatedCorrectlyAligned)
-				{
-					bestTrace = std::move(trace);
-					bestAlignmentEstimatedCorrectlyAligned = alignment.EstimatedCorrectlyAligned();
-					bestSeed = seedHits[i];
-				}
-			}
-		}
-		auto timeEnd = std::chrono::system_clock::now();
-		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		//failed alignment, don't output
-		if (!hasAlignment)
-		{
-			return emptyAlignment(time, 0);
-		}
-		if (std::get<0>(bestTrace.first) == std::numeric_limits<ScoreType>::max() && std::get<0>(bestTrace.second) == std::numeric_limits<ScoreType>::max())
-		{
-			return emptyAlignment(time, 0);
+			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], nodesliceMap);
+			if (item.alignmentFailed()) continue;
+			// addAlignmentNodes(triedAlignmentNodes, item);
+			result.alignments.push_back(item);
 		}
 
-		auto traceVector = getTraceInfo(sequence, std::get<1>(bestTrace.second), std::get<1>(bestTrace.first));
-
-		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.first), std::get<1>(bestTrace.first), 0);
-		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(bestTrace.second), std::get<1>(bestTrace.second), 0);
-		//failed alignment, don't output
-		if (fwresult.alignmentFailed && bwresult.alignmentFailed)
-		{
-			return emptyAlignment(time, 0);
-		}
-		auto result = mergeAlignments(bwresult, fwresult);
-		result.trace = traceVector;
-		LengthType lastAligned = 0;
-		if (std::get<1>(bestTrace.second).size() > 0)
-		{
-			lastAligned = std::get<1>(bestTrace.second)[0].second;
-		}
-		else
-		{
-			lastAligned = std::get<1>(bestSeed);
-			assert(std::get<1>(bestTrace.first).size() > 0);
-		}
-		result.alignment.set_query_position(lastAligned);
-		result.alignmentStart = lastAligned;
-		result.alignmentEnd = result.alignmentStart + bestAlignmentEstimatedCorrectlyAligned;
-		timeEnd = std::chrono::system_clock::now();
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		result.elapsedMilliseconds = time;
 		return result;
 	}
 
@@ -630,53 +573,86 @@ public:
 	}
 private:
 
-	void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>>& trace, LengthType sequenceSplitIndex) const
+	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, std::tuple<int, size_t, bool> seedHit, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap) const
 	{
-		if (std::get<1>(trace.first).size() > 0)
+		assert(params.graph.finalized);
+		auto timeStart = std::chrono::system_clock::now();
+
+		auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHit) * 2);
+		auto pos = std::get<1>(seedHit);
+		auto alignment = getSplitAlignment(sequence, std::get<0>(seedHit), std::get<2>(seedHit), std::get<1>(seedHit), sequence.size() * 0.4, nodesliceMap);
+		auto trace = getPiecewiseTracesFromSplit(alignment, sequence, nodesliceMap);
+
+		//failed alignment, don't output
+		if (std::get<0>(trace.first) == std::numeric_limits<ScoreType>::max() && std::get<0>(trace.second) == std::numeric_limits<ScoreType>::max())
 		{
-			size_t oldNodeIndex = params.graph.IndexToNode(std::get<1>(trace.first)[0].first);
-			size_t startIndex = std::get<1>(trace.first)[0].second;
-			size_t endIndex = std::get<1>(trace.first)[0].second;
-			for (size_t i = 1; i < std::get<1>(trace.first).size(); i++)
-			{
-				size_t nodeIndex = params.graph.IndexToNode(std::get<1>(trace.first)[i].first);
-				size_t index = std::get<1>(trace.first)[i].second;
-				if (nodeIndex != oldNodeIndex)
-				{
-					tried.emplace_back(startIndex, endIndex, oldNodeIndex);
-					startIndex = index;
-					oldNodeIndex = nodeIndex;
-				}
-				endIndex = index;
-			}
-			tried.emplace_back(startIndex, endIndex, oldNodeIndex);
+			return emptyAlignment(0, 0);
 		}
-		if (std::get<1>(trace.second).size() > 0)
+
+		auto traceVector = getTraceInfo(sequence, std::get<1>(trace.second), std::get<1>(trace.first));
+
+		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(trace.first), std::get<1>(trace.first), 0);
+		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(trace.second), std::get<1>(trace.second), 0);
+		//failed alignment, don't output
+		if (fwresult.alignmentFailed() && bwresult.alignmentFailed())
 		{
-			size_t oldNodeIndex = params.graph.IndexToNode(std::get<1>(trace.second)[0].first);
-			size_t startIndex = std::get<1>(trace.second)[0].second;
-			size_t endIndex = std::get<1>(trace.second)[0].second;
-			for (size_t i = 1; i < std::get<1>(trace.second).size(); i++)
+			return emptyAlignment(0, 0);
+		}
+		auto result = mergeAlignments(bwresult, fwresult);
+		LengthType seqstart = 0;
+		LengthType seqend = 0;
+		assert(std::get<1>(trace.first).size() > 0 || std::get<1>(trace.second).size() > 0);
+		if (std::get<1>(trace.second).size() > 0 && std::get<1>(trace.first).size() > 0)
+		{
+			seqstart = std::get<1>(trace.second)[0].second;
+			seqend = std::get<1>(trace.first).back().second;
+		}
+		else if (std::get<1>(trace.second).size() > 0)
+		{
+			seqstart = std::get<1>(trace.second)[0].second;
+			seqend = std::get<1>(trace.second).back().second;
+		}
+		else if (std::get<1>(trace.first).size() > 0)
+		{
+			seqstart = std::get<1>(trace.first)[0].second;
+			seqend = std::get<1>(trace.first).back().second;
+		}
+		else
+		{
+			assert(false);
+		}
+		result.alignment.set_sequence(sequence.substr(seqstart, seqend - seqstart));
+		result.trace = traceVector;
+		result.alignment.set_query_position(seqstart);
+		result.alignmentStart = seqstart;
+		result.alignmentEnd = seqend;
+		auto timeEnd = std::chrono::system_clock::now();
+		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		result.elapsedMilliseconds = time;
+		return result;
+	}
+
+	void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const AlignmentResult::AlignmentItem& trace) const
+	{
+		assert(trace.trace.size() > 0);
+		LengthType currentNode = trace.trace[0].nodeID;
+		size_t currentReadStart = trace.trace[0].readpos;
+		for (size_t i = 1; i < trace.trace.size(); i++)
+		{
+			if (trace.trace[i].nodeID != currentNode)
 			{
-				size_t nodeIndex = params.graph.IndexToNode(std::get<1>(trace.second)[i].first);
-				size_t index = std::get<1>(trace.second)[i].second;
-				if (nodeIndex != oldNodeIndex)
-				{
-					tried.emplace_back(startIndex, endIndex, oldNodeIndex);
-					startIndex = index;
-					oldNodeIndex = nodeIndex;
-				}
-				endIndex = index;
+				tried.emplace_back(currentReadStart, trace.trace[i-1].readpos, currentNode);
+				currentNode = trace.trace[i].nodeID;
+				currentReadStart = trace.trace[i].readpos;
 			}
-			tried.emplace_back(startIndex, endIndex, oldNodeIndex);
 		}
 	}
 
-	AlignmentResult emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed) const
+	AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed) const
 	{
 		vg::Alignment result;
 		result.set_score(std::numeric_limits<decltype(result.score())>::max());
-		return AlignmentResult { result, true, cellsProcessed, elapsedMilliseconds };
+		return AlignmentResult::AlignmentItem { result, cellsProcessed, elapsedMilliseconds };
 	}
 
 	bool posEqual(const vg::Position& pos1, const vg::Position& pos2) const
@@ -684,17 +660,16 @@ private:
 		return pos1.node_id() == pos2.node_id() && pos1.is_reverse() == pos2.is_reverse();
 	}
 
-	AlignmentResult mergeAlignments(const AlignmentResult& first, const AlignmentResult& second) const
+	AlignmentResult::AlignmentItem mergeAlignments(const AlignmentResult::AlignmentItem& first, const AlignmentResult::AlignmentItem& second) const
 	{
-		assert(!first.alignmentFailed || !second.alignmentFailed);
-		if (first.alignmentFailed) return second;
-		if (second.alignmentFailed) return first;
+		assert(!first.alignmentFailed() || !second.alignmentFailed());
+		if (first.alignmentFailed()) return second;
+		if (second.alignmentFailed()) return first;
 		if (first.alignment.path().mapping_size() == 0) return second;
 		if (second.alignment.path().mapping_size() == 0) return first;
-		assert(!first.alignmentFailed);
-		assert(!second.alignmentFailed);
-		AlignmentResult finalResult;
-		finalResult.alignmentFailed = false;
+		assert(!first.alignmentFailed());
+		assert(!second.alignmentFailed());
+		AlignmentResult::AlignmentItem finalResult;
 		finalResult.cellsProcessed = first.cellsProcessed + second.cellsProcessed;
 		finalResult.elapsedMilliseconds = first.elapsedMilliseconds + second.elapsedMilliseconds;
 		finalResult.alignment = first.alignment;
@@ -818,7 +793,7 @@ private:
 		return result;
 	}
 
-	AlignmentResult traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed) const
+	AlignmentResult::AlignmentItem traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed) const
 	{
 		vg::Alignment result;
 		result.set_name(seq_id);
@@ -826,19 +801,19 @@ private:
 		result.set_sequence(sequence);
 		auto path = new vg::Path;
 		result.set_allocated_path(path);
-		if (trace.size() == 0) return AlignmentResult { result, true, cellsProcessed, std::numeric_limits<size_t>::max() };
+		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		size_t pos = 0;
 		size_t oldNode = params.graph.IndexToNode(trace[0].first);
 		while (oldNode == params.graph.dummyNodeStart)
 		{
 			pos++;
-			if (pos == trace.size()) return emptyAlignment(std::numeric_limits<size_t>::max(), cellsProcessed);
+			if (pos == trace.size()) return emptyAlignment(0, cellsProcessed);
 			assert(pos < trace.size());
 			assert(trace[pos].second >= trace[pos-1].second);
 			oldNode = params.graph.IndexToNode(trace[pos].first);
 			assert(oldNode < params.graph.nodeIDs.size());
 		}
-		if (oldNode == params.graph.dummyNodeEnd) return emptyAlignment(std::numeric_limits<size_t>::max(), cellsProcessed);
+		if (oldNode == params.graph.dummyNodeEnd) return emptyAlignment(0, cellsProcessed);
 		int rank = 0;
 		auto vgmapping = path->add_mapping();
 		auto position = new vg::Position;
@@ -882,7 +857,10 @@ private:
 		edit->set_from_length(btNodeEnd.first - btNodeStart.first);
 		edit->set_to_length(btNodeEnd.second - btBeforeNode.second);
 		edit->set_sequence(sequence.substr(btNodeStart.second, btNodeEnd.second - btBeforeNode.second));
-		return AlignmentResult { result, false, cellsProcessed, std::numeric_limits<size_t>::max() };
+		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
+		item.alignmentStart = trace[0].second;
+		item.alignmentEnd = trace.back().second;
+		return item;
 	}
 
 #ifndef NDEBUG

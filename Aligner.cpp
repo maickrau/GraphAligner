@@ -99,7 +99,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& alignments, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& results, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -119,13 +119,14 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 
-		AlignmentResult alignment;
+		AlignmentResult alignments;
 
 		try
 		{
 			if (graphAlignerSeedHits == nullptr)
 			{
-				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.dynamicRowStart);
+				assert(false);
+				// alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth);
 			}
 			else
 			{
@@ -137,7 +138,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignment = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.dynamicRowStart, graphAlignerSeedHits->at(fastq));
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, graphAlignerSeedHits->at(fastq));
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -147,35 +148,42 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			continue;
 		}
 
-		coutoutput << "read " << fastq->seq_id << " took " << alignment.elapsedMilliseconds << "ms" << BufferedWriter::Flush;
-
 		//failed alignment, don't output
-		if (alignment.alignmentFailed)
-		{
-			coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-			cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-			continue;
-		}
-		if (alignment.alignment.score() == std::numeric_limits<decltype(alignment.alignment.score())>::max())
+		if (alignments.alignments.size() == 0)
 		{
 			coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			continue;
 		}
 
-		coutoutput << "read " << fastq->seq_id << " score " << alignment.alignment.score() << BufferedWriter::Flush;
-		if (alignment.alignment.score() > fastq->sequence.size() * 0.25)
-		{
-			cerroutput << "read " << fastq->seq_id << " score is poor: " << alignment.alignment.score() << BufferedWriter::Flush;
-		}
-		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignment.alignmentStart << "-" << alignment.alignmentEnd << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
-
-		replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment);
-
-		alignments.push_back(alignment.alignment);
-		coutoutput << "thread " << threadnum << " successfully aligned read " << fastq->seq_id << " with " << alignment.cellsProcessed << " cells" << BufferedWriter::Flush;
+		std::string alignmentpositions;
 		std::vector<vg::Alignment> alignmentvec;
-		alignmentvec.emplace_back(alignments.back());
+		size_t timems = 0;
+		size_t totalcells = 0;
+		for (auto& alignment : alignments.alignments)
+		{
+			try
+			{
+				assert(!alignment.alignmentFailed());
+			}
+			catch (const ThreadReadAssertion::AssertionFailure& a)
+			{
+				continue;
+			}
+			replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment);
+			results.push_back(alignment.alignment);
+			alignmentvec.emplace_back(alignment.alignment);
+			alignmentpositions += std::to_string(alignment.alignmentStart) + "-" + std::to_string(alignment.alignmentEnd) + ", ";
+			timems += alignment.elapsedMilliseconds;
+			totalcells += alignment.cellsProcessed;
+		}
+		alignmentpositions.pop_back();
+		alignmentpositions.pop_back();
+
+		coutoutput << "read " << fastq->seq_id << " took " << timems << "ms" << BufferedWriter::Flush;
+		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
+
+		coutoutput << "thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
 		std::string filename;
 		filename = "alignment_";
 		filename += std::to_string(threadnum);
@@ -188,20 +196,20 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
 		stream::write_buffered(alignmentOut, alignmentvec, 0);
 		coutoutput << "alignment write finished" << BufferedWriter::Flush;
-		std::string tracefilename;
-		tracefilename = "trace_";
-		tracefilename += std::to_string(threadnum);
-		tracefilename += "_";
-		tracefilename += fastq->seq_id;
-		tracefilename += ".trace";
-		std::replace(tracefilename.begin(), tracefilename.end(), '/', '_');
-		std::replace(tracefilename.begin(), tracefilename.end(), ':', '_');
-		coutoutput << "write trace to " << tracefilename << BufferedWriter::Flush;
-		writeTrace(alignment.trace, tracefilename);
-		coutoutput << "trace write finished" << BufferedWriter::Flush;
+		// std::string tracefilename;
+		// tracefilename = "trace_";
+		// tracefilename += std::to_string(threadnum);
+		// tracefilename += "_";
+		// tracefilename += fastq->seq_id;
+		// tracefilename += ".trace";
+		// std::replace(tracefilename.begin(), tracefilename.end(), '/', '_');
+		// std::replace(tracefilename.begin(), tracefilename.end(), ':', '_');
+		// coutoutput << "write trace to " << tracefilename << BufferedWriter::Flush;
+		// writeTrace(alignment.trace, tracefilename);
+		// coutoutput << "trace write finished" << BufferedWriter::Flush;
 	}
 	assertSetRead("After all reads");
-	coutoutput << "thread " << threadnum << " finished with " << alignments.size() << " alignments" << BufferedWriter::Flush;
+	coutoutput << "thread " << threadnum << " finished with " << results.size() << " alignments" << BufferedWriter::Flush;
 }
 
 AlignmentGraph getGraph(std::string graphFile)
