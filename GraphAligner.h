@@ -2745,6 +2745,7 @@ private:
 						{
 							DPSlice tmp;
 							std::swap(backtraceOverrideTemps.back(), tmp);
+							backtraceOverrideTemps.pop_back();
 						}
 #ifdef SLICEVERBOSE
 						std::cerr << " to " << backtraceOverrideTemps.size() << " temps";
