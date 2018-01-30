@@ -26,12 +26,15 @@ int main(int argc, char** argv)
 	std::string alignmentfile {argv[3]};
 	int length = std::stoi(argv[4]);
 	std::cerr << "length: " << length << std::endl;
-	auto alignment = CommonUtils::LoadVGAlignment(alignmentfile);
+	auto alignments = CommonUtils::LoadVGAlignments(alignmentfile);
 	auto graph = GfaGraph::LoadFromFile(infile);
 	std::priority_queue<PriorityNode, std::vector<PriorityNode>, std::greater<PriorityNode>> queue;
-	for (const auto& pos : alignment.path().mapping())
+	for (const auto& alignment : alignments)
 	{
-		queue.emplace(NodePos {pos.position().node_id(), pos.position().is_reverse()}, 0);
+		for (const auto& pos : alignment.path().mapping())
+		{
+			queue.emplace(NodePos {pos.position().node_id(), pos.position().is_reverse()}, 0);
+		}
 	}
 	std::unordered_map<NodePos, size_t> distance;
 	while (queue.size() != 0)
