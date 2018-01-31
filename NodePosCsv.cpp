@@ -11,6 +11,7 @@ int main(int argc, char** argv)
 	std::string outfilename {argv[2]};
 
 	std::unordered_map<int, std::unordered_map<std::string, std::vector<std::pair<int, int>>>> positions;
+	std::unordered_map<int, std::unordered_map<std::string, int>> minRepeatCounts;
 	auto alignments = CommonUtils::LoadVGAlignments(infilename);
 	std::unordered_set<std::string> alignmentNames;
 	for (auto aln : alignments)
@@ -22,12 +23,13 @@ int main(int argc, char** argv)
 			auto mapping = aln.path().mapping(i);
 			positions[mapping.position().node_id()][aln.name()].emplace_back(pos, pos+mapping.edit(0).to_length());
 			pos += mapping.edit(0).to_length();
+			minRepeatCounts[mapping.position().node_id()][aln.name()] += 1;
 		}
 	}
 	std::vector<std::string> readnames { alignmentNames.begin(), alignmentNames.end() };
 	std::sort(readnames.begin(), readnames.end());
 	std::ofstream out {outfilename};
-	out << "node";
+	out << "node,_numreads,_minrepeatcount,_traversingreads";
 	for (auto read : readnames)
 	{
 		out << "," << read;
@@ -36,6 +38,24 @@ int main(int argc, char** argv)
 	for (auto node : positions)
 	{
 		out << node.first;
+		out << "," << node.second.size();
+		int minRepeatCount = 0;
+		for (auto pair : minRepeatCounts[node.first])
+		{
+			minRepeatCount = std::max(minRepeatCount, pair.second);
+		}
+		out << "," << minRepeatCount;
+		out << ",";
+		bool first = true;
+		for (auto read : node.second)
+		{
+			if (read.second.size() > 0)
+			{
+				if (!first) out << ";";
+				out << read.first;
+				first = false;
+			}
+		}
 		for (auto read : readnames)
 		{
 			out << ",";
