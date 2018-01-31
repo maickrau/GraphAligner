@@ -28,6 +28,14 @@ namespace std
 			return hash<int>()(x.id) ^ hash<bool>()(x.end);
 		}
 	};
+	template <> 
+	struct hash<std::pair<NodePos, NodePos>>
+	{
+		size_t operator()(const std::pair<NodePos, NodePos>& x) const
+		{
+			return hash<NodePos>()(x.first) ^ hash<NodePos>()(x.second);
+		}
+	};
 }
 
 class GfaGraph
@@ -37,6 +45,7 @@ public:
 	void SaveToFile(std::string filename) const;
 	void AddSubgraph(const GfaGraph& subgraph);
 	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
+	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;
 	std::unordered_map<int, std::string> nodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
 	int edgeOverlap;

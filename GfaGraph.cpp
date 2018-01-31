@@ -67,6 +67,36 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
 	return result;
 }
 
+GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& nodeids, const std::unordered_set<std::pair<NodePos, NodePos>>& selectedEdges) const
+{
+	GfaGraph result;
+	result.edgeOverlap = edgeOverlap;
+	for (auto node : nodeids)
+	{
+		if (nodes.count(node) == 0) continue;
+		result.nodes[node] = nodes.at(node);
+		NodePos end {node, true};
+		if (edges.count(end) == 1)
+		{
+			for (auto target : edges.at(end))
+			{
+				if (nodeids.count(target.id) == 0) continue;
+				if (selectedEdges.count({end, target}) == 1 || selectedEdges.count({target, end}) == 1) result.edges[end].push_back(target);
+			}
+		}
+		NodePos start {node, false};
+		if (edges.count(start) == 1)
+		{
+			for (auto target : edges.at(start))
+			{
+				if (nodeids.count(target.id) == 0) continue;
+				if (selectedEdges.count({start, target}) == 1 || selectedEdges.count({target, start}) == 1) result.edges[start].push_back(target);
+			}
+		}
+	}
+	return result;
+}
+
 void GfaGraph::SaveToFile(std::string filename) const
 {
 	std::ofstream file {filename};
