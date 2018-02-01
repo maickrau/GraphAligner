@@ -29,25 +29,31 @@ int main(int argc, char** argv)
 	std::vector<std::string> readnames { alignmentNames.begin(), alignmentNames.end() };
 	std::sort(readnames.begin(), readnames.end());
 	std::ofstream out {outfilename};
-	out << "node,_numreads,_minrepeatcount,_traversingreads";
+	out << "node,_numreads,_minalnrepeatcount,_traversingreads";
 	for (auto read : readnames)
 	{
 		out << "," << read;
 	}
 	out << std::endl;
+	std::vector<int> nodevec;
 	for (auto node : positions)
 	{
-		out << node.first;
-		out << "," << node.second.size();
+		nodevec.push_back(node.first);
+	}
+	std::sort(nodevec.begin(), nodevec.end());
+	for (auto node : nodevec)
+	{
+		out << node;
+		out << "," << positions[node].size();
 		int minRepeatCount = 0;
-		for (auto pair : minRepeatCounts[node.first])
+		for (auto pair : minRepeatCounts[node])
 		{
 			minRepeatCount = std::max(minRepeatCount, pair.second);
 		}
 		out << "," << minRepeatCount;
 		out << ",";
 		bool first = true;
-		for (auto read : node.second)
+		for (auto read : positions[node])
 		{
 			if (read.second.size() > 0)
 			{
@@ -59,12 +65,12 @@ int main(int argc, char** argv)
 		for (auto read : readnames)
 		{
 			out << ",";
-			if (node.second.count(read) == 1)
+			if (positions[node].count(read) == 1)
 			{
-				for (size_t i = 0; i < node.second[read].size(); i++)
+				for (size_t i = 0; i < positions[node][read].size(); i++)
 				{
 					if (i > 0) out << ";";
-					out << node.second[read][i].first << "-" << node.second[read][i].second;
+					out << positions[node][read][i].first << "-" << positions[node][read][i].second;
 				}
 			}
 		}
