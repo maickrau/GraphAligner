@@ -250,9 +250,10 @@ private:
 	private:
 		void addReachableRec(const Params& params, MatrixPosition pos, size_t row, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices, std::vector<std::unordered_map<LengthType, size_t>>& indices)
 		{
+			assert(slices.size() > 0);
 			assert(row < indices.size());
 			if (indices[row].count(pos.first) == 1) return;
-			auto size = indices[row].size();
+			size_t size = indices[row].size();
 			indices[row][pos.first] = size;
 			if (row > 0 && row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
 			{
@@ -262,10 +263,12 @@ private:
 				assert(slices[sliceIndex].scores.hasNode(nodeIndex));
 				auto nodeStart = params.graph.NodeStart(nodeIndex);
 				auto offset = pos.first - nodeStart;
+				assert(slices[sliceIndex].scores.node(nodeIndex).size() > offset);
 				if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists()) return;
 			}
 			assert(row == pos.second - slices[0].j);
 			size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
+			assert(sliceIndex < slices.size());
 			MatrixPosition predecessor;
 			if (sliceIndex > 0)
 			{
@@ -462,9 +465,9 @@ public:
 
 	static MatrixPosition pickBacktracePredecessor(const Params& params, const std::string& sequence, const DPSlice& slice, const MatrixPosition pos, const DPSlice& previousSlice)
 	{
-		assert(cellExists(params, slice, pos.second - slice.j, pos.first));
 		assert(pos.second >= slice.j);
 		assert(pos.second < slice.j + WordConfiguration<Word>::WordSize);
+		assert(cellExists(params, slice, pos.second - slice.j, pos.first));
 		auto nodeIndex = params.graph.IndexToNode(pos.first);
 		assert(slice.scores.hasNode(nodeIndex));
 		auto scoreHere = getValue(params, slice, pos.second - slice.j, pos.first);
@@ -2602,10 +2605,10 @@ private:
 		bool currentlyCorrect = table.correctness.back().CurrentlyCorrect();
 		while (!currentlyCorrect)
 		{
+			currentlyCorrect = table.correctness.back().FalseFromCorrect();
 			table.correctness.pop_back();
 			table.bandwidthPerSlice.pop_back();
 			if (table.correctness.size() == 0) break;
-			currentlyCorrect = table.correctness.back().FalseFromCorrect();
 		}
 		if (table.correctness.size() == 0)
 		{
