@@ -5,6 +5,7 @@
 #include "CommonUtils.h"
 #include "vg.pb.h"
 #include "stream.hpp"
+#include "GfaGraph.h"
 
 std::default_random_engine generator;
 std::uniform_real_distribution<double> distribution(0.0,1.0);
@@ -46,55 +47,60 @@ bool is_file_exist(std::string fileName)
 	return infile.good();
 }
 
-std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::Graph& g, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesRight, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesLeft)
+std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std::vector<std::string>& nodeSequences, const std::vector<int>& nodeIds, int overlap, int length, double substitutionErrorRate, double insertionErrorRate, double deletionErrorRate, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesRight, const std::map<size_t, std::vector<std::pair<size_t, bool>>>& outEdgesLeft)
 {
 	bool reverse = false;
 	if (distribution(generator) < 0.5) reverse = true;
 
 	std::vector<std::pair<int, bool>> realNodes;
 
-	int currentNode = rand() % g.node_size();
-	int startNode = g.node(currentNode).id();
-	int startPos = rand() % g.node(currentNode).sequence().size();
+	int currentNode = rand() % nodeSequences.size();
+	int startNode = nodeIds[currentNode];
+	assert(nodeSequences[currentNode].size() > overlap);
+	int startPos = rand() % (nodeSequences[currentNode].size() - overlap);
 	std::string realsequence;
 	if (reverse)
 	{
-		realsequence = CommonUtils::ReverseComplement(g.node(currentNode).sequence().substr(0, startPos));	
+		realsequence = CommonUtils::ReverseComplement(nodeSequences[currentNode]).substr(startPos);
 	}
 	else
 	{
-		realsequence = g.node(currentNode).sequence().substr(startPos);	
+		realsequence = nodeSequences[currentNode].substr(startPos);	
 	}
+	assert(realsequence.size() > overlap);
+	realsequence.erase(realsequence.end()-overlap, realsequence.end());
 	while (realsequence.size() < length)
 	{
-		if (currentNode == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
-		realNodes.emplace_back(g.node(currentNode).id(), reverse);
+		if (currentNode == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+		realNodes.emplace_back(nodeIds[currentNode], reverse);
 		if (reverse)
 		{
-			if (outEdgesLeft.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
-			if (outEdgesLeft.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesLeft.count(currentNode) == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesLeft.at(currentNode).size() == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			auto pickedIndex = rand() % outEdgesLeft.at(currentNode).size();
 			reverse = outEdgesLeft.at(currentNode)[pickedIndex].second;
 			currentNode = outEdgesLeft.at(currentNode)[pickedIndex].first;
 		}
 		else
 		{
-			if (outEdgesRight.count(currentNode) == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
-			if (outEdgesRight.at(currentNode).size() == 0) return simulateOneRead(g, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesRight.count(currentNode) == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
+			if (outEdgesRight.at(currentNode).size() == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			auto pickedIndex = rand() % outEdgesRight.at(currentNode).size();
 			reverse = outEdgesRight.at(currentNode)[pickedIndex].second;
 			currentNode = outEdgesRight.at(currentNode)[pickedIndex].first;
 		}
 		if (reverse)
 		{
-			realsequence += CommonUtils::ReverseComplement(g.node(currentNode).sequence());
+			realsequence += CommonUtils::ReverseComplement(nodeSequences[currentNode]);
 		}
 		else
 		{
-			realsequence += g.node(currentNode).sequence();
+			realsequence += nodeSequences[currentNode];
 		}
+		assert(realsequence.size() > overlap);
+		realsequence.erase(realsequence.end()-overlap, realsequence.end());
 	}
-	realNodes.emplace_back(g.node(currentNode).id(), reverse);
+	realNodes.emplace_back(nodeIds[currentNode], reverse);
 	realsequence = realsequence.substr(0, length);
 	auto errorSequence = introduceErrors(realsequence, substitutionErrorRate, insertionErrorRate, deletionErrorRate);
 
@@ -147,37 +153,85 @@ int main(int argc, char** argv)
 		std::cout << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
-
-
-	std::map<int, size_t> ids;
-	for (int i = 0; i < graph.node_size(); i++)
-	{
-		ids[graph.node(i).id()] = i;
-	}
+	std::vector<std::string> nodeSequences;
+	std::vector<int> nodeIds;
+	int overlap = 0;
 	std::map<size_t, std::vector<std::pair<size_t, bool>>> outEdgesRight;
 	std::map<size_t, std::vector<std::pair<size_t, bool>>> outEdgesLeft;
-	for (int i = 0; i < graph.edge_size(); i++)
+
+	if (graphFile.substr(graphFile.size()-3) == ".vg")
 	{
-		if (graph.edge(i).from_start())
+		vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
+		std::map<int, size_t> ids;
+		for (int i = 0; i < graph.node_size(); i++)
 		{
-			bool direction = graph.edge(i).to_end();
-			outEdgesLeft[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+			nodeSequences.push_back(graph.node(i).sequence());
+			nodeIds.push_back(graph.node(i).id());
+			ids[graph.node(i).id()] = i;
 		}
-		else
+		for (int i = 0; i < graph.edge_size(); i++)
 		{
-			bool direction = graph.edge(i).to_end();
-			outEdgesRight[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+			if (graph.edge(i).from_start())
+			{
+				bool direction = graph.edge(i).to_end();
+				outEdgesLeft[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+			}
+			else
+			{
+				bool direction = graph.edge(i).to_end();
+				outEdgesRight[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
+			}
+			if (graph.edge(i).to_end())
+			{
+				bool direction = graph.edge(i).from_start();
+				outEdgesRight[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+			}
+			else
+			{
+				bool direction = graph.edge(i).from_start();
+				outEdgesLeft[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+			}
 		}
-		if (graph.edge(i).to_end())
+	}
+	else
+	{
+		GfaGraph graph = GfaGraph::LoadFromFile(graphFile);
+		std::map<int, size_t> ids;
+		size_t nodenum = 0;
+		overlap = graph.edgeOverlap;
+		for (const auto& pair : graph.nodes)
 		{
-			bool direction = graph.edge(i).from_start();
-			outEdgesRight[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+			nodeSequences.push_back(pair.second);
+			nodeIds.push_back(pair.first);
+			ids[pair.first] = nodenum;
+			nodenum++;
 		}
-		else
+		for (auto edge : graph.edges)
 		{
-			bool direction = graph.edge(i).from_start();
-			outEdgesLeft[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
+			auto from = edge.first;
+			for (auto to : edge.second)
+			{
+				if (!from.end)
+				{
+					bool direction = to.end;
+					outEdgesLeft[ids[from.id]].emplace_back(ids[to.id], direction);
+				}
+				else
+				{
+					bool direction = to.end;
+					outEdgesRight[ids[from.id]].emplace_back(ids[to.id], direction);
+				}
+				if (to.end)
+				{
+					bool direction = !from.end;
+					outEdgesRight[ids[to.id]].emplace_back(ids[from.id], !direction);
+				}
+				else
+				{
+					bool direction = !from.end;
+					outEdgesLeft[ids[to.id]].emplace_back(ids[from.id], !direction);
+				}
+			}
 		}
 	}
 
@@ -186,7 +240,7 @@ int main(int argc, char** argv)
 	std::vector<vg::Alignment> seeds;
 	for (int i = 0; i < numReads; i++)
 	{
-		reads.push_back(simulateOneRead(graph, length, substitution, insertions, deletions, outEdgesRight, outEdgesLeft));
+		reads.push_back(simulateOneRead(nodeSequences, nodeIds, overlap, length, substitution, insertions, deletions, outEdgesRight, outEdgesLeft));
 		truth.emplace_back(std::get<0>(reads[i]));
 		seeds.emplace_back(std::get<2>(reads[i]));
 	}
