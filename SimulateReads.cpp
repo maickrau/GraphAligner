@@ -40,7 +40,7 @@ std::string introduceErrors(std::string real, double substitutionErrorRate, doub
 	return result;
 }
 
-bool is_file_exist(const char *fileName)
+bool is_file_exist(std::string fileName)
 {
 	std::ifstream infile(fileName);
 	return infile.good();
@@ -128,22 +128,27 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const vg::
 
 int main(int argc, char** argv)
 {
+	std::string graphFile {argv[1]};
+	std::string alignmentOutFile {argv[2]};
+	std::string fastqOutFile {argv[3]};
+	int numReads = std::stoi(argv[4]);
+	int length = std::stoi(argv[5]);
+	double substitution = std::stod(argv[6]);
+	double insertions = std::stod(argv[7]);
+	std::string seedsOutFile {argv[8]};
+	double deletions = std::stod(argv[9]);
+
 	generator.seed(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
 
-	if (is_file_exist(argv[1])){
-		std::cout << "load graph from " << argv[1] << std::endl;
+	if (is_file_exist(graphFile)){
+		std::cout << "load graph from " << graphFile << std::endl;
 	}
 	else{
 		std::cout << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	vg::Graph graph = CommonUtils::LoadVGGraph(argv[1]);
+	vg::Graph graph = CommonUtils::LoadVGGraph(graphFile);
 
-	int numReads = std::stoi(argv[4]);
-	int length = std::stoi(argv[5]);
-	double substitution = std::stod(argv[6]);
-	double insertions = std::stod(argv[7]);
-	double deletions = std::stod(argv[9]);
 
 	std::map<int, size_t> ids;
 	for (int i = 0; i < graph.node_size(); i++)
@@ -186,13 +191,13 @@ int main(int argc, char** argv)
 		seeds.emplace_back(std::get<2>(reads[i]));
 	}
 
-	std::ofstream alignmentOut { argv[2], std::ios::out | std::ios::binary };
+	std::ofstream alignmentOut { alignmentOutFile, std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, truth, 0);
 
-	std::ofstream seedsOut { argv[8], std::ios::out | std::ios::binary };
+	std::ofstream seedsOut { seedsOutFile, std::ios::out | std::ios::binary };
 	stream::write_buffered(seedsOut, seeds, 0);
 
-	std::ofstream fastqOut {argv[3]};
+	std::ofstream fastqOut {fastqOutFile};
 	for (int i = 0; i < numReads; i++)
 	{
 		fastqOut << "@" << std::get<0>(reads[i]).name() << "\n";
