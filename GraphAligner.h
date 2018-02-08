@@ -114,7 +114,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		numCells(0)
+		numCells(0),
+		alternateMode(false)
 		{}
 		DPSlice(std::vector<typename NodeSlice<WordSlice>::MapItem>* vectorMap) :
 		minScore(std::numeric_limits<ScoreType>::min()),
@@ -124,7 +125,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		numCells(0)
+		numCells(0),
+		alternateMode(false)
 		{}
 		ScoreType minScore;
 		std::vector<LengthType> minScoreIndex;
@@ -134,6 +136,7 @@ private:
 		LengthType j;
 		size_t cellsProcessed;
 		size_t numCells;
+		bool alternateMode;
 		size_t EstimatedMemoryUsage() const
 		{
 			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 3 + sizeof(int));
@@ -149,6 +152,7 @@ private:
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
 			result.numCells = numCells;
+			result.alternateMode = alternateMode;
 			return result;
 		}
 		DPSlice getFrozenScores() const
@@ -162,6 +166,7 @@ private:
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
 			result.numCells = numCells;
+			result.alternateMode = alternateMode;
 			return result;
 		}
 	};
@@ -2226,6 +2231,21 @@ private:
 						}
 					}
 				}
+				if (pair.second.back().scoreEnd < previousSlice.minScore + bandwidth && pair.second.back().scoreEndExists())
+				{
+					for (auto neighbor : params.graph.outNeighbors[pair.first])
+					{
+						auto neighborStart = params.graph.NodeStart(neighbor);
+						if (characterMatch(sequence[startj], params.graph.NodeSequences(neighborStart)))
+						{
+							calculables[pair.second.back().scoreEnd - previousSlice.minScore].emplace_back(neighbor, neighborStart);
+						}
+						else
+						{
+							calculables[pair.second.back().scoreEnd - previousSlice.minScore + 1].emplace_back(neighbor, neighborStart);
+						}
+					}
+				}
 			}
 			else
 			{
@@ -2547,6 +2567,7 @@ private:
 		}
 		{
 			DPSlice result { &nodesliceMap };
+			result.alternateMode = true;
 			result.j = previous.j + WordConfiguration<Word>::WordSize;
 			result.correctness = previous.correctness;
 			result.scores.reserve(params.AlternateMethodCutoff);
@@ -2587,12 +2608,21 @@ private:
 				word.confirmedRows.partial = false;
 				minScore = std::min(minScore, word.scoreEnd);
 			}
-			for (auto& word : pair.second)
+			const ScoreType newUninitializedValue = minScore + pair.second.size() + bandwidth + 1;
+			for (size_t i = 0; i < pair.second.size(); i++)
 			{
+				auto& word = pair.second[i];
 				if (word.scoreEnd == uninitializedValue)
 				{
-					word.scoreEnd = minScore + pair.second.size() + bandwidth + 1;
-					word.scoreBeforeStart = minScore + pair.second.size() + bandwidth + 1;
+					if (i != 0 && pair.second[i-1].scoreEnd < newUninitializedValue)
+					{
+						word.scoreEnd = pair.second[i-1].scoreEnd+1;
+					}
+					else
+					{
+						word.scoreEnd = newUninitializedValue;
+					}
+					word.scoreBeforeStart = newUninitializedValue;
 				}
 			}
 			slice.numCells += pair.second.size();
@@ -2672,11 +2702,11 @@ private:
 			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " cells " << newSlice.numCells;
 #endif
 
-			if (rampUntil == slice && newSlice.numCells >= params.BacktraceOverrideCutoff)
+			if (rampUntil == slice && newSlice.alternateMode)
 			{
 				rampUntil++;
 			}
-			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && lastSlice.numCells < params.BacktraceOverrideCutoff)
+			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && !lastSlice.alternateMode)
 			{
 				rampSlice = lastSlice;
 				rampRedoIndex = slice-1;
@@ -2769,19 +2799,19 @@ private:
 				continue;
 			}
 
-			if (!backtraceOverriding && newSlice.numCells >= params.BacktraceOverrideCutoff && lastSlice.numCells < params.BacktraceOverrideCutoff)
+			if (!backtraceOverriding && newSlice.alternateMode && !lastSlice.alternateMode)
 			{
 #ifdef SLICEVERBOSE
 				std::cerr << " start backtrace override";
 #endif
-				assert(lastSlice.numCells < params.BacktraceOverrideCutoff);
+				assert(!lastSlice.alternateMode);
 				backtraceOverridePreslice = lastSlice;
 				backtraceOverriding = true;
 				backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
 			}
 			else if (backtraceOverriding)
 			{
-				if (newSlice.numCells < params.BacktraceOverrideCutoff)
+				if (!newSlice.alternateMode)
 				{
 #ifdef SLICEVERBOSE
 					std::cerr << " end backtrace override";
