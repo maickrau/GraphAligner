@@ -75,13 +75,20 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 	{
 		if (currentNode == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 		realNodes.emplace_back(nodeIds[currentNode], reverse);
-		nodelens.emplace_back(nodeSequences[currentNode].size() - overlap);
+		if (nodelens.size() == 0)
+		{
+			nodelens.emplace_back(nodeSequences[currentNode].size() - overlap - startPos);
+		}
+		else
+		{
+			nodelens.emplace_back(nodeSequences[currentNode].size() - overlap);
+		}
 		if (reverse)
 		{
 			if (outEdgesLeft.count(currentNode) == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			if (outEdgesLeft.at(currentNode).size() == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			auto pickedIndex = rand() % outEdgesLeft.at(currentNode).size();
-			reverse = outEdgesLeft.at(currentNode)[pickedIndex].second;
+			reverse = !outEdgesLeft.at(currentNode)[pickedIndex].second;
 			currentNode = outEdgesLeft.at(currentNode)[pickedIndex].first;
 		}
 		else
@@ -89,7 +96,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 			if (outEdgesRight.count(currentNode) == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			if (outEdgesRight.at(currentNode).size() == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 			auto pickedIndex = rand() % outEdgesRight.at(currentNode).size();
-			reverse = outEdgesRight.at(currentNode)[pickedIndex].second;
+			reverse = !outEdgesRight.at(currentNode)[pickedIndex].second;
 			currentNode = outEdgesRight.at(currentNode)[pickedIndex].first;
 		}
 		if (reverse)
@@ -151,7 +158,9 @@ int main(int argc, char** argv)
 	std::string seedsOutFile {argv[8]};
 	double deletions = std::stod(argv[9]);
 
-	generator.seed(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
+	// generator.seed(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
+	generator.seed(0);
+	srand(0);
 
 	if (is_file_exist(graphFile)){
 		std::cout << "load graph from " << graphFile << std::endl;
@@ -180,22 +189,22 @@ int main(int argc, char** argv)
 		{
 			if (graph.edge(i).from_start())
 			{
-				bool direction = graph.edge(i).to_end();
+				bool direction = !graph.edge(i).to_end();
 				outEdgesLeft[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
 			}
 			else
 			{
-				bool direction = graph.edge(i).to_end();
+				bool direction = !graph.edge(i).to_end();
 				outEdgesRight[ids[graph.edge(i).from()]].emplace_back(ids[graph.edge(i).to()], direction);
 			}
 			if (graph.edge(i).to_end())
 			{
-				bool direction = graph.edge(i).from_start();
+				bool direction = !graph.edge(i).from_start();
 				outEdgesRight[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
 			}
 			else
 			{
-				bool direction = graph.edge(i).from_start();
+				bool direction = !graph.edge(i).from_start();
 				outEdgesLeft[ids[graph.edge(i).to()]].emplace_back(ids[graph.edge(i).from()], !direction);
 			}
 		}
@@ -218,25 +227,25 @@ int main(int argc, char** argv)
 			auto from = edge.first;
 			for (auto to : edge.second)
 			{
-				if (!from.end)
-				{
-					bool direction = to.end;
-					outEdgesLeft[ids[from.id]].emplace_back(ids[to.id], direction);
-				}
-				else
+				if (from.end)
 				{
 					bool direction = to.end;
 					outEdgesRight[ids[from.id]].emplace_back(ids[to.id], direction);
 				}
+				else
+				{
+					bool direction = to.end;
+					outEdgesLeft[ids[from.id]].emplace_back(ids[to.id], direction);
+				}
 				if (to.end)
 				{
-					bool direction = !from.end;
-					outEdgesRight[ids[to.id]].emplace_back(ids[from.id], !direction);
+					bool direction = from.end;
+					outEdgesLeft[ids[to.id]].emplace_back(ids[from.id], !direction);
 				}
 				else
 				{
-					bool direction = !from.end;
-					outEdgesLeft[ids[to.id]].emplace_back(ids[from.id], !direction);
+					bool direction = from.end;
+					outEdgesRight[ids[to.id]].emplace_back(ids[from.id], !direction);
 				}
 			}
 		}
