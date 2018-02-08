@@ -53,11 +53,13 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 	if (distribution(generator) < 0.5) reverse = true;
 
 	std::vector<std::pair<int, bool>> realNodes;
+	std::vector<size_t> nodelens;
 
 	int currentNode = rand() % nodeSequences.size();
 	int startNode = nodeIds[currentNode];
 	assert(nodeSequences[currentNode].size() > overlap);
 	int startPos = rand() % (nodeSequences[currentNode].size() - overlap);
+	bool startReverse = reverse;
 	std::string realsequence;
 	if (reverse)
 	{
@@ -65,7 +67,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 	}
 	else
 	{
-		realsequence = nodeSequences[currentNode].substr(startPos);	
+		realsequence = nodeSequences[currentNode].substr(startPos);
 	}
 	assert(realsequence.size() > overlap);
 	realsequence.erase(realsequence.end()-overlap, realsequence.end());
@@ -73,6 +75,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 	{
 		if (currentNode == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
 		realNodes.emplace_back(nodeIds[currentNode], reverse);
+		nodelens.emplace_back(nodeSequences[currentNode].size() - overlap);
 		if (reverse)
 		{
 			if (outEdgesLeft.count(currentNode) == 0) return simulateOneRead(nodeSequences, nodeIds, overlap, length, substitutionErrorRate, insertionErrorRate, deletionErrorRate, outEdgesRight, outEdgesLeft);
@@ -101,6 +104,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 		realsequence.erase(realsequence.end()-overlap, realsequence.end());
 	}
 	realNodes.emplace_back(nodeIds[currentNode], reverse);
+	nodelens.emplace_back(nodeSequences[currentNode].size() - overlap);
 	realsequence = realsequence.substr(0, length);
 	auto errorSequence = introduceErrors(realsequence, substitutionErrorRate, insertionErrorRate, deletionErrorRate);
 
@@ -116,6 +120,8 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 		mapping->set_allocated_position(position);
 		position->set_node_id(realNodes[i].first);
 		position->set_is_reverse(realNodes[i].second);
+		auto edit = mapping->add_edit();
+		edit->set_from_length(nodelens[i]);
 		if (i == 0) position->set_offset(startPos);
 	}
 
@@ -128,6 +134,7 @@ std::tuple<vg::Alignment, std::string, vg::Alignment> simulateOneRead(const std:
 	auto seedposition = new vg::Position;
 	seedmapping->set_allocated_position(seedposition);
 	seedposition->set_node_id(startNode);
+	seedposition->set_is_reverse(startReverse);
 
 	return std::make_tuple(result, errorSequence, seed);
 }
