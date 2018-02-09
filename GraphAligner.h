@@ -2427,7 +2427,11 @@ private:
 		{
 			forceComponentZeroRow(currentSlice, previousSlice, currentBand, previousBand, components[component], component, partOfComponent, sequence.size());
 			assert(calculables.size() == 0);
-			calculables.insert(components[component].begin(), components[component].end());
+			for (size_t i = 0; i < components[component].size(); i++)
+			{
+				calculables.insert(components[component][i]);
+				currentSlice.setMinScore(components[component][i], std::numeric_limits<ScoreType>::max());
+			}
 			while (calculables.size() > 0)
 			{
 				auto i = calculables.top();
@@ -2438,7 +2442,7 @@ private:
 				auto debugOldNode = currentSlice.node(i);
 #endif
 				auto nodeCalc = calculateNode(i, j, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand);
-				currentSlice.setMinScore(i, nodeCalc.minScore);
+				currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 				auto newEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 				auto debugNewNode = currentSlice.node(i);

@@ -649,6 +649,11 @@ public:
 			return std::get<2>(found->second);
 		}
 	}
+	void setMinScoreIfSmaller(size_t nodeIndex, int score)
+	{
+		auto oldScore = minScore(nodeIndex);
+		if (score < oldScore) setMinScore(nodeIndex, score);
+	}
 	void setMinScore(size_t nodeIndex, int score)
 	{
 		if (vectorMap != nullptr)
