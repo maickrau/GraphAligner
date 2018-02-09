@@ -158,9 +158,8 @@ int main(int argc, char** argv)
 	std::string seedsOutFile {argv[8]};
 	double deletions = std::stod(argv[9]);
 
-	// generator.seed(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
-	generator.seed(0);
-	srand(0);
+	generator.seed(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
+	srand(std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
 
 	if (is_file_exist(graphFile)){
 		std::cout << "load graph from " << graphFile << std::endl;
