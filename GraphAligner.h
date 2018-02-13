@@ -2627,6 +2627,11 @@ private:
 					}
 					word.scoreBeforeStart = newUninitializedValue;
 				}
+				if (i != 0 && pair.second[i-1].scoreEnd + 1 < pair.second[i].scoreEnd)
+				{
+					pair.second[i].scoreEnd = pair.second[i-1].scoreEnd;
+					pair.second[i].exists &= ~(((Word)1) << (WordConfiguration<Word>::WordSize-1));
+				}
 			}
 			slice.numCells += pair.second.size();
 			slice.scores.setMinScore(node, minScore);
