@@ -99,7 +99,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, std::vector<vg::Alignment>& results, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -171,7 +171,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				continue;
 			}
 			replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment);
-			results.push_back(alignment.alignment);
 			alignmentvec.emplace_back(alignment.alignment);
 			alignmentpositions += std::to_string(alignment.alignmentStart) + "-" + std::to_string(alignment.alignmentEnd) + ", ";
 			timems += alignment.elapsedMilliseconds;
@@ -209,7 +208,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		// coutoutput << "trace write finished" << BufferedWriter::Flush;
 	}
 	assertSetRead("After all reads");
-	coutoutput << "thread " << threadnum << " finished with " << results.size() << " alignments" << BufferedWriter::Flush;
+	coutoutput << "thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
 }
 
 AlignmentGraph getGraph(std::string graphFile)
@@ -281,8 +280,6 @@ void alignReads(AlignerParams params)
 	}
 
 	std::vector<const FastQ*> readPointers;
-	std::vector<std::vector<vg::Alignment>> resultsPerThread;
-	resultsPerThread.resize(params.numThreads);
 	for (size_t i = 0; i < fastqs.size(); i++)
 	{
 		readPointers.push_back(&(fastqs[i]));
@@ -295,9 +292,12 @@ void alignReads(AlignerParams params)
 	assertSetRead("Running alignments");
 	std::mutex readMutex;
 
+	std::vector<size_t> numAlnsPerThread;
+	numAlnsPerThread.resize(params.numThreads, 0);
+
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, &resultsPerThread, i, seedHitsToThreads, params]() { runComponentMappings(alignmentGraph, readPointers, readMutex, resultsPerThread[i], i, seedHitsToThreads, params); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i]); });
 	}
 
 	for (int i = 0; i < params.numThreads; i++)
@@ -306,25 +306,11 @@ void alignReads(AlignerParams params)
 	}
 	assertSetRead("Postprocessing");
 
-	std::vector<vg::Alignment> alignments;
-
-	for (int i = 0; i < params.numThreads; i++)
+	size_t numAlignments = 0;
+	for (size_t i = 0; i < params.numThreads; i++)
 	{
-		alignments.insert(alignments.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
+		numAlignments += numAlnsPerThread[i];
 	}
 
-	std::cerr << "final result has " << alignments.size() << " alignments" << std::endl;
-
-	if (params.alignmentFile != "")
-	{
-		std::ofstream alignmentOut { params.alignmentFile, std::ios::out | std::ios::binary };
-		stream::write_buffered(alignmentOut, alignments, 0);
-	}
-	if (params.auggraphFile != "")
-	{
-		vg::Graph augmentedGraphAllReads;
-		vg::Graph graph = CommonUtils::LoadVGGraph(params.graphFile);
-		augmentedGraphAllReads = augmentGraphwithAlignment(graph, alignments);
-		outputGraph(params.auggraphFile, augmentedGraphAllReads);
-	}
+	std::cerr << "final result has " << numAlignments << " alignments" << std::endl;
 }

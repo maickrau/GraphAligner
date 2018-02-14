@@ -18,8 +18,6 @@ int main(int argc, char** argv)
     AlignerParams params;
 	params.graphFile = "";
 	params.fastqFile = "";
-	params.alignmentFile = "";
-	params.auggraphFile = "";
 	params.seedFile = "";
 	params.numThreads = 0;
 	params.initialBandwidth = 0;
@@ -28,7 +26,7 @@ int main(int argc, char** argv)
 	bool initialFullBand = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:a:t:B:A:is:d:MSb:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:")) != -1)
 	{
 		switch(c)
 		{
@@ -38,9 +36,6 @@ int main(int argc, char** argv)
 			case 'f':
 				params.fastqFile = std::string(optarg);
 				break;
-			case 'a':
-				params.alignmentFile = std::string(optarg);
-				break;
 			case 't':
 				params.numThreads = std::stoi(optarg);
 				break;
@@ -49,9 +44,6 @@ int main(int argc, char** argv)
 				break;
 			case 'B':
 				params.rampBandwidth = std::stoi(optarg);
-				break;
-			case 'A':
-				params.auggraphFile = std::string(optarg);
 				break;
 			case 'i':
 				initialFullBand = true;
