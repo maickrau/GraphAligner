@@ -12,8 +12,6 @@ struct AlignerParams
 	int numThreads;
 	int initialBandwidth;
 	int rampBandwidth;
-	std::string alignmentFile;
-	std::string auggraphFile;
 	int dynamicRowStart;
 	std::string seedFile;
 };
