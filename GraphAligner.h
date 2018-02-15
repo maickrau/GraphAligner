@@ -1443,89 +1443,100 @@ private:
 
 		WordSlice oldWordSlice = slice[0];
 
+		WordSlice currentWordSlice;
+		WordSlice upWordSlice = oldSlice[0];
+
 		if (isSource(i, currentBand, previousBand))
 		{
 			if (j == 0 && previousBand[i])
 			{
-				slice[0] = getSourceSliceFromStartMatch(sequence[0], params.graph.NodeSequences(nodeStart), previousSlice.node(i)[0].scoreEnd);
+				currentWordSlice = getSourceSliceFromStartMatch(sequence[0], params.graph.NodeSequences(nodeStart), previousSlice.node(i)[0].scoreEnd);
 			}
 			else if (previousBand[i])
 			{
-				slice[0] = getSourceSliceFromBefore(i, previousSlice);
+				currentWordSlice = getSourceSliceFromBefore(i, previousSlice);
 			}
 			else
 			{
 				assert(false);
 			}
-			if (slice[0].scoreEnd < result.minScore)
+			if (currentWordSlice.scoreEnd < result.minScore)
 			{
-				result.minScore = slice[0].scoreEnd;
+				result.minScore = currentWordSlice.scoreEnd;
 				result.minScoreIndex.clear();
 			}
-			if (slice[0].scoreEnd == result.minScore)
+			if (currentWordSlice.scoreEnd == result.minScore)
 			{
 				result.minScoreIndex.push_back(nodeStart);
 			}
-			assertSliceCorrectness(slice[0], oldSlice[0], previousBand[i]);
+			assertSliceCorrectness(currentWordSlice, upWordSlice, previousBand[i]);
 		}
 		else
 		{
 			Word Eq = EqV.getEq(params.graph.NodeSequences(nodeStart));
-			slice[0] = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && params.graph.NodeSequences(params.graph.NodeStart(i)) == sequence[j-1]));
-			if (previousBand[i] && slice[0].scoreBeforeStart > oldSlice[0].scoreEnd)
+			currentWordSlice = getNodeStartSlice(Eq, i, previousSlice, currentSlice, currentBand, previousBand, (j == 0 && previousBand[i]) || (j > 0 && params.graph.NodeSequences(params.graph.NodeStart(i)) == sequence[j-1]));
+			if (previousBand[i] && currentWordSlice.scoreBeforeStart > upWordSlice.scoreEnd)
 			{
-				auto mergable = getSourceSliceFromScore(oldSlice[0].scoreEnd);
+				auto mergable = getSourceSliceFromScore(upWordSlice.scoreEnd);
 				mergable.scoreBeforeExists = true;
-				slice[0] = slice[0].mergeWith(mergable);
+				currentWordSlice = currentWordSlice.mergeWith(mergable);
 			}
-			if (slice[0].scoreEnd < result.minScore)
+			if (currentWordSlice.scoreEnd < result.minScore)
 			{
-				result.minScore = slice[0].scoreEnd;
+				result.minScore = currentWordSlice.scoreEnd;
 				result.minScoreIndex.clear();
 			}
-			if (slice[0].scoreEnd == result.minScore)
+			if (currentWordSlice.scoreEnd == result.minScore)
 			{
 				result.minScoreIndex.push_back(nodeStart);
 			}
-			assertSliceCorrectness(slice[0], oldSlice[0], previousBand[i]);
+			assertSliceCorrectness(currentWordSlice, upWordSlice, previousBand[i]);
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 		}
 
-		if (slice[0].VP == oldWordSlice.VP && slice[0].VN == oldWordSlice.VN && slice[0].scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+		slice[0] = currentWordSlice;
+
+		if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 		{
 			result.cellsProcessed = 1;
 			return result;
 		}
 
 		bool upExists = previousBand[i];
+		WordSlice previousWordSlice = currentWordSlice;
+		WordSlice upPreviousWordSlice = upWordSlice;
 		for (LengthType w = 1; w < params.graph.NodeEnd(i) - params.graph.NodeStart(i); w++)
 		{
-			Word Eq = EqV.getEq(params.graph.NodeSequences(nodeStart+w));
+			char graphChar = params.graph.NodeSequences(nodeStart+w);
+			upWordSlice = oldSlice[w];
+			Word Eq = EqV.getEq(graphChar);
 
 			oldWordSlice = slice[w];
 
-			slice[w] = getNextSlice(Eq, slice[w-1], upExists, upExists, upExists, (j == 0 && previousBand[i]) || (j > 0 && params.graph.NodeSequences(nodeStart+w) == sequence[j-1]), oldSlice[w-1], oldSlice[w]);
-			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
+			currentWordSlice = getNextSlice(Eq, previousWordSlice, upExists, upExists, upExists, (j == 0 && previousBand[i]) || (j > 0 && graphChar == sequence[j-1]), upPreviousWordSlice, upWordSlice);
+			if (previousBand[i] && currentWordSlice.scoreBeforeStart > oldSlice[w].scoreEnd)
 			{
 				auto mergable = getSourceSliceFromScore(oldSlice[w].scoreEnd);
 				mergable.scoreBeforeExists = true;
-				slice[w] = slice[w].mergeWith(mergable);
+				currentWordSlice = currentWordSlice.mergeWith(mergable);
 			}
 
-			assert(previousBand[i] || slice[w].scoreBeforeStart == j || slice[w].scoreBeforeStart == slice[w-1].scoreBeforeStart + 1);
-			assertSliceCorrectness(slice[w], oldSlice[w], previousBand[i]);
+			assert(previousBand[i] || currentWordSlice.scoreBeforeStart == j || currentWordSlice.scoreBeforeStart == previousWordSlice.scoreBeforeStart + 1);
+			assertSliceCorrectness(currentWordSlice, oldSlice[w], previousBand[i]);
 
-			if (slice[w].scoreEnd < result.minScore)
+			if (currentWordSlice.scoreEnd < result.minScore)
 			{
-				result.minScore = slice[w].scoreEnd;
+				result.minScore = currentWordSlice.scoreEnd;
 				result.minScoreIndex.clear();
 			}
-			if (slice[w].scoreEnd == result.minScore)
+			if (currentWordSlice.scoreEnd == result.minScore)
 			{
 				result.minScoreIndex.push_back(nodeStart + w);
 			}
 
-			if (slice[w].VP == oldWordSlice.VP && slice[w].VN == oldWordSlice.VN && slice[w].scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+			slice[w] = currentWordSlice;
+
+			if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 			{
 				result.cellsProcessed = w+1;
 				return result;
@@ -1533,13 +1544,15 @@ private:
 
 #ifdef EXTRABITVECTORASSERTIONS
 			auto correctslice = getWordSliceCellByCell(j, nodeStart+w, sequence, currentSlice, previousSlice, currentBand, previousBand);
-			assert(slice[w].scoreBeforeStart == correctslice.scoreBeforeStart);
-			assert(slice[w].scoreEnd == correctslice.scoreEnd);
-			assert(slice[w].VP == correctslice.VP);
-			assert(slice[w].VN == correctslice.VN);
+			assert(currentWordSlice.scoreBeforeStart == correctslice.scoreBeforeStart);
+			assert(currentWordSlice.scoreEnd == correctslice.scoreEnd);
+			assert(currentWordSlice.VP == correctslice.VP);
+			assert(currentWordSlice.VN == correctslice.VN);
 #endif
+			previousWordSlice = currentWordSlice;
+			upPreviousWordSlice = upWordSlice;
 		}
-		result.cellsProcessed = (params.graph.NodeEnd(i) - params.graph.NodeStart(i)) * WordConfiguration<Word>::WordSize;
+		result.cellsProcessed = (params.graph.NodeEnd(i) - params.graph.NodeStart(i));
 		return result;
 	}
 
@@ -2200,7 +2213,16 @@ private:
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
-			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " slices " << newSlice.numCells << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (newSlice.cellsProcessed - newSlice.numCells * WordConfiguration<Word>::WordSize) / (newSlice.numCells * WordConfiguration<Word>::WordSize)) << "%";
+			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " slices " << newSlice.numCells << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
+			size_t debugSmallCells = 0;
+			for (auto node : newSlice.scores)
+			{
+				for (auto cell : node.second)
+				{
+					if (cell.scoreEnd < newSlice.minScore + bandwidth) debugSmallCells++;
+				}
+			}
+			std::cerr << " small endcells " << debugSmallCells;
 #endif
 
 			//todo fix
