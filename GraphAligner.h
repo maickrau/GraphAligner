@@ -1441,8 +1441,7 @@ private:
 		assert(slice.size() == params.graph.NodeEnd(i) - params.graph.NodeStart(i));
 		auto nodeStart = params.graph.NodeStart(i);
 
-		//todo fix
-		// if (oldScoreConfirmed == WordConfiguration<Word>::AllOnes) return result;
+		WordSlice oldWordSlice = slice[0];
 
 		if (isSource(i, currentBand, previousBand))
 		{
@@ -1492,16 +1491,18 @@ private:
 			//note: currentSlice[start].score - optimalInNeighborEndScore IS NOT within {-1, 0, 1} always because of the band
 		}
 
-		//todo fix
-		// if (slice[0].scoreConfirmed == oldScoreConfirmed && slice[0].partialConfirmed == oldPartialConfirmed) return result;
+		if (slice[0].VP == oldWordSlice.VP && slice[0].VN == oldWordSlice.VN && slice[0].scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+		{
+			result.cellsProcessed = 1;
+			return result;
+		}
 
 		bool upExists = previousBand[i];
 		for (LengthType w = 1; w < params.graph.NodeEnd(i) - params.graph.NodeStart(i); w++)
 		{
 			Word Eq = EqV.getEq(params.graph.NodeSequences(nodeStart+w));
 
-			//todo fix
-			// if (oldScoreConfirmed == WordConfiguration<Word>::AllOnes) return result;
+			oldWordSlice = slice[w];
 
 			slice[w] = getNextSlice(Eq, slice[w-1], upExists, upExists, upExists, (j == 0 && previousBand[i]) || (j > 0 && params.graph.NodeSequences(nodeStart+w) == sequence[j-1]), oldSlice[w-1], oldSlice[w]);
 			if (previousBand[i] && slice[w].scoreBeforeStart > oldSlice[w].scoreEnd)
@@ -1524,8 +1525,11 @@ private:
 				result.minScoreIndex.push_back(nodeStart + w);
 			}
 
-			//todo fix
-			// if (slice[w].scoreConfirmed == oldScoreConfirmed && slice[w].partialConfirmed == oldPartialConfirmed) return result;
+			if (slice[w].VP == oldWordSlice.VP && slice[w].VN == oldWordSlice.VN && slice[w].scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+			{
+				result.cellsProcessed = w+1;
+				return result;
+			}
 
 #ifdef EXTRABITVECTORASSERTIONS
 			auto correctslice = getWordSliceCellByCell(j, nodeStart+w, sequence, currentSlice, previousSlice, currentBand, previousBand);
