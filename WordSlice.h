@@ -141,10 +141,7 @@ public:
 	scoreEnd(0),
 	scoreBeforeStart(0),
 	scoreBeforeExists(false),
-	sliceExists(false),
-	exists(0),
-	scoreConfirmed(0),
-	partialConfirmed(0)
+	sliceExists(false)
 	{}
 	WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, bool scoreBeforeExists) :
 	VP(VP),
@@ -152,10 +149,7 @@ public:
 	scoreEnd(scoreEnd),
 	scoreBeforeStart(scoreBeforeStart),
 	scoreBeforeExists(scoreBeforeExists),
-	sliceExists(false),
-	exists(0),
-	scoreConfirmed(0),
-	partialConfirmed(0)
+	sliceExists(false)
 	{}
 	Word VP;
 	Word VN;
@@ -163,9 +157,6 @@ public:
 	ScoreType scoreBeforeStart;
 	bool scoreBeforeExists;
 	bool sliceExists;
-	Word exists;
-	Word scoreConfirmed;
-	Word partialConfirmed;
 
 	ScoreType minScore() const
 	{
@@ -182,26 +173,10 @@ public:
 		return minScore;
 	}
 
-	bool scoreEndExists() const
-	{
-		return exists & WordConfiguration<Word>::LastBit;
-	}
-
 	WordSlice mergeWith(const WordSlice& other) const
 	{
 		auto result = mergeTwoSlices(*this, other);
 		return result;
-	}
-
-	bool cellExists(int row) const
-	{
-		return exists & (((Word)1) << row);
-	}
-
-	ScoreType getValueIfExists(int row, ScoreType defaultValue) const
-	{
-		if (cellExists(row)) return getValue(row);
-		return defaultValue;
 	}
 
 	ScoreType getValue(int row) const
@@ -210,109 +185,6 @@ public:
 		if (row < WordConfiguration<Word>::WordSize-1) mask = ~(WordConfiguration<Word>::AllOnes << (row + 1));
 		auto value = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & mask) - WordConfiguration<Word>::popcount(VN & mask);
 		return value;
-	}
-
-	void setValue(int row, ScoreType value)
-	{
-		exists |= ((Word)1) << row;
-		assert(!(scoreConfirmed & (((Word)1) << row)));
-		scoreConfirmed |= ((Word)1) << row;
-		if (scoreConfirmed == ((Word)1) << row)
-		{
-			scoreBeforeStart = value + row + 1;
-			if (row < WordConfiguration<Word>::WordSize-1)
-			{
-				VN = ~(WordConfiguration<Word>::AllOnes << (row + 1));
-				VP = WordConfiguration<Word>::AllOnes << (row + 1);
-			}
-			else
-			{
-				VN = WordConfiguration<Word>::AllOnes;
-				VP = WordConfiguration<Word>::AllZeros;
-			}
-			scoreEnd = value + WordConfiguration<Word>::WordSize - row - 1;
-			return;
-		}
-		if (row > 0 && (scoreConfirmed & (((Word)1) << (row-1))))
-		{
-			auto oldscore = scoreEnd - (WordConfiguration<Word>::WordSize - row - 1 - 1);
-			assert(oldscore == getValue(row - 1));
-			assert(value >= oldscore - 1);
-			assert(value <= oldscore + 1);
-			Word mask = ((Word)1) << row;
-			switch (value + 1 - oldscore)
-			{
-				case 0:
-					VN |= mask;
-					VP &= ~mask;
-					scoreEnd -= 2;
-					break;
-				case 1:
-					VN &= ~mask;
-					VP &= ~mask;
-					scoreEnd--;
-					break;
-				case 2:
-					VP |= mask;
-					VN &= ~mask;
-					break;
-			}
-			return;
-		}
-		ScoreType scores[WordConfiguration<Word>::WordSize];
-		scores[0] = scoreBeforeStart + (VP & 1) - (VN & 1);
-		for (int i = 1; i < WordConfiguration<Word>::WordSize; i++)
-		{
-			auto mask = ((Word)1) << i;
-			scores[i] = scores[i-1] + ((VP & mask) ? 1 : 0) - ((VN & mask) ? 1 : 0);
-		}
-		for (int i = 0; i <= row; i++)
-		{
-			scores[i] = std::min(scores[i], value + row - i);
-		}
-		for (int i = row+1; i <= WordConfiguration<Word>::WordSize; i++)
-		{
-			scores[i] = std::min(scores[i], value + i - row);
-		}
-		assert(scores[0] >= scoreBeforeStart - 1);
-		assert(scores[0] <= scoreBeforeStart + 1);
-		switch(scores[0] + 1 - scoreBeforeStart)
-		{
-			case 0:
-				VP &= ~(Word)1;
-				VN |= 1;
-				break;
-			case 1:
-				VP &= ~(Word)1;
-				VN &= ~(Word)1;
-				break;
-			case 2:
-				VP |= 1;
-				VN &= ~(Word)1;
-				break;
-		}
-		for (int i = 1; i <= WordConfiguration<Word>::WordSize; i++)
-		{
-			assert(scores[i] >= scores[i-1] - 1);
-			assert(scores[i] <= scores[i-1] + 1);
-			Word mask = ((Word)1) << i;
-			switch(scores[i] + 1 - scores[i-1])
-			{
-				case 0:
-					VP &= ~mask;
-					VN |= mask;
-					break;
-				case 1:
-					VP &= ~mask;
-					VN &= ~mask;
-					break;
-				case 2:
-					VP |= mask;
-					VN &= ~mask;
-					break;
-			}
-		}
-		scoreEnd = scores[WordConfiguration<Word>::WordSize - 1];
 	}
 
 private:
@@ -343,11 +215,7 @@ private:
 		static_assert(std::is_same<Word, uint64_t>::value);
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
 		WordSlice result;
-		//todo fix:
-		//"currently" this is only called from the bitvector calculation, where every cell always exists
-		//what if it's called from somewhere where cells are missing?
 		result.sliceExists = true;
-		result.exists = WordConfiguration<Word>::AllOnes;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
 		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
@@ -384,8 +252,6 @@ private:
 		{
 			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
 		}
-		result.scoreConfirmed = (leftSmaller & left.scoreConfirmed) | (rightSmaller & right.scoreConfirmed) | (~leftSmaller & ~rightSmaller & (left.scoreConfirmed | right.scoreConfirmed));
-		result.partialConfirmed = (leftSmaller & left.partialConfirmed) | (rightSmaller & right.partialConfirmed) | (~leftSmaller & ~rightSmaller & (left.partialConfirmed | right.partialConfirmed));
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 		return result;
 	}

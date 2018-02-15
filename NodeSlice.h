@@ -19,8 +19,6 @@ public:
 		Word VP;
 		Word VN;
 		uint16_t plusMinScore;
-		Word exists;
-		Word scoreConfirmed;
 		bool sliceExists;
 	};
 	class TinySlice
@@ -307,8 +305,7 @@ public:
 		{
 			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
 			result.scoreEnd = result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN);
-			result.exists = frozenSlices[index].exists;
-			result.scoreConfirmed = frozenSlices[index].scoreConfirmed;
+			result.sliceExists = frozenSlices[index].sliceExists;
 			return result;
 		}
 		else if (frozen == FrozenLastRow)
@@ -316,23 +313,7 @@ public:
 			bool VP = frozenSqrtSlices[index].VPVNLastBit & 1;
 			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
 			Slice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), false };
-			assert(result.exists == 0);
 			if (frozenSqrtSlices[index].VPVNLastBit & 4)
-			{
-				result.exists |= WordConfiguration<Word>::LastBit;
-				assert(result.exists != 0);
-			}
-			if (frozenSqrtSlices[index].VPVNLastBit & 8)
-			{
-				result.scoreConfirmed |= WordConfiguration<Word>::LastBit;
-				assert(result.scoreConfirmed != 0);
-			}
-			if (frozenSqrtSlices[index].VPVNLastBit & 16)
-			{
-				result.partialConfirmed |= WordConfiguration<Word>::LastBit;
-				assert(result.partialConfirmed != 0);
-			}
-			if (frozenSqrtSlices[index].VPVNLastBit & 32)
 			{
 				result.sliceExists = true;
 			}
@@ -362,8 +343,7 @@ public:
 			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
 			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
 			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
-			result.frozenSlices[i].exists = mutableSlices[i].exists;
-			result.frozenSlices[i].scoreConfirmed = mutableSlices[i].scoreConfirmed;
+			result.frozenSlices[i].sliceExists = mutableSlices[i].sliceExists;
 		}
 		return result;
 	}
@@ -384,10 +364,7 @@ public:
 			result.frozenSqrtSlices[i].VPVNLastBit = 0;
 			result.frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
 			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VN >> 62) & 2;
-			result.frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].scoreEndExists() ? 4 : 0;
-			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].scoreConfirmed & WordConfiguration<Word>::LastBit) ? 8 : 0;
-			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].partialConfirmed & WordConfiguration<Word>::LastBit) ? 16 : 0;
-			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].sliceExists) ? 32 : 0;
+			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].sliceExists) ? 4 : 0;
 			assert(mutableSlices[i].scoreEnd >= result.minEndScore);
 			assert(mutableSlices[i].scoreEnd - result.minEndScore < std::numeric_limits<decltype(frozenSqrtSlices[i].plusMinScore)>::max());
 			result.frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - result.minEndScore;
