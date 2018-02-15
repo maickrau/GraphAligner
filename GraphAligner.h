@@ -1958,7 +1958,7 @@ private:
 		nodeslice[index].setValue(row, value);
 	}
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables, ScoreType previousMinScore, int bandwidth) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousMinScore, int bandwidth) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		std::vector<LengthType> currentMinimumIndex;
@@ -1980,19 +1980,22 @@ private:
 		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
 		EqVector EqV {BA, BT, BC, BG};
 
+		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> calculableQueue;
+
 		for (auto node : previousNodes)
 		{
 			if (previousSlice.minScore(node) <= previousMinScore + bandwidth)
 			{
-				calculables.insert(node);
+				calculableQueue.emplace(node, previousSlice.minScore(node));
 			}
 		}
-		assert(calculables.size() != 0);
+		assert(calculableQueue.size() != 0);
 		
 		ScoreType currentMinScoreAtEndRow = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
-		while (calculables.size() > 0)
+		while (calculableQueue.size() > 0)
 		{
-			auto i = calculables.top();
+			auto pair = calculableQueue.top();
+			auto i = pair.node;
 			if (!currentSlice.hasNode(i))
 			{
 				assert(!currentBand[i]);
@@ -2006,7 +2009,7 @@ private:
 				currentBand[i] = true;
 			}
 			assert(currentBand[i]);
-			calculables.pop();
+			calculableQueue.pop();
 			auto oldEnd = currentSlice.node(i).back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 			std::vector<WordSlice> debugOldNode;
@@ -2027,11 +2030,12 @@ private:
 				assertBitvectorConfirmedAreConsistent(debugNewNode[debugi], debugOldNode[debugi]);
 			}
 #endif
-			if (newEnd.minScore() < currentMinScoreAtEndRow + bandwidth && (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN))
+			ScoreType newEndMinScore = newEnd.minScore();
+			if (newEndMinScore < currentMinScoreAtEndRow + bandwidth && (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN))
 			{
 				for (auto neighbor : params.graph.outNeighbors[i])
 				{
-					calculables.insert(neighbor);
+					calculableQueue.emplace(neighbor, newEndMinScore);
 				}
 			}
 #ifndef NDEBUG
@@ -2075,9 +2079,9 @@ private:
 		return result;
 	}
 
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, std::vector<bool>& currentBand, UniqueQueue<LengthType>& calculables, int bandwidth) const
+	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, std::vector<bool>& currentBand, int bandwidth) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, calculables, previousSlice.minScore, bandwidth);
+		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, previousSlice.minScore, bandwidth);
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreIndex = sliceResult.minScoreIndex;
 		slice.minScore = sliceResult.minScore;
@@ -2090,14 +2094,14 @@ private:
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, UniqueQueue<LengthType>& calculables, std::vector<bool>& processed, int bandwidth) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, std::vector<bool>& processed, int bandwidth) const
 	{
 		DPSlice bandTest { &nodesliceMap };
 		assert(sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize);
 		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 		bandTest.correctness = previous.correctness;
 
-		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, calculables, bandwidth);
+		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, bandwidth);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		verifySliceBitvector(sequence, bandTest, previous, bandTest.minScore + bandwidth);
@@ -2133,7 +2137,6 @@ private:
 		std::vector<bool> previousBand;
 		std::vector<bool> currentBand;
 		std::vector<size_t> partOfComponent;
-		UniqueQueue<LengthType> calculables { params.graph.NodeSize() };
 		previousBand.resize(params.graph.NodeSize(), false);
 		currentBand.resize(params.graph.NodeSize(), false);
 		partOfComponent.resize(params.graph.NodeSize(), std::numeric_limits<size_t>::max());
@@ -2170,7 +2173,7 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto timeStart = std::chrono::system_clock::now();
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, processed, bandwidth);
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
@@ -2432,7 +2435,6 @@ private:
 		std::vector<bool> previousBand;
 		std::vector<bool> currentBand;
 		std::vector<size_t> partOfComponent;
-		UniqueQueue<LengthType> calculables { params.graph.NodeSize() };
 		previousBand.resize(params.graph.NodeSize(), false);
 		currentBand.resize(params.graph.NodeSize(), false);
 		partOfComponent.resize(params.graph.NodeSize(), std::numeric_limits<size_t>::max());
@@ -2457,7 +2459,7 @@ private:
 #ifndef NDEBUG
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, calculables, processed, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, processed, bandwidth);
 			assert(result.size() == 0 || newSlice.j == result.back().j + WordConfiguration<Word>::WordSize);
 
 			size_t sliceCells = 0;
