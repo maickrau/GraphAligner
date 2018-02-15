@@ -1578,19 +1578,19 @@ private:
 		return getValueIfExists(params, slice, row, cell, defaultValue, maxScore);
 	}
 
+	static bool cellExists(WordSlice slice, int row, int maxScore)
+	{
+		if (!slice.sliceExists) return false;
+		auto score = slice.getValue(row);
+		return score < maxScore;
+	}
+
 #ifdef EXTRACORRECTNESSASSERTIONS
 
 	template <typename T>
 	T volmin(volatile T& a, T b) const
 	{
 		return std::min((T)a, b);
-	}
-
-	static bool cellExists(WordSlice slice, int row, int maxScore)
-	{
-		if (!slice.sliceExists) return false;
-		auto score = slice.getValue(row);
-		return score < maxScore;
 	}
 
 	void verifySliceBitvector(const std::string& sequence, const DPSlice& current, const DPSlice& previous, int maxScore) const
@@ -1958,6 +1958,25 @@ private:
 		nodeslice[index].setValue(row, value);
 	}
 
+	ScoreType changedMinScore(WordSlice oldSlice, WordSlice newSlice) const
+	{
+		ScoreType oldScore = oldSlice.scoreBeforeStart;
+		ScoreType newScore = newSlice.scoreBeforeStart;
+		Word mask = 1;
+		ScoreType result = std::numeric_limits<ScoreType>::max();
+		if (newScore < oldScore) result = std::min(result, newScore);
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			oldScore += (oldSlice.VP & mask) ? 1 : 0;
+			oldScore -= (oldSlice.VN & mask) ? 1 : 0;
+			newScore += (newSlice.VP & mask) ? 1 : 0;
+			newScore -= (newSlice.VN & mask) ? 1 : 0;
+			if (newScore < oldScore) result = std::min(result, newScore);
+			mask <<= 1;
+		}
+		return result;
+	}
+
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousMinScore, int bandwidth) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
@@ -2030,7 +2049,7 @@ private:
 				assertBitvectorConfirmedAreConsistent(debugNewNode[debugi], debugOldNode[debugi]);
 			}
 #endif
-			ScoreType newEndMinScore = newEnd.minScore();
+			ScoreType newEndMinScore = changedMinScore(oldEnd, newEnd);
 			if (newEndMinScore < currentMinScoreAtEndRow + bandwidth && (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN))
 			{
 				for (auto neighbor : params.graph.outNeighbors[i])
