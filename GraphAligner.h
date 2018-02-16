@@ -112,6 +112,7 @@ private:
 		nodes(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
+		bandwidth(0),
 		cellsProcessed(0),
 		numCells(0)
 		{}
@@ -122,6 +123,7 @@ private:
 		nodes(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
+		bandwidth(0),
 		cellsProcessed(0),
 		numCells(0)
 		{}
@@ -131,6 +133,7 @@ private:
 		std::vector<size_t> nodes;
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
+		int bandwidth;
 		size_t cellsProcessed;
 		size_t numCells;
 		size_t EstimatedMemoryUsage() const
@@ -146,6 +149,7 @@ private:
 			result.nodes = nodes;
 			result.correctness = correctness;
 			result.j = j;
+			result.bandwidth = bandwidth;
 			result.cellsProcessed = cellsProcessed;
 			result.numCells = numCells;
 			return result;
@@ -159,6 +163,7 @@ private:
 			result.nodes = nodes;
 			result.correctness = correctness;
 			result.j = j;
+			result.bandwidth = bandwidth;
 			result.cellsProcessed = cellsProcessed;
 			result.numCells = numCells;
 			return result;
@@ -192,196 +197,194 @@ private:
 		}
 		BacktraceOverride(const Params& params, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices)
 		{
-			//todo fix
-			// assert(slices.size() > 0);
-			// startj = slices[0].j;
-			// endj = slices.back().j;
-			// assert(endj == startj + (slices.size()-1) * WordConfiguration<Word>::WordSize);
-			// items.resize(WordConfiguration<Word>::WordSize * slices.size());
-			// makeTrace(params, sequence, previous, slices);
+			assert(slices.size() > 0);
+			startj = slices[0].j;
+			endj = slices.back().j;
+			assert(endj == startj + (slices.size()-1) * WordConfiguration<Word>::WordSize);
+			items.resize(WordConfiguration<Word>::WordSize * slices.size());
+			makeTrace(params, sequence, previous, slices);
 		};
 		//returns the trace backwards, aka result[0] is at the bottom of the slice and result.back() at the top
 		std::vector<MatrixPosition> GetBacktrace(MatrixPosition start) const
 		{
 			//todo fix
-// 			assert(items.size() > 0);
-// 			assert(items.size() % WordConfiguration<Word>::WordSize == 0);
-// 			assert(items.back().size() > 0);
-// 			assert(items.back()[0].pos.second == start.second);
-// 			size_t currentIndex = -1;
-// 			size_t currentRow = items.size()-1;
-// 			std::vector<MatrixPosition> result;
-// 			for (size_t i = 0; i < items.back().size(); i++)
-// 			{
-// 				if (items.back()[i].pos == start)
-// 				{
-// 					currentIndex = i;
-// 					break;
-// 				}
-// 			}
-// 			assert(currentIndex != -1);
-// #ifdef SLICEVERBOSE
-// 			std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
-// #endif
-// 			while (true)
-// 			{
-// 				auto current = items[currentRow][currentIndex];
-// 				assert(!current.end);
-// 				result.push_back(current.pos);
-// #ifdef SLICEVERBOSE
-// 				if (current.pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
-// 				{
-// 					std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
-// 				}
-// #endif
-// 				size_t nextIndex = current.previousIndex;
-// 				size_t nextRow = current.previousInSameRow ? currentRow : currentRow - 1;
-// 				if (nextRow == -1)
-// 				{
-// 					result.emplace_back(nextIndex, current.pos.second-1);
-// 					break;
-// 				}
-// 				currentIndex = nextIndex;
-// 				currentRow = nextRow;
-// 			}
-// 			return result;
+			assert(items.size() > 0);
+			assert(items.size() % WordConfiguration<Word>::WordSize == 0);
+			assert(items.back().size() > 0);
+			assert(items.back()[0].pos.second == start.second);
+			size_t currentIndex = -1;
+			size_t currentRow = items.size()-1;
+			std::vector<MatrixPosition> result;
+			for (size_t i = 0; i < items.back().size(); i++)
+			{
+				if (items.back()[i].pos == start)
+				{
+					currentIndex = i;
+					break;
+				}
+			}
+			assert(currentIndex != -1);
+#ifdef SLICEVERBOSE
+			std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
+#endif
+			while (true)
+			{
+				auto current = items[currentRow][currentIndex];
+				assert(!current.end);
+				result.push_back(current.pos);
+#ifdef SLICEVERBOSE
+				if (current.pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+				{
+					std::cerr << "2: j " << items[currentRow][currentIndex].pos.second << " score " << items[currentRow][currentIndex].score << std::endl;
+				}
+#endif
+				size_t nextIndex = current.previousIndex;
+				size_t nextRow = current.previousInSameRow ? currentRow : currentRow - 1;
+				if (nextRow == -1)
+				{
+					result.emplace_back(nextIndex, current.pos.second-1);
+					break;
+				}
+				currentIndex = nextIndex;
+				currentRow = nextRow;
+			}
+			return result;
 		}
 		LengthType startj;
 		LengthType endj;
 	private:
-		//todo fix
-		// void addReachableRec(const Params& params, MatrixPosition pos, size_t row, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices, std::vector<std::unordered_map<LengthType, size_t>>& indices)
-		// {
-		// 	assert(slices.size() > 0);
-		// 	assert(row < indices.size());
-		// 	if (indices[row].count(pos.first) == 1) return;
-		// 	size_t size = indices[row].size();
-		// 	indices[row][pos.first] = size;
-		// 	if (row > 0 && row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
-		// 	{
-		// 		size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
-		// 		assert(sliceIndex < slices.size());
-		// 		auto nodeIndex = params.graph.IndexToNode(pos.first);
-		// 		assert(slices[sliceIndex].scores.hasNode(nodeIndex));
-		// 		auto nodeStart = params.graph.NodeStart(nodeIndex);
-		// 		auto offset = pos.first - nodeStart;
-		// 		assert(slices[sliceIndex].scores.node(nodeIndex).size() > offset);
-		// 		if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists()) return;
-		// 	}
-		// 	assert(row == pos.second - slices[0].j);
-		// 	size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
-		// 	assert(sliceIndex < slices.size());
-		// 	MatrixPosition predecessor;
-		// 	if (sliceIndex > 0)
-		// 	{
-		// 		predecessor = pickBacktracePredecessor(params, sequence, slices[sliceIndex], pos, slices[sliceIndex-1]);
-		// 	}
-		// 	else
-		// 	{
-		// 		predecessor = pickBacktracePredecessor(params, sequence, slices[0], pos, previous);
-		// 	}
-		// 	assert(predecessor.second == pos.second || predecessor.second == pos.second-1);
-		// 	if (predecessor.second >= slices[0].j && predecessor.second != -1)
-		// 	{
-		// 		addReachableRec(params, predecessor, predecessor.second - slices[0].j, sequence, previous, slices, indices);
-		// 	}
-		// }
-// 		void makeTrace(const Params& params, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices)
-// 		{
-// 			assert(slices.size() > 0);
-// 			assert(items.size() == WordConfiguration<Word>::WordSize * slices.size());
-// 			std::vector<std::unordered_map<LengthType, size_t>> indexOfPos;
-// 			indexOfPos.resize(items.size());
-// 			size_t endrow = items.size()-1;
-// #ifdef SLICEVERBOSE
-// 			size_t numEndCells = 0;
-// #endif
-// 			for (const auto& pair : slices.back().scores)
-// 			{
-// 				LengthType nodeStart = params.graph.NodeStart(pair.first);
-// 				LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
-// 				for (size_t i = 0; i < pair.second.size(); i++)
-// 				{
-// 					if (pair.second[i].scoreEndExists())
-// 					{
-// #ifdef SLICEVERBOSE
-// 						numEndCells++;
-// #endif
-// 						addReachableRec(params, MatrixPosition { nodeStart+i, endj }, endrow, sequence, previous, slices, indexOfPos);
-// 					}
-// 				}
-// 			}
-// #ifdef SLICEVERBOSE
-// 			std::cerr << " endcells " << numEndCells;
-// #endif
+		void addReachableRec(const Params& params, MatrixPosition pos, size_t row, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices, std::vector<std::unordered_map<LengthType, size_t>>& indices)
+		{
+			assert(slices.size() > 0);
+			assert(row < indices.size());
+			if (indices[row].count(pos.first) == 1) return;
+			size_t size = indices[row].size();
+			indices[row][pos.first] = size;
+			if (row > 0 && row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+			{
+				size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
+				assert(sliceIndex < slices.size());
+				auto nodeIndex = params.graph.IndexToNode(pos.first);
+				assert(slices[sliceIndex].scores.hasNode(nodeIndex));
+				auto nodeStart = params.graph.NodeStart(nodeIndex);
+				auto offset = pos.first - nodeStart;
+				assert(slices[sliceIndex].scores.node(nodeIndex).size() > offset);
+				if (slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEnd >= slices[sliceIndex].minScore + slices[sliceIndex].bandwidth) return;
+			}
+			assert(row == pos.second - slices[0].j);
+			size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
+			assert(sliceIndex < slices.size());
+			MatrixPosition predecessor;
+			if (sliceIndex > 0)
+			{
+				predecessor = pickBacktracePredecessor(params, sequence, slices[sliceIndex], pos, slices[sliceIndex-1]);
+			}
+			else
+			{
+				predecessor = pickBacktracePredecessor(params, sequence, slices[0], pos, previous);
+			}
+			assert(predecessor.second == pos.second || predecessor.second == pos.second-1);
+			if (predecessor.second >= slices[0].j && predecessor.second != -1)
+			{
+				addReachableRec(params, predecessor, predecessor.second - slices[0].j, sequence, previous, slices, indices);
+			}
+		}
+		void makeTrace(const Params& params, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices)
+		{
+			assert(slices.size() > 0);
+			assert(items.size() == WordConfiguration<Word>::WordSize * slices.size());
+			std::vector<std::unordered_map<LengthType, size_t>> indexOfPos;
+			indexOfPos.resize(items.size());
+			size_t endrow = items.size()-1;
+#ifdef SLICEVERBOSE
+			size_t numEndCells = 0;
+#endif
+			for (const auto& pair : slices.back().scores)
+			{
+				LengthType nodeStart = params.graph.NodeStart(pair.first);
+				LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
+				for (size_t i = 0; i < pair.second.size(); i++)
+				{
+					if (pair.second[i].scoreEnd < slices.back().minScore + slices.back().bandwidth)
+					{
+#ifdef SLICEVERBOSE
+						numEndCells++;
+#endif
+						addReachableRec(params, MatrixPosition { nodeStart+i, endj }, endrow, sequence, previous, slices, indexOfPos);
+					}
+				}
+			}
+#ifdef SLICEVERBOSE
+			std::cerr << " endcells " << numEndCells;
+#endif
 
-// 			for (size_t row = items.size()-1; row < items.size(); row--)
-// 			{
-// 				items[row].resize(indexOfPos[row].size(), BacktraceItem {false, 0, MatrixPosition {0, 0}});
-// 				for (auto pair : indexOfPos[row])
-// 				{
-// 					auto w = pair.first;
-// 					auto index = pair.second;
-// 					MatrixPosition pos { w, slices[0].j + row };
-// 					items[row][index].pos = pos;
-// #ifdef SLICEVERBOSE
-// 					if (pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
-// 					{
-// 						auto sliceIndex = row / WordConfiguration<Word>::WordSize;
-// 						auto node = params.graph.IndexToNode(pos.first);
-// 						auto offset = pos.first - params.graph.NodeStart(node);
-// 						assert(sliceIndex < slices.size());
-// 						assert(slices[sliceIndex].scores.hasNode(node));
-// 						items[row][index].score = slices[sliceIndex].scores.node(node)[offset].scoreEnd;
-// 					}
-// #endif
-// 					MatrixPosition predecessor;
-// 					size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
-// 					if (row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
-// 					{
-// 						auto nodeIndex = params.graph.IndexToNode(w);
-// 						auto offset = w - params.graph.NodeStart(nodeIndex);
-// 						assert(slices[sliceIndex].scores.hasNode(nodeIndex));
-// 						if (!slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEndExists())
-// 						{
-// 							items[row][index].end = true;
-// 							continue;
-// 						}
-// 					}
-// 					if (sliceIndex > 0)
-// 					{
-// 						predecessor = pickBacktracePredecessor(params, sequence, slices[sliceIndex], pos, slices[sliceIndex-1]);
-// 					}
-// 					else
-// 					{
-// 						predecessor = pickBacktracePredecessor(params, sequence, slices[0], pos, previous);
-// 					}
-// 					if (predecessor.second == pos.second)
-// 					{
-// 						items[row][index].previousInSameRow = true;
-// 						items[row][index].previousIndex = indexOfPos[row].at(predecessor.first);
-// 					}
-// 					else
-// 					{
-// 						items[row][index].previousInSameRow = false;
-// 						if (row != 0)
-// 						{
-// 							items[row][index].previousIndex = indexOfPos[row-1].at(predecessor.first);
-// 						}
-// 						else
-// 						{
-// 							items[row][index].previousIndex = predecessor.first;
-// 						}
-// 					}
-// 				}
-// #ifndef NDEBUG
-// 				for (size_t i = 0; i < items[row].size(); i++)
-// 				{
-// 					assert(items[row][i].end || items[row][i].pos.first != 0);
-// 				}
-// #endif
-// 			}
-// 		}
+			for (size_t row = items.size()-1; row < items.size(); row--)
+			{
+				items[row].resize(indexOfPos[row].size(), BacktraceItem {false, 0, MatrixPosition {0, 0}});
+				for (auto pair : indexOfPos[row])
+				{
+					auto w = pair.first;
+					auto index = pair.second;
+					MatrixPosition pos { w, slices[0].j + row };
+					items[row][index].pos = pos;
+#ifdef SLICEVERBOSE
+					if (pos.second % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+					{
+						auto sliceIndex = row / WordConfiguration<Word>::WordSize;
+						auto node = params.graph.IndexToNode(pos.first);
+						auto offset = pos.first - params.graph.NodeStart(node);
+						assert(sliceIndex < slices.size());
+						assert(slices[sliceIndex].scores.hasNode(node));
+						items[row][index].score = slices[sliceIndex].scores.node(node)[offset].scoreEnd;
+					}
+#endif
+					MatrixPosition predecessor;
+					size_t sliceIndex = row / WordConfiguration<Word>::WordSize;
+					if (row % WordConfiguration<Word>::WordSize == WordConfiguration<Word>::WordSize - 1)
+					{
+						auto nodeIndex = params.graph.IndexToNode(w);
+						auto offset = w - params.graph.NodeStart(nodeIndex);
+						assert(slices[sliceIndex].scores.hasNode(nodeIndex));
+						if (slices[sliceIndex].scores.node(nodeIndex)[offset].scoreEnd >= slices[sliceIndex].minScore + slices[sliceIndex].bandwidth)
+						{
+							items[row][index].end = true;
+							continue;
+						}
+					}
+					if (sliceIndex > 0)
+					{
+						predecessor = pickBacktracePredecessor(params, sequence, slices[sliceIndex], pos, slices[sliceIndex-1]);
+					}
+					else
+					{
+						predecessor = pickBacktracePredecessor(params, sequence, slices[0], pos, previous);
+					}
+					if (predecessor.second == pos.second)
+					{
+						items[row][index].previousInSameRow = true;
+						items[row][index].previousIndex = indexOfPos[row].at(predecessor.first);
+					}
+					else
+					{
+						items[row][index].previousInSameRow = false;
+						if (row != 0)
+						{
+							items[row][index].previousIndex = indexOfPos[row-1].at(predecessor.first);
+						}
+						else
+						{
+							items[row][index].previousIndex = predecessor.first;
+						}
+					}
+				}
+#ifndef NDEBUG
+				for (size_t i = 0; i < items[row].size(); i++)
+				{
+					assert(items[row][i].end || items[row][i].pos.first != 0);
+				}
+#endif
+			}
+		}
 		std::vector<std::vector<BacktraceItem>> items;
 	};
 	class DPTable
@@ -2118,6 +2121,7 @@ private:
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, std::vector<bool>& currentBand, int bandwidth) const
 	{
 		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, previousSlice.minScore, bandwidth);
+		slice.bandwidth = bandwidth;
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreIndex = sliceResult.minScoreIndex;
 		slice.minScore = sliceResult.minScore;
@@ -2225,16 +2229,15 @@ private:
 			std::cerr << " small endcells " << debugSmallCells;
 #endif
 
-			//todo fix
-			// if (rampUntil == slice && newSlice.alternateMode)
-			// {
-			// 	rampUntil++;
-			// }
-			// if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && !lastSlice.alternateMode)
-			// {
-			// 	rampSlice = lastSlice;
-			// 	rampRedoIndex = slice-1;
-			// }
+			if (rampUntil == slice && newSlice.numCells >= params.BacktraceOverrideCutoff)
+			{
+				rampUntil++;
+			}
+			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && newSlice.numCells < params.BacktraceOverrideCutoff)
+			{
+				rampSlice = lastSlice;
+				rampRedoIndex = slice-1;
+			}
 			assert(newSlice.j == lastSlice.j + WordConfiguration<Word>::WordSize);
 
 			realCells += newSlice.numCells;
@@ -2323,51 +2326,50 @@ private:
 				continue;
 			}
 
-			//todo fix
-// 			if (!backtraceOverriding && newSlice.alternateMode && !lastSlice.alternateMode)
-// 			{
-// #ifdef SLICEVERBOSE
-// 				std::cerr << " start backtrace override";
-// #endif
-// 				assert(!lastSlice.alternateMode);
-// 				backtraceOverridePreslice = lastSlice;
-// 				backtraceOverriding = true;
-// 				backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
-// 			}
-// 			else if (backtraceOverriding)
-// 			{
-// 				if (!newSlice.alternateMode)
-// 				{
-// #ifdef SLICEVERBOSE
-// 					std::cerr << " end backtrace override";
-// #endif
-// 					assert(lastSlice.j == backtraceOverrideTemps.back().j);
-// 					assert(backtraceOverrideTemps.size() > 0);
-// 					result.backtraceOverrides.emplace_back(params, sequence, backtraceOverridePreslice, backtraceOverrideTemps);
-// 					backtraceOverriding = false;
-// 					while (result.slices.size() > 0 && result.slices.back().j >= result.backtraceOverrides.back().startj && result.slices.back().j <= result.backtraceOverrides.back().endj)
-// 					{
-// 						result.slices.pop_back();
-// 					}
-// 					result.slices.push_back(lastSlice);
-// #ifdef SLICEVERBOSE
-// 					std::cerr << " push slice j " << lastSlice.j;
-// #endif
-// 					storeSlice = newSlice.getFrozenSqrtEndScores();
-// 					//empty memory
-// 					{
-// 						decltype(backtraceOverrideTemps) tmp;
-// 						std::swap(backtraceOverrideTemps, tmp);
-// 					}
-// 				}
-// 				else
-// 				{
-// #ifdef SLICEVERBOSE
-// 					std::cerr << " continue backtrace override";
-// #endif
-// 					backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
-// 				}
-// 			}
+			if (!backtraceOverriding && newSlice.numCells >= params.BacktraceOverrideCutoff)
+			{
+#ifdef SLICEVERBOSE
+				std::cerr << " start backtrace override";
+#endif
+				assert(!lastSlice.numCells < params.BacktraceOverrideCutoff);
+				backtraceOverridePreslice = lastSlice;
+				backtraceOverriding = true;
+				backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
+			}
+			else if (backtraceOverriding)
+			{
+				if (newSlice.numCells < params.BacktraceOverrideCutoff)
+				{
+#ifdef SLICEVERBOSE
+					std::cerr << " end backtrace override";
+#endif
+					assert(lastSlice.j == backtraceOverrideTemps.back().j);
+					assert(backtraceOverrideTemps.size() > 0);
+					result.backtraceOverrides.emplace_back(params, sequence, backtraceOverridePreslice, backtraceOverrideTemps);
+					backtraceOverriding = false;
+					while (result.slices.size() > 0 && result.slices.back().j >= result.backtraceOverrides.back().startj && result.slices.back().j <= result.backtraceOverrides.back().endj)
+					{
+						result.slices.pop_back();
+					}
+					result.slices.push_back(lastSlice);
+#ifdef SLICEVERBOSE
+					std::cerr << " push slice j " << lastSlice.j;
+#endif
+					storeSlice = newSlice.getFrozenSqrtEndScores();
+					//empty memory
+					{
+						decltype(backtraceOverrideTemps) tmp;
+						std::swap(backtraceOverrideTemps, tmp);
+					}
+				}
+				else
+				{
+#ifdef SLICEVERBOSE
+					std::cerr << " continue backtrace override";
+#endif
+					backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
+				}
+			}
 #ifdef SLICEVERBOSE
 			std::cerr << std::endl;
 #endif
