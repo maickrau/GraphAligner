@@ -424,12 +424,12 @@ template <typename T>
 class NodeSlice
 {
 public:
-	using MapItem = std::tuple<size_t, size_t, int>;
+	using MapItem = std::tuple<size_t, size_t, int, size_t>;
 	using Container = WordContainer<size_t, int, uint64_t>;
 	using View = Container::ContainerView;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, View>>
 	{
-		using map_iterator = typename std::unordered_map<size_t, std::tuple<size_t, size_t, int>>::iterator;
+		using map_iterator = typename std::unordered_map<size_t, MapItem>::iterator;
 	public:
 		NodeSliceIterator(NodeSlice* slice, map_iterator pos) :
 		slice(slice),
@@ -502,7 +502,7 @@ public:
 	};
 	class NodeSliceConstIterator : std::iterator<std::forward_iterator_tag, const std::pair<size_t, View>>
 	{
-		using map_iterator = typename std::unordered_map<size_t, std::tuple<size_t, size_t, int>>::const_iterator;
+		using map_iterator = typename std::unordered_map<size_t, MapItem>::const_iterator;
 	public:
 		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos) :
 		slice(slice),
@@ -570,7 +570,7 @@ public:
 		assert(vectorMap != nullptr);
 		for (auto index : activeVectorMapIndices)
 		{
-			(*vectorMap)[index] = std::make_tuple(0, 0, 0);
+			(*vectorMap)[index] = std::make_tuple(0, 0, 0, 0);
 		}
 		activeVectorMapIndices.clear();
 	}
@@ -584,13 +584,13 @@ public:
 		{
 			assert(nodeIndex < vectorMap->size());
 			assert(std::get<0>((*vectorMap)[nodeIndex]) == std::get<1>((*vectorMap)[nodeIndex]));
-			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0, size };
 			activeVectorMapIndices.push_back(nodeIndex);
 		}
 		else
 		{
 			assert(nodes.find(nodeIndex) == nodes.end());
-			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0 };
+			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size };
 		}
 		slices.resize(slices.size() + size);
 	}
@@ -666,6 +666,33 @@ public:
 		else
 		{
 			std::get<2>(nodes[nodeIndex]) = score;
+		}
+	}
+	size_t startIndex(size_t nodeIndex) const
+	{
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]));
+			return std::get<3>((*vectorMap)[nodeIndex]);
+		}
+		else
+		{
+			auto found = nodes.find(nodeIndex);
+			assert(found != nodes.end());
+			return std::get<3>(found->second);
+		}
+	}
+	void setStartIndex(size_t nodeIndex, size_t index)
+	{
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			std::get<3>((*vectorMap)[nodeIndex]) = index;
+		}
+		else
+		{
+			std::get<3>(nodes[nodeIndex]) = index;
 		}
 	}
 	size_t size() const
