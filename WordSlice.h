@@ -160,17 +160,11 @@ public:
 
 	ScoreType minScore() const
 	{
-		//todo fix
-		ScoreType minScore = std::numeric_limits<ScoreType>::max();
-		ScoreType scoreHere = scoreBeforeStart;
-		for (int i = 0; i < 64; i++)
-		{
-			Word mask = ((Word)1) << i;
-			scoreHere += (VP & mask) ? 1 : 0;
-			scoreHere -= (VN & mask) ? 1 : 0;
-			minScore = std::min(minScore, scoreHere);
-		}
-		return minScore;
+		auto result = minScoreLogW();
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(result == minScoreCellByCell());
+#endif
+		return result;
 	}
 
 	WordSlice mergeWith(const WordSlice& other) const
@@ -189,6 +183,52 @@ public:
 
 private:
 
+#ifdef EXTRACORRECTNESSASSERTIONS
+	ScoreType minScoreCellByCell() const
+	{
+		ScoreType minScore = std::numeric_limits<ScoreType>::max();
+		ScoreType scoreHere = scoreBeforeStart;
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			Word mask = ((Word)1) << i;
+			scoreHere += (VP & mask) ? 1 : 0;
+			scoreHere -= (VN & mask) ? 1 : 0;
+			minScore = std::min(minScore, scoreHere);
+		}
+		return minScore;
+	}
+#endif
+
+	ScoreType minScoreLogW() const
+	{
+		if (VP == WordConfiguration<Word>::AllOnes) return scoreBeforeStart + 1;
+		if (VN == WordConfiguration<Word>::AllOnes) return scoreEnd;
+		Word tmpVP = VP;
+		Word tmpVN = VN;
+		uint64_t chunkValue = 0x1010101010101010 + (tmpVP & WordConfiguration<Word>::LSBMask) - (tmpVN & WordConfiguration<Word>::LSBMask);
+		uint64_t chunkMin = chunkValue;
+		for (int i = 1; i < 8; i++)
+		{
+			tmpVP >>= 1;
+			tmpVN >>= 1;
+			chunkValue += tmpVP & WordConfiguration<Word>::LSBMask;
+			chunkValue -= tmpVN & WordConfiguration<Word>::LSBMask;
+			assert((chunkValue & 0x2020202020202020) == 0);
+			uint64_t diff = 0x2020202020202020 + chunkMin - chunkValue;
+			uint64_t smallerChunk = ((diff & 0x2020202020202020) >> 5) * 0x0F;
+			chunkMin = chunkMin - (diff & smallerChunk);
+		}
+		Word VPVN = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(VP), 0), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(VN), 0));
+		ScoreType result = (chunkMin & 0xFF) - 16;
+		for (int i = 1; i < 8; i++)
+		{
+			VPVN >>= 8;
+			chunkMin >>= 8;
+			ScoreType value = (chunkMin & 0xFF) - 16 + (VPVN & 0x7F) - (VPVN & 0x80);
+			result = std::min(result, value);
+		}
+		return result + scoreBeforeStart;
+	}
 
 	static uint64_t bytePrefixSums(uint64_t value, int addition)
 	{
