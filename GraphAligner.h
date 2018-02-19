@@ -418,7 +418,7 @@ public:
 	nodesliceMap(),
 	params(params)
 	{
-		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0, 0});
+		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0, 0, 0});
 	}
 	
 	// AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence) const
@@ -1129,7 +1129,7 @@ private:
 	class NodeWithPriority
 	{
 	public:
-		NodeWithPriority(LengthType node, size_t offset, int priority) : node(node), offset(offset), priority(priority) {}
+		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
 		bool operator>(const NodeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -1140,6 +1140,7 @@ private:
 		}
 		LengthType node;
 		size_t offset;
+		size_t endOffset;
 		int priority;
 	};
 
@@ -1445,7 +1446,7 @@ private:
 #endif
 	}
 
-	NodeCalculationResult calculateNode(size_t i, size_t j, size_t startIndex, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ScoreType previousSliceQuitScore, ScoreType quitScore, int bandwidth) const
+	NodeCalculationResult calculateNode(size_t i, size_t j, size_t startIndex, size_t endIndex, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ScoreType previousSliceQuitScore, ScoreType quitScore, int bandwidth) const
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
@@ -1549,7 +1550,7 @@ private:
 #endif
 
 		int timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
-		if (timeUntilNextScoreCheck < 0)
+		if (endIndex <= startIndex && timeUntilNextScoreCheck < 0)
 		{
 			result.cellsProcessed = 1;
 			return result;
@@ -1600,7 +1601,7 @@ private:
 #endif
 
 			timeUntilNextScoreCheck--;
-			if (timeUntilNextScoreCheck < 0)
+			if (endIndex <= w && timeUntilNextScoreCheck < 0)
 			{
 				timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
 				if (timeUntilNextScoreCheck < 0)
@@ -2050,7 +2051,7 @@ private:
 		{
 			if (previousSlice.minScore(node) <= previousQuitScore)
 			{
-				calculableQueue.emplace(node, previousSlice.startIndex(node), previousSlice.minScore(node));
+				calculableQueue.emplace(node, previousSlice.startIndex(node), previousSlice.endIndex(node), previousSlice.minScore(node));
 			}
 		}
 		assert(calculableQueue.size() != 0);
@@ -2062,6 +2063,7 @@ private:
 			if (pair.priority > currentMinScoreAtEndRow + bandwidth) break;
 			auto i = pair.node;
 			size_t offset = pair.offset;
+			size_t endOffset = pair.endOffset;
 			if (!currentSlice.hasNode(i))
 			{
 				assert(!currentBand[i]);
@@ -2086,7 +2088,7 @@ private:
 				debugOldNode.push_back(debugNode[ii]);
 			}
 #endif
-			auto nodeCalc = calculateNode(i, j, offset, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand, previousQuitScore, currentMinScoreAtEndRow + bandwidth, bandwidth);
+			auto nodeCalc = calculateNode(i, j, offset, endOffset, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand, previousQuitScore, currentMinScoreAtEndRow + bandwidth, bandwidth);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 			auto newEnd = currentSlice.node(i).back();
@@ -2102,7 +2104,7 @@ private:
 			{
 				for (auto neighbor : params.graph.outNeighbors[i])
 				{
-					calculableQueue.emplace(neighbor, 0, newEndMinScore);
+					calculableQueue.emplace(neighbor, 0, 0, newEndMinScore);
 				}
 			}
 #ifndef NDEBUG
@@ -2153,6 +2155,7 @@ private:
 		for (auto node : slice)
 		{
 			size_t startOffset = -1;
+			size_t endOffset = -1;
 #ifndef NDEBUG
 			ScoreType debugNodeMinScore = std::numeric_limits<ScoreType>::max();
 #endif
@@ -2182,10 +2185,12 @@ private:
 				else if (cell.scoreEnd <= minScore + bandwidth)
 				{
 					if (startOffset == -1) startOffset = i;
+					endOffset = i;
 				}
 			}
 			assert(startOffset != -1 || debugNodeMinScore > minScore + bandwidth);
 			slice.setStartIndex(node.first, startOffset);
+			slice.setEndIndex(node.first, endOffset);
 		}
 #ifdef SLICEVERBOSE
 		std::cerr << "useless cells " << uselessCells << " ";

@@ -426,7 +426,7 @@ template <typename T>
 class NodeSlice
 {
 public:
-	using MapItem = std::tuple<size_t, size_t, int, size_t>;
+	using MapItem = std::tuple<size_t, size_t, int, size_t, size_t>;
 	using Container = WordContainer<size_t, int, uint64_t>;
 	using View = Container::ContainerView;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, View>>
@@ -572,7 +572,7 @@ public:
 		assert(vectorMap != nullptr);
 		for (auto index : activeVectorMapIndices)
 		{
-			(*vectorMap)[index] = std::make_tuple(0, 0, 0, 0);
+			(*vectorMap)[index] = std::make_tuple(0, 0, 0, 0, 0);
 		}
 		activeVectorMapIndices.clear();
 	}
@@ -586,13 +586,13 @@ public:
 		{
 			assert(nodeIndex < vectorMap->size());
 			assert(std::get<0>((*vectorMap)[nodeIndex]) == std::get<1>((*vectorMap)[nodeIndex]));
-			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0, size };
+			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
 			activeVectorMapIndices.push_back(nodeIndex);
 		}
 		else
 		{
 			assert(nodes.find(nodeIndex) == nodes.end());
-			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size };
+			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
 		}
 		slices.resize(slices.size() + size);
 	}
@@ -695,6 +695,33 @@ public:
 		else
 		{
 			std::get<3>(nodes[nodeIndex]) = index;
+		}
+	}
+	size_t endIndex(size_t nodeIndex) const
+	{
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			assert(std::get<0>((*vectorMap)[nodeIndex]) != std::get<1>((*vectorMap)[nodeIndex]));
+			return std::get<4>((*vectorMap)[nodeIndex]);
+		}
+		else
+		{
+			auto found = nodes.find(nodeIndex);
+			assert(found != nodes.end());
+			return std::get<4>(found->second);
+		}
+	}
+	void setEndIndex(size_t nodeIndex, size_t index)
+	{
+		if (vectorMap != nullptr)
+		{
+			assert(nodeIndex < vectorMap->size());
+			std::get<4>((*vectorMap)[nodeIndex]) = index;
+		}
+		else
+		{
+			std::get<4>(nodes[nodeIndex]) = index;
 		}
 	}
 	size_t size() const
