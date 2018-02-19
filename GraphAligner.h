@@ -1548,7 +1548,8 @@ private:
 		slice[startIndex].debugCalcCount = oldWordSlice.debugCalcCount+1;
 #endif
 
-		if (currentWordSlice.minScore() > quitScore)
+		int timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
+		if (timeUntilNextScoreCheck < 0)
 		{
 			result.cellsProcessed = 1;
 			return result;
@@ -1598,10 +1599,15 @@ private:
 			slice[w].debugCalcCount = oldWordSlice.debugCalcCount+1;
 #endif
 
-			if (currentWordSlice.minScore() > quitScore)
+			timeUntilNextScoreCheck--;
+			if (timeUntilNextScoreCheck < 0)
 			{
-				result.cellsProcessed = w - startIndex + 1;
-				return result;
+				timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
+				if (timeUntilNextScoreCheck < 0)
+				{
+					result.cellsProcessed = w - startIndex + 1;
+					return result;
+				}
 			}
 			if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 			{

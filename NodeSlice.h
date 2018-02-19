@@ -20,6 +20,7 @@ public:
 		Word VN;
 		uint16_t plusMinScore;
 		bool sliceExists;
+		int8_t minPlusEndScore;
 	};
 	class TinySlice
 	{
@@ -304,7 +305,7 @@ public:
 		if (frozen == FrozenScores)
 		{
 			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
-			result.scoreEnd = result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN);
+			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
 			result.sliceExists = frozenSlices[index].sliceExists;
 			return result;
 		}
@@ -343,6 +344,7 @@ public:
 			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
 			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
 			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
+			result.frozenSlices[i].minPlusEndScore = mutableSlices[i].scoreEnd - mutableSlices[i].scoreBeforeStart;
 			result.frozenSlices[i].sliceExists = mutableSlices[i].sliceExists;
 		}
 		return result;
