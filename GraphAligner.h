@@ -1544,6 +1544,9 @@ private:
 			currentWordSlice = currentWordSlice.mergeWith(oldWordSlice);
 		}
 		slice[startIndex] = currentWordSlice;
+#ifdef SLICEVERBOSE
+		slice[startIndex].debugCalcCount = oldWordSlice.debugCalcCount+1;
+#endif
 
 		if (currentWordSlice.minScore() > quitScore)
 		{
@@ -1591,6 +1594,9 @@ private:
 			}
 
 			slice[w] = currentWordSlice;
+#ifdef SLICEVERBOSE
+			slice[w].debugCalcCount = oldWordSlice.debugCalcCount+1;
+#endif
 
 			if (currentWordSlice.minScore() > quitScore)
 			{
@@ -2010,25 +2016,6 @@ private:
 	}
 #endif
 
-	ScoreType changedMinScore(WordSlice oldSlice, WordSlice newSlice) const
-	{
-		ScoreType oldScore = oldSlice.scoreBeforeStart;
-		ScoreType newScore = newSlice.scoreBeforeStart;
-		Word mask = 1;
-		ScoreType result = std::numeric_limits<ScoreType>::max();
-		if (newScore < oldScore) result = std::min(result, newScore);
-		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
-		{
-			oldScore += (oldSlice.VP & mask) ? 1 : 0;
-			oldScore -= (oldSlice.VN & mask) ? 1 : 0;
-			newScore += (newSlice.VP & mask) ? 1 : 0;
-			newScore -= (newSlice.VN & mask) ? 1 : 0;
-			if (newScore < oldScore) result = std::min(result, newScore);
-			mask <<= 1;
-		}
-		return result;
-	}
-
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousQuitScore, int bandwidth) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
@@ -2104,7 +2091,7 @@ private:
 				assertBitvectorConfirmedAreConsistent(debugNewNode[debugi], debugOldNode[debugi], currentMinScoreAtEndRow + bandwidth);
 			}
 #endif
-			ScoreType newEndMinScore = changedMinScore(oldEnd, newEnd);
+			ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
 			if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth && (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN))
 			{
 				for (auto neighbor : params.graph.outNeighbors[i])
@@ -2151,6 +2138,7 @@ private:
 	{
 #ifdef SLICEVERBOSE
 		size_t uselessCells = 0;
+		size_t doubleCalcs = 0;
 #endif
 		ScoreType uninitScore = std::numeric_limits<ScoreType>::max();
 		ScoreType minScore = sliceCalc.minScore;
@@ -2165,10 +2153,16 @@ private:
 			for (size_t i = 0; i < node.second.size(); i++)
 			{
 				WordSlice& cell = node.second[i];
+#ifdef SLICEVERBOSE
+				if (cell.debugCalcCount > 1)
+				{
+					doubleCalcs += cell.debugCalcCount - 1;
+				}
+#endif
 #ifndef NDEBUG
 				debugNodeMinScore = std::min(debugNodeMinScore, cell.scoreEnd);
 #endif
-				if (cell.minScore() > minScore + bandwidth)
+				if (cell.scoreBeforeStart == uninitScore || cell.minScore() > minScore + bandwidth)
 				{
 #ifdef SLICEVERBOSE
 					if (cell.scoreEnd != uninitScore) uselessCells++;
@@ -2189,6 +2183,7 @@ private:
 		}
 #ifdef SLICEVERBOSE
 		std::cerr << "useless cells " << uselessCells << " ";
+		std::cerr << "doublecounts " << doubleCalcs << " ";
 #endif
 	}
 
