@@ -2640,9 +2640,10 @@ private:
 	{
 		DPSlice result;
 		result.j = -WordConfiguration<Word>::WordSize;
-		result.scores.addNode(nodeIndex, params.graph.NodeEnd(nodeIndex) - params.graph.NodeStart(nodeIndex));
+		result.scores.addNode(nodeIndex, params.graph.NodeLength(nodeIndex));
 		result.scores.setMinScore(nodeIndex, 0);
 		result.scores.setStartIndex(nodeIndex, 0);
+		result.scores.setEndIndex(nodeIndex, params.graph.NodeLength(nodeIndex));
 		result.bandwidth = 1;
 		result.minScore = 0;
 		result.minScoreIndex.push_back(params.graph.NodeEnd(nodeIndex) - 1);
@@ -2653,7 +2654,7 @@ private:
 			slice[i] = {0, 0, 0, 0, false};
 			slice[i].sliceExists = true;
 		}
-		return result;
+		return result.getFrozenSqrtEndScores();
 	}
 
 	int getSamplingFrequency(size_t sequenceLen) const
