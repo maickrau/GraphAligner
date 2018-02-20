@@ -782,6 +782,7 @@ public:
 	NodeSlice getFrozenSqrtEndScores() const
 	{
 		NodeSlice result;
+		assert(vectorMap != nullptr);
 		result.slices = slices.getFrozenSqrtEndScores();
 		if (vectorMap != nullptr)
 		{
@@ -799,6 +800,7 @@ public:
 	NodeSlice getFrozenScores() const
 	{
 		NodeSlice result;
+		assert(vectorMap != nullptr);
 		result.slices = slices.getFrozenScores();
 		if (vectorMap != nullptr)
 		{

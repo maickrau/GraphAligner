@@ -1274,7 +1274,7 @@ private:
 			{
 				WordSlice neighborSlice = currentSlice.node(neighbor).back();
 				WordSlice upNeighborSlice = previousSlice.node(neighbor).back();
-				if (neighborSlice.sliceExists && neighborSlice.minScore() <= quitScore && upNeighborSlice.sliceExists && upNeighborSlice.scoreEnd <= previousSliceQuitScore)
+				if (neighborSlice.sliceExists && neighborSlice.minScore <= quitScore && upNeighborSlice.sliceExists && upNeighborSlice.scoreEnd <= previousSliceQuitScore)
 				{
 					assertSliceCorrectness(neighborSlice, upNeighborSlice, previousBand[neighbor]);
 				}
@@ -1298,7 +1298,7 @@ private:
 			if (currentBand[neighbor])
 			{
 				auto possiblePrevious = currentSlice.node(neighbor).back();
-				if (possiblePrevious.sliceExists && possiblePrevious.minScore() <= quitScore)
+				if (possiblePrevious.sliceExists && possiblePrevious.minScore <= quitScore)
 				{
 					if (previous.sliceExists)
 					{
@@ -1357,7 +1357,7 @@ private:
 	{
 		for (auto neighbor : params.graph.inNeighbors[nodeIndex])
 		{
-			if (currentBand[neighbor] && currentSlice.node(neighbor).back().sliceExists && currentSlice.node(neighbor).back().minScore() <= quitScore) return false;
+			if (currentBand[neighbor] && currentSlice.node(neighbor).back().sliceExists && currentSlice.node(neighbor).back().minScore <= quitScore) return false;
 			if (previousBand[neighbor] && previousSlice.node(neighbor).back().sliceExists && previousSlice.node(neighbor).back().scoreEnd <= previousSliceQuitScore) return false;
 		}
 		return true;
@@ -1544,12 +1544,13 @@ private:
 		{
 			currentWordSlice = currentWordSlice.mergeWith(oldWordSlice);
 		}
+		currentWordSlice.calcMinScore();
 		slice[startIndex] = currentWordSlice;
 #ifdef SLICEVERBOSE
 		slice[startIndex].debugCalcCount = oldWordSlice.debugCalcCount+1;
 #endif
 
-		int timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
+		int timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore;
 		if (endIndex <= startIndex && timeUntilNextScoreCheck < 0)
 		{
 			result.cellsProcessed = 1;
@@ -1563,7 +1564,8 @@ private:
 
 		WordSlice previousWordSlice = currentWordSlice;
 		WordSlice upPreviousWordSlice = upWordSlice;
-		for (LengthType w = startIndex+1; w < params.graph.NodeEnd(i) - params.graph.NodeStart(i); w++)
+		size_t nodeSize = params.graph.NodeEnd(i) - params.graph.NodeStart(i);
+		for (LengthType w = startIndex+1; w < nodeSize; w++)
 		{
 			char graphChar = params.graph.NodeSequences(nodeStart+w);
 			upWordSlice = oldSlice[w];
@@ -1595,20 +1597,21 @@ private:
 				result.minScoreIndex.push_back(nodeStart + w);
 			}
 
+			timeUntilNextScoreCheck--;
+			if (timeUntilNextScoreCheck < 0 || w == nodeSize-1)
+			{
+				currentWordSlice.calcMinScore();
+				timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore;
+			}
 			slice[w] = currentWordSlice;
 #ifdef SLICEVERBOSE
 			slice[w].debugCalcCount = oldWordSlice.debugCalcCount+1;
 #endif
 
-			timeUntilNextScoreCheck--;
 			if (endIndex <= w && timeUntilNextScoreCheck < 0)
 			{
-				timeUntilNextScoreCheck = quitScore - currentWordSlice.minScore();
-				if (timeUntilNextScoreCheck < 0)
-				{
-					result.cellsProcessed = w - startIndex + 1;
-					return result;
-				}
+				result.cellsProcessed = w - startIndex + 1;
+				return result;
 			}
 			if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 			{
@@ -1626,7 +1629,7 @@ private:
 			previousWordSlice = currentWordSlice;
 			upPreviousWordSlice = upWordSlice;
 		}
-		result.cellsProcessed = (params.graph.NodeEnd(i) - params.graph.NodeStart(i));
+		result.cellsProcessed = nodeSize - startIndex;
 		return result;
 	}
 
@@ -2099,12 +2102,15 @@ private:
 				assertBitvectorConfirmedAreConsistent(debugNewNode[debugi], debugOldNode[debugi], currentMinScoreAtEndRow + bandwidth);
 			}
 #endif
-			ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
-			if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth && (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN))
+			if (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
-				for (auto neighbor : params.graph.outNeighbors[i])
+				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
+				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
 				{
-					calculableQueue.emplace(neighbor, 0, 0, newEndMinScore);
+					for (auto neighbor : params.graph.outNeighbors[i])
+					{
+						calculableQueue.emplace(neighbor, 0, 0, newEndMinScore);
+					}
 				}
 			}
 #ifndef NDEBUG
@@ -2171,7 +2177,7 @@ private:
 #ifndef NDEBUG
 				debugNodeMinScore = std::min(debugNodeMinScore, cell.scoreEnd);
 #endif
-				if (cell.scoreBeforeStart == uninitScore || cell.minScore() > minScore + bandwidth)
+				if (cell.scoreBeforeStart == uninitScore || cell.minScore > minScore+bandwidth)
 				{
 #ifdef SLICEVERBOSE
 					if (cell.scoreEnd != uninitScore) uselessCells++;

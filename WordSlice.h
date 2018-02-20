@@ -141,7 +141,8 @@ public:
 	scoreEnd(0),
 	scoreBeforeStart(0),
 	scoreBeforeExists(false),
-	sliceExists(false)
+	sliceExists(false),
+	minScore(-1)
 #ifdef SLICEVERBOSE
 	,debugCalcCount(0)
 #endif
@@ -152,7 +153,8 @@ public:
 	scoreEnd(scoreEnd),
 	scoreBeforeStart(scoreBeforeStart),
 	scoreBeforeExists(scoreBeforeExists),
-	sliceExists(false)
+	sliceExists(false),
+	minScore(-1)
 #ifdef SLICEVERBOSE
 	,debugCalcCount(0)
 #endif
@@ -161,25 +163,24 @@ public:
 	Word VN;
 	ScoreType scoreEnd;
 	ScoreType scoreBeforeStart;
+	ScoreType minScore;
 	bool scoreBeforeExists;
 	bool sliceExists;
 #ifdef SLICEVERBOSE
 	int debugCalcCount;
 #endif
 
-	ScoreType minScore() const
+	void calcMinScore()
 	{
-		// auto result = minScoreLogW();
-		auto result = minScoreLocalMinima();
+		minScore = minScoreLocalMinima();
 #ifdef EXTRACORRECTNESSASSERTIONS
-		assert(result == minScoreCellByCell());
+		assert(minScore == minScoreCellByCell());
 #endif
-		return result;
 	}
 
 	ScoreType changedMinScore(WordSlice other) const
 	{
-		if (other.scoreBeforeStart == std::numeric_limits<ScoreType>::max()) return std::min(scoreBeforeStart, minScore());
+		if (other.scoreBeforeStart == std::numeric_limits<ScoreType>::max()) return std::min(scoreBeforeStart, minScore);
 		auto result = changedMinScoreLocalMinima(other);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(result == changedMinScoreCellByCell(other));
@@ -237,6 +238,32 @@ private:
 		return minScore;
 	}
 #endif
+
+	bool minScoreLocalMinimaSmallerThan(ScoreType score) const
+	{
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word possibleLocalMinima = (VP & (VN - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
+		if (scoreBeforeStart + (VP & 1) - (VN & 1) <= score) return true;
+		//the score is inited to the first cell at the start
+		possibleLocalMinima &= ~((Word)1);
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			if (scoreHere <= score)
+			{
+				scoreHere += WordConfiguration<Word>::popcount(VP & currentMinimumMask);
+				if (scoreHere <= score) return true;
+			}
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return false;
+	}
 
 	ScoreType minScoreLocalMinima() const
 	{
