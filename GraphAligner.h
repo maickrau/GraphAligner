@@ -2352,11 +2352,11 @@ private:
 			std::cerr << " small endcells " << debugSmallCells;
 #endif
 
-			if (rampUntil == slice && newSlice.numCells >= params.BacktraceOverrideCutoff)
+			if (rampUntil == slice && newSlice.cellsProcessed >= params.BacktraceOverrideCutoff)
 			{
 				rampUntil++;
 			}
-			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && newSlice.numCells < params.BacktraceOverrideCutoff)
+			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && newSlice.cellsProcessed < params.BacktraceOverrideCutoff)
 			{
 				rampSlice = lastSlice;
 				rampRedoIndex = slice-1;
@@ -2449,19 +2449,19 @@ private:
 				continue;
 			}
 
-			if (!backtraceOverriding && newSlice.numCells >= params.BacktraceOverrideCutoff)
+			if (!backtraceOverriding && newSlice.cellsProcessed >= params.BacktraceOverrideCutoff)
 			{
 #ifdef SLICEVERBOSE
 				std::cerr << " start backtrace override";
 #endif
-				assert(!lastSlice.numCells < params.BacktraceOverrideCutoff);
+				assert(!lastSlice.cellsProcessed < params.BacktraceOverrideCutoff);
 				backtraceOverridePreslice = lastSlice;
 				backtraceOverriding = true;
 				backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
 			}
 			else if (backtraceOverriding)
 			{
-				if (newSlice.numCells < params.BacktraceOverrideCutoff)
+				if (newSlice.cellsProcessed < params.BacktraceOverrideCutoff)
 				{
 #ifdef SLICEVERBOSE
 					std::cerr << " end backtrace override";
