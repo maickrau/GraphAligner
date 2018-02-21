@@ -25,6 +25,7 @@ public:
 	//positions of the least significant bits for each chunk
 	static constexpr uint64_t LSBMask = 0x0101010101010101;
 
+#ifdef NOBUILTINPOPCOUNT
 	static int popcount(uint64_t x)
 	{
 		//https://en.wikipedia.org/wiki/Hamming_weight
@@ -33,6 +34,14 @@ public:
 		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
 		return (x * 0x0101010101010101) >> 56;
 	}
+#else
+	static int popcount(uint64_t x)
+	{
+		//https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gcc/X86-Built-in-Functions.html
+		return __builtin_popcountll(x);
+	}
+#endif
+
 
 	static uint64_t ChunkPopcounts(uint64_t value)
 	{
