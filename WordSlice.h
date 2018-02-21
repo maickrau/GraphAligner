@@ -25,6 +25,7 @@ public:
 	//positions of the least significant bits for each chunk
 	static constexpr uint64_t LSBMask = 0x0101010101010101;
 
+#ifdef NOBUILTINPOPCOUNT
 	static int popcount(uint64_t x)
 	{
 		//https://en.wikipedia.org/wiki/Hamming_weight
@@ -33,6 +34,14 @@ public:
 		x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
 		return (x * 0x0101010101010101) >> 56;
 	}
+#else
+	static int popcount(uint64_t x)
+	{
+		//https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gcc/X86-Built-in-Functions.html
+		return __builtin_popcountll(x);
+	}
+#endif
+
 
 	static uint64_t ChunkPopcounts(uint64_t value)
 	{
@@ -131,39 +140,6 @@ public:
 	}
 };
 
-class RowConfirmation
-{
-public:
-	RowConfirmation(char rows, bool partial) : rows(rows), partial(partial)
-	{};
-	char rows;
-	bool partial;
-	bool operator>(const RowConfirmation& other) const
-	{
-		return rows > other.rows || (rows == other.rows && partial && !other.partial);
-	}
-	bool operator<(const RowConfirmation& other) const
-	{
-		return rows < other.rows || (rows == other.rows && !partial && other.partial);
-	}
-	bool operator==(const RowConfirmation& other) const
-	{
-		return rows == other.rows && partial == other.partial;
-	}
-	bool operator!=(const RowConfirmation& other) const
-	{
-		return !(*this == other);
-	}
-	bool operator>=(const RowConfirmation& other) const
-	{
-		return !(*this < other);
-	}
-	bool operator<=(const RowConfirmation& other) const
-	{
-		return !(*this > other);
-	}
-};
-
 template <typename LengthType, typename ScoreType, typename Word>
 class WordSlice
 {
@@ -173,47 +149,58 @@ public:
 	VN(0),
 	scoreEnd(0),
 	scoreBeforeStart(0),
-	confirmedRows(0, false),
 	scoreBeforeExists(false),
-	exists(0)
+	sliceExists(false),
+	minScore(-1)
+#ifdef SLICEVERBOSE
+	,debugCalcCount(0)
+#endif
 	{}
-	WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, int confirmedRows, bool scoreBeforeExists) :
+	WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, bool scoreBeforeExists) :
 	VP(VP),
 	VN(VN),
 	scoreEnd(scoreEnd),
 	scoreBeforeStart(scoreBeforeStart),
-	confirmedRows(confirmedRows, false),
 	scoreBeforeExists(scoreBeforeExists),
-	exists(0)
+	sliceExists(false),
+	minScore(-1)
+#ifdef SLICEVERBOSE
+	,debugCalcCount(0)
+#endif
 	{}
 	Word VP;
 	Word VN;
 	ScoreType scoreEnd;
 	ScoreType scoreBeforeStart;
-	RowConfirmation confirmedRows;
+	ScoreType minScore;
 	bool scoreBeforeExists;
-	uint64_t exists;
+	bool sliceExists;
+#ifdef SLICEVERBOSE
+	int debugCalcCount;
+#endif
 
-	bool scoreEndExists() const
+	void calcMinScore()
 	{
-		return exists & WordConfiguration<Word>::LastBit;
+		minScore = minScoreLocalMinima();
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(minScore == minScoreCellByCell());
+#endif
+	}
+
+	ScoreType changedMinScore(WordSlice other) const
+	{
+		if (other.scoreBeforeStart == std::numeric_limits<ScoreType>::max()) return std::min(scoreBeforeStart, minScore);
+		auto result = changedMinScoreLocalMinima(other);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(result == changedMinScoreCellByCell(other));
+#endif
+		return result;
 	}
 
 	WordSlice mergeWith(const WordSlice& other) const
 	{
 		auto result = mergeTwoSlices(*this, other);
-		return mergeTwoSlices(*this, other);
-	}
-
-	bool cellExists(int row) const
-	{
-		return exists & (((Word)1) << row);
-	}
-
-	ScoreType getValueIfExists(int row, ScoreType defaultValue) const
-	{
-		if (cellExists(row)) return getValue(row);
-		return defaultValue;
+		return result;
 	}
 
 	ScoreType getValue(int row) const
@@ -224,114 +211,152 @@ public:
 		return value;
 	}
 
-	void setValue(int row, ScoreType value)
-	{
-		exists |= ((Word)1) << row;
-		if (!confirmedRows.partial)
-		{
-			confirmedRows.partial = true;
-			scoreBeforeStart = value + row + 1;
-			if (row < WordConfiguration<Word>::WordSize-1)
-			{
-				VN = ~(WordConfiguration<Word>::AllOnes << (row + 1));
-				VP = WordConfiguration<Word>::AllOnes << (row + 1);
-			}
-			else
-			{
-				VN = WordConfiguration<Word>::AllOnes;
-				VP = WordConfiguration<Word>::AllZeros;
-			}
-			confirmedRows.rows = row;
-			scoreEnd = value + WordConfiguration<Word>::WordSize - row - 1;
-			return;
-		}
-		assert(confirmedRows.rows < row);
-		if (confirmedRows.rows == row - 1)
-		{
-			auto oldscore = scoreEnd - (WordConfiguration<Word>::WordSize - confirmedRows.rows - 1);
-			assert(oldscore == getValue(confirmedRows.rows));
-			assert(value >= oldscore - 1);
-			assert(value <= oldscore + 1);
-			Word mask = ((Word)1) << row;
-			switch (value + 1 - oldscore)
-			{
-				case 0:
-					VN |= mask;
-					VP &= ~mask;
-					scoreEnd -= 2;
-					break;
-				case 1:
-					VN &= ~mask;
-					VP &= ~mask;
-					scoreEnd--;
-					break;
-				case 2:
-					VP |= mask;
-					VN &= ~mask;
-					break;
-			}
-			confirmedRows.rows = row;
-			return;
-		}
-		ScoreType scores[WordConfiguration<Word>::WordSize];
-		scores[0] = scoreBeforeStart + (VP & 1) - (VN & 1);
-		for (int i = 1; i <= confirmedRows.rows; i++)
-		{
-			auto mask = ((Word)1) << i;
-			scores[i] = scores[i-1] + ((VP & mask) ? 1 : 0) - ((VN & mask) ? 1 : 0);
-		}
-		for (int i = confirmedRows.rows+1; i <= row; i++)
-		{
-			scores[i] = scores[i-1] + 1;
-		}
-		for (int i = 0; i <= row; i++)
-		{
-			scores[i] = std::min(scores[i], value + row - i);
-		}
-		assert(scores[0] >= scoreBeforeStart - 1);
-		assert(scores[0] <= scoreBeforeStart + 1);
-		switch(scores[0] + 1 - scoreBeforeStart)
-		{
-			case 0:
-				VP &= ~(Word)1;
-				VN |= 1;
-				break;
-			case 1:
-				VP &= ~(Word)1;
-				VN &= ~(Word)1;
-				break;
-			case 2:
-				VP |= 1;
-				VN &= ~(Word)1;
-				break;
-		}
-		for (int i = 1; i <= row; i++)
-		{
-			assert(scores[i] >= scores[i-1] - 1);
-			assert(scores[i] <= scores[i-1] + 1);
-			Word mask = ((Word)1) << i;
-			switch(scores[i] + 1 - scores[i-1])
-			{
-				case 0:
-					VP &= ~mask;
-					VN |= mask;
-					break;
-				case 1:
-					VP &= ~mask;
-					VN &= ~mask;
-					break;
-				case 2:
-					VP |= mask;
-					VN &= ~mask;
-					break;
-			}
-		}
-		scoreEnd = scores[row] + WordConfiguration<Word>::WordSize - 1 - row;
-		confirmedRows.rows = row;
-	}
-
 private:
 
+#ifdef EXTRACORRECTNESSASSERTIONS
+	ScoreType changedMinScoreCellByCell(WordSlice oldSlice) const
+	{
+		ScoreType oldScore = oldSlice.scoreBeforeStart;
+		ScoreType newScore = scoreBeforeStart;
+		Word mask = 1;
+		ScoreType result = std::numeric_limits<ScoreType>::max();
+		if (newScore < oldScore) result = std::min(result, newScore);
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			oldScore += (oldSlice.VP & mask) ? 1 : 0;
+			oldScore -= (oldSlice.VN & mask) ? 1 : 0;
+			newScore += (VP & mask) ? 1 : 0;
+			newScore -= (VN & mask) ? 1 : 0;
+			if (newScore < oldScore) result = std::min(result, newScore);
+			mask <<= 1;
+		}
+		return result;
+	}
+
+	ScoreType minScoreCellByCell() const
+	{
+		ScoreType minScore = std::numeric_limits<ScoreType>::max();
+		ScoreType scoreHere = scoreBeforeStart;
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			Word mask = ((Word)1) << i;
+			scoreHere += (VP & mask) ? 1 : 0;
+			scoreHere -= (VN & mask) ? 1 : 0;
+			minScore = std::min(minScore, scoreHere);
+		}
+		return minScore;
+	}
+#endif
+
+	bool minScoreLocalMinimaSmallerThan(ScoreType score) const
+	{
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word possibleLocalMinima = (VP & (VN - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
+		if (scoreBeforeStart + (VP & 1) - (VN & 1) <= score) return true;
+		//the score is inited to the first cell at the start
+		possibleLocalMinima &= ~((Word)1);
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			if (scoreHere <= score)
+			{
+				scoreHere += WordConfiguration<Word>::popcount(VP & currentMinimumMask);
+				if (scoreHere <= score) return true;
+			}
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return false;
+	}
+
+	ScoreType minScoreLocalMinima() const
+	{
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word possibleLocalMinima = (VP & (VN - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
+		ScoreType result = scoreBeforeStart + (VP & 1) - (VN & 1);
+		//the score is inited to the first cell at the start
+		possibleLocalMinima &= ~((Word)1);
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			result = std::min(result, scoreHere);
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return result;
+	}
+
+	ScoreType changedMinScoreLocalMinima(WordSlice oldSlice) const
+	{
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word possibleLocalMinima = (VP & (VN - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
+		auto masks = differenceMasks(VP, VN, oldSlice.VP, oldSlice.VN, oldSlice.scoreBeforeStart - scoreBeforeStart);
+		Word smaller = masks.first;
+		//corner cases
+		if (smaller != WordConfiguration<Word>::AllOnes)
+		{
+			possibleLocalMinima |= (~smaller) >> 1;
+			possibleLocalMinima |= (~smaller) << 1;
+			possibleLocalMinima |= 1;
+			possibleLocalMinima |= WordConfiguration<Word>::LastBit;
+			possibleLocalMinima &= smaller;
+		}
+		ScoreType result = (scoreBeforeStart < oldSlice.scoreBeforeStart) ? scoreBeforeStart : std::numeric_limits<ScoreType>::max();
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			result = std::min(result, scoreHere);
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return result;
+	}
+
+	ScoreType minScoreLogW() const
+	{
+		if (VP == WordConfiguration<Word>::AllOnes) return scoreBeforeStart + 1;
+		if (VN == WordConfiguration<Word>::AllOnes) return scoreEnd;
+		Word tmpVP = VP;
+		Word tmpVN = VN;
+		uint64_t chunkValue = 0x1010101010101010 + (tmpVP & WordConfiguration<Word>::LSBMask) - (tmpVN & WordConfiguration<Word>::LSBMask);
+		uint64_t chunkMin = chunkValue;
+		for (int i = 1; i < 8; i++)
+		{
+			tmpVP >>= 1;
+			tmpVN >>= 1;
+			chunkValue += tmpVP & WordConfiguration<Word>::LSBMask;
+			chunkValue -= tmpVN & WordConfiguration<Word>::LSBMask;
+			assert((chunkValue & 0x2020202020202020) == 0);
+			uint64_t diff = 0x2020202020202020 + chunkMin - chunkValue;
+			uint64_t smallerChunk = ((diff & 0x2020202020202020) >> 5) * 0x0F;
+			chunkMin = chunkMin - (diff & smallerChunk);
+		}
+		Word VPVN = byteVPVNSum(bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(VP), 0), bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(VN), 0));
+		ScoreType result = (chunkMin & 0xFF) - 16;
+		for (int i = 1; i < 8; i++)
+		{
+			VPVN >>= 8;
+			chunkMin >>= 8;
+			ScoreType value = (chunkMin & 0xFF) - 16 + (VPVN & 0x7F) - (VPVN & 0x80);
+			result = std::min(result, value);
+		}
+		return result + scoreBeforeStart;
+	}
 
 	static uint64_t bytePrefixSums(uint64_t value, int addition)
 	{
@@ -357,12 +382,8 @@ private:
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
-		auto newConfirmedRows = confirmedRowsInMerged(left, right);
 		WordSlice result;
-		//todo fix:
-		//"currently" this is only called from the bitvector calculation, where every cell always exists
-		//what if it's called from somewhere where cells are missing?
-		result.exists = left.exists & right.exists;
+		result.sliceExists = true;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
 		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
@@ -399,100 +420,8 @@ private:
 		{
 			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
 		}
-		result.confirmedRows = newConfirmedRows;
-		assert(result.confirmedRows >= std::min(left.confirmedRows, right.confirmedRows));
-		assert(result.confirmedRows <= std::max(left.confirmedRows, right.confirmedRows));
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 		return result;
-	}
-
-	static RowConfirmation confirmedRowsInMerged(WordSlice left, WordSlice right)
-	{
-		if (left.confirmedRows == right.confirmedRows) return left.confirmedRows;
-		if (right.confirmedRows > left.confirmedRows) std::swap(left, right);
-		assert(right.confirmedRows < left.confirmedRows);
-		ScoreType leftScore = left.scoreBeforeStart;
-		ScoreType rightScore = right.scoreBeforeStart;
-		Word confirmedMask = ~(WordConfiguration<Word>::AllOnes << right.confirmedRows.rows);
-		leftScore += WordConfiguration<Word>::popcount(left.VP & confirmedMask);
-		leftScore -= WordConfiguration<Word>::popcount(left.VN & confirmedMask);
-		rightScore += WordConfiguration<Word>::popcount(right.VP & confirmedMask);
-		rightScore -= WordConfiguration<Word>::popcount(right.VN & confirmedMask);
-		if (right.confirmedRows.rows == left.confirmedRows.rows)
-		{
-			assert(!right.confirmedRows.partial);
-			assert(left.confirmedRows.partial);
-			auto mask = ((Word)1) << left.confirmedRows.rows;
-			rightScore -= 1;
-			if (left.VP & mask)
-			{
-				return { left.confirmedRows.rows, leftScore <= rightScore };
-			}
-			else
-			{
-				leftScore -= 1;
-				return { left.confirmedRows.rows, leftScore <= rightScore };
-			}
-		}
-		Word premask = ((Word)1) << right.confirmedRows.rows;
-		leftScore += (left.VP & premask) ? 1 : 0;
-		leftScore -= (left.VN & premask) ? 1 : 0;
-		if (right.confirmedRows.partial && (right.VP & premask))
-		{
-		}
-		else
-		{
-			rightScore -= 1;
-		}
-		if (leftScore == rightScore + 1)
-		{
-			return { right.confirmedRows.rows, true };
-		}
-		if (leftScore > rightScore + 1)
-		{
-			return right.confirmedRows;
-		}
-		if (left.confirmedRows.rows > right.confirmedRows.rows + 1)
-		{
-			Word partiallyConfirmedMask = 0;
-			if (left.confirmedRows.rows < WordConfiguration<Word>::WordSize)
-			{
-				partiallyConfirmedMask = WordConfiguration<Word>::AllOnes << left.confirmedRows.rows;
-			}
-			partiallyConfirmedMask = ~partiallyConfirmedMask;
-			assert(right.confirmedRows.rows + 1 < WordConfiguration<Word>::WordSize);
-			partiallyConfirmedMask &= WordConfiguration<Word>::AllOnes << (right.confirmedRows.rows + 1);
-			Word low = left.VP & partiallyConfirmedMask;
-			Word high = ~left.VN & partiallyConfirmedMask;
-			Word mortonLow = WordConfiguration<Word>::MortonLow(low, high);
-			Word mortonHigh = WordConfiguration<Word>::MortonHigh(low, high);
-			assert(leftScore <= rightScore);
-			auto pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, rightScore - leftScore);
-			if (pos/2 < left.confirmedRows.rows)
-			{
-				auto nextpos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, rightScore - leftScore + 1);
-				return { pos/2, nextpos/2 > pos/2 };
-			}
-			leftScore += WordConfiguration<Word>::popcount(left.VP & partiallyConfirmedMask);
-			leftScore -= WordConfiguration<Word>::popcount(left.VN & partiallyConfirmedMask);
-			rightScore -= left.confirmedRows.rows - right.confirmedRows.rows - 1;
-		}
-		if (!left.confirmedRows.partial) return left.confirmedRows;
-		assert(left.confirmedRows.partial);
-		assert(left.confirmedRows.rows < WordConfiguration<Word>::WordSize);
-		Word postmask = ((Word)1) << left.confirmedRows.rows;
-		rightScore -= 1;
-		if (left.VP & postmask)
-		{
-			if (leftScore <= rightScore) return left.confirmedRows;
-		}
-		else
-		{
-			leftScore -= 1;
-			assert(leftScore <= rightScore);
-			return left.confirmedRows;
-		}
-		return { left.confirmedRows.rows, false };
 	}
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)

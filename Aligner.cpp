@@ -170,6 +170,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			{
 				continue;
 			}
+			numAlignments += 1;
 			replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment);
 			alignmentvec.emplace_back(alignment.alignment);
 			alignmentpositions += std::to_string(alignment.alignmentStart) + "-" + std::to_string(alignment.alignmentEnd) + ", ";

@@ -9,6 +9,15 @@ int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+#ifndef NOBUILTINPOPCOUNT
+	if (__builtin_cpu_supports("popcnt") == 0)
+	{
+		std::cerr << "CPU does not support builtin popcount operation" << std::endl;
+		std::cerr << "recompile with -DNOBUILTINPOPCOUNT" << std::endl;
+		std::abort();
+	}
+#endif
+
     struct sigaction act;
     act.sa_handler = ThreadReadAssertion::signal;
     sigemptyset(&act.sa_mask);

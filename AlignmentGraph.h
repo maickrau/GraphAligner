@@ -13,6 +13,9 @@ class CycleCutCalculation;
 class AlignmentGraph
 {
 public:
+	//arbitrarily 100, shouldn't be too small because of per-node overhead, and not too high because of in-band-but-not-calculated overhead
+	static constexpr int SPLIT_NODE_SIZE = 100;
+
 	typedef std::pair<size_t, size_t> MatrixPosition;
 	class SeedHit
 	{
@@ -23,12 +26,11 @@ public:
 		size_t nodePos;
 	};
 	AlignmentGraph();
-	void ReserveNodes(size_t numNodes, size_t totalSequenceLength);
+	void ReserveNodes(size_t numNodes, size_t numSplitNodes, size_t totalSequenceLength);
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
 	size_t GetReversePosition(size_t position) const;
-	size_t GetReverseNode(size_t nodeIndex) const;
 	size_t SizeInBp() const;
 	size_t IndexToNode(size_t index) const;
 	size_t NodeSize() const;
@@ -43,8 +45,10 @@ public:
 	int DBGOverlap;
 
 private:
+	void AddNode(int nodeId, int offset, std::string sequence, bool reverseNode);
 	std::vector<size_t> nodeStart;
-	std::unordered_map<int, size_t> nodeLookup;
+	std::unordered_map<int, std::vector<size_t>> nodeLookup;
+	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
