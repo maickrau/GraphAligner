@@ -2177,6 +2177,7 @@ private:
 #ifndef NDEBUG
 				debugNodeMinScore = std::min(debugNodeMinScore, cell.scoreEnd);
 #endif
+				if (cell.scoreBeforeStart != uninitScore) cell.calcMinScore();
 				if (cell.scoreBeforeStart == uninitScore || cell.minScore > minScore+bandwidth)
 				{
 #ifdef SLICEVERBOSE
@@ -2251,6 +2252,42 @@ private:
 		}
 		while (table.slices.size() > 1 && table.slices.back().j >= table.correctness.size() * WordConfiguration<Word>::WordSize) table.slices.pop_back();
 	}
+
+#ifndef NDEBUG
+	void printPathExtensions(LengthType startpos, std::string prefix) const
+	{
+		auto node = params.graph.IndexToNode(startpos);
+		auto end = params.graph.NodeEnd(node);
+		for (size_t i = startpos; i < end && prefix.size() < 64; i++)
+		{
+			prefix += params.graph.NodeSequences(i);
+		}
+		if (prefix.size() == 64)
+		{
+			std::cerr << prefix << " " << node << std::endl;
+		}
+		else
+		{
+			if (params.graph.outNeighbors[node].size() == 0)
+			{
+				std::cerr << prefix << " TIP! " << node << std::endl;
+			}
+			else
+			{
+				for (auto neighbor : params.graph.outNeighbors[node])
+				{
+					printPathExtensions(params.graph.NodeStart(neighbor), prefix);
+				}
+			}
+		}
+	}
+
+	void __attribute__ ((noinline)) printPathExtensions(LengthType startpos) const
+	{
+		printPathExtensions(startpos, "");
+		asm ("");
+	}
+#endif
 
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency) const
 	{
