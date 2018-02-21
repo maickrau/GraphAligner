@@ -8,6 +8,7 @@
 #include <queue>
 #include "AlignmentGraph.h"
 #include "CommonUtils.h"
+#include "ThreadReadAssertion.h"
 
 AlignmentGraph::AlignmentGraph() :
 DBGOverlap(0),
@@ -226,9 +227,11 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 	assert(pos < nodeSequencesATorCG.size());
 	assert(pos > 0);
 	size_t forwardNode = IndexToNode(pos);
-	size_t originalNodeSize = nodeLookup.at(nodeIDs[forwardNode]).size() * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[forwardNode]).back());
+	size_t originalNodeSize = (nodeLookup.at(nodeIDs[forwardNode]).size() - 1) * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[forwardNode]).back());
 	size_t currentOffset = pos - NodeStart(forwardNode) + nodeOffset[forwardNode];
+	assert(currentOffset < originalNodeSize);
 	size_t reverseOffset = originalNodeSize - currentOffset - 1;
+	assert(reverseOffset < originalNodeSize);
 	size_t reverseNodeOriginalId;
 	if (nodeIDs[forwardNode] % 2 == 0)
 	{
@@ -238,6 +241,8 @@ size_t AlignmentGraph::GetReversePosition(size_t pos) const
 	{
 		reverseNodeOriginalId = (nodeIDs[forwardNode] / 2) * 2;
 	}
+	assert(nodeLookup.count(reverseNodeOriginalId) == 1);
+	assert(nodeLookup.at(reverseNodeOriginalId).size() > reverseOffset / SPLIT_NODE_SIZE);
 	size_t reverseNode = nodeLookup.at(reverseNodeOriginalId)[reverseOffset / SPLIT_NODE_SIZE];
 	size_t reverseNodeOffset = reverseOffset % SPLIT_NODE_SIZE;
 	size_t newPos = NodeStart(reverseNode) + reverseNodeOffset;
