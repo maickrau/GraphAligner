@@ -451,8 +451,8 @@ public:
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
-			auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
-			auto pos = std::get<1>(seedHits[i]);
+			// auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
+			// auto pos = std::get<1>(seedHits[i]);
 			// if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
 			// {
 			// 	logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
@@ -587,7 +587,6 @@ private:
 		assert(params.graph.finalized);
 		auto timeStart = std::chrono::system_clock::now();
 
-		auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHit) * 2);
 		auto pos = std::get<1>(seedHit);
 		auto alignment = getSplitAlignment(sequence, std::get<0>(seedHit), std::get<2>(seedHit), std::get<1>(seedHit), sequence.size() * 0.4);
 		auto trace = getPiecewiseTracesFromSplit(alignment, sequence);
@@ -686,8 +685,8 @@ private:
 		int start = 0;
 		auto firstEndPos = first.alignment.path().mapping(first.alignment.path().mapping_size()-1).position();
 		auto secondStartPos = second.alignment.path().mapping(0).position();
-		auto firstEndPosNodeId = params.graph.nodeLookup.at(firstEndPos.node_id());
-		auto secondStartPosNodeId = params.graph.nodeLookup.at(secondStartPos.node_id());
+		auto firstEndPosNodeId = params.graph.nodeLookup.at(firstEndPos.node_id()).back();
+		auto secondStartPosNodeId = params.graph.nodeLookup.at(secondStartPos.node_id())[0];
 		if (posEqual(firstEndPos, secondStartPos))
 		{
 			start = 1;
@@ -859,6 +858,7 @@ private:
 			position = new vg::Position;
 			vgmapping->set_allocated_position(position);
 			vgmapping->set_rank(rank);
+			position->set_offset(params.graph.nodeOffset[oldNode]);
 			position->set_node_id(params.graph.nodeIDs[oldNode]);
 			position->set_is_reverse(params.graph.reverse[oldNode]);
 		}
@@ -2677,12 +2677,12 @@ private:
 	{
 		DPSlice result;
 		result.j = -WordConfiguration<Word>::WordSize;
+		result.bandwidth = 1;
+		result.minScore = 0;
 		result.scores.addNode(nodeIndex, params.graph.NodeLength(nodeIndex));
 		result.scores.setMinScore(nodeIndex, 0);
 		result.scores.setStartIndex(nodeIndex, 0);
 		result.scores.setEndIndex(nodeIndex, params.graph.NodeLength(nodeIndex));
-		result.bandwidth = 1;
-		result.minScore = 0;
 		result.minScoreIndex.push_back(params.graph.NodeEnd(nodeIndex) - 1);
 		result.nodes.push_back(nodeIndex);
 		auto slice = result.scores.node(nodeIndex);
@@ -2690,6 +2690,30 @@ private:
 		{
 			slice[i] = {0, 0, 0, 0, false};
 			slice[i].sliceExists = true;
+		}
+		return result.getFrozenSqrtEndScores();
+	}
+
+	DPSlice getInitialSliceOneNodeGroup(const std::vector<LengthType>& nodeIndices) const
+	{
+		DPSlice result;
+		result.j = -WordConfiguration<Word>::WordSize;
+		result.bandwidth = 1;
+		result.minScore = 0;
+		for (auto nodeIndex : nodeIndices)
+		{
+			result.scores.addNode(nodeIndex, params.graph.NodeLength(nodeIndex));
+			result.scores.setMinScore(nodeIndex, 0);
+			result.scores.setStartIndex(nodeIndex, 0);
+			result.scores.setEndIndex(nodeIndex, params.graph.NodeLength(nodeIndex));
+			result.minScoreIndex.push_back(params.graph.NodeEnd(nodeIndex) - 1);
+			result.nodes.push_back(nodeIndex);
+			auto slice = result.scores.node(nodeIndex);
+			for (size_t i = 0; i < slice.size(); i++)
+			{
+				slice[i] = {0, 0, 0, 0, false};
+				slice[i].sliceExists = true;
+			}
 		}
 		return result.getFrozenSqrtEndScores();
 	}
@@ -2706,21 +2730,20 @@ private:
 	{
 		assert(matchSequencePosition >= 0);
 		assert(matchSequencePosition < sequence.size());
-		size_t forwardNode;
-		size_t backwardNode;
+		std::vector<size_t> forwardNodes;
+		std::vector<size_t> backwardNodes;
 		TwoDirectionalSplitAlignment result;
 		result.sequenceSplitIndex = matchSequencePosition;
 		if (matchBigraphNodeBackwards)
 		{
-			forwardNode = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
-			backwardNode = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
+			forwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+			backwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
 		}
 		else
 		{
-			forwardNode = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
-			backwardNode = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
+			forwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
+			backwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
 		}
-		assert(params.graph.NodeEnd(forwardNode) - params.graph.NodeStart(forwardNode) == params.graph.NodeEnd(backwardNode) - params.graph.NodeStart(backwardNode));
 		ScoreType score = 0;
 		if (matchSequencePosition > 0)
 		{
@@ -2732,7 +2755,7 @@ private:
 			{
 				backwardPart += 'N';
 			}
-			auto backwardInitialBand = getInitialSliceOnlyOneNode(backwardNode);
+			auto backwardInitialBand = getInitialSliceOneNodeGroup(backwardNodes);
 			size_t samplingFrequency = getSamplingFrequency(backwardPart.size());
 			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			removeWronglyAlignedEnd(backwardSlice);
@@ -2748,7 +2771,7 @@ private:
 			{
 				forwardPart += 'N';
 			}
-			auto forwardInitialBand = getInitialSliceOnlyOneNode(forwardNode);
+			auto forwardInitialBand = getInitialSliceOneNodeGroup(forwardNodes);
 			size_t samplingFrequency = getSamplingFrequency(forwardPart.size());
 			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
 			removeWronglyAlignedEnd(forwardSlice);

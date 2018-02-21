@@ -26,22 +26,25 @@ finalized(false)
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	reverse.push_back(false);
+	nodeOffset.push_back(false);
 	nodeSequencesATorCG.push_back(false);
 	nodeSequencesACorTG.push_back(false);
 }
 
-void AlignmentGraph::ReserveNodes(size_t numNodes, size_t sequenceLength)
+void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes, size_t sequenceLength)
 {
 	numNodes += 2; //dummy start and end nodes
+	numSplitNodes += 2; //dummy start and end nodes
 	sequenceLength += 2; //dummy start and end nodes
 	nodeSequencesATorCG.reserve(sequenceLength);
 	nodeSequencesACorTG.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
-	nodeIDs.reserve(numNodes);
-	nodeStart.reserve(numNodes);
-	inNeighbors.reserve(numNodes);
-	outNeighbors.reserve(numNodes);
-	reverse.reserve(numNodes);
+	nodeIDs.reserve(numSplitNodes);
+	nodeStart.reserve(numSplitNodes);
+	inNeighbors.reserve(numSplitNodes);
+	outNeighbors.reserve(numSplitNodes);
+	reverse.reserve(numSplitNodes);
+	nodeOffset.reserve(numSplitNodes);
 }
 
 void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool reverseNode)
@@ -50,14 +53,35 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
+	for (size_t i = 0; i < sequence.size(); i += SPLIT_NODE_SIZE)
+	{
+		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
+		if (i > 0)
+		{
+			assert(outNeighbors.size() >= 2);
+			assert(outNeighbors.size() == inNeighbors.size());
+			assert(nodeIDs.size() == outNeighbors.size());
+			assert(nodeOffset.size() == outNeighbors.size());
+			assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
+			assert(nodeOffset[outNeighbors.size()-2] + SPLIT_NODE_SIZE == nodeOffset[outNeighbors.size()-1]);
+			outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
+			inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+		}
+	}
+}
+
+void AlignmentGraph::AddNode(int nodeId, int offset, std::string sequence, bool reverseNode)
+{
+	assert(!finalized);
 
 	assert(std::numeric_limits<size_t>::max() - sequence.size() > nodeSequencesATorCG.size());
-	nodeLookup[nodeId] = nodeStart.size();
+	nodeLookup[nodeId].push_back(nodeStart.size());
 	nodeIDs.push_back(nodeId);
 	nodeStart.push_back(nodeSequencesATorCG.size());
 	inNeighbors.emplace_back();
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
+	nodeOffset.push_back(offset);
 	for (auto c : sequence)
 	{
 		switch(c)
@@ -93,8 +117,8 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
-	auto from = nodeLookup[node_id_from];
-	auto to = nodeLookup[node_id_to];
+	auto from = nodeLookup[node_id_from].back();
+	auto to = nodeLookup[node_id_to][0];
 	assert(to >= 0);
 	assert(from >= 0);
 	assert(to < inNeighbors.size());
@@ -116,13 +140,15 @@ void AlignmentGraph::Finalize(int wordSize)
 	outNeighbors.emplace_back();
 	nodeSequencesATorCG.push_back(false);
 	nodeSequencesACorTG.push_back(false);
+	nodeOffset.push_back(false);
 	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
 	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-	std::cerr << nodeStart.size() << " nodes" << std::endl;
+	std::cerr << nodeLookup.size() << " original nodes" << std::endl;
+	std::cerr << nodeStart.size() << " split nodes" << std::endl;
 	std::cerr << nodeSequencesATorCG.size() << "bp" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
@@ -136,14 +162,13 @@ void AlignmentGraph::Finalize(int wordSize)
 	}
 	std::cerr << edges << " edges" << std::endl;
 	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
-#ifndef NDEBUG
 	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
 	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
 	assert(outNeighbors.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-#endif
+	assert(nodeOffset.size() == nodeStart.size());
 	nodeStart.shrink_to_fit();
 	nodeIDs.shrink_to_fit();
 	inNeighbors.shrink_to_fit();
@@ -196,30 +221,26 @@ std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpos
 	return positions.back();
 }
 
-size_t AlignmentGraph::GetReverseNode(size_t nodeIndex) const
-{
-	auto bigraphNodeId = nodeIDs[nodeIndex] / 2;
-	size_t otherNode;
-	if (nodeIDs[nodeIndex] % 2 == 1)
-	{
-		otherNode = nodeLookup.at(bigraphNodeId * 2);
-	}
-	else
-	{
-		otherNode = nodeLookup.at(bigraphNodeId * 2 + 1);
-	}
-	assert(otherNode != nodeIndex);
-	assert(NodeEnd(otherNode) - NodeStart(otherNode) == NodeEnd(nodeIndex) - NodeStart(nodeIndex));
-	return otherNode;
-}
-
 size_t AlignmentGraph::GetReversePosition(size_t pos) const
 {
 	assert(pos < nodeSequencesATorCG.size());
 	assert(pos > 0);
-	auto originalNode = IndexToNode(pos);
-	auto otherNode = GetReverseNode(originalNode);
-	size_t newPos = (NodeEnd(otherNode) - 1) - (pos - nodeStart[originalNode]);
+	size_t forwardNode = IndexToNode(pos);
+	size_t originalNodeSize = nodeLookup.at(nodeIDs[forwardNode]).size() * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[forwardNode]).back());
+	size_t currentOffset = pos - NodeStart(forwardNode) + nodeOffset[forwardNode];
+	size_t reverseOffset = originalNodeSize - currentOffset - 1;
+	size_t reverseNodeOriginalId;
+	if (nodeIDs[forwardNode] % 2 == 0)
+	{
+		reverseNodeOriginalId = (nodeIDs[forwardNode] / 2) * 2 + 1;
+	}
+	else
+	{
+		reverseNodeOriginalId = (nodeIDs[forwardNode] / 2) * 2;
+	}
+	size_t reverseNode = nodeLookup.at(reverseNodeOriginalId)[reverseOffset / SPLIT_NODE_SIZE];
+	size_t reverseNodeOffset = reverseOffset % SPLIT_NODE_SIZE;
+	size_t newPos = NodeStart(reverseNode) + reverseNodeOffset;
 	return newPos;
 }
 
