@@ -39,7 +39,7 @@ void normalize(std::vector<double>& logs)
 std::vector<double> getCorrectLogOdds()
 {
 	std::vector<double> result;
-	for (int i = 0; i < wordSize/2; i++)
+	for (int i = 0; i <= wordSize/2; i++)
 	{
 		result.push_back(stddistlog(i, correctMean*wordSize, correctStddev*wordSize));
 	}
