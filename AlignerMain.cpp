@@ -78,9 +78,9 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	if (params.initialBandwidth < 2)
+	if (params.initialBandwidth < 1)
 	{
-		std::cerr << "bandwidth must be >= 2" << std::endl;
+		std::cerr << "bandwidth must be >= 1" << std::endl;
 		std::exit(0);
 	}
 
