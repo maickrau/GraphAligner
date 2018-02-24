@@ -1556,7 +1556,7 @@ private:
 			result.cellsProcessed = 1;
 			return result;
 		}
-		if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+		if (endIndex <= startIndex && oldWordSlice.sliceExists && currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 		{
 			result.cellsProcessed = 1;
 			return result;
@@ -1597,6 +1597,11 @@ private:
 				result.minScoreIndex.push_back(nodeStart + w);
 			}
 
+			if (oldWordSlice.sliceExists)
+			{
+				currentWordSlice = currentWordSlice.mergeWith(oldWordSlice);
+			}
+
 			timeUntilNextScoreCheck--;
 			if (timeUntilNextScoreCheck < 0 || w == nodeSize-1)
 			{
@@ -1613,7 +1618,7 @@ private:
 				result.cellsProcessed = w - startIndex + 1;
 				return result;
 			}
-			if (currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
+			if (endIndex <= w && oldWordSlice.sliceExists && currentWordSlice.VP == oldWordSlice.VP && currentWordSlice.VN == oldWordSlice.VN && currentWordSlice.scoreBeforeStart == oldWordSlice.scoreBeforeStart)
 			{
 				result.cellsProcessed = w - startIndex + 1;
 				return result;
