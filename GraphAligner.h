@@ -107,7 +107,7 @@ private:
 	public:
 		DPSlice() :
 		minScore(std::numeric_limits<ScoreType>::min()),
-		minScoreIndex(),
+		minScoreIndex(-1),
 		scores(),
 		nodes(),
 		correctness(),
@@ -118,7 +118,7 @@ private:
 		{}
 		DPSlice(std::vector<typename NodeSlice<WordSlice>::MapItem>* vectorMap) :
 		minScore(std::numeric_limits<ScoreType>::min()),
-		minScoreIndex(),
+		minScoreIndex(-1),
 		scores(vectorMap),
 		nodes(),
 		correctness(),
@@ -128,7 +128,7 @@ private:
 		numCells(0)
 		{}
 		ScoreType minScore;
-		std::vector<LengthType> minScoreIndex;
+		LengthType minScoreIndex;
 		NodeSlice<WordSlice> scores;
 		std::vector<size_t> nodes;
 		AlignmentCorrectnessEstimationState correctness;
@@ -945,7 +945,7 @@ private:
 			{
 				assert(i == slice.slices.size() - 1);
 				result.first = slice.slices.back().minScore;
-				result.second.emplace_back(slice.slices.back().minScoreIndex.back(), slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
+				result.second.emplace_back(slice.slices.back().minScoreIndex, slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 				continue;
 			}
 			if (lastBacktraceOverrideStartJ == slice.slices[i].j + WordConfiguration<Word>::WordSize) continue;
@@ -954,8 +954,8 @@ private:
 			if (i == slice.slices.size() - 1)
 			{
 				result.first = partTable.back().minScore;
-				assert(partTable.back().minScoreIndex.size() > 0);
-				result.second.emplace_back(partTable.back().minScoreIndex.back(), partTable.back().j + WordConfiguration<Word>::WordSize - 1);
+				assert(partTable.back().minScoreIndex != -1);
+				result.second.emplace_back(partTable.back().minScoreIndex, partTable.back().j + WordConfiguration<Word>::WordSize - 1);
 			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.second.back());
 			assert(partTrace.size() > 1);
@@ -1424,7 +1424,7 @@ private:
 	{
 	public:
 		ScoreType minScore;
-		std::vector<LengthType> minScoreIndex;
+		LengthType minScoreIndex;
 		size_t cellsProcessed;
 	};
 
@@ -1450,6 +1450,7 @@ private:
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
+		result.minScoreIndex = -1;
 		result.cellsProcessed = 0;
 		auto slice = currentSlice.node(i);
 		const auto oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
@@ -1483,12 +1484,8 @@ private:
 				if (currentWordSlice.scoreEnd < result.minScore)
 				{
 					result.minScore = currentWordSlice.scoreEnd;
-					result.minScoreIndex.clear();
+					result.minScoreIndex = nodeStart;
 					quitScore = std::min(quitScore, result.minScore + bandwidth);
-				}
-				if (currentWordSlice.scoreEnd == result.minScore)
-				{
-					result.minScoreIndex.push_back(nodeStart);
 				}
 				assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 			}
@@ -1505,12 +1502,8 @@ private:
 				if (currentWordSlice.scoreEnd < result.minScore)
 				{
 					result.minScore = currentWordSlice.scoreEnd;
-					result.minScoreIndex.clear();
+					result.minScoreIndex = nodeStart;
 					quitScore = std::min(quitScore, result.minScore + bandwidth);
-				}
-				if (currentWordSlice.scoreEnd == result.minScore)
-				{
-					result.minScoreIndex.push_back(nodeStart);
 				}
 				assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 			}
@@ -1530,12 +1523,8 @@ private:
 			if (currentWordSlice.scoreEnd < result.minScore)
 			{
 				result.minScore = currentWordSlice.scoreEnd;
-				result.minScoreIndex.clear();
+				result.minScoreIndex = nodeStart + startIndex;
 				quitScore = std::min(quitScore, result.minScore + bandwidth);
-			}
-			if (currentWordSlice.scoreEnd == result.minScore)
-			{
-				result.minScoreIndex.push_back(nodeStart + startIndex);
 			}
 			assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 		}
@@ -1589,12 +1578,8 @@ private:
 			if (currentWordSlice.scoreEnd < result.minScore)
 			{
 				result.minScore = currentWordSlice.scoreEnd;
-				result.minScoreIndex.clear();
+				result.minScoreIndex = nodeStart + w;
 				quitScore = std::min(quitScore, result.minScore + bandwidth);
-			}
-			if (currentWordSlice.scoreEnd == result.minScore)
-			{
-				result.minScoreIndex.push_back(nodeStart + w);
 			}
 
 			if (oldWordSlice.sliceExists)
@@ -2034,7 +2019,7 @@ private:
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousQuitScore, int bandwidth) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
-		std::vector<LengthType> currentMinimumIndex;
+		LengthType currentMinimumIndex;
 		size_t cellsProcessed = 0;
 
 		//preprocessed bitvectors for character equality
@@ -2122,22 +2107,15 @@ private:
 			auto debugslice = currentSlice.node(i);
 			if (nodeCalc.minScore != std::numeric_limits<ScoreType>::max() && nodeCalc.minScore <= currentMinScoreAtEndRow + bandwidth)
 			{
-				for (auto index : nodeCalc.minScoreIndex)
-				{
-					assert(index >= params.graph.NodeStart(i));
-					assert(index < params.graph.NodeEnd(i));
-					assert(debugslice[index - params.graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
-				}
+				assert(nodeCalc.minScoreIndex >= params.graph.NodeStart(i));
+				assert(nodeCalc.minScoreIndex < params.graph.NodeEnd(i));
+				assert(debugslice[nodeCalc.minScoreIndex - params.graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
 			}
 #endif
 			if (nodeCalc.minScore < currentMinimumScore)
 			{
 				currentMinimumScore = nodeCalc.minScore;
-				currentMinimumIndex.clear();
-			}
-			if (nodeCalc.minScore == currentMinimumScore)
-			{
-				currentMinimumIndex.insert(currentMinimumIndex.end(), nodeCalc.minScoreIndex.begin(), nodeCalc.minScoreIndex.end());
+				currentMinimumIndex = nodeCalc.minScoreIndex;
 			}
 			cellsProcessed += nodeCalc.cellsProcessed;
 		}
@@ -2529,15 +2507,12 @@ private:
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
 #ifndef NDEBUG
-			for (auto index : newSlice.minScoreIndex)
-			{
-				auto debugMinimumNode = params.graph.IndexToNode(index);
-				assert(newSlice.scores.hasNode(debugMinimumNode));
-				auto debugslice = newSlice.scores.node(debugMinimumNode);
-				assert(index >= params.graph.NodeStart(debugMinimumNode));
-				assert(index < params.graph.NodeEnd(debugMinimumNode));
-				assert(debugslice[index - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
-			}
+			auto debugMinimumNode = params.graph.IndexToNode(newSlice.minScoreIndex);
+			assert(newSlice.scores.hasNode(debugMinimumNode));
+			auto debugslice = newSlice.scores.node(debugMinimumNode);
+			assert(newSlice.minScoreIndex >= params.graph.NodeStart(debugMinimumNode));
+			assert(newSlice.minScoreIndex < params.graph.NodeEnd(debugMinimumNode));
+			assert(debugslice[newSlice.minScoreIndex - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
 #endif
 			lastSlice = newSlice.getFrozenSqrtEndScores();
 			newSlice.scores.clearVectorMap();
@@ -2655,15 +2630,12 @@ private:
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
 #ifndef NDEBUG
-			for (auto index : newSlice.minScoreIndex)
-			{
-				auto debugMinimumNode = params.graph.IndexToNode(index);
-				assert(newSlice.scores.hasNode(debugMinimumNode));
-				auto debugslice = newSlice.scores.node(debugMinimumNode);
-				assert(index >= params.graph.NodeStart(debugMinimumNode));
-				assert(index < params.graph.NodeEnd(debugMinimumNode));
-				assert(debugslice[index - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
-			}
+			auto debugMinimumNode = params.graph.IndexToNode(newSlice.minScoreIndex);
+			assert(newSlice.scores.hasNode(debugMinimumNode));
+			auto debugslice = newSlice.scores.node(debugMinimumNode);
+			assert(newSlice.minScoreIndex >= params.graph.NodeStart(debugMinimumNode));
+			assert(newSlice.minScoreIndex < params.graph.NodeEnd(debugMinimumNode));
+			assert(debugslice[newSlice.minScoreIndex - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
 #endif
 			lastSlice = newSlice.getFrozenSqrtEndScores();
 			newSlice.scores.clearVectorMap();
@@ -2688,7 +2660,7 @@ private:
 		result.scores.setMinScore(nodeIndex, 0);
 		result.scores.setStartIndex(nodeIndex, 0);
 		result.scores.setEndIndex(nodeIndex, params.graph.NodeLength(nodeIndex));
-		result.minScoreIndex.push_back(params.graph.NodeEnd(nodeIndex) - 1);
+		result.minScoreIndex = params.graph.NodeEnd(nodeIndex) - 1;
 		result.nodes.push_back(nodeIndex);
 		auto slice = result.scores.node(nodeIndex);
 		for (size_t i = 0; i < slice.size(); i++)
@@ -2711,7 +2683,7 @@ private:
 			result.scores.setMinScore(nodeIndex, 0);
 			result.scores.setStartIndex(nodeIndex, 0);
 			result.scores.setEndIndex(nodeIndex, params.graph.NodeLength(nodeIndex));
-			result.minScoreIndex.push_back(params.graph.NodeEnd(nodeIndex) - 1);
+			result.minScoreIndex = params.graph.NodeEnd(nodeIndex) - 1;
 			result.nodes.push_back(nodeIndex);
 			auto slice = result.scores.node(nodeIndex);
 			for (size_t i = 0; i < slice.size(); i++)
