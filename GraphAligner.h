@@ -255,6 +255,9 @@ private:
 	private:
 		void addReachableRec(const Params& params, MatrixPosition pos, size_t row, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices, std::vector<std::unordered_map<LengthType, size_t>>& indices)
 		{
+		//manual tail call
+		//because gcc doesn't optimize it for some reason and recursion runs into a stack overflow
+		start:
 			assert(slices.size() > 0);
 			assert(row < indices.size());
 			if (indices[row].count(pos.first) == 1) return;
@@ -286,7 +289,11 @@ private:
 			assert(predecessor.second == pos.second || predecessor.second == pos.second-1);
 			if (predecessor.second >= slices[0].j && predecessor.second != -1)
 			{
-				addReachableRec(params, predecessor, predecessor.second - slices[0].j, sequence, previous, slices, indices);
+				//manual tail call
+				//because gcc doesn't optimize it for some reason and recursion runs into a stack overflow
+				pos = predecessor;
+				row = predecessor.second - slices[0].j;
+				goto start;
 			}
 		}
 		void makeTrace(const Params& params, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices)
