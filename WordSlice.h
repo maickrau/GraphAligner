@@ -366,6 +366,12 @@ private:
 		return value * WordConfiguration<Word>::PrefixSumMultiplierConstant;
 	}
 
+	static uint64_t bytePrefixSums(uint64_t value)
+	{
+		value <<= WordConfiguration<Word>::ChunkBits;
+		return value * WordConfiguration<Word>::PrefixSumMultiplierConstant;
+	}
+
 	static uint64_t byteVPVNSum(uint64_t prefixSumVP, uint64_t prefixSumVN)
 	{
 		uint64_t result = WordConfiguration<Word>::SignMask;
@@ -426,6 +432,66 @@ private:
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
+		auto result = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		auto debugCompare = differenceMasksWord(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		assert(result.first == debugCompare.first);
+		assert(result.second == debugCompare.second);
+#endif
+		return result;
+	}
+
+	__attribute__((optimize("unroll-loops")))
+	static std::pair<uint64_t, uint64_t> differenceMasksSIMD(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
+	{
+		char leftScores __attribute__((vector_size(16))) { 0 };
+		char rightScores __attribute__((vector_size(16))) { scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference };
+		char tmp __attribute__((vector_size(16))) { 0 };
+		static_assert(sizeof(decltype(leftScores)) == 16);
+		static_assert(sizeof(decltype(rightScores)) == 16);
+		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP));
+		leftScores += tmp;
+		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN));
+		leftScores -= tmp;
+		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP));
+		rightScores += tmp;
+		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN));
+		rightScores -= tmp;
+
+		char leftVPvec __attribute__((vector_size(16)));
+		char leftVNvec __attribute__((vector_size(16)));
+		char rightVPvec __attribute__((vector_size(16)));
+		char rightVNvec __attribute__((vector_size(16)));
+		*((uint64_t*)&leftVPvec) = leftVP;
+		*((uint64_t*)&leftVNvec) = leftVN;
+		*((uint64_t*)&rightVPvec) = rightVP;
+		*((uint64_t*)&rightVNvec) = rightVN;
+		char firstBit __attribute__((vector_size(16))) {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+		char smallerMask __attribute__((vector_size(16))) {0};
+		uint64_t maskBit = 0x0101010101010101;
+		uint64_t leftSmaller {0};
+		uint64_t rightSmaller {0};
+		for (int i = 0; i < 8; i++)
+		{
+			leftScores = leftScores + (leftVPvec & firstBit) - (leftVNvec & firstBit);
+			rightScores = rightScores + (rightVPvec & firstBit) - (rightVNvec & firstBit);
+			smallerMask = leftScores < rightScores;
+			leftSmaller |= (*((uint64_t*)&smallerMask)) & maskBit;
+			smallerMask = rightScores < leftScores;
+			rightSmaller |= (*((uint64_t*)&smallerMask)) & maskBit;
+			leftVPvec = leftVPvec >> firstBit;
+			leftVNvec = leftVNvec >> firstBit;
+			rightVPvec = rightVPvec >> firstBit;
+			rightVNvec = rightVNvec >> firstBit;
+			maskBit <<= 1;
+		}
+
+		return std::make_pair(leftSmaller, rightSmaller);
+	}
+
+	static std::pair<uint64_t, uint64_t> differenceMasksWord(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
+	{
+		auto test = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(scoreDifference >= 0);
 		const uint64_t signmask = WordConfiguration<Word>::SignMask;
 		const uint64_t lsbmask = WordConfiguration<Word>::LSBMask;
