@@ -441,48 +441,50 @@ private:
 		return result;
 	}
 
+	union SIMDVector
+	{
+		char vec __attribute__((vector_size(16)));
+		uint64_t val[2];
+	};
+
 	__attribute__((optimize("unroll-loops")))
 	static std::pair<uint64_t, uint64_t> differenceMasksSIMD(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		char leftScores __attribute__((vector_size(16))) { 0 };
-		char rightScores __attribute__((vector_size(16))) { scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference, scoreDifference };
-		char tmp __attribute__((vector_size(16))) { 0 };
+		SIMDVector leftScores {.vec = {0}};
+		SIMDVector rightScores {.vec = {scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference}};
+		SIMDVector tmp {.vec = {0}};
 		static_assert(sizeof(decltype(leftScores)) == 16);
 		static_assert(sizeof(decltype(rightScores)) == 16);
-		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP));
-		leftScores += tmp;
-		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN));
-		leftScores -= tmp;
-		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP));
-		rightScores += tmp;
-		*((uint64_t*)&tmp) = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN));
-		rightScores -= tmp;
+		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP));
+		leftScores.vec += tmp.vec;
+		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN));
+		leftScores.vec -= tmp.vec;
+		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP));
+		rightScores.vec += tmp.vec;
+		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN));
+		rightScores.vec -= tmp.vec;
 
-		char leftVPvec __attribute__((vector_size(16)));
-		char leftVNvec __attribute__((vector_size(16)));
-		char rightVPvec __attribute__((vector_size(16)));
-		char rightVNvec __attribute__((vector_size(16)));
-		*((uint64_t*)&leftVPvec) = leftVP;
-		*((uint64_t*)&leftVNvec) = leftVN;
-		*((uint64_t*)&rightVPvec) = rightVP;
-		*((uint64_t*)&rightVNvec) = rightVN;
-		char firstBit __attribute__((vector_size(16))) {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
-		char smallerMask __attribute__((vector_size(16))) {0};
+		SIMDVector leftVPvec {.val = {leftVP, 0}};
+		SIMDVector leftVNvec {.val = {leftVN, 0}};
+		SIMDVector rightVPvec {.val = {rightVP, 0}};
+		SIMDVector rightVNvec {.val = {rightVN, 0}};
+		SIMDVector firstBit {.vec = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}};
+		SIMDVector smallerMask {.vec = {0}};
 		uint64_t maskBit = 0x0101010101010101;
 		uint64_t leftSmaller {0};
 		uint64_t rightSmaller {0};
 		for (int i = 0; i < 8; i++)
 		{
-			leftScores = leftScores + (leftVPvec & firstBit) - (leftVNvec & firstBit);
-			rightScores = rightScores + (rightVPvec & firstBit) - (rightVNvec & firstBit);
-			smallerMask = leftScores < rightScores;
-			leftSmaller |= (*((uint64_t*)&smallerMask)) & maskBit;
-			smallerMask = rightScores < leftScores;
-			rightSmaller |= (*((uint64_t*)&smallerMask)) & maskBit;
-			leftVPvec = leftVPvec >> firstBit;
-			leftVNvec = leftVNvec >> firstBit;
-			rightVPvec = rightVPvec >> firstBit;
-			rightVNvec = rightVNvec >> firstBit;
+			leftScores.vec += (leftVPvec.vec & firstBit.vec) - (leftVNvec.vec & firstBit.vec);
+			rightScores.vec += (rightVPvec.vec & firstBit.vec) - (rightVNvec.vec & firstBit.vec);
+			smallerMask.vec = leftScores.vec < rightScores.vec;
+			leftSmaller |= smallerMask.val[0] & maskBit;
+			smallerMask.vec = rightScores.vec < leftScores.vec;
+			rightSmaller |= smallerMask.val[0] & maskBit;
+			leftVPvec.vec >>= firstBit.vec;
+			leftVNvec.vec >>= firstBit.vec;
+			rightVPvec.vec >>= firstBit.vec;
+			rightVNvec.vec >>= firstBit.vec;
 			maskBit <<= 1;
 		}
 
