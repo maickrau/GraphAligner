@@ -452,9 +452,6 @@ private:
 	static constexpr SIMDVector doubleshufflevec {.vec = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}};
 	static constexpr SIMDVector unshufflevecFirst {.vec = {0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0}};
 	static constexpr SIMDVector unshufflevecSecond {.vec = {1, 3, 5, 7, 9, 11, 13, 15, 0, 0, 0, 0, 0, 0, 0, 0}};
-	static constexpr SIMDVector fouralignvec {.vec = {0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4}};
-	static constexpr SIMDVector fourselectvec {.vec = {0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f}};
-	static constexpr SIMDVector oddfourselectvec {.vec = {0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f}};
 	static constexpr SIMDVector firstBit {.vec = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}};
 
 	static SIMDVector fourBitSums(char zeroScore, uint64_t VP, uint64_t VN)
@@ -475,17 +472,62 @@ private:
 		plus.val[0] = VNchunks;
 		result.vec -= plus.vec;
 		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
-		result.vec += splitToFours(VPfours).vec & oddfourselectvec.vec;
-		result.vec -= splitToFours(VNfours).vec & oddfourselectvec.vec;
+		result.vec += splitToFourOdds(VPfours).vec;
+		result.vec -= splitToFourOdds(VNfours).vec;
 		return result;
+	}
+
+	static uint64_t alignFour(uint64_t word)
+	{
+		return ((word & 0xf000f000f000f000) >> 4) + (word & 0x000f000f000f000f);
+	}
+
+	static uint64_t alignFourOdd(uint64_t word)
+	{
+		return ((word & 0xf000f000f000f000) >> 4);
+	}
+
+	static uint64_t unalignFour(uint64_t word)
+	{
+		return ((word & 0x0f000f000f000f00) << 4) + (word & 0x000f000f000f000f);
+	}
+
+	static SIMDVector alignFour(SIMDVector vec)
+	{
+		//SIMD does not do bitshifting quickly. Do manually instead
+		vec.val[0] = alignFour(vec.val[0]);
+		vec.val[1] = alignFour(vec.val[1]);
+		return vec;
+	}
+
+	static SIMDVector alignFourOdds(SIMDVector vec)
+	{
+		//SIMD does not do bitshifting quickly. Do manually instead
+		vec.val[0] = alignFourOdd(vec.val[0]);
+		vec.val[1] = alignFourOdd(vec.val[1]);
+		return vec;
+	}
+
+	static SIMDVector unalignFour(SIMDVector vec)
+	{
+		//SIMD does not do bitshifting quickly. Do manually instead
+		vec.val[0] = unalignFour(vec.val[0]);
+		vec.val[1] = unalignFour(vec.val[1]);
+		return vec;
 	}
 
 	static SIMDVector splitToFours(uint64_t word)
 	{
 		SIMDVector result {.val = {word, 0}};
 		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
-		result.vec >>= fouralignvec.vec;
-		return result;
+		return alignFour(result);
+	}
+
+	static SIMDVector splitToFourOdds(uint64_t word)
+	{
+		SIMDVector result {.val = {word, 0}};
+		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
+		return alignFourOdds(result);
 	}
 
 	__attribute__((optimize("unroll-loops")))
@@ -521,8 +563,8 @@ private:
 			rightVNvec.vec >>= firstBit.vec;
 			maskBit.vec <<= firstBit.vec;
 		}
-		leftSmaller.vec = _mm_shuffle_epi8(leftSmaller.vec << fouralignvec.vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(leftSmaller.vec, unshufflevecFirst.vec);
-		rightSmaller.vec = _mm_shuffle_epi8(rightSmaller.vec << fouralignvec.vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(rightSmaller.vec, unshufflevecFirst.vec);
+		leftSmaller.vec = _mm_shuffle_epi8(unalignFour(leftSmaller).vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(leftSmaller.vec, unshufflevecFirst.vec);
+		rightSmaller.vec = _mm_shuffle_epi8(unalignFour(rightSmaller).vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(rightSmaller.vec, unshufflevecFirst.vec);
 
 		return std::make_pair(leftSmaller.val[0], rightSmaller.val[0]);
 	}
