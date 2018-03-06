@@ -1,6 +1,8 @@
 #ifndef WordSlice_h
 #define WordSlice_h
 
+#include <tmmintrin.h>
+
 template <typename Word>
 class WordConfiguration
 {
@@ -447,53 +449,86 @@ private:
 		uint64_t val[2];
 	};
 
+	static constexpr SIMDVector doubleshufflevec {.vec = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}};
+	static constexpr SIMDVector unshufflevecFirst {.vec = {0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0}};
+	static constexpr SIMDVector unshufflevecSecond {.vec = {1, 3, 5, 7, 9, 11, 13, 15, 0, 0, 0, 0, 0, 0, 0, 0}};
+	static constexpr SIMDVector fouralignvec {.vec = {0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4}};
+	static constexpr SIMDVector fourselectvec {.vec = {0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f}};
+	static constexpr SIMDVector oddfourselectvec {.vec = {0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f, 0, 0x0f}};
+	static constexpr SIMDVector firstBit {.vec = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}};
+
+	static SIMDVector fourBitSums(char zeroScore, uint64_t VP, uint64_t VN)
+	{
+		SIMDVector result {.vec = {zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore}};
+		uint64_t VPfours = VP - ((VP >> 1) & 0x5555555555555555);
+		uint64_t VNfours = VN - ((VN >> 1) & 0x5555555555555555);
+		VPfours = (VPfours & 0x3333333333333333) + ((VPfours >> 2) & 0x3333333333333333);
+		VNfours = (VNfours & 0x3333333333333333) + ((VNfours >> 2) & 0x3333333333333333);
+		uint64_t VPchunks = (VPfours + (VPfours >> 4)) & 0x0f0f0f0f0f0f0f0f;
+		uint64_t VNchunks = (VNfours + (VNfours >> 4)) & 0x0f0f0f0f0f0f0f0f;
+		VPfours <<= 4;
+		VNfours <<= 4;
+		VPchunks *= 0x0101010101010100;
+		VNchunks *= 0x0101010101010100;
+		SIMDVector plus {.val = {VPchunks, 0}};
+		result.vec += plus.vec;
+		plus.val[0] = VNchunks;
+		result.vec -= plus.vec;
+		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
+		result.vec += splitToFours(VPfours).vec & oddfourselectvec.vec;
+		result.vec -= splitToFours(VNfours).vec & oddfourselectvec.vec;
+		return result;
+	}
+
+	static SIMDVector splitToFours(uint64_t word)
+	{
+		SIMDVector result {.val = {word, 0}};
+		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
+		result.vec >>= fouralignvec.vec;
+		return result;
+	}
+
 	__attribute__((optimize("unroll-loops")))
 	static std::pair<uint64_t, uint64_t> differenceMasksSIMD(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		SIMDVector leftScores {.vec = {0}};
-		SIMDVector rightScores {.vec = {scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference,scoreDifference}};
-		SIMDVector tmp {.vec = {0}};
-		static_assert(sizeof(decltype(leftScores)) == 16);
-		static_assert(sizeof(decltype(rightScores)) == 16);
-		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVP));
-		leftScores.vec += tmp.vec;
-		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(leftVN));
-		leftScores.vec -= tmp.vec;
-		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVP));
-		rightScores.vec += tmp.vec;
-		tmp.val[0] = bytePrefixSums(WordConfiguration<Word>::ChunkPopcounts(rightVN));
-		rightScores.vec -= tmp.vec;
+		const uint64_t allones = WordConfiguration<Word>::AllOnes;
+		const uint64_t allzeros = WordConfiguration<Word>::AllZeros;
+		if (scoreDifference == 128 && rightVN == allones && leftVP == allones)
+		{
+			return std::make_pair(allones ^ ((Word)1 << (WordConfiguration<Word>::WordSize-1)), allzeros);
+		}
+		if (scoreDifference >= 128) return std::make_pair(allones, allzeros);
+		char diff = scoreDifference;
+		SIMDVector leftScores = fourBitSums(0, leftVP, leftVN);
+		SIMDVector rightScores = fourBitSums(scoreDifference, rightVP, rightVN);
 
-		SIMDVector leftVPvec {.val = {leftVP, 0}};
-		SIMDVector leftVNvec {.val = {leftVN, 0}};
-		SIMDVector rightVPvec {.val = {rightVP, 0}};
-		SIMDVector rightVNvec {.val = {rightVN, 0}};
-		SIMDVector firstBit {.vec = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}};
-		SIMDVector smallerMask {.vec = {0}};
-		uint64_t maskBit = 0x0101010101010101;
-		uint64_t leftSmaller {0};
-		uint64_t rightSmaller {0};
-		for (int i = 0; i < 8; i++)
+		SIMDVector leftVPvec = splitToFours(leftVP);
+		SIMDVector leftVNvec = splitToFours(leftVN);
+		SIMDVector rightVPvec = splitToFours(rightVP);
+		SIMDVector rightVNvec = splitToFours(rightVN);
+		SIMDVector leftSmaller {0};
+		SIMDVector rightSmaller {0};
+		SIMDVector maskBit {.vec = firstBit.vec};
+		for (int i = 0; i < 4; i++)
 		{
 			leftScores.vec += (leftVPvec.vec & firstBit.vec) - (leftVNvec.vec & firstBit.vec);
 			rightScores.vec += (rightVPvec.vec & firstBit.vec) - (rightVNvec.vec & firstBit.vec);
-			smallerMask.vec = leftScores.vec < rightScores.vec;
-			leftSmaller |= smallerMask.val[0] & maskBit;
-			smallerMask.vec = rightScores.vec < leftScores.vec;
-			rightSmaller |= smallerMask.val[0] & maskBit;
+			leftSmaller.vec |= (leftScores.vec < rightScores.vec) & maskBit.vec;
+			rightSmaller.vec |= (rightScores.vec < leftScores.vec) & maskBit.vec;
 			leftVPvec.vec >>= firstBit.vec;
 			leftVNvec.vec >>= firstBit.vec;
 			rightVPvec.vec >>= firstBit.vec;
 			rightVNvec.vec >>= firstBit.vec;
-			maskBit <<= 1;
+			maskBit.vec <<= firstBit.vec;
 		}
+		leftSmaller.vec = _mm_shuffle_epi8(leftSmaller.vec << fouralignvec.vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(leftSmaller.vec, unshufflevecFirst.vec);
+		rightSmaller.vec = _mm_shuffle_epi8(rightSmaller.vec << fouralignvec.vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(rightSmaller.vec, unshufflevecFirst.vec);
 
-		return std::make_pair(leftSmaller, rightSmaller);
+		return std::make_pair(leftSmaller.val[0], rightSmaller.val[0]);
 	}
 
 	static std::pair<uint64_t, uint64_t> differenceMasksWord(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		auto test = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(scoreDifference >= 0);
 		const uint64_t signmask = WordConfiguration<Word>::SignMask;
 		const uint64_t lsbmask = WordConfiguration<Word>::LSBMask;
