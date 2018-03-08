@@ -988,6 +988,7 @@ private:
 #ifndef NDEBUG
 		verifyTrace(result.second, sequence, result.first, slice);
 #endif
+		ArenaAllocator::ResetAllocator();
 		return result;
 	}
 
@@ -2346,6 +2347,7 @@ private:
 			assert(result.backtraceOverrides[i].startj > result.backtraceOverrides[i-1].endj);
 		}
 #endif
+		ArenaAllocator::ResetAllocator();
 		return result;
 	}
 
