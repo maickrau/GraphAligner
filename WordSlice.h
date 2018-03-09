@@ -1,6 +1,7 @@
 #ifndef WordSlice_h
 #define WordSlice_h
 
+#include "ByteStuff.h"
 #include <tmmintrin.h>
 
 template <typename Word>
@@ -40,7 +41,10 @@ public:
 	static int popcount(uint64_t x)
 	{
 		//https://gcc.gnu.org/onlinedocs/gcc-4.8.4/gcc/X86-Built-in-Functions.html
-		return __builtin_popcountll(x);
+		// return __builtin_popcountll(x);
+		//for some reason __builtin_popcount takes 21 instructions so call assembly directly
+		__asm__("popcnt %0, %0" : "+r" (x));
+		return x;
 	}
 #endif
 
@@ -434,7 +438,8 @@ private:
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		auto result = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		auto result = differenceMasksBytePrecalc(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		// auto result = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		auto debugCompare = differenceMasksWord(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(result.first == debugCompare.first);
@@ -567,6 +572,43 @@ private:
 		rightSmaller.vec = _mm_shuffle_epi8(unalignFour(rightSmaller).vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(rightSmaller.vec, unshufflevecFirst.vec);
 
 		return std::make_pair(leftSmaller.val[0], rightSmaller.val[0]);
+	}
+
+	static ScoreType clamp(ScoreType low, ScoreType val, ScoreType high)
+	{
+		return std::min(high, std::max(low, val));
+	}
+
+	static std::pair<Word, Word> differenceMasksBytePrecalc(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
+	{
+		assert(scoreDifference >= 0);
+		Word VPcommon = ~(leftVP & rightVP);
+		Word VNcommon = ~(leftVN & rightVN);
+		leftVP &= VPcommon;
+		leftVN &= VNcommon;
+		rightVP &= VPcommon;
+		rightVN &= VNcommon;
+		Word twosmaller = leftVN & rightVP;
+		Word onesmaller = (rightVP & ~leftVN) | (leftVN & ~rightVP);
+		Word equal = ~leftVP & ~leftVN & ~rightVP & ~rightVN;
+		Word onebigger = (leftVP & ~rightVN) | (rightVN & ~leftVP);
+		Word twobigger = rightVN & leftVP;
+		Word sign = onesmaller | twosmaller;
+		Word low = ~equal;
+		Word high = twosmaller | twobigger;
+		Word leftSmaller = 0;
+		Word rightSmaller = 0;
+		for (size_t i = 0; i < sizeof(Word); i++)
+		{
+			std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::VPVNChange((size_t)(clamp(-17, scoreDifference, 17)+17), sign & 0xFF, low & 0xFF, high & 0xFF);
+			leftSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
+			rightSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
+			scoreDifference += std::get<2>(bytePrecalced);
+			sign >>= 8;
+			low >>= 8;
+			high >>= 8;
+		}
+		return std::make_pair(leftSmaller, rightSmaller);
 	}
 
 	static std::pair<uint64_t, uint64_t> differenceMasksWord(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
