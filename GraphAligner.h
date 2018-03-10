@@ -1217,6 +1217,16 @@ private:
 				}
 			}
 #endif
+			if (currentBand[neighbor])
+			{
+				auto possiblePrevious = currentSlice.node(neighbor).back();
+				if (possiblePrevious.sliceExists && possiblePrevious.minScore <= quitScore)
+				{
+					previous = possiblePrevious;
+					hasRealNeighbor = true;
+					foundSomething = true;
+				}
+			}
 			if (previousBand[neighbor])
 			{
 				auto possiblePreviousUp = previousSlice.node(neighbor).back();
@@ -1225,27 +1235,20 @@ private:
 					previousUp = possiblePreviousUp;
 					foundOneUp = true;
 					foundSomething = true;
-					previous = getSourceSliceFromScore(possiblePreviousUp.scoreEnd);
-					assert(previousBand[neighbor]);
-					previous.scoreBeforeExists = true;
-					previous.sliceExists = true;
-					foundSomething = true;
-				}
-			}
-			if (currentBand[neighbor])
-			{
-				auto possiblePrevious = currentSlice.node(neighbor).back();
-				if (possiblePrevious.sliceExists && possiblePrevious.minScore <= quitScore)
-				{
-					if (previous.sliceExists)
-					{
-						previous = previous.mergeWith(possiblePrevious);
-					}
-					else
+					auto possiblePrevious = getSourceSliceFromScore(possiblePreviousUp.scoreEnd);
+					if (!previous.sliceExists)
 					{
 						previous = possiblePrevious;
+						previous.scoreBeforeExists = true;
+						previous.sliceExists = true;
 					}
-					hasRealNeighbor = true;
+					else if (possiblePrevious.scoreEnd < previous.scoreBeforeStart)
+					{
+						previous = previous.mergeWithVertical(possiblePrevious);
+						previous.scoreBeforeExists = true;
+						previous.sliceExists = true;
+					}
+					assert(previousBand[neighbor]);
 					foundSomething = true;
 				}
 			}
@@ -1434,7 +1437,7 @@ private:
 				{
 					auto mergable = getSourceSliceFromScore(upWordSlice.scoreEnd);
 					mergable.scoreBeforeExists = true;
-					currentWordSlice = currentWordSlice.mergeWith(mergable);
+					currentWordSlice = currentWordSlice.mergeWithVertical(mergable);
 				}
 				if (currentWordSlice.scoreEnd < result.minScore)
 				{
@@ -1506,7 +1509,7 @@ private:
 			{
 				auto mergable = getSourceSliceFromScore(upWordSlice.scoreEnd);
 				mergable.scoreBeforeExists = true;
-				currentWordSlice = currentWordSlice.mergeWith(mergable);
+				currentWordSlice = currentWordSlice.mergeWithVertical(mergable);
 			}
 
 			assert(previousBand[i] || currentWordSlice.scoreBeforeStart == j || currentWordSlice.scoreBeforeStart == previousWordSlice.scoreBeforeStart + 1);

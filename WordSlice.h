@@ -61,22 +61,22 @@ public:
 	static int BitPosition(uint64_t low, uint64_t high, int rank)
 	{
 		assert(rank >= 0);
-		auto result = BitPosition(low, rank);
-		if (result < 64) return result;
-		return 64 + BitPosition(high, result - 64);
+		if (popcount(low) <= rank)
+		{
+			rank -= popcount(low);
+			return 64 + BitPosition(high, rank);
+		}
+		return BitPosition(low, rank);
 	}
 
 	static int BitPosition(uint64_t number, int rank)
 	{
+		// // https://stackoverflow.com/questions/45482787/how-to-efficiently-find-the-n-th-set-bit
+		// uint64_t j = _pdep_u64(1 << rank, number);
+		// return (__builtin_ctz(j));
 		uint64_t bytes = ChunkPopcounts(number);
 		//cumulative popcount of each byte
 		uint64_t cumulative = bytes * PrefixSumMultiplierConstant;
-		//rank is higher than the total number of ones
-		if (rank >= (cumulative >> 56))
-		{
-			rank -= cumulative >> 56;
-			return 64 + rank;
-		}
 		//spread the rank into each byte
 		uint64_t rankFinder = ((rank + 1) & 0xFF) * PrefixSumMultiplierConstant;
 		//rankMask's msb will be 0 if the c. popcount at that byte is < rank, or 1 if >= rank
@@ -206,6 +206,12 @@ public:
 	WordSlice mergeWith(const WordSlice& other) const
 	{
 		auto result = mergeTwoSlices(*this, other);
+		return result;
+	}
+
+	WordSlice mergeWithVertical(const WordSlice& fullVertical) const
+	{
+		auto result = mergeWithVerticalSlice(*this, fullVertical);
 		return result;
 	}
 
@@ -389,18 +395,56 @@ private:
 		return result;
 	}
 
+	static WordSlice mergeWithVerticalSlice(WordSlice slice, WordSlice fullVertical)
+	{
+		assert(fullVertical.VP == WordConfiguration<Word>::AllOnes);
+		assert(slice.scoreBeforeStart > fullVertical.scoreBeforeStart);
+		if (slice.scoreEnd >= fullVertical.scoreEnd)
+		{
+			return fullVertical;
+		}
+		auto masks = differenceMaskFullVertical(slice, fullVertical.scoreBeforeStart);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		auto debugCompare = differenceMasks(fullVertical.VP, fullVertical.VN, slice.VP, slice.VN, slice.scoreBeforeStart - fullVertical.scoreBeforeStart);
+		assert(masks.first == debugCompare.first);
+		assert(masks.second == debugCompare.second);
+#endif
+		return mergeTwoSlices(fullVertical, slice, masks.first, masks.second);
+	}
+
+	static std::pair<Word, Word> differenceMaskFullVertical(WordSlice slice, ScoreType fullVerticalScore)
+	{
+		Word low = ~slice.VP;
+		Word high = slice.VN;
+		Word mortonLow = WordConfiguration<Word>::MortonLow(high, low);
+		Word mortonHigh = WordConfiguration<Word>::MortonHigh(high, low);
+		auto pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.scoreBeforeStart - fullVerticalScore - 1);
+		auto nextpos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.scoreBeforeStart - fullVerticalScore);
+		auto bitpos = pos / 2;
+		auto nextbitpos = nextpos / 2;
+		auto verticalSmaller = ~(WordConfiguration<Word>::AllOnes << bitpos);
+		auto sliceSmaller = WordConfiguration<Word>::AllOnes << nextbitpos;
+		return std::make_pair(verticalSmaller, sliceSmaller);
+	}
+
 	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right)
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value);
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
+		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
+		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
+		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
+		return mergeTwoSlices(left, right, masks.first, masks.second);
+	}
+
+	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right, Word leftSmaller, Word rightSmaller)
+	{
+		assert(left.scoreBeforeStart <= right.scoreBeforeStart);
 		WordSlice result;
 		result.sliceExists = true;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
-		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
-		auto leftSmaller = masks.first;
-		auto rightSmaller = masks.second;
 		assert((leftSmaller & rightSmaller) == 0);
 		auto mask = (rightSmaller | ((leftSmaller | rightSmaller) - (rightSmaller << 1))) & ~leftSmaller;
 		uint64_t leftReduction = leftSmaller & (rightSmaller << 1);
@@ -418,19 +462,12 @@ private:
 		result.VN = (left.VN & ~mask) | (right.VN & mask);
 		result.VP = (left.VP & ~mask) | (right.VP & mask);
 		assert((result.VP & result.VN) == 0);
-		result.scoreBeforeStart = std::min(left.scoreBeforeStart, right.scoreBeforeStart);
+		result.scoreBeforeStart = left.scoreBeforeStart;
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
-		if (left.scoreBeforeStart < right.scoreBeforeStart)
+		result.scoreBeforeExists = left.scoreBeforeExists;
+		if (right.scoreBeforeStart == left.scoreBeforeStart)
 		{
-			result.scoreBeforeExists = left.scoreBeforeExists;
-		}
-		else if (right.scoreBeforeStart < left.scoreBeforeStart)
-		{
-			result.scoreBeforeExists = right.scoreBeforeExists;
-		}
-		else
-		{
-			result.scoreBeforeExists = left.scoreBeforeExists || right.scoreBeforeExists;
+			result.scoreBeforeExists |= right.scoreBeforeExists;
 		}
 		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 		return result;
@@ -600,7 +637,8 @@ private:
 		Word rightSmaller = 0;
 		for (size_t i = 0; i < sizeof(Word); i++)
 		{
-			std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::VPVNChange((size_t)(clamp(-17, scoreDifference, 17)+17), sign & 0xFF, low & 0xFF, high & 0xFF);
+			// std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::VPVNChange((size_t)(clamp(-17, scoreDifference, 17)+17), sign & 0xFF, low & 0xFF, high & 0xFF);
+			std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(clamp(-17, scoreDifference, 17)+17) << 24) + ((sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
 			leftSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
 			rightSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
 			scoreDifference += std::get<2>(bytePrecalced);

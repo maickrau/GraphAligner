@@ -49,7 +49,7 @@ std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 			{
 				for (int high = 0; high < 256; high++)
 				{
-					assert(result.size() == index(scorediff, sign, low, high));
+					assert(result.size() == index(scorediff+17, sign, low, high));
 					result.push_back(precalcVPVNChange(scorediff, sign, low, high));
 				}
 			}
@@ -59,10 +59,10 @@ std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 	return result;
 }
 
-std::vector<std::tuple<uint8_t, uint8_t, int8_t>> precalcedVPVNChanges = getPrecalcedChanges();
 
 namespace ByteStuff
 {
+	std::vector<std::tuple<uint8_t, uint8_t, int8_t>> precalcedVPVNChanges = getPrecalcedChanges();
 	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediffPlusSeventeen, size_t sign, size_t low, size_t high)
 	{
 		size_t vecindex = index(scorediffPlusSeventeen, sign, low, high);

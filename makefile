@@ -1,6 +1,6 @@
 CC=gcc
 GPP=g++
-CPPFLAGS=-Wall -std=c++14 -O3 -g -flax-vector-conversions -msse4.1
+CPPFLAGS=-Wall -std=c++14 -O3 -g -flax-vector-conversions -msse4.1 -mbmi2
 
 ODIR=obj
 BINDIR=bin
