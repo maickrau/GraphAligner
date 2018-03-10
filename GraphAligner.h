@@ -1522,10 +1522,15 @@ private:
 				quitScore = std::min(quitScore, result.minScore + bandwidth);
 			}
 
+#ifdef EXTRACORRECTNESSASSERTIONS
 			if (oldWordSlice.sliceExists)
 			{
-				currentWordSlice = currentWordSlice.mergeWith(oldWordSlice);
+				auto debugTestSlice = currentWordSlice.mergeWith(oldWordSlice);
+				assert(debugTestSlice.scoreBeforeStart == currentWordSlice.scoreBeforeStart);
+				assert(debugTestSlice.VP == currentWordSlice.VP);
+				assert(debugTestSlice.VN == currentWordSlice.VN);
 			}
+#endif
 
 			timeUntilNextScoreCheck--;
 			if (timeUntilNextScoreCheck < 0 || w == nodeSize-1)
