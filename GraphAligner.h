@@ -1299,8 +1299,16 @@ private:
 	{
 		for (auto neighbor : params.graph.inNeighbors[nodeIndex])
 		{
-			if (currentBand[neighbor] && currentSlice.node(neighbor).back().sliceExists && currentSlice.node(neighbor).back().minScore <= quitScore) return false;
-			if (previousBand[neighbor] && previousSlice.node(neighbor).back().sliceExists && previousSlice.node(neighbor).back().scoreEnd <= previousSliceQuitScore) return false;
+			if (currentBand[neighbor])
+			{
+				auto slice = currentSlice.node(neighbor).back();
+				if (slice.sliceExists && slice.minScore <= quitScore) return false;
+			}
+			if (previousBand[neighbor])
+			{
+				auto slice = previousSlice.node(neighbor).back();
+				if (slice.sliceExists && slice.scoreEnd <= previousSliceQuitScore) return false;
+			}
 		}
 		return true;
 	}
@@ -1851,14 +1859,9 @@ private:
 			if (!currentSlice.hasNode(i))
 			{
 				assert(!currentBand[i]);
-				currentSlice.addNode(i, params.graph.NodeLength(i));
+				currentSlice.addNode(i, params.graph.NodeLength(i), WordSlice {0, 0, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max(), 0 });
 				currentSlice.setMinScore(i, std::numeric_limits<ScoreType>::max());
 				currentSlice.setStartIndex(i, offset);
-				auto node = currentSlice.node(i);
-				for (size_t ind = 0; ind < node.size(); ind++)
-				{
-					node[ind] = {0, 0, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max(), 0 };
-				}
 				currentBand[i] = true;
 			}
 			assert(currentBand[i]);
@@ -2002,6 +2005,7 @@ private:
 		assert(sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize);
 		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 		bandTest.correctness = previous.correctness;
+		bandTest.scores.reserve(previous.numCells);
 
 		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, bandwidth);
 
@@ -2636,15 +2640,10 @@ private:
 		DPSlice startSlice;
 		for (size_t i = 0; i < params.graph.nodeStart.size(); i++)
 		{
-			startSlice.scores.addNode(i, params.graph.NodeEnd(i) - params.graph.NodeStart(i));
+			startSlice.scores.addNode(i, params.graph.NodeEnd(i) - params.graph.NodeStart(i), WordSlice {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false});
 			startSlice.scores.setMinScore(i, 0);
 			startSlice.j = -WordConfiguration<Word>::WordSize;
 			startSlice.nodes.push_back(i);
-			auto slice = startSlice.scores.node(i);
-			for (size_t ii = 0; ii < slice.size(); ii++)
-			{
-				slice[ii] = {0, 0, 0, 0, WordConfiguration<Word>::WordSize, false};
-			}
 		}
 		size_t samplingFrequency = getSamplingFrequency(sequence.size());
 		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency);

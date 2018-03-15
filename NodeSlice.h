@@ -403,10 +403,10 @@ public:
 	{
 		return frozen == FullyMutable ? mutableSlices.size() : frozen == FrozenScores ? frozenSlices.size() : frozenSqrtSlices.size();
 	}
-	void resize(size_t size)
+	void resize(size_t size, Slice value)
 	{
 		assert(frozen == FullyMutable);
-		mutableSlices.resize(size);
+		mutableSlices.resize(size, value);
 	}
 	Slice& back()
 	{
@@ -590,6 +590,10 @@ public:
 	}
 	void addNode(size_t nodeIndex, size_t size)
 	{
+		addNode(nodeIndex, size, typename Container::Slice {0, 0, 0, 0, 0 });
+	}
+	void addNode(size_t nodeIndex, size_t size, typename Container::Slice value)
+	{
 		if (vectorMap != nullptr)
 		{
 			assert(nodeIndex < vectorMap->size());
@@ -602,7 +606,7 @@ public:
 			assert(nodes.find(nodeIndex) == nodes.end());
 			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
 		}
-		slices.resize(slices.size() + size);
+		slices.resize(slices.size() + size, value);
 	}
 	View node(size_t nodeIndex)
 	{
@@ -718,6 +722,7 @@ public:
 		result.nodes = nodes;
 		if (vectorMap != nullptr)
 		{
+			result.nodes.reserve(activeVectorMapIndices.size());
 			for (auto index : activeVectorMapIndices)
 			{
 				result.nodes[index] = (*vectorMap)[index];
@@ -733,6 +738,7 @@ public:
 		result.nodes = nodes;
 		if (vectorMap != nullptr)
 		{
+			result.nodes.reserve(activeVectorMapIndices.size());
 			for (auto index : activeVectorMapIndices)
 			{
 				result.nodes[index] = (*vectorMap)[index];
