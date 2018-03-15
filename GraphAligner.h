@@ -7,7 +7,6 @@
 #include <vector>
 #include <cmath>
 #include <unordered_set>
-#include <queue>
 #include <iostream>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
@@ -19,6 +18,7 @@
 #include "UniqueQueue.h"
 #include "WordSlice.h"
 #include "GraphAlignerCommon.h"
+#include "ArrayPriorityQueue.h"
 
 void printtime(const char* msg)
 {
@@ -58,7 +58,26 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
+	class NodeWithPriority
+	{
+	public:
+		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
+		bool operator>(const NodeWithPriority& other) const
+		{
+			return priority > other.priority;
+		}
+		bool operator<(const NodeWithPriority& other) const
+		{
+			return priority < other.priority;
+		}
+		LengthType node;
+		size_t offset;
+		size_t endOffset;
+		int priority;
+	};
+
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
+	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
 	mutable BufferedWriter logger;
 	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 	typedef GraphAlignerParams<LengthType, ScoreType, Word> Params;
@@ -421,6 +440,7 @@ private:
 public:
 
 	GraphAligner(const Params& params) :
+	calculableQueue(WordConfiguration<Word>::WordSize + std::max(params.initialBandwidth, params.rampBandwidth) + 1),
 	logger(std::cerr),
 	nodesliceMap(),
 	params(params)
@@ -1062,24 +1082,6 @@ private:
 		assert(table[0].scores.hasNode(params.graph.IndexToNode(result.back().first)));
 		return result;
 	}
-
-	class NodeWithPriority
-	{
-	public:
-		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
-		bool operator>(const NodeWithPriority& other) const
-		{
-			return priority > other.priority;
-		}
-		bool operator<(const NodeWithPriority& other) const
-		{
-			return priority < other.priority;
-		}
-		LengthType node;
-		size_t offset;
-		size_t endOffset;
-		int priority;
-	};
 
 #ifdef EXTRABITVECTORASSERTIONS
 
@@ -1807,7 +1809,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousQuitScore, int bandwidth) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		LengthType currentMinimumIndex;
@@ -1829,13 +1831,11 @@ private:
 		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
 		EqVector EqV {BA, BT, BC, BG};
 
-		std::priority_queue<NodeWithPriority, std::vector<NodeWithPriority>, std::greater<NodeWithPriority>> calculableQueue;
-
 		for (auto node : previousNodes)
 		{
 			if (previousSlice.minScore(node) <= previousQuitScore)
 			{
-				calculableQueue.emplace(node, previousSlice.startIndex(node), previousSlice.endIndex(node), previousSlice.minScore(node));
+				calculableQueue.insert(previousSlice.minScore(node) - previousMinScore, NodeWithPriority { node, previousSlice.startIndex(node), previousSlice.endIndex(node), previousSlice.minScore(node) });
 			}
 		}
 		assert(calculableQueue.size() != 0);
@@ -1890,7 +1890,7 @@ private:
 				{
 					for (auto neighbor : params.graph.outNeighbors[i])
 					{
-						calculableQueue.emplace(neighbor, 0, 0, newEndMinScore);
+						calculableQueue.insert(newEndMinScore - previousMinScore, NodeWithPriority { neighbor, 0, 0, newEndMinScore });
 					}
 				}
 			}
@@ -1911,13 +1911,14 @@ private:
 			cellsProcessed += nodeCalc.cellsProcessed;
 		}
 
-
 		NodeCalculationResult result;
 		result.minScore = currentMinimumScore;
 		result.minScoreIndex = currentMinimumIndex;
 		result.cellsProcessed = cellsProcessed;
 
 		finalizeSlice(currentSlice, result, bandwidth);
+
+		calculableQueue.clear();
 
 		return result;
 	}
@@ -1981,7 +1982,7 @@ private:
 
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, std::vector<bool>& currentBand, int bandwidth) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, previousSlice.minScore + previousSlice.bandwidth, bandwidth);
+		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 		slice.bandwidth = bandwidth;
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreIndex = sliceResult.minScoreIndex;
