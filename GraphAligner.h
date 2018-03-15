@@ -1943,6 +1943,7 @@ private:
 #ifndef NDEBUG
 			ScoreType debugNodeMinScore = std::numeric_limits<ScoreType>::max();
 #endif
+			ScoreType cellMinScore = minScore+bandwidth+1;
 			for (size_t i = 0; i < node.second.size(); i++)
 			{
 				WordSlice& cell = node.second[i];
@@ -1955,8 +1956,19 @@ private:
 #ifndef NDEBUG
 				debugNodeMinScore = std::min(debugNodeMinScore, cell.scoreEnd);
 #endif
-				if (cell.scoreBeforeStart != uninitScore) cell.calcMinScore();
-				if (cell.scoreBeforeStart == uninitScore || cell.minScore > minScore+bandwidth)
+				if (cell.scoreBeforeStart != uninitScore)
+				{
+					if (cellMinScore < minScore+bandwidth)
+					{
+						cellMinScore++;
+					}
+					else
+					{
+						cell.calcMinScore();
+						cellMinScore = cell.minScore;
+					}
+				}
+				if (cell.scoreBeforeStart == uninitScore || cellMinScore > minScore+bandwidth)
 				{
 #ifdef SLICEVERBOSE
 					if (cell.scoreEnd != uninitScore) uselessCells++;
