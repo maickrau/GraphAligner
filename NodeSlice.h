@@ -312,12 +312,9 @@ public:
 	}
 	const Slice getSlice(size_t index) const
 	{
-		if (frozen == FrozenScores)
+		if (frozen == FullyMutable)
 		{
-			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
-			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
-			result.sliceExists = frozenSlices[index].sliceExists;
-			return result;
+			return mutableSlices[index];
 		}
 		else if (frozen == FrozenLastRow)
 		{
@@ -332,7 +329,10 @@ public:
 		}
 		else
 		{
-			return mutableSlices[index];
+			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
+			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
+			result.sliceExists = frozenSlices[index].sliceExists;
+			return result;
 		}
 	}
 	WordContainer getFrozenScores() const
