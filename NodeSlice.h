@@ -436,7 +436,7 @@ template <typename T>
 class NodeSlice
 {
 public:
-	using MapType = std::unordered_map<size_t, NodeSliceMapItem, std::hash<size_t>, std::equal_to<size_t>, ArenaAllocator::ArenaAllocator<std::pair<const size_t,NodeSliceMapItem>>>;
+	using MapType = std::unordered_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
 	using Container = WordContainer<size_t, int, uint64_t>;
 	using View = Container::ContainerView;
