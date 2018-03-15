@@ -322,26 +322,31 @@ private:
 			std::vector<std::unordered_map<LengthType, size_t>> indexOfPos;
 			indexOfPos.resize(items.size());
 			size_t endrow = items.size()-1;
-#ifdef SLICEVERBOSE
-			size_t numEndCells = 0;
-#endif
-			for (const auto& pair : slices.back().scores)
 			{
-				LengthType nodeStart = params.graph.NodeStart(pair.first);
-				LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
-				for (size_t i = 0; i < pair.second.size(); i++)
+				std::vector<MatrixPosition> endPositions;
+				for (const auto& pair : slices.back().scores)
 				{
-					if (pair.second[i].scoreEnd <= slices.back().minScore + slices.back().bandwidth)
+					LengthType nodeStart = params.graph.NodeStart(pair.first);
+					LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
+					for (size_t i = 0; i < pair.second.size(); i++)
 					{
-#ifdef SLICEVERBOSE
-						numEndCells++;
-#endif
-						addReachableRec(params, MatrixPosition { nodeStart+i, endj }, endrow, sequence, previous, slices, indexOfPos);
+						if (pair.second[i].scoreEnd <= slices.back().minScore + slices.back().bandwidth)
+						{
+							endPositions.emplace_back(nodeStart+i, endj);
+						}
 					}
+				}
+				for (size_t i = 0; i < indexOfPos.size(); i++)
+				{
+					indexOfPos[i].reserve(endPositions.size());
+				}
+				for (auto pos : endPositions)
+				{
+					addReachableRec(params, pos, endrow, sequence, previous, slices, indexOfPos);
 				}
 			}
 #ifdef SLICEVERBOSE
-			std::cerr << " endcells " << numEndCells;
+			std::cerr << " endcells " << endPositions.size();
 #endif
 
 			for (size_t row = items.size()-1; row < items.size(); row--)
