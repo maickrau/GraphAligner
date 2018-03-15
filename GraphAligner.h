@@ -344,10 +344,10 @@ private:
 				{
 					addReachableRec(params, pos, endrow, sequence, previous, slices, indexOfPos);
 				}
-			}
 #ifdef SLICEVERBOSE
-			std::cerr << " endcells " << endPositions.size();
+				std::cerr << " endcells " << endPositions.size();
 #endif
+			}
 
 			for (size_t row = items.size()-1; row < items.size(); row--)
 			{
