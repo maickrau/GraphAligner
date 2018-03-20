@@ -616,6 +616,7 @@ private:
 		return std::min(high, std::max(low, val));
 	}
 
+	__attribute__((optimize("unroll-loops")))
 	static std::pair<Word, Word> differenceMasksBytePrecalc(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
 	{
 		assert(scoreDifference >= 0);
@@ -637,11 +638,20 @@ private:
 		Word rightSmaller = 0;
 		for (size_t i = 0; i < sizeof(Word); i++)
 		{
-			// std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::VPVNChange((size_t)(clamp(-17, scoreDifference, 17)+17), sign & 0xFF, low & 0xFF, high & 0xFF);
-			std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(clamp(-17, scoreDifference, 17)+17) << 24) + ((sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
-			leftSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
-			rightSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
-			scoreDifference += std::get<2>(bytePrecalced);
+			if (scoreDifference >= 0)
+			{
+				std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(std::min(scoreDifference, 17)) << 24) + ((sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
+				leftSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
+				rightSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
+				scoreDifference += std::get<2>(bytePrecalced);
+			}
+			else
+			{
+				std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(std::min(-scoreDifference, 17)) << 24) + ((~sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
+				leftSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
+				rightSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
+				scoreDifference -= std::get<2>(bytePrecalced);
+			}
 			sign >>= 8;
 			low >>= 8;
 			high >>= 8;

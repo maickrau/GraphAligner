@@ -3,13 +3,13 @@
 #include "ThreadReadAssertion.h"
 #include "ByteStuff.h"
 
-size_t index(size_t scorediffPlusSeventeen, size_t sign, size_t low, size_t high)
+size_t index(size_t scorediff, size_t sign, size_t low, size_t high)
 {
-	assert(scorediffPlusSeventeen <= 17+17);
+	assert(scorediff <= 17);
 	assert(sign < 256);
 	assert(low < 256);
 	assert(high < 256);
-	return scorediffPlusSeventeen*256*256*256+sign*256*256+low*256+high;
+	return scorediff*256*256*256+sign*256*256+low*256+high;
 }
 
 std::tuple<uint8_t, uint8_t, int8_t> precalcVPVNChange(int8_t scorediff, uint8_t sign, uint8_t low, uint8_t high)
@@ -40,8 +40,8 @@ std::tuple<uint8_t, uint8_t, int8_t> precalcVPVNChange(int8_t scorediff, uint8_t
 std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 {
 	std::vector<std::tuple<uint8_t, uint8_t, int8_t>> result;
-	result.reserve((17+17+1)*256*256*256);
-	for (int scorediff = -17; scorediff <= 17; scorediff++)
+	result.reserve((17+1)*256*256*256);
+	for (int scorediff = 0; scorediff <= 17; scorediff++)
 	{
 		for (int sign = 0; sign < 256; sign++)
 		{
@@ -49,13 +49,13 @@ std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 			{
 				for (int high = 0; high < 256; high++)
 				{
-					assert(result.size() == index(scorediff+17, sign, low, high));
+					assert(result.size() == index(scorediff, sign, low, high));
 					result.push_back(precalcVPVNChange(scorediff, sign, low, high));
 				}
 			}
 		}
 	}
-	assert(result.size() == (17+17+1)*256*256*256);
+	assert(result.size() == (17+1)*256*256*256);
 	return result;
 }
 
@@ -63,9 +63,9 @@ std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 namespace ByteStuff
 {
 	std::vector<std::tuple<uint8_t, uint8_t, int8_t>> precalcedVPVNChanges = getPrecalcedChanges();
-	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediffPlusSeventeen, size_t sign, size_t low, size_t high)
+	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediff, size_t sign, size_t low, size_t high)
 	{
-		size_t vecindex = index(scorediffPlusSeventeen, sign, low, high);
+		size_t vecindex = index(scorediff, sign, low, high);
 		assert(vecindex < precalcedVPVNChanges.size());
 		return precalcedVPVNChanges[vecindex];
 	}

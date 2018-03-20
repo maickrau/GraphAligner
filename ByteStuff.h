@@ -6,7 +6,7 @@
 
 namespace ByteStuff
 {
-	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediffPlusSeventeen, size_t sign, size_t low, size_t high);
+	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediff, size_t sign, size_t low, size_t high);
 	extern std::vector<std::tuple<uint8_t, uint8_t, int8_t>> precalcedVPVNChanges;
 }
 
