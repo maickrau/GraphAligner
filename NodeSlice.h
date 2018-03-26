@@ -4,6 +4,7 @@
 #include <limits>
 #include <unordered_map>
 #include <vector>
+#include "ArenaAllocator.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
 
@@ -311,12 +312,9 @@ public:
 	}
 	const Slice getSlice(size_t index) const
 	{
-		if (frozen == FrozenScores)
+		if (frozen == FullyMutable)
 		{
-			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
-			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
-			result.sliceExists = frozenSlices[index].sliceExists;
-			return result;
+			return mutableSlices[index];
 		}
 		else if (frozen == FrozenLastRow)
 		{
@@ -331,7 +329,10 @@ public:
 		}
 		else
 		{
-			return mutableSlices[index];
+			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
+			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
+			result.sliceExists = frozenSlices[index].sliceExists;
+			return result;
 		}
 	}
 	WordContainer getFrozenScores() const
@@ -402,10 +403,10 @@ public:
 	{
 		return frozen == FullyMutable ? mutableSlices.size() : frozen == FrozenScores ? frozenSlices.size() : frozenSqrtSlices.size();
 	}
-	void resize(size_t size)
+	void resize(size_t size, Slice value)
 	{
 		assert(frozen == FullyMutable);
-		mutableSlices.resize(size);
+		mutableSlices.resize(size, value);
 	}
 	Slice& back()
 	{
@@ -435,12 +436,13 @@ template <typename T>
 class NodeSlice
 {
 public:
+	using MapType = std::unordered_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
 	using Container = WordContainer<size_t, int, uint64_t>;
 	using View = Container::ContainerView;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, View>>
 	{
-		using map_iterator = typename std::unordered_map<size_t, NodeSliceMapItem>::iterator;
+		using map_iterator = typename MapType::iterator;
 	public:
 		NodeSliceIterator(NodeSlice* slice, map_iterator pos) :
 		slice(slice),
@@ -507,7 +509,7 @@ public:
 	};
 	class NodeSliceConstIterator : std::iterator<std::forward_iterator_tag, const std::pair<size_t, View>>
 	{
-		using map_iterator = typename std::unordered_map<size_t, NodeSliceMapItem>::const_iterator;
+		using map_iterator = typename MapType::const_iterator;
 	public:
 		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos) :
 		slice(slice),
@@ -588,6 +590,10 @@ public:
 	}
 	void addNode(size_t nodeIndex, size_t size)
 	{
+		addNode(nodeIndex, size, typename Container::Slice {0, 0, 0, 0, 0 });
+	}
+	void addNode(size_t nodeIndex, size_t size, typename Container::Slice value)
+	{
 		if (vectorMap != nullptr)
 		{
 			assert(nodeIndex < vectorMap->size());
@@ -600,7 +606,7 @@ public:
 			assert(nodes.find(nodeIndex) == nodes.end());
 			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
 		}
-		slices.resize(slices.size() + size);
+		slices.resize(slices.size() + size, value);
 	}
 	View node(size_t nodeIndex)
 	{
@@ -712,16 +718,15 @@ public:
 	{
 		NodeSlice result;
 		result.slices = slices.getFrozenSqrtEndScores();
+		//copy the map always to make sure that the memory arena gets reused
+		result.nodes = nodes;
 		if (vectorMap != nullptr)
 		{
+			result.nodes.reserve(activeVectorMapIndices.size());
 			for (auto index : activeVectorMapIndices)
 			{
 				result.nodes[index] = (*vectorMap)[index];
 			}
-		}
-		else
-		{
-			result.nodes = nodes;
 		}
 		return result;
 	}
@@ -729,16 +734,15 @@ public:
 	{
 		NodeSlice result;
 		result.slices = slices.getFrozenScores();
+		//copy the map always to make sure that the memory arena gets reused
+		result.nodes = nodes;
 		if (vectorMap != nullptr)
 		{
+			result.nodes.reserve(activeVectorMapIndices.size());
 			for (auto index : activeVectorMapIndices)
 			{
 				result.nodes[index] = (*vectorMap)[index];
 			}
-		}
-		else
-		{
-			result.nodes = nodes;
 		}
 		return result;
 	}
@@ -775,7 +779,7 @@ private:
 	}
 	std::vector<NodeSliceMapItem>* vectorMap;
 	std::vector<size_t> activeVectorMapIndices;
-	std::unordered_map<size_t, NodeSliceMapItem> nodes;
+	MapType nodes;
 	Container slices;
 	friend class NodeSliceIterator;
 	friend class NodeSliceConstIterator;
