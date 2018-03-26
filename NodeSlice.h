@@ -4,7 +4,6 @@
 #include <limits>
 #include <unordered_map>
 #include <vector>
-#include "ArenaAllocator.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
 
