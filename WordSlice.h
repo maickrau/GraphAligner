@@ -2,7 +2,6 @@
 #define WordSlice_h
 
 #include "ByteStuff.h"
-#include <tmmintrin.h>
 
 template <typename Word>
 class WordConfiguration
@@ -476,139 +475,12 @@ private:
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
 		auto result = differenceMasksBytePrecalc(leftVP, leftVN, rightVP, rightVN, scoreDifference);
-		// auto result = differenceMasksSIMD(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		auto debugCompare = differenceMasksWord(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(result.first == debugCompare.first);
 		assert(result.second == debugCompare.second);
 #endif
 		return result;
-	}
-
-	union SIMDVector
-	{
-		char vec __attribute__((vector_size(16)));
-		uint64_t val[2];
-	};
-
-	static constexpr SIMDVector doubleshufflevec {.vec = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7}};
-	static constexpr SIMDVector unshufflevecFirst {.vec = {0, 2, 4, 6, 8, 10, 12, 14, 0, 0, 0, 0, 0, 0, 0, 0}};
-	static constexpr SIMDVector unshufflevecSecond {.vec = {1, 3, 5, 7, 9, 11, 13, 15, 0, 0, 0, 0, 0, 0, 0, 0}};
-	static constexpr SIMDVector firstBit {.vec = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}};
-
-	static SIMDVector fourBitSums(char zeroScore, uint64_t VP, uint64_t VN)
-	{
-		SIMDVector result {.vec = {zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore,zeroScore}};
-		uint64_t VPfours = VP - ((VP >> 1) & 0x5555555555555555);
-		uint64_t VNfours = VN - ((VN >> 1) & 0x5555555555555555);
-		VPfours = (VPfours & 0x3333333333333333) + ((VPfours >> 2) & 0x3333333333333333);
-		VNfours = (VNfours & 0x3333333333333333) + ((VNfours >> 2) & 0x3333333333333333);
-		uint64_t VPchunks = (VPfours + (VPfours >> 4)) & 0x0f0f0f0f0f0f0f0f;
-		uint64_t VNchunks = (VNfours + (VNfours >> 4)) & 0x0f0f0f0f0f0f0f0f;
-		VPfours <<= 4;
-		VNfours <<= 4;
-		VPchunks *= 0x0101010101010100;
-		VNchunks *= 0x0101010101010100;
-		SIMDVector plus {.val = {VPchunks, 0}};
-		result.vec += plus.vec;
-		plus.val[0] = VNchunks;
-		result.vec -= plus.vec;
-		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
-		result.vec += splitToFourOdds(VPfours).vec;
-		result.vec -= splitToFourOdds(VNfours).vec;
-		return result;
-	}
-
-	static uint64_t alignFour(uint64_t word)
-	{
-		return ((word & 0xf000f000f000f000) >> 4) + (word & 0x000f000f000f000f);
-	}
-
-	static uint64_t alignFourOdd(uint64_t word)
-	{
-		return ((word & 0xf000f000f000f000) >> 4);
-	}
-
-	static uint64_t unalignFour(uint64_t word)
-	{
-		return ((word & 0x0f000f000f000f00) << 4) + (word & 0x000f000f000f000f);
-	}
-
-	static SIMDVector alignFour(SIMDVector vec)
-	{
-		//SIMD does not do bitshifting quickly. Do manually instead
-		vec.val[0] = alignFour(vec.val[0]);
-		vec.val[1] = alignFour(vec.val[1]);
-		return vec;
-	}
-
-	static SIMDVector alignFourOdds(SIMDVector vec)
-	{
-		//SIMD does not do bitshifting quickly. Do manually instead
-		vec.val[0] = alignFourOdd(vec.val[0]);
-		vec.val[1] = alignFourOdd(vec.val[1]);
-		return vec;
-	}
-
-	static SIMDVector unalignFour(SIMDVector vec)
-	{
-		//SIMD does not do bitshifting quickly. Do manually instead
-		vec.val[0] = unalignFour(vec.val[0]);
-		vec.val[1] = unalignFour(vec.val[1]);
-		return vec;
-	}
-
-	static SIMDVector splitToFours(uint64_t word)
-	{
-		SIMDVector result {.val = {word, 0}};
-		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
-		return alignFour(result);
-	}
-
-	static SIMDVector splitToFourOdds(uint64_t word)
-	{
-		SIMDVector result {.val = {word, 0}};
-		result.vec = _mm_shuffle_epi8(result.vec, doubleshufflevec.vec);
-		return alignFourOdds(result);
-	}
-
-	__attribute__((optimize("unroll-loops")))
-	static std::pair<uint64_t, uint64_t> differenceMasksSIMD(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
-	{
-		const uint64_t allones = WordConfiguration<Word>::AllOnes;
-		const uint64_t allzeros = WordConfiguration<Word>::AllZeros;
-		if (scoreDifference == 128 && rightVN == allones && leftVP == allones)
-		{
-			return std::make_pair(allones ^ ((Word)1 << (WordConfiguration<Word>::WordSize-1)), allzeros);
-		}
-		if (scoreDifference >= 128) return std::make_pair(allones, allzeros);
-		char diff = scoreDifference;
-		SIMDVector leftScores = fourBitSums(0, leftVP, leftVN);
-		SIMDVector rightScores = fourBitSums(scoreDifference, rightVP, rightVN);
-
-		SIMDVector leftVPvec = splitToFours(leftVP);
-		SIMDVector leftVNvec = splitToFours(leftVN);
-		SIMDVector rightVPvec = splitToFours(rightVP);
-		SIMDVector rightVNvec = splitToFours(rightVN);
-		SIMDVector leftSmaller {0};
-		SIMDVector rightSmaller {0};
-		SIMDVector maskBit {.vec = firstBit.vec};
-		for (int i = 0; i < 4; i++)
-		{
-			leftScores.vec += (leftVPvec.vec & firstBit.vec) - (leftVNvec.vec & firstBit.vec);
-			rightScores.vec += (rightVPvec.vec & firstBit.vec) - (rightVNvec.vec & firstBit.vec);
-			leftSmaller.vec |= (leftScores.vec < rightScores.vec) & maskBit.vec;
-			rightSmaller.vec |= (rightScores.vec < leftScores.vec) & maskBit.vec;
-			leftVPvec.vec >>= firstBit.vec;
-			leftVNvec.vec >>= firstBit.vec;
-			rightVPvec.vec >>= firstBit.vec;
-			rightVNvec.vec >>= firstBit.vec;
-			maskBit.vec <<= firstBit.vec;
-		}
-		leftSmaller.vec = _mm_shuffle_epi8(unalignFour(leftSmaller).vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(leftSmaller.vec, unshufflevecFirst.vec);
-		rightSmaller.vec = _mm_shuffle_epi8(unalignFour(rightSmaller).vec, unshufflevecSecond.vec) | _mm_shuffle_epi8(rightSmaller.vec, unshufflevecFirst.vec);
-
-		return std::make_pair(leftSmaller.val[0], rightSmaller.val[0]);
 	}
 
 	static ScoreType clamp(ScoreType low, ScoreType val, ScoreType high)
