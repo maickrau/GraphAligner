@@ -15,7 +15,6 @@
 #include "GraphAlignerWrapper.h"
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
-#include "UniqueQueue.h"
 #include "WordSlice.h"
 #include "GraphAlignerCommon.h"
 #include "ArrayPriorityQueue.h"
