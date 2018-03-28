@@ -13,7 +13,13 @@
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, const std::vector<std::tuple<int, size_t, bool>>& seedHits)
 {
-	GraphAlignerParams<size_t, int32_t, uint64_t> params {initialBandwidth, rampBandwidth, graph};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, rampBandwidth, graph};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
-	return aligner.AlignOneWay(seq_id, sequence, seedHits);
+	std::vector<GraphAlignerCommon<size_t, int32_t, uint64_t>::SeedHit> seeds;
+	seeds.reserve(seedHits.size());
+	for (auto seed : seedHits)
+	{
+		seeds.emplace_back(std::get<0>(seed), std::get<1>(seed), std::get<2>(seed));
+	}
+	return aligner.AlignOneWay(seq_id, sequence, seeds);
 }

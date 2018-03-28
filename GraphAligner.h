@@ -21,11 +21,12 @@ private:
 	using VGAlignment = GraphAlignerVGAlignment<LengthType, ScoreType, Word>;
 	using BitvectorAligner = GraphAlignerBitvector<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
+	using Params = typename Common::Params;
+	using SeedHit = typename Common::SeedHit;
+	using MatrixPosition = typename Common::MatrixPosition;
 	mutable BitvectorAligner bvAligner;
 	mutable BufferedWriter logger;
-	typedef GraphAlignerParams<LengthType, ScoreType, Word> Params;
 	const Params& params;
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
 public:
 
 	GraphAligner(const Params& params) :
@@ -56,15 +57,15 @@ public:
 	// 	return result;
 	// }
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<std::tuple<int, size_t, bool>>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits) const
 	{
 		assert(params.graph.finalized);
 		AlignmentResult result;
 		assert(seedHits.size() > 0);
-		std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
+		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			logger << "seed " << i << "/" << seedHits.size() << " " << std::get<0>(seedHits[i]) << (std::get<2>(seedHits[i]) ? "-" : "+") << "," << std::get<1>(seedHits[i]);
+			logger << "seed " << i << "/" << seedHits.size() << " " << seedHits[i].nodeID << (seedHits[i].reverse ? "-" : "+") << "," << seedHits[i].seqPos;
 			// auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
 			// auto pos = std::get<1>(seedHits[i]);
 			// if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
@@ -84,29 +85,28 @@ public:
 
 private:
 
-	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, std::tuple<int, size_t, bool> seedHit) const
+	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit) const
 	{
 		assert(params.graph.finalized);
 		auto timeStart = std::chrono::system_clock::now();
 
-		auto pos = std::get<1>(seedHit);
 		auto trace = bvAligner.getTraceFromSeed(sequence, seedHit);
 
 #ifndef NDEBUG
-		if (std::get<1>(trace.first).size() > 0) verifyTrace(std::get<1>(trace.first), sequence, std::get<0>(trace.first));
-		if (std::get<1>(trace.second).size() > 0) verifyTrace(std::get<1>(trace.second), sequence, std::get<0>(trace.second));
+		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);
+		if (trace.backward.trace.size() > 0) verifyTrace(trace.backward.trace, sequence, trace.backward.score);
 #endif
 
 		//failed alignment, don't output
-		if (std::get<0>(trace.first) == std::numeric_limits<ScoreType>::max() && std::get<0>(trace.second) == std::numeric_limits<ScoreType>::max())
+		if (trace.forward.failed() && trace.backward.failed())
 		{
 			return VGAlignment::emptyAlignment(0, 0);
 		}
 
-		auto traceVector = getTraceInfo(sequence, std::get<1>(trace.second), std::get<1>(trace.first));
+		// auto traceVector = getTraceInfo(sequence, trace.backward.trace, trace.forward.trace);
 
-		auto fwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, std::get<0>(trace.first), std::get<1>(trace.first), 0);
-		auto bwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, std::get<0>(trace.second), std::get<1>(trace.second), 0);
+		auto fwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.forward.score, trace.forward.trace, 0);
+		auto bwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.backward.score, trace.backward.trace, 0);
 		//failed alignment, don't output
 		if (fwresult.alignmentFailed() && bwresult.alignmentFailed())
 		{
@@ -115,28 +115,28 @@ private:
 		auto result = VGAlignment::mergeAlignments(params, bwresult, fwresult);
 		LengthType seqstart = 0;
 		LengthType seqend = 0;
-		assert(std::get<1>(trace.first).size() > 0 || std::get<1>(trace.second).size() > 0);
-		if (std::get<1>(trace.second).size() > 0 && std::get<1>(trace.first).size() > 0)
+		assert(trace.forward.trace.size() > 0 || trace.backward.trace.size() > 0);
+		if (trace.backward.trace.size() > 0 && trace.forward.trace.size() > 0)
 		{
-			seqstart = std::get<1>(trace.second)[0].second;
-			seqend = std::get<1>(trace.first).back().second;
+			seqstart = trace.backward.trace[0].second;
+			seqend = trace.forward.trace.back().second;
 		}
-		else if (std::get<1>(trace.second).size() > 0)
+		else if (trace.backward.trace.size() > 0)
 		{
-			seqstart = std::get<1>(trace.second)[0].second;
-			seqend = std::get<1>(trace.second).back().second;
+			seqstart = trace.backward.trace[0].second;
+			seqend = trace.backward.trace.back().second;
 		}
-		else if (std::get<1>(trace.first).size() > 0)
+		else if (trace.forward.trace.size() > 0)
 		{
-			seqstart = std::get<1>(trace.first)[0].second;
-			seqend = std::get<1>(trace.first).back().second;
+			seqstart = trace.forward.trace[0].second;
+			seqend = trace.forward.trace.back().second;
 		}
 		else
 		{
 			assert(false);
 		}
 		result.alignment.set_sequence(sequence.substr(seqstart, seqend - seqstart));
-		result.trace = traceVector;
+		// result.trace = traceVector;
 		result.alignment.set_query_position(seqstart);
 		result.alignmentStart = seqstart;
 		result.alignmentEnd = seqend;
@@ -146,21 +146,21 @@ private:
 		return result;
 	}
 
-	void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const AlignmentResult::AlignmentItem& trace) const
-	{
-		assert(trace.trace.size() > 0);
-		LengthType currentNode = trace.trace[0].nodeID;
-		size_t currentReadStart = trace.trace[0].readpos;
-		for (size_t i = 1; i < trace.trace.size(); i++)
-		{
-			if (trace.trace[i].nodeID != currentNode)
-			{
-				tried.emplace_back(currentReadStart, trace.trace[i-1].readpos, currentNode);
-				currentNode = trace.trace[i].nodeID;
-				currentReadStart = trace.trace[i].readpos;
-			}
-		}
-	}
+	// void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const AlignmentResult::AlignmentItem& trace) const
+	// {
+	// 	assert(trace.trace.size() > 0);
+	// 	LengthType currentNode = trace.trace[0].nodeID;
+	// 	size_t currentReadStart = trace.trace[0].readpos;
+	// 	for (size_t i = 1; i < trace.trace.size(); i++)
+	// 	{
+	// 		if (trace.trace[i].nodeID != currentNode)
+	// 		{
+	// 			tried.emplace_back(currentReadStart, trace.trace[i-1].readpos, currentNode);
+	// 			currentNode = trace.trace[i].nodeID;
+	// 			currentReadStart = trace.trace[i].readpos;
+	// 		}
+	// 	}
+	// }
 
 	std::vector<AlignmentResult::TraceItem> getTraceInfo(const std::string& sequence, const std::vector<MatrixPosition>& bwtrace, const std::vector<MatrixPosition>& fwtrace) const
 	{

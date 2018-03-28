@@ -13,8 +13,9 @@
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerVGAlignment
 {
-	typedef GraphAlignerParams<LengthType, ScoreType, Word> Params;
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
+	using Params = typename Common::Params;
+	using MatrixPosition = typename Common::MatrixPosition;
 public:
 	static AlignmentResult::AlignmentItem traceToAlignment(const Params& params, const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed)
 	{

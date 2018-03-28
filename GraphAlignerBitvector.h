@@ -43,13 +43,16 @@ private:
 	};
 
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
+	using Params = typename Common::Params;
+	using MatrixPosition = typename Common::MatrixPosition;
+	using Trace = typename Common::Trace;
+	using OnewayTrace = typename Common::OnewayTrace;
+	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
 	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
 	mutable BufferedWriter logger;
 	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
-	typedef GraphAlignerParams<LengthType, ScoreType, Word> Params;
 	const Params& params;
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
 	class EqVector
 	{
 	public:
@@ -420,9 +423,9 @@ public:
 		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0, 0, 0});
 	}
 
-	std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> getTraceFromSeed(const std::string& sequence, std::tuple<int, size_t, bool> seedHit)
+	Trace getTraceFromSeed(const std::string& sequence, SeedHit seedHit)
 	{
-		auto alignment = getSplitAlignment(sequence, std::get<0>(seedHit), std::get<2>(seedHit), std::get<1>(seedHit), sequence.size() * 0.4);
+		auto alignment = getSplitAlignment(sequence, seedHit.nodeID, seedHit.reverse, seedHit.seqPos, sequence.size() * 0.4);
 		auto trace = getPiecewiseTracesFromSplit(alignment, sequence);
 		return trace;
 	}
@@ -541,20 +544,21 @@ public:
 	}
 private:
 
-	std::pair<ScoreType, std::vector<MatrixPosition>> getTraceFromTable(const std::string& sequence, const DPTable& slice) const
+	OnewayTrace getTraceFromTable(const std::string& sequence, const DPTable& slice) const
 	{
 		assert(slice.bandwidthPerSlice.size() == slice.correctness.size());
 		assert(sequence.size() % WordConfiguration<Word>::WordSize == 0);
 		if (slice.slices.size() == 0)
 		{
-			return std::make_pair(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{});
+			return OnewayTrace::TraceFailed();
 		}
 		if (slice.bandwidthPerSlice.size() == 0)
 		{
-			return std::make_pair(std::numeric_limits<ScoreType>::max(), std::vector<MatrixPosition>{});
+			return OnewayTrace::TraceFailed();
 		}
 		assert(slice.samplingFrequency > 1);
-		std::pair<ScoreType, std::vector<MatrixPosition>> result {0, {}};
+		OnewayTrace result;
+		result.score = 0;
 		size_t backtraceOverrideIndex = -1;
 		LengthType lastBacktraceOverrideStartJ = -1;
 		LengthType nextBacktraceOverrideEndJ = -1;
@@ -568,8 +572,8 @@ private:
 			if ((slice.slices[i].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize == slice.bandwidthPerSlice.size())
 			{
 				assert(i == slice.slices.size() - 1);
-				result.first = slice.slices.back().minScore;
-				result.second.emplace_back(slice.slices.back().minScoreIndex, slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
+				result.score = slice.slices.back().minScore;
+				result.trace.emplace_back(slice.slices.back().minScoreIndex, slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
 				continue;
 			}
 			if (lastBacktraceOverrideStartJ == slice.slices[i].j + WordConfiguration<Word>::WordSize) continue;
@@ -577,31 +581,31 @@ private:
 			assert(partTable.size() > 0);
 			if (i == slice.slices.size() - 1)
 			{
-				result.first = partTable.back().minScore;
+				result.score = partTable.back().minScore;
 				assert(partTable.back().minScoreIndex != -1);
-				result.second.emplace_back(partTable.back().minScoreIndex, partTable.back().j + WordConfiguration<Word>::WordSize - 1);
+				result.trace.emplace_back(partTable.back().minScoreIndex, partTable.back().j + WordConfiguration<Word>::WordSize - 1);
 			}
-			auto partTrace = getTraceFromTableInner(sequence, partTable, result.second.back());
+			auto partTrace = getTraceFromTableInner(sequence, partTable, result.trace.back());
 			assert(partTrace.size() > 1);
 			//begin()+1 because the starting position was already inserted earlier
-			result.second.insert(result.second.end(), partTrace.begin()+1, partTrace.end());
-			auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.second.back().first);
-			result.second.insert(result.second.end(), boundaryTrace.begin(), boundaryTrace.end());
+			result.trace.insert(result.trace.end(), partTrace.begin()+1, partTrace.end());
+			auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.trace.back().first);
+			result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
 			assert(boundaryTrace.size() > 0);
 			if (slice.slices[i].j == nextBacktraceOverrideEndJ)
 			{
-				auto trace = slice.backtraceOverrides[backtraceOverrideIndex].GetBacktrace(result.second.back());
-				result.second.insert(result.second.end(), trace.begin()+1, trace.end());
+				auto trace = slice.backtraceOverrides[backtraceOverrideIndex].GetBacktrace(result.trace.back());
+				result.trace.insert(result.trace.end(), trace.begin()+1, trace.end());
 				lastBacktraceOverrideStartJ = slice.backtraceOverrides[backtraceOverrideIndex].startj;
 				backtraceOverrideIndex--;
 				if (backtraceOverrideIndex != -1) nextBacktraceOverrideEndJ = slice.backtraceOverrides[backtraceOverrideIndex].endj;
 				if (lastBacktraceOverrideStartJ == 0) break;
 			}
 		}
-		assert(result.second.back().second == -1);
-		result.second.pop_back();
-		assert(result.second.back().second == 0);
-		std::reverse(result.second.begin(), result.second.end());
+		assert(result.trace.back().second == -1);
+		result.trace.pop_back();
+		assert(result.trace.back().second == 0);
+		std::reverse(result.trace.begin(), result.trace.end());
 		return result;
 	}
 
@@ -2100,12 +2104,11 @@ private:
 		return trace;
 	}
 
-	std::pair<std::tuple<ScoreType, std::vector<MatrixPosition>>, std::tuple<ScoreType, std::vector<MatrixPosition>>> getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
+	Trace getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
 	{
 		assert(split.sequenceSplitIndex >= 0);
 		assert(split.sequenceSplitIndex < sequence.size());
-		std::pair<ScoreType, std::vector<MatrixPosition>> backtraceresult {0, std::vector<MatrixPosition>{}};
-		std::pair<ScoreType, std::vector<MatrixPosition>> reverseBacktraceResult {0, std::vector<MatrixPosition>{}};
+		Trace result;
 		if (split.sequenceSplitIndex < sequence.size() - 1 && split.forward.slices.size() > 0)
 		{
 			std::string backtraceSequence;
@@ -2121,12 +2124,11 @@ private:
 			}
 			assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
-			backtraceresult = getTraceFromTable(backtraceSequence, split.forward);
-			// std::cerr << "fw score: " << std::get<0>(backtraceresult) << std::endl;
+			result.forward = getTraceFromTable(backtraceSequence, split.forward);
 
-			while (backtraceresult.second.size() > 0 && backtraceresult.second.back().second >= backtraceableSize)
+			while (result.forward.trace.size() > 0 && result.forward.trace.back().second >= backtraceableSize)
 			{
-				backtraceresult.second.pop_back();
+				result.forward.trace.pop_back();
 			}
 		}
 		if (split.sequenceSplitIndex > 0 && split.backward.slices.size() > 0)
@@ -2144,24 +2146,23 @@ private:
 			}
 			assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
-			reverseBacktraceResult = getTraceFromTable(backwardBacktraceSequence, split.backward);
-			// std::cerr << "bw score: " << std::get<0>(reverseBacktraceResult) << std::endl;
+			result.backward = getTraceFromTable(backwardBacktraceSequence, split.backward);
 
-			while (reverseBacktraceResult.second.size() > 0 && reverseBacktraceResult.second.back().second >= backtraceableSize)
+			while (result.backward.trace.size() > 0 && result.backward.trace.back().second >= backtraceableSize)
 			{
-				reverseBacktraceResult.second.pop_back();
+				result.backward.trace.pop_back();
 			}
-			reverseBacktraceResult.second = reverseTrace(reverseBacktraceResult.second, split.sequenceSplitIndex - 1);
-			for (size_t i = 0; i < backtraceresult.second.size(); i++)
+			result.backward.trace = reverseTrace(result.backward.trace, split.sequenceSplitIndex - 1);
+			for (size_t i = 0; i < result.backward.trace.size(); i++)
 			{
-				backtraceresult.second[i].second += split.sequenceSplitIndex;
+				result.backward.trace[i].second += split.sequenceSplitIndex;
 			}
 		}
 
-		return std::make_pair(backtraceresult, reverseBacktraceResult);
+		return result;
 	}
 
-	std::tuple<ScoreType, std::vector<MatrixPosition>, size_t> getBacktraceFullStart(std::string sequence) const
+	OnewayTrace getBacktraceFullStart(std::string sequence) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 		for (int i = 0; i < padding; i++)
@@ -2181,14 +2182,13 @@ private:
 		removeWronglyAlignedEnd(slice);
 		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
-		auto backtraceresult = getTraceFromTable(sequence, slice);
-		while (backtraceresult.second.back().second >= sequence.size() - padding)
+		auto result = getTraceFromTable(sequence, slice);
+		while (result.trace.back().second >= sequence.size() - padding)
 		{
-			backtraceresult.second.pop_back();
+			result.trace.pop_back();
 		}
-		assert(backtraceresult.second[0].second == 0);
-		assert(backtraceresult.second.back().second == sequence.size() - padding - 1);
-		return std::make_tuple(backtraceresult.first, backtraceresult.second, 0);
+		assert(result.trace[0].second == 0);
+		return result;
 	}
 
 };

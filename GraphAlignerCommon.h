@@ -2,29 +2,68 @@
 #define GraphAlignerCommon_h
 
 template <typename LengthType, typename ScoreType, typename Word>
-class GraphAlignerParams
-{
-public:
-	//cutoff for doing the backtrace in the sqrt-slice pass
-	//"bulges" in the band are responsible for almost all of the time spent aligning,
-	//and this way they don't need to be recalculated, saving about half of the time.
-	//semi-arbitrarily fifty thousand, empirically a good enough cutoff
-	static constexpr size_t BacktraceOverrideCutoff = 50000;
-	GraphAlignerParams(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph) :
-	initialBandwidth(initialBandwidth),
-	rampBandwidth(rampBandwidth),
-	graph(graph)
-	{
-	}
-	const LengthType initialBandwidth;
-	const LengthType rampBandwidth;
-	const AlignmentGraph& graph;
-};
-
-template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerCommon
 {
 public:
+	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	class Params
+	{
+	public:
+		//cutoff for doing the backtrace in the sqrt-slice pass
+		//"bulges" in the band are responsible for almost all of the time spent aligning,
+		//and this way they don't need to be recalculated, saving about half of the time.
+		//semi-arbitrarily fifty thousand, empirically a good enough cutoff
+		static constexpr size_t BacktraceOverrideCutoff = 50000;
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph) :
+		initialBandwidth(initialBandwidth),
+		rampBandwidth(rampBandwidth),
+		graph(graph)
+		{
+		}
+		const LengthType initialBandwidth;
+		const LengthType rampBandwidth;
+		const AlignmentGraph& graph;
+	};
+	class SeedHit
+	{
+	public:
+		SeedHit(int nodeID, size_t seqPos, bool reverse) :
+		nodeID(nodeID),
+		seqPos(seqPos),
+		reverse(reverse)
+		{
+		}
+		int nodeID;
+		size_t seqPos;
+		bool reverse;
+	};
+	class OnewayTrace
+	{
+	public:
+		OnewayTrace() :
+		trace(),
+		score(0)
+		{
+		}
+		static OnewayTrace TraceFailed()
+		{
+			OnewayTrace result;
+			result.score = std::numeric_limits<ScoreType>::max();
+			return result;
+		}
+		bool failed() const
+		{
+			return score == std::numeric_limits<ScoreType>::max();
+		}
+		std::vector<MatrixPosition> trace;
+		ScoreType score;
+	};
+	class Trace
+	{
+	public:
+		OnewayTrace forward;
+		OnewayTrace backward;
+	};
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
 		assert(graphCharacter == 'A' || graphCharacter == 'T' || graphCharacter == 'C' || graphCharacter == 'G');
