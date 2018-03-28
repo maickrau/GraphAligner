@@ -19,36 +19,6 @@
 #include "GraphAlignerCommon.h"
 #include "ArrayPriorityQueue.h"
 
-void printtime(const char* msg)
-{
-	static auto time = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-	auto newtime = std::chrono::system_clock::now().time_since_epoch() / std::chrono::milliseconds(1);
-	std::cout << msg << " " << newtime << " (" << (newtime - time) << ")" << std::endl;
-	time = newtime;
-}
-
-#ifndef NDEBUG
-size_t getset(const std::set<size_t>& set, size_t pos)
-{
-	auto iter = set.begin();
-	for (auto i = 0; i < pos; i++)
-	{
-		++iter;
-	}
-	return *iter;
-}
-
-size_t getset(const std::unordered_set<size_t>& set, size_t pos)
-{
-	auto iter = set.begin();
-	for (auto i = 0; i < pos; i++)
-	{
-		++iter;
-	}
-	return *iter;
-}
-#endif
-
 #ifndef NDEBUG
 thread_local int debugLastRowMinScore;
 #endif
