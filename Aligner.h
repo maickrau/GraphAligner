@@ -13,6 +13,7 @@ struct AlignerParams
 	int initialBandwidth;
 	int rampBandwidth;
 	int dynamicRowStart;
+	size_t maxCellsPerSlice;
 	std::string seedFile;
 };
 

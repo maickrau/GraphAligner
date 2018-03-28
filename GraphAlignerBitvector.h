@@ -1434,6 +1434,7 @@ private:
 				currentMinimumIndex = nodeCalc.minScoreIndex;
 			}
 			cellsProcessed += nodeCalc.cellsProcessed;
+			if (cellsProcessed > params.maxCellsPerSlice) break;
 		}
 
 		NodeCalculationResult result;
@@ -1544,7 +1545,7 @@ private:
 		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, bandwidth);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-		verifySliceBitvector(sequence, bandTest, previous);
+		if (bandTest.cellsProcessed <= params.maxCellsPerSlice) verifySliceBitvector(sequence, bandTest, previous);
 #endif
 		return bandTest;
 	}

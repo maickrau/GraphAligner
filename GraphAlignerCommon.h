@@ -14,12 +14,14 @@ public:
 		//and this way they don't need to be recalculated, saving about half of the time.
 		//semi-arbitrarily fifty thousand, empirically a good enough cutoff
 		static constexpr size_t BacktraceOverrideCutoff = 50000;
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
-		graph(graph)
+		graph(graph),
+		maxCellsPerSlice(maxCellsPerSlice)
 		{
 		}
+		const size_t maxCellsPerSlice;
 		const LengthType initialBandwidth;
 		const LengthType rampBandwidth;
 		const AlignmentGraph& graph;

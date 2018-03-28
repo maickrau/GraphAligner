@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
+#include <limits>
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
@@ -32,10 +33,11 @@ int main(int argc, char** argv)
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
 	params.dynamicRowStart = 64;
+	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	bool initialFullBand = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:")) != -1)
 	{
 		switch(c)
 		{
@@ -62,6 +64,9 @@ int main(int argc, char** argv)
 				break;
 			case 'd':
 				params.dynamicRowStart = std::stoi(optarg);
+				break;
+			case 'C':
+				params.maxCellsPerSlice = std::stol(optarg);
 				break;
 		}
 	}
