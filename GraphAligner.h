@@ -9,7 +9,6 @@
 #include <unordered_set>
 #include <iostream>
 #include "AlignmentGraph.h"
-#include "vg.pb.h"
 #include "NodeSlice.h"
 #include "CommonUtils.h"
 #include "GraphAlignerWrapper.h"
@@ -18,6 +17,7 @@
 #include "WordSlice.h"
 #include "GraphAlignerCommon.h"
 #include "ArrayPriorityQueue.h"
+#include "GraphAlignerVGAlignment.h"
 
 #ifndef NDEBUG
 thread_local int debugLastRowMinScore;
@@ -46,6 +46,7 @@ private:
 	};
 
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
+	using VGAlignment = GraphAlignerVGAlignment<LengthType, ScoreType, Word>;
 	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
 	mutable BufferedWriter logger;
 	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
@@ -595,19 +596,19 @@ private:
 		//failed alignment, don't output
 		if (std::get<0>(trace.first) == std::numeric_limits<ScoreType>::max() && std::get<0>(trace.second) == std::numeric_limits<ScoreType>::max())
 		{
-			return emptyAlignment(0, 0);
+			return VGAlignment::emptyAlignment(0, 0);
 		}
 
 		auto traceVector = getTraceInfo(sequence, std::get<1>(trace.second), std::get<1>(trace.first));
 
-		auto fwresult = traceToAlignment(seq_id, sequence, std::get<0>(trace.first), std::get<1>(trace.first), 0);
-		auto bwresult = traceToAlignment(seq_id, sequence, std::get<0>(trace.second), std::get<1>(trace.second), 0);
+		auto fwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, std::get<0>(trace.first), std::get<1>(trace.first), 0);
+		auto bwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, std::get<0>(trace.second), std::get<1>(trace.second), 0);
 		//failed alignment, don't output
 		if (fwresult.alignmentFailed() && bwresult.alignmentFailed())
 		{
-			return emptyAlignment(0, 0);
+			return VGAlignment::emptyAlignment(0, 0);
 		}
-		auto result = mergeAlignments(bwresult, fwresult);
+		auto result = VGAlignment::mergeAlignments(params, bwresult, fwresult);
 		LengthType seqstart = 0;
 		LengthType seqend = 0;
 		assert(std::get<1>(trace.first).size() > 0 || std::get<1>(trace.second).size() > 0);
@@ -655,59 +656,6 @@ private:
 				currentReadStart = trace.trace[i].readpos;
 			}
 		}
-	}
-
-	AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed) const
-	{
-		vg::Alignment result;
-		result.set_score(std::numeric_limits<decltype(result.score())>::max());
-		return AlignmentResult::AlignmentItem { result, cellsProcessed, elapsedMilliseconds };
-	}
-
-	bool posEqual(const vg::Position& pos1, const vg::Position& pos2) const
-	{
-		return pos1.node_id() == pos2.node_id() && pos1.is_reverse() == pos2.is_reverse();
-	}
-
-	AlignmentResult::AlignmentItem mergeAlignments(const AlignmentResult::AlignmentItem& first, const AlignmentResult::AlignmentItem& second) const
-	{
-		assert(!first.alignmentFailed() || !second.alignmentFailed());
-		if (first.alignmentFailed()) return second;
-		if (second.alignmentFailed()) return first;
-		if (first.alignment.path().mapping_size() == 0) return second;
-		if (second.alignment.path().mapping_size() == 0) return first;
-		assert(!first.alignmentFailed());
-		assert(!second.alignmentFailed());
-		AlignmentResult::AlignmentItem finalResult;
-		finalResult.cellsProcessed = first.cellsProcessed + second.cellsProcessed;
-		finalResult.elapsedMilliseconds = first.elapsedMilliseconds + second.elapsedMilliseconds;
-		finalResult.alignment = first.alignment;
-		finalResult.alignment.set_score(first.alignment.score() + second.alignment.score());
-		int start = 0;
-		auto firstEndPos = first.alignment.path().mapping(first.alignment.path().mapping_size()-1).position();
-		auto secondStartPos = second.alignment.path().mapping(0).position();
-		auto firstEndPosNodeId = params.graph.nodeLookup.at(firstEndPos.node_id()).back();
-		auto secondStartPosNodeId = params.graph.nodeLookup.at(secondStartPos.node_id())[0];
-		if (posEqual(firstEndPos, secondStartPos))
-		{
-			start = 1;
-		}
-		else if (std::find(params.graph.outNeighbors[firstEndPosNodeId].begin(), params.graph.outNeighbors[firstEndPosNodeId].end(), secondStartPosNodeId) != params.graph.outNeighbors[firstEndPosNodeId].end())
-		{
-			start = 0;
-		}
-		else
-		{
-			logger << "Piecewise alignments can't be merged!";
-			logger << " first end: " << firstEndPos.node_id() << " " << (firstEndPos.is_reverse() ? "-" : "+");
-			logger << " second start: " << secondStartPos.node_id() << " " << (secondStartPos.is_reverse() ? "-" : "+") << BufferedWriter::Flush;
-		}
-		for (int i = start; i < second.alignment.path().mapping_size(); i++)
-		{
-			auto mapping = finalResult.alignment.mutable_path()->add_mapping();
-			*mapping = second.alignment.path().mapping(i);
-		}
-		return finalResult;
 	}
 
 	std::vector<AlignmentResult::TraceItem> getTraceInfo(const std::string& sequence, const std::vector<MatrixPosition>& bwtrace, const std::vector<MatrixPosition>& fwtrace) const
@@ -800,83 +748,6 @@ private:
 			}
 		}
 		return result;
-	}
-
-	AlignmentResult::AlignmentItem traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed) const
-	{
-		vg::Alignment result;
-		result.set_name(seq_id);
-		result.set_score(score);
-		result.set_sequence(sequence);
-		auto path = new vg::Path;
-		result.set_allocated_path(path);
-		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
-		size_t pos = 0;
-		size_t oldNode = params.graph.IndexToNode(trace[0].first);
-		while (oldNode == params.graph.dummyNodeStart)
-		{
-			pos++;
-			if (pos == trace.size()) return emptyAlignment(0, cellsProcessed);
-			assert(pos < trace.size());
-			assert(trace[pos].second >= trace[pos-1].second);
-			oldNode = params.graph.IndexToNode(trace[pos].first);
-			assert(oldNode < params.graph.nodeIDs.size());
-		}
-		if (oldNode == params.graph.dummyNodeEnd) return emptyAlignment(0, cellsProcessed);
-		int rank = 0;
-		int oldNodeId = params.graph.nodeIDs[oldNode];
-		auto vgmapping = path->add_mapping();
-		auto position = new vg::Position;
-		vgmapping->set_allocated_position(position);
-		vgmapping->set_rank(rank);
-		auto edit = vgmapping->add_edit();
-		position->set_node_id(params.graph.nodeIDs[oldNode]);
-		position->set_is_reverse(params.graph.reverse[oldNode]);
-		position->set_offset(trace[pos].first - params.graph.NodeStart(oldNode));
-		MatrixPosition btNodeStart = trace[pos];
-		MatrixPosition btNodeEnd = trace[pos];
-		MatrixPosition btBeforeNode = trace[pos];
-		for (; pos < trace.size(); pos++)
-		{
-			if (params.graph.IndexToNode(trace[pos].first) == params.graph.dummyNodeEnd) break;
-			if (params.graph.IndexToNode(trace[pos].first) == oldNode)
-			{
-				btNodeEnd = trace[pos];
-				continue;
-			}
-			assert(trace[pos].second >= trace[pos-1].second);
-			assert(params.graph.IndexToNode(btNodeEnd.first) == params.graph.IndexToNode(btNodeStart.first));
-			assert(btNodeEnd.second >= btNodeStart.second);
-			assert(btNodeEnd.first >= btNodeStart.first);
-			auto previousNode = oldNode;
-			oldNode = params.graph.IndexToNode(trace[pos].first);
-			edit->set_from_length(edit->from_length() + btNodeEnd.first - btNodeStart.first + 1);
-			edit->set_to_length(edit->to_length() + btNodeEnd.second - btBeforeNode.second);
-			edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.second, btNodeEnd.second - btBeforeNode.second));
-			btBeforeNode = btNodeEnd;
-			btNodeStart = trace[pos];
-			btNodeEnd = trace[pos];
-			if (params.graph.nodeIDs[oldNode] != oldNodeId || params.graph.reverse[oldNode] != params.graph.reverse[previousNode] || params.graph.nodeOffset[oldNode] != params.graph.nodeOffset[previousNode] + params.graph.SPLIT_NODE_SIZE)
-			{
-				rank++;
-				oldNodeId = params.graph.nodeIDs[oldNode];
-				vgmapping = path->add_mapping();
-				position = new vg::Position;
-				vgmapping->set_allocated_position(position);
-				vgmapping->set_rank(rank);
-				position->set_offset(params.graph.nodeOffset[oldNode]);
-				position->set_node_id(params.graph.nodeIDs[oldNode]);
-				position->set_is_reverse(params.graph.reverse[oldNode]);
-				edit = vgmapping->add_edit();
-			}
-		}
-		edit->set_from_length(edit->from_length() + btNodeEnd.first - btNodeStart.first);
-		edit->set_to_length(edit->to_length() + btNodeEnd.second - btBeforeNode.second);
-		edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.second, btNodeEnd.second - btBeforeNode.second));
-		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
-		item.alignmentStart = trace[0].second;
-		item.alignmentEnd = trace.back().second;
-		return item;
 	}
 
 #ifndef NDEBUG

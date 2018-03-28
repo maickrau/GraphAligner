@@ -61,6 +61,8 @@ private:
 
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAligner;
+	template <typename LengthType, typename ScoreType, typename Word>
+	friend class GraphAlignerVGAlignment;
 };
 
 
