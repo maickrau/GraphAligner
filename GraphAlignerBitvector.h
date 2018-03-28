@@ -50,7 +50,6 @@ private:
 	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
 	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
-	mutable BufferedWriter logger;
 	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 	const Params& params;
 	class EqVector
@@ -416,7 +415,6 @@ public:
 
 	GraphAlignerBitvector(const Params& params) :
 	calculableQueue(WordConfiguration<Word>::WordSize + std::max(params.initialBandwidth, params.rampBandwidth) + 1),
-	logger(std::cerr),
 	nodesliceMap(),
 	params(params)
 	{
