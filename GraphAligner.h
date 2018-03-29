@@ -258,7 +258,6 @@ private:
 	void verifyTrace(const std::vector<MatrixPosition>& trace, const std::string& sequence, volatile ScoreType score) const
 	{
 		volatile ScoreType realscore = 0;
-		assert(trace[0].second == 0);
 		realscore += Common::characterMatch(sequence[0], params.graph.NodeSequences(trace[0].first)) ? 0 : 1;
 		for (size_t i = 1; i < trace.size(); i++)
 		{

@@ -2152,10 +2152,6 @@ private:
 				result.backward.trace.pop_back();
 			}
 			result.backward.trace = reverseTrace(result.backward.trace, split.sequenceSplitIndex - 1);
-			for (size_t i = 0; i < result.backward.trace.size(); i++)
-			{
-				result.backward.trace[i].second += split.sequenceSplitIndex;
-			}
 		}
 
 		return result;
