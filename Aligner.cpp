@@ -73,13 +73,6 @@ vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg
 	return augmentedGraph;
 }
 
-void outputGraph(std::string filename, const vg::Graph& graph)
-{
-	std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
-	std::vector<vg::Graph> writeVector {graph};
-	stream::write_buffered(alignmentOut, writeVector, 0);
-}
-
 void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
 {
 	for (int i = 0; i < alignment.path().mapping_size(); i++)
@@ -99,7 +92,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, std::vector<vg::Alignment>& alignmentsOut, bool hasMergedAlignmentOut)
 {
 	assertSetRead("Before any read");
 	BufferedWriter cerroutput {std::cerr};
@@ -184,29 +177,25 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
 		coutoutput << "thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
-		std::string filename;
-		filename = "alignment_";
-		filename += std::to_string(threadnum);
-		filename += "_";
-		filename += fastq->seq_id;
-		filename += ".gam";
-		std::replace(filename.begin(), filename.end(), '/', '_');
-		std::replace(filename.begin(), filename.end(), ':', '_');
-		coutoutput << "write alignment to " << filename << BufferedWriter::Flush;
-		std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
-		stream::write_buffered(alignmentOut, alignmentvec, 0);
-		coutoutput << "alignment write finished" << BufferedWriter::Flush;
-		// std::string tracefilename;
-		// tracefilename = "trace_";
-		// tracefilename += std::to_string(threadnum);
-		// tracefilename += "_";
-		// tracefilename += fastq->seq_id;
-		// tracefilename += ".trace";
-		// std::replace(tracefilename.begin(), tracefilename.end(), '/', '_');
-		// std::replace(tracefilename.begin(), tracefilename.end(), ':', '_');
-		// coutoutput << "write trace to " << tracefilename << BufferedWriter::Flush;
-		// writeTrace(alignment.trace, tracefilename);
-		// coutoutput << "trace write finished" << BufferedWriter::Flush;
+		if (hasMergedAlignmentOut)
+		{
+			alignmentsOut.insert(alignmentsOut.end(), alignmentvec.begin(), alignmentvec.end());
+		}
+		else
+		{
+			std::string filename;
+			filename = "alignment_";
+			filename += std::to_string(threadnum);
+			filename += "_";
+			filename += fastq->seq_id;
+			filename += ".gam";
+			std::replace(filename.begin(), filename.end(), '/', '_');
+			std::replace(filename.begin(), filename.end(), ':', '_');
+			coutoutput << "write alignment to " << filename << BufferedWriter::Flush;
+			std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
+			stream::write_buffered(alignmentOut, alignmentvec, 0);
+			coutoutput << "alignment write finished" << BufferedWriter::Flush;
+		}
 	}
 	assertSetRead("After all reads");
 	coutoutput << "thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
@@ -296,9 +285,13 @@ void alignReads(AlignerParams params)
 	std::vector<size_t> numAlnsPerThread;
 	numAlnsPerThread.resize(params.numThreads, 0);
 
+	std::vector<std::vector<vg::Alignment>> resultsPerThread;
+	bool hasMergedAlignmentOut = params.outputAlignmentFile != "";
+	resultsPerThread.resize(params.numThreads);
+
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i]); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &resultsPerThread, hasMergedAlignmentOut]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], resultsPerThread[i], hasMergedAlignmentOut); });
 	}
 
 	for (int i = 0; i < params.numThreads; i++)
@@ -314,4 +307,19 @@ void alignReads(AlignerParams params)
 	}
 
 	std::cerr << "final result has " << numAlignments << " alignments" << std::endl;
+	if (hasMergedAlignmentOut)
+	{
+		assert(params.outputAlignmentFile != "");
+		std::cerr << "merge alignments for writing" << std::endl;
+		std::vector<vg::Alignment> finalResult;
+		finalResult.reserve(numAlignments);
+		for (size_t i = 0; i < resultsPerThread.size(); i++)
+		{
+			finalResult.insert(finalResult.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
+		}
+		std::cerr << "write to " << params.outputAlignmentFile << std::endl;
+		std::ofstream resultFile { params.outputAlignmentFile, std::ios::out | std::ios::binary };
+		stream::write_buffered(resultFile, finalResult, 0);
+		std::cerr << "write finished" << std::endl;
+	}
 }

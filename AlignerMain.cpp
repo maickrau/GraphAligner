@@ -37,7 +37,7 @@ int main(int argc, char** argv)
 	bool initialFullBand = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:")) != -1)
 	{
 		switch(c)
 		{
@@ -67,6 +67,9 @@ int main(int argc, char** argv)
 				break;
 			case 'C':
 				params.maxCellsPerSlice = std::stol(optarg);
+				break;
+			case 'a':
+				params.outputAlignmentFile = std::string(optarg);
 				break;
 		}
 	}

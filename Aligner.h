@@ -15,6 +15,7 @@ struct AlignerParams
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::string seedFile;
+	std::string outputAlignmentFile;
 };
 
 void alignReads(AlignerParams params);
