@@ -189,15 +189,20 @@ private:
 			startj = slices[0].j;
 			endj = slices.back().j;
 			assert(endj == startj + (slices.size()-1) * WordConfiguration<Word>::WordSize);
-			items.resize(WordConfiguration<Word>::WordSize * slices.size());
+			if (startj + WordConfiguration<Word>::WordSize * slices.size() <= sequence.size())
+			{
+				items.resize(WordConfiguration<Word>::WordSize * slices.size());
+			}
+			else
+			{
+				items.resize(sequence.size() - startj);
+			}
 			makeTrace(params, sequence, previous, slices);
 		};
 		//returns the trace backwards, aka result[0] is at the bottom of the slice and result.back() at the top
 		std::vector<MatrixPosition> GetBacktrace(MatrixPosition start) const
 		{
-			//todo fix
 			assert(items.size() > 0);
-			assert(items.size() % WordConfiguration<Word>::WordSize == 0);
 			assert(items.back().size() > 0);
 			assert(items.back()[0].pos.second == start.second);
 			size_t currentIndex = -1;
@@ -545,7 +550,6 @@ private:
 	OnewayTrace getTraceFromTable(const std::string& sequence, const DPTable& slice) const
 	{
 		assert(slice.bandwidthPerSlice.size() == slice.correctness.size());
-		assert(sequence.size() % WordConfiguration<Word>::WordSize == 0);
 		if (slice.slices.size() == 0)
 		{
 			return OnewayTrace::TraceFailed();
@@ -571,7 +575,7 @@ private:
 			{
 				assert(i == slice.slices.size() - 1);
 				result.score = slice.slices.back().minScore;
-				result.trace.emplace_back(slice.slices.back().minScoreIndex, slice.slices.back().j + WordConfiguration<Word>::WordSize - 1);
+				result.trace.emplace_back(slice.slices.back().minScoreIndex, std::min( slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
 				continue;
 			}
 			if (lastBacktraceOverrideStartJ == slice.slices[i].j + WordConfiguration<Word>::WordSize) continue;
@@ -581,7 +585,7 @@ private:
 			{
 				result.score = partTable.back().minScore;
 				assert(partTable.back().minScoreIndex != -1);
-				result.trace.emplace_back(partTable.back().minScoreIndex, partTable.back().j + WordConfiguration<Word>::WordSize - 1);
+				result.trace.emplace_back(partTable.back().minScoreIndex, std::min(partTable.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
 			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.trace.back());
 			assert(partTrace.size() > 1);
@@ -653,7 +657,6 @@ private:
 		result.push_back(pos);
 		for (size_t slice = table.size()-1; slice < table.size(); slice--)
 		{
-			assert(result.back().second == table[slice].j + WordConfiguration<Word>::WordSize - 1);
 #ifdef SLICEVERBOSE
 			auto node = params.graph.IndexToNode(result.back().first);
 			auto offset = result.back().first - params.graph.NodeStart(node);
@@ -663,7 +666,7 @@ private:
 			assert(table[slice].j <= result.back().second);
 			assert(table[slice].j + WordConfiguration<Word>::WordSize > result.back().second);
 			auto partialTrace = getTraceFromSlice(sequence, table[slice], result.back());
-			assert(partialTrace.size() >= WordConfiguration<Word>::WordSize - 1);
+			assert(partialTrace.size() >= result.back().second - table[slice].j);
 			result.insert(result.end(), partialTrace.begin(), partialTrace.end());
 			assert(result.back().second == table[slice].j);
 			if (slice > 0)
@@ -1358,6 +1361,18 @@ private:
 			if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
 			if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
 		}
+		if (j + WordConfiguration<Word>::WordSize > sequence.size())
+		{
+			Word mask = WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size());
+			assert((BA & mask) == 0);
+			assert((BT & mask) == 0);
+			assert((BC & mask) == 0);
+			assert((BG & mask) == 0);
+			BA |= mask;
+			BT |= mask;
+			BC |= mask;
+			BG |= mask;
+		}
 		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
 		EqVector EqV {BA, BT, BC, BG};
 
@@ -1442,11 +1457,46 @@ private:
 		result.minScoreIndex = currentMinimumIndex;
 		result.cellsProcessed = cellsProcessed;
 
+		if (j + WordConfiguration<Word>::WordSize > sequence.size())
+		{
+			flattenLastSliceEnd(currentSlice, result, j, sequence.size());
+		}
+
 		finalizeSlice(currentSlice, result, bandwidth);
 
 		calculableQueue.clear();
 
 		return result;
+	}
+
+	WordSlice flattenWordSlice(WordSlice slice, size_t row) const
+	{
+		Word mask = ~(WordConfiguration<Word>::AllOnes << row);
+		slice.VP &= mask;
+		slice.VN &= mask;
+		slice.scoreEnd = slice.scoreBeforeStart + WordConfiguration<Word>::popcount(slice.VP) - WordConfiguration<Word>::popcount(slice.VN);
+		return slice;
+	}
+
+	void flattenLastSliceEnd(NodeSlice<WordSlice>& slice, NodeCalculationResult& sliceCalc, LengthType j, size_t sequenceSize) const
+	{
+		assert(j < sequenceSize);
+		assert(sequenceSize - j < WordConfiguration<Word>::WordSize);
+		sliceCalc.minScore = std::numeric_limits<ScoreType>::max();
+		sliceCalc.minScoreIndex = -1;
+		for (auto node : slice)
+		{
+			for (size_t i = 0; i < node.second.size(); i++)
+			{
+				auto wordSliceResult = flattenWordSlice(node.second[i], sequenceSize - j);
+				node.second[i] = wordSliceResult;
+				if (wordSliceResult.scoreEnd < sliceCalc.minScore)
+				{
+					sliceCalc.minScore = wordSliceResult.scoreEnd;
+					sliceCalc.minScoreIndex = params.graph.NodeStart(node.first)+i;
+				}
+			}
+		}
 	}
 
 	void finalizeSlice(NodeSlice<WordSlice>& slice, NodeCalculationResult sliceCalc, int bandwidth) const
@@ -1459,6 +1509,7 @@ private:
 		ScoreType minScore = sliceCalc.minScore;
 		assert(minScore < uninitScore);
 		assert(minScore < uninitScore - 2 * bandwidth - 1);
+
 		for (auto node : slice)
 		{
 			size_t startOffset = -1;
@@ -1537,7 +1588,6 @@ private:
 	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, std::vector<bool>& processed, int bandwidth) const
 	{
 		DPSlice bandTest { &nodesliceMap };
-		assert(sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize);
 		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 		bandTest.correctness = previous.correctness;
 		bandTest.scores.reserve(previous.numCells);
@@ -1545,7 +1595,7 @@ private:
 		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, bandwidth);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-		if (bandTest.cellsProcessed <= params.maxCellsPerSlice) verifySliceBitvector(sequence, bandTest, previous);
+		if (bandTest.cellsProcessed <= params.maxCellsPerSlice && sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize) verifySliceBitvector(sequence, bandTest, previous);
 #endif
 		return bandTest;
 	}
@@ -1606,7 +1656,7 @@ private:
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency) const
 	{
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
-		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size());
+		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		DPTable result;
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
@@ -2030,7 +2080,7 @@ private:
 	{
 		size_t samplingFrequency = 1;
 		samplingFrequency = (int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize));
-		if (samplingFrequency <= 1) samplingFrequency = sequenceLen / WordConfiguration<Word>::WordSize + 1;
+		if (samplingFrequency <= 1) samplingFrequency = 2;
 		return samplingFrequency;
 	}
 
@@ -2057,15 +2107,10 @@ private:
 		{
 			assert(sequence.size() >= matchSequencePosition + params.graph.DBGOverlap);
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, matchSequencePosition + params.graph.DBGOverlap));
-			int backwardpadding = (WordConfiguration<Word>::WordSize - (backwardPart.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
-			assert(backwardpadding < WordConfiguration<Word>::WordSize);
-			for (int i = 0; i < backwardpadding; i++)
-			{
-				backwardPart += 'N';
-			}
 			auto backwardInitialBand = getInitialSliceOneNodeGroup(backwardNodes);
 			size_t samplingFrequency = getSamplingFrequency(backwardPart.size());
-			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, backwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+			size_t numSlices = (backwardPart.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, numSlices, samplingFrequency);
 			removeWronglyAlignedEnd(backwardSlice);
 			result.backward = std::move(backwardSlice);
 			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
@@ -2073,15 +2118,10 @@ private:
 		if (matchSequencePosition < sequence.size() - 1)
 		{
 			auto forwardPart = sequence.substr(matchSequencePosition);
-			int forwardpadding = (WordConfiguration<Word>::WordSize - (forwardPart.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
-			assert(forwardpadding < WordConfiguration<Word>::WordSize);
-			for (int i = 0; i < forwardpadding; i++)
-			{
-				forwardPart += 'N';
-			}
 			auto forwardInitialBand = getInitialSliceOneNodeGroup(forwardNodes);
 			size_t samplingFrequency = getSamplingFrequency(forwardPart.size());
-			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, forwardPart.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+			size_t numSlices = (forwardPart.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, numSlices, samplingFrequency);
 			removeWronglyAlignedEnd(forwardSlice);
 			result.forward = std::move(forwardSlice);
 			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
@@ -2112,22 +2152,20 @@ private:
 		{
 			std::string backtraceSequence;
 			auto endpartsize = sequence.size() - split.sequenceSplitIndex;
-			int endpadding = (WordConfiguration<Word>::WordSize - (endpartsize % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 			assert(sequence.size() >= split.sequenceSplitIndex + params.graph.DBGOverlap);
 			size_t backtraceableSize = sequence.size() - split.sequenceSplitIndex - params.graph.DBGOverlap;
 			backtraceSequence = sequence.substr(split.sequenceSplitIndex);
-			backtraceSequence.reserve(sequence.size() + endpadding);
-			for (int i = 0; i < endpadding; i++)
-			{
-				backtraceSequence += 'N';
-			}
-			assert(backtraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
 			result.forward = getTraceFromTable(backtraceSequence, split.forward);
 
 			while (result.forward.trace.size() > 0 && result.forward.trace.back().second >= backtraceableSize)
 			{
 				result.forward.trace.pop_back();
+			}
+
+			for (auto& item : result.forward.trace)
+			{
+				item.second += split.sequenceSplitIndex;
 			}
 		}
 		if (split.sequenceSplitIndex > 0 && split.backward.slices.size() > 0)
@@ -2137,13 +2175,6 @@ private:
 			assert(sequence.size() >= split.sequenceSplitIndex + params.graph.DBGOverlap);
 			size_t backtraceableSize = split.sequenceSplitIndex;
 			backwardBacktraceSequence = CommonUtils::ReverseComplement(sequence.substr(0, split.sequenceSplitIndex + params.graph.DBGOverlap));
-			int startpadding = (WordConfiguration<Word>::WordSize - (backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
-			backwardBacktraceSequence.reserve(sequence.size() + startpadding);
-			for (int i = 0; i < startpadding; i++)
-			{
-				backwardBacktraceSequence += 'N';
-			}
-			assert(backwardBacktraceSequence.size() % WordConfiguration<Word>::WordSize == 0);
 
 			result.backward = getTraceFromTable(backwardBacktraceSequence, split.backward);
 
