@@ -18,9 +18,16 @@ std::unordered_map<std::string, std::vector<vg::Alignment>> splitAlignments(cons
 	return result;
 }
 
+//longer alignments are better
 bool alignmentLengthCompare(const vg::Alignment& left, const vg::Alignment& right)
 {
-	return left.sequence().size() < right.sequence().size();
+	return left.sequence().size() > right.sequence().size();
+}
+
+//lower scores are better
+bool alignmentScoreCompare(const vg::Alignment& left, const vg::Alignment& right)
+{
+	return left.score() < right.score();
 }
 
 bool alignmentIncompatible(const vg::Alignment& left, const vg::Alignment& right)
@@ -43,10 +50,11 @@ bool alignmentIncompatible(const vg::Alignment& left, const vg::Alignment& right
 
 std::vector<vg::Alignment> selectAlignments(std::vector<vg::Alignment> alignments)
 {
-	std::sort(alignments.begin(), alignments.end(), alignmentLengthCompare);
+	std::sort(alignments.begin(), alignments.end(), alignmentScoreCompare);
+	std::stable_sort(alignments.begin(), alignments.end(), alignmentLengthCompare);
 	std::vector<vg::Alignment> result;
-	assert(alignments[0].sequence().size() <= alignments.back().sequence().size());
-	for (size_t i = alignments.size()-1; i < alignments.size(); i--)
+	assert(alignments[0].sequence().size() > alignments.back().sequence().size() || (alignments[0].sequence().size() == alignments.back().sequence().size() && alignments[0].score() <= alignments.back().score()));
+	for (size_t i = 0; i < alignments.size(); i++)
 	{
 		vg::Alignment& aln = alignments[i];
 		if (!std::any_of(result.begin(), result.end(), [&aln](const vg::Alignment& existing) { return alignmentIncompatible(existing, aln); }))
