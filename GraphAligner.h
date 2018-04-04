@@ -24,6 +24,7 @@ private:
 	using Params = typename Common::Params;
 	using SeedHit = typename Common::SeedHit;
 	using MatrixPosition = typename Common::MatrixPosition;
+	using Trace = typename Common::Trace;
 	mutable BitvectorAligner bvAligner;
 	mutable BufferedWriter logger;
 	const Params& params;
@@ -85,12 +86,61 @@ public:
 
 private:
 
+	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit) const
+	{
+		assert(seedHit.seqPos >= 0);
+		assert(seedHit.seqPos < sequence.size());
+		int forwardNodeId;
+		int backwardNodeId;
+		if (seedHit.reverse)
+		{
+			forwardNodeId = seedHit.nodeID * 2 + 1;
+			backwardNodeId = seedHit.nodeID * 2;
+		}
+		else
+		{
+			forwardNodeId = seedHit.nodeID * 2;
+			backwardNodeId = seedHit.nodeID * 2 + 1;
+		}
+		Trace result;
+		if (seedHit.seqPos > 0)
+		{
+			assert(sequence.size() >= seedHit.seqPos + params.graph.DBGOverlap);
+			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + params.graph.DBGOverlap));
+			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId);
+			result.backward.trace = reverseTrace(result.backward.trace, seedHit.seqPos - 1);
+		}
+		if (seedHit.seqPos < sequence.size() - 1)
+		{
+			auto forwardPart = sequence.substr(seedHit.seqPos);
+			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId);
+			for (auto& item : result.forward.trace)
+			{
+				item.second += seedHit.seqPos;
+			}
+		}
+		return result;
+	}
+
+	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace, LengthType end) const
+	{
+		if (trace.size() == 0) return trace;
+		std::reverse(trace.begin(), trace.end());
+		for (size_t i = 0; i < trace.size(); i++)
+		{
+			trace[i].first = params.graph.GetReversePosition(trace[i].first);
+			assert(trace[i].second <= end);
+			trace[i].second = end - trace[i].second;
+		}
+		return trace;
+	}
+
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit) const
 	{
 		assert(params.graph.finalized);
 		auto timeStart = std::chrono::system_clock::now();
 
-		auto trace = bvAligner.getTraceFromSeed(sequence, seedHit);
+		auto trace = getTwoDirectionalTrace(sequence, seedHit);
 
 #ifndef NDEBUG
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);

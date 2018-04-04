@@ -426,11 +426,28 @@ public:
 		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0, 0, 0});
 	}
 
-	Trace getTraceFromSeed(const std::string& sequence, SeedHit seedHit)
+	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId) const
 	{
-		auto alignment = getSplitAlignment(sequence, seedHit.nodeID, seedHit.reverse, seedHit.seqPos, sequence.size() * 0.4);
-		auto trace = getPiecewiseTracesFromSplit(alignment, sequence);
-		return trace;
+		std::vector<size_t> nodes;
+		nodes = params.graph.nodeLookup.at(bigraphNodeId);
+		assert(sequence.size() >= params.graph.DBGOverlap);
+		size_t samplingFrequency = getSamplingFrequency(sequence.size());
+		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto initialBandwidth = getInitialSliceOneNodeGroup(nodes);
+		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, samplingFrequency);
+		removeWronglyAlignedEnd(slice);
+		assert(slice.slices.back().minScore <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
+
+		OnewayTrace result;
+
+		result = getTraceFromTable(sequence, slice);
+		size_t backtraceableSize = sequence.size() - params.graph.DBGOverlap;
+		while (result.trace.size() > 0 && result.trace.back().second >= backtraceableSize)
+		{
+			result.trace.pop_back();
+		}
+
+		return result;
 	}
 
 	static MatrixPosition pickBacktracePredecessor(const Params& params, const std::string& sequence, const DPSlice& slice, const MatrixPosition pos, const DPSlice& previousSlice)
@@ -2082,110 +2099,6 @@ private:
 		samplingFrequency = (int)(sqrt(sequenceLen / WordConfiguration<Word>::WordSize));
 		if (samplingFrequency <= 1) samplingFrequency = 2;
 		return samplingFrequency;
-	}
-
-	TwoDirectionalSplitAlignment getSplitAlignment(const std::string& sequence, LengthType matchBigraphNodeId, bool matchBigraphNodeBackwards, LengthType matchSequencePosition, ScoreType maxScore) const
-	{
-		assert(matchSequencePosition >= 0);
-		assert(matchSequencePosition < sequence.size());
-		std::vector<size_t> forwardNodes;
-		std::vector<size_t> backwardNodes;
-		TwoDirectionalSplitAlignment result;
-		result.sequenceSplitIndex = matchSequencePosition;
-		if (matchBigraphNodeBackwards)
-		{
-			forwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
-			backwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
-		}
-		else
-		{
-			forwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2);
-			backwardNodes = params.graph.nodeLookup.at(matchBigraphNodeId * 2 + 1);
-		}
-		ScoreType score = 0;
-		if (matchSequencePosition > 0)
-		{
-			assert(sequence.size() >= matchSequencePosition + params.graph.DBGOverlap);
-			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, matchSequencePosition + params.graph.DBGOverlap));
-			auto backwardInitialBand = getInitialSliceOneNodeGroup(backwardNodes);
-			size_t samplingFrequency = getSamplingFrequency(backwardPart.size());
-			size_t numSlices = (backwardPart.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-			auto backwardSlice = getSqrtSlices(backwardPart, backwardInitialBand, numSlices, samplingFrequency);
-			removeWronglyAlignedEnd(backwardSlice);
-			result.backward = std::move(backwardSlice);
-			if (result.backward.slices.size() > 0) score += result.backward.slices.back().minScore;
-		}
-		if (matchSequencePosition < sequence.size() - 1)
-		{
-			auto forwardPart = sequence.substr(matchSequencePosition);
-			auto forwardInitialBand = getInitialSliceOneNodeGroup(forwardNodes);
-			size_t samplingFrequency = getSamplingFrequency(forwardPart.size());
-			size_t numSlices = (forwardPart.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-			auto forwardSlice = getSqrtSlices(forwardPart, forwardInitialBand, numSlices, samplingFrequency);
-			removeWronglyAlignedEnd(forwardSlice);
-			result.forward = std::move(forwardSlice);
-			if (result.forward.slices.size() > 0) score += result.forward.slices.back().minScore;
-		}
-		assert(score <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
-		return result;
-	}
-
-	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace, LengthType end) const
-	{
-		if (trace.size() == 0) return trace;
-		std::reverse(trace.begin(), trace.end());
-		for (size_t i = 0; i < trace.size(); i++)
-		{
-			trace[i].first = params.graph.GetReversePosition(trace[i].first);
-			assert(trace[i].second <= end);
-			trace[i].second = end - trace[i].second;
-		}
-		return trace;
-	}
-
-	Trace getPiecewiseTracesFromSplit(const TwoDirectionalSplitAlignment& split, const std::string& sequence) const
-	{
-		assert(split.sequenceSplitIndex >= 0);
-		assert(split.sequenceSplitIndex < sequence.size());
-		Trace result;
-		if (split.sequenceSplitIndex < sequence.size() - 1 && split.forward.slices.size() > 0)
-		{
-			std::string backtraceSequence;
-			auto endpartsize = sequence.size() - split.sequenceSplitIndex;
-			assert(sequence.size() >= split.sequenceSplitIndex + params.graph.DBGOverlap);
-			size_t backtraceableSize = sequence.size() - split.sequenceSplitIndex - params.graph.DBGOverlap;
-			backtraceSequence = sequence.substr(split.sequenceSplitIndex);
-
-			result.forward = getTraceFromTable(backtraceSequence, split.forward);
-
-			while (result.forward.trace.size() > 0 && result.forward.trace.back().second >= backtraceableSize)
-			{
-				result.forward.trace.pop_back();
-			}
-
-			for (auto& item : result.forward.trace)
-			{
-				item.second += split.sequenceSplitIndex;
-			}
-		}
-		if (split.sequenceSplitIndex > 0 && split.backward.slices.size() > 0)
-		{
-			std::string backwardBacktraceSequence;
-			auto startpartsize = split.sequenceSplitIndex;
-			assert(sequence.size() >= split.sequenceSplitIndex + params.graph.DBGOverlap);
-			size_t backtraceableSize = split.sequenceSplitIndex;
-			backwardBacktraceSequence = CommonUtils::ReverseComplement(sequence.substr(0, split.sequenceSplitIndex + params.graph.DBGOverlap));
-
-			result.backward = getTraceFromTable(backwardBacktraceSequence, split.backward);
-
-			while (result.backward.trace.size() > 0 && result.backward.trace.back().second >= backtraceableSize)
-			{
-				result.backward.trace.pop_back();
-			}
-			result.backward.trace = reverseTrace(result.backward.trace, split.sequenceSplitIndex - 1);
-		}
-
-		return result;
 	}
 
 	OnewayTrace getBacktraceFullStart(std::string sequence) const
