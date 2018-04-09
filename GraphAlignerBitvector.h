@@ -607,15 +607,15 @@ private:
 				result.score = partTable.back().minScore;
 				assert(partTable.back().minScoreIndex != -1);
 				result.trace.emplace_back(partTable.back().minScoreIndex, std::min(partTable.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
-				if (sequence.size() == 1)
+				if (result.trace.back().second == partTable.back().j)
 				{
 					auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.trace.back().first);
 					result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
-					break;
+					continue;
 				}
 			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.trace.back());
-			assert(partTrace.size() > 1);
+			assert(partTrace.size() >= 1);
 			//begin()+1 because the starting position was already inserted earlier
 			result.trace.insert(result.trace.end(), partTrace.begin()+1, partTrace.end());
 			auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.trace.back().first);
