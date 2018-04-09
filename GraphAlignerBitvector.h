@@ -608,6 +608,12 @@ private:
 				result.score = partTable.back().minScore;
 				assert(partTable.back().minScoreIndex != -1);
 				result.trace.emplace_back(partTable.back().minScoreIndex, std::min(partTable.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
+				if (sequence.size() == 1)
+				{
+					auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.trace.back().first);
+					result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
+					break;
+				}
 			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.trace.back());
 			assert(partTrace.size() > 1);
