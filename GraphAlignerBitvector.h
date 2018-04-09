@@ -292,7 +292,6 @@ private:
 		void makeTrace(const Params& params, const std::string& sequence, const DPSlice& previous, const std::vector<DPSlice>& slices)
 		{
 			assert(slices.size() > 0);
-			assert(items.size() == WordConfiguration<Word>::WordSize * slices.size());
 			std::vector<std::unordered_map<LengthType, size_t>> indexOfPos;
 			indexOfPos.resize(items.size());
 			size_t endrow = items.size()-1;
@@ -301,7 +300,7 @@ private:
 				for (const auto& pair : slices.back().scores)
 				{
 					LengthType nodeStart = params.graph.NodeStart(pair.first);
-					LengthType endj = slices.back().j + WordConfiguration<Word>::WordSize-1;
+					LengthType endj = slices[0].j + endrow;
 					for (size_t i = 0; i < pair.second.size(); i++)
 					{
 						if (pair.second[i].scoreEnd <= slices.back().minScore + slices.back().bandwidth)
