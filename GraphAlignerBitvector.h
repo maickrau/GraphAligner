@@ -436,6 +436,11 @@ public:
 		auto initialBandwidth = getInitialSliceOneNodeGroup(nodes);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, samplingFrequency);
 		removeWronglyAlignedEnd(slice);
+		if (slice.slices.size() == 0)
+		{
+			assert(slice.bandwidthPerSlice.size() == 0);
+			return OnewayTrace::TraceFailed();
+		}
 		assert(slice.slices.back().minScore <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
 
 		OnewayTrace result;

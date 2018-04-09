@@ -88,17 +88,21 @@ void AlignmentGraph::AddNode(int nodeId, int offset, std::string sequence, bool 
 		switch(c)
 		{
 			case 'A':
+			case 'a':
 				nodeSequencesATorCG.push_back(false);
 				nodeSequencesACorTG.push_back(false);
 				break;
+			case 't':
 			case 'T':
 				nodeSequencesATorCG.push_back(false);
 				nodeSequencesACorTG.push_back(true);
 				break;
+			case 'c':
 			case 'C':
 				nodeSequencesATorCG.push_back(true);
 				nodeSequencesACorTG.push_back(false);
 				break;
+			case 'g':
 			case 'G':
 				nodeSequencesATorCG.push_back(true);
 				nodeSequencesACorTG.push_back(true);
