@@ -152,9 +152,9 @@ void AlignmentGraph::Finalize(int wordSize)
 	assert(outNeighbors.size() == nodeStart.size());
 	assert(reverse.size() == nodeStart.size());
 	assert(nodeIDs.size() == nodeStart.size());
-	std::cerr << nodeLookup.size() << " original nodes" << std::endl;
-	std::cerr << nodeStart.size() << " split nodes" << std::endl;
-	std::cerr << nodeSequencesATorCG.size() << "bp" << std::endl;
+	std::cout << nodeLookup.size() << " original nodes" << std::endl;
+	std::cout << nodeStart.size() << " split nodes" << std::endl;
+	std::cout << nodeSequencesATorCG.size() << "bp" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
@@ -165,8 +165,8 @@ void AlignmentGraph::Finalize(int wordSize)
 		if (inNeighbors[i].size() >= 2) specialNodes++;
 		edges += inNeighbors[i].size();
 	}
-	std::cerr << edges << " edges" << std::endl;
-	std::cerr << specialNodes << " nodes with in-degree >= 2" << std::endl;
+	std::cout << edges << " edges" << std::endl;
+	std::cout << specialNodes << " nodes with in-degree >= 2" << std::endl;
 	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
 	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());

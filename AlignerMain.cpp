@@ -35,9 +35,10 @@ int main(int argc, char** argv)
 	params.dynamicRowStart = 64;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	bool initialFullBand = false;
+	params.quietMode = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:q")) != -1)
 	{
 		switch(c)
 		{
@@ -70,6 +71,9 @@ int main(int argc, char** argv)
 				break;
 			case 'a':
 				params.outputAlignmentFile = std::string(optarg);
+				break;
+			case 'q':
+				params.quietMode = true;
 				break;
 		}
 	}

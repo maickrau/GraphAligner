@@ -95,8 +95,13 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, std::vector<vg::Alignment>& alignmentsOut, bool hasMergedAlignmentOut)
 {
 	assertSetRead("Before any read");
-	BufferedWriter cerroutput {std::cerr};
-	BufferedWriter coutoutput {std::cout};
+	BufferedWriter cerroutput;
+	BufferedWriter coutoutput;
+	if (!params.quietMode)
+	{
+		cerroutput = {std::cerr};
+		coutoutput = {std::cout};
+	}
 	while (true)
 	{
 		const FastQ* fastq;
@@ -131,7 +136,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, graphAlignerSeedHits->at(fastq));
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, graphAlignerSeedHits->at(fastq));
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -306,20 +311,20 @@ void alignReads(AlignerParams params)
 		numAlignments += numAlnsPerThread[i];
 	}
 
-	std::cerr << "final result has " << numAlignments << " alignments" << std::endl;
+	std::cout << "final result has " << numAlignments << " alignments" << std::endl;
 	if (hasMergedAlignmentOut)
 	{
 		assert(params.outputAlignmentFile != "");
-		std::cerr << "merge alignments for writing" << std::endl;
+		std::cout << "merge alignments for writing" << std::endl;
 		std::vector<vg::Alignment> finalResult;
 		finalResult.reserve(numAlignments);
 		for (size_t i = 0; i < resultsPerThread.size(); i++)
 		{
 			finalResult.insert(finalResult.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
 		}
-		std::cerr << "write to " << params.outputAlignmentFile << std::endl;
+		std::cout << "write to " << params.outputAlignmentFile << std::endl;
 		std::ofstream resultFile { params.outputAlignmentFile, std::ios::out | std::ios::binary };
 		stream::write_buffered(resultFile, finalResult, 0);
-		std::cerr << "write finished" << std::endl;
+		std::cout << "write finished" << std::endl;
 	}
 }

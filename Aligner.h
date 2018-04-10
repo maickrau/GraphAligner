@@ -16,6 +16,7 @@ struct AlignerParams
 	size_t maxCellsPerSlice;
 	std::string seedFile;
 	std::string outputAlignmentFile;
+	bool quietMode;
 };
 
 void alignReads(AlignerParams params);

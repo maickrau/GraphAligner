@@ -137,15 +137,18 @@ namespace CommonUtils
 
 }
 
-BufferedWriter::BufferedWriter(std::ostream& stream) : stream(stream) {};
+BufferedWriter::BufferedWriter() : stream(nullptr) {};
+BufferedWriter::BufferedWriter(std::ostream& stream) : stream(&stream) {};
 BufferedWriter& BufferedWriter::operator<<(FlushClass f)
 {
+	if (stream == nullptr) return *this;
 	flush();
 	return *this;
 }
 void BufferedWriter::flush()
 {
+	if (stream == nullptr) return;
 	stringstream << std::endl;
-	stream << stringstream.str();
+	(*stream) << stringstream.str();
 	stringstream.str("");
 }

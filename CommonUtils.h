@@ -18,10 +18,12 @@ class BufferedWriter : std::ostream
 {
 public:
 	class FlushClass {};
+	BufferedWriter();
 	BufferedWriter(std::ostream& stream);
 	template <typename T>
 	BufferedWriter& operator<<(T obj)
 	{
+		if (stream == nullptr) return *this;
 		stringstream << obj;
 		return *this;
 	}
@@ -29,7 +31,7 @@ public:
 	void flush();
 	static FlushClass Flush;
 private:
-	std::ostream& stream;
+	std::ostream* stream;
 	std::stringstream stringstream;
 };
 

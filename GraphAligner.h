@@ -32,9 +32,10 @@ public:
 
 	GraphAligner(const Params& params) :
 	bvAligner(params),
-	logger(std::cerr),
+	logger(),
 	params(params)
 	{
+		if (!params.quietMode) logger = { std::cerr };
 	}
 	
 	// AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence) const

@@ -1207,7 +1207,7 @@ private:
 	{
 		auto node = params.graph.IndexToNode(w);
 		auto offset = w - params.graph.NodeStart(node);
-		assert(slice.scores.hasNode(node));
+		if (!slice.scores.hasNode(node)) return false;
 		auto wordslice = slice.scores.node(node)[offset];
 		return wordslice.sliceExists;
 	}
