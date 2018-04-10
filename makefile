@@ -77,7 +77,10 @@ $(BINDIR)/ExtractExactPathSubgraph: $(OBJ)
 $(BINDIR)/EstimateRepeatCount: $(OBJ)
 	$(GPP) -o $@ EstimateRepeatCount.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
 
-all: $(BINDIR)/Aligner $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/MergeGfas $(BINDIR)/VisualizeAlignment $(BINDIR)/SelectPartials $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount
+$(BINDIR)/SelectFullAlignments: $(OBJ)
+	$(GPP) -o $@ SelectFullAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+
+all: $(BINDIR)/Aligner $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/MergeGfas $(BINDIR)/VisualizeAlignment $(BINDIR)/SelectPartials $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount $(BINDIR)/SelectFullAlignments
 
 clean:
 	rm -f $(ODIR)/*
