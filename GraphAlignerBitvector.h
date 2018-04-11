@@ -609,9 +609,18 @@ private:
 				result.trace.emplace_back(partTable.back().minScoreIndex, std::min(partTable.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
 				if (result.trace.back().second == partTable.back().j)
 				{
-					auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable[0], slice.slices[i], result.trace.back().first);
-					result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
-					continue;
+					if (partTable.size() == 1)
+					{
+						auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable.back(), slice.slices[i], result.trace.back().first);
+						result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
+						continue;
+					}
+					else
+					{
+						auto boundaryTrace = getSliceBoundaryTrace(sequence, partTable.back(), partTable[partTable.size()-2], result.trace.back().first);
+						result.trace.insert(result.trace.end(), boundaryTrace.begin(), boundaryTrace.end());
+						partTable.pop_back();
+					}
 				}
 			}
 			auto partTrace = getTraceFromTableInner(sequence, partTable, result.trace.back());
