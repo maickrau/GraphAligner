@@ -456,6 +456,7 @@ public:
 
 	static MatrixPosition pickBacktracePredecessor(const Params& params, const std::string& sequence, const DPSlice& slice, const MatrixPosition pos, const DPSlice& previousSlice)
 	{
+		const ScoreType defaultValue = sequence.size() + slice.bandwidth + 1;
 		assert(pos.second >= slice.j);
 		assert(pos.second < slice.j + WordConfiguration<Word>::WordSize);
 		assert(cellExists(params, slice, pos.second - slice.j, pos.first));
@@ -468,7 +469,7 @@ public:
 			for (auto neighbor : params.graph.inNeighbors[nodeIndex])
 			{
 				LengthType u = params.graph.NodeEnd(neighbor)-1;
-				auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, u, sequence.size());
+				auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, u, defaultValue);
 				assert(horizontalScore >= scoreHere-1);
 				if (horizontalScore == scoreHere-1)
 				{
@@ -478,11 +479,11 @@ public:
 				ScoreType diagonalScore;
 				if (pos.second == slice.j)
 				{
-					diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, u, sequence.size());
+					diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, u, defaultValue);
 				}
 				else
 				{
-					diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, u, sequence.size());
+					diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, u, defaultValue);
 				}
 				if (Common::characterMatch(sequence[pos.second], params.graph.NodeSequences(pos.first)))
 				{
@@ -508,7 +509,7 @@ public:
 		}
 		else
 		{
-			auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, pos.first-1, sequence.size());
+			auto horizontalScore = getValueIfExists(params, slice, pos.second - slice.j, pos.first-1, defaultValue);
 			assert(horizontalScore >= scoreHere-1);
 			if (horizontalScore == scoreHere-1)
 			{
@@ -518,11 +519,11 @@ public:
 			ScoreType diagonalScore;
 			if (pos.second == slice.j)
 			{
-				diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first-1, sequence.size());
+				diagonalScore = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first-1, defaultValue);
 			}
 			else
 			{
-				diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first-1, sequence.size());
+				diagonalScore = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first-1, defaultValue);
 			}
 			if (Common::characterMatch(sequence[pos.second], params.graph.NodeSequences(pos.first)))
 			{
@@ -549,11 +550,11 @@ public:
 		if (pos.second == slice.j)
 		{
 			assert(previousSlice.j + WordConfiguration<Word>::WordSize == slice.j);
-			scoreUp = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first, sequence.size());
+			scoreUp = getValueIfExists(params, previousSlice, WordConfiguration<Word>::WordSize - 1, pos.first, defaultValue);
 		}
 		else
 		{
-			scoreUp = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first, sequence.size());
+			scoreUp = getValueIfExists(params, slice, pos.second - 1 - slice.j, pos.first, defaultValue);
 		}
 		assert(scoreUp >= scoreHere-1);
 		if (scoreUp == scoreHere - 1)
