@@ -20,6 +20,10 @@ public:
 	class FlushClass {};
 	BufferedWriter();
 	BufferedWriter(std::ostream& stream);
+	BufferedWriter(const BufferedWriter& other) = default;
+	BufferedWriter(BufferedWriter&& other) = default;
+	BufferedWriter& operator=(const BufferedWriter& other) = default;
+	BufferedWriter& operator=(BufferedWriter&& other) = default;
 	template <typename T>
 	BufferedWriter& operator<<(T obj)
 	{
