@@ -5,6 +5,7 @@
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
+#include "ByteStuff.h"
 
 int main(int argc, char** argv)
 {
@@ -108,6 +109,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
+	ByteStuff::precalculateByteStuff();
 	alignReads(params);
 
 	return 0;
