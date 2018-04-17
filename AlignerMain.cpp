@@ -37,9 +37,10 @@ int main(int argc, char** argv)
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	bool initialFullBand = false;
 	params.quietMode = false;
+	params.sloppyOptimizations = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:q")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:qu")) != -1)
 	{
 		switch(c)
 		{
@@ -75,6 +76,9 @@ int main(int argc, char** argv)
 				break;
 			case 'q':
 				params.quietMode = true;
+				break;
+			case 'u':
+				params.sloppyOptimizations = true;
 				break;
 		}
 	}

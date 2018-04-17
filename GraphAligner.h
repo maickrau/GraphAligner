@@ -78,8 +78,12 @@ public:
 			logger << BufferedWriter::Flush;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i]);
 			if (item.alignmentFailed()) continue;
-			// addAlignmentNodes(triedAlignmentNodes, item);
 			result.alignments.push_back(item);
+			// addAlignmentNodes(triedAlignmentNodes, item);
+			if (params.sloppyOptimizations && item.alignmentStart == 0 && item.alignmentEnd >= sequence.size() - params.graph.DBGOverlap - 1)
+			{
+				break;
+			}
 		}
 
 		return result;
