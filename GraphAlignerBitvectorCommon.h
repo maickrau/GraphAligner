@@ -24,23 +24,6 @@ private:
 	using Params = typename Common::Params;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
 public:
-	class NodeWithPriority
-	{
-	public:
-		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
-		bool operator>(const NodeWithPriority& other) const
-		{
-		return priority > other.priority;
-		}
-		bool operator<(const NodeWithPriority& other) const
-		{
-		return priority < other.priority;
-		}
-		LengthType node;
-		size_t offset;
-		size_t endOffset;
-		int priority;
-	};
 
 	class EqVector
 	{

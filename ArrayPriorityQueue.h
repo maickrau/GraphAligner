@@ -2,6 +2,7 @@
 #define ArrayPriorityQueue_h
 
 #include <queue>
+#include "ThreadReadAssertion.h"
 
 template <typename T>
 class ArrayPriorityQueue

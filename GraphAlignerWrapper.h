@@ -4,6 +4,7 @@
 #define GraphAlignerWrapper_h
 
 #include <tuple>
+#include "GraphAlignerCommon.h"
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
 
@@ -60,6 +61,6 @@ public:
 };
 
 // AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth);
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<std::tuple<int, size_t, bool>>& seedHits);
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<std::tuple<int, size_t, bool>>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState);
 
 #endif

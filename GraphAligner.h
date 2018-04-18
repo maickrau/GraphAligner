@@ -25,8 +25,9 @@ private:
 	using SeedHit = typename Common::SeedHit;
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
-	mutable BitvectorAligner bvAligner;
+	BitvectorAligner bvAligner;
 	mutable BufferedWriter logger;
+	using AlignerGraphsizedState = typename Common::AlignerGraphsizedState;
 	const Params& params;
 public:
 
@@ -59,7 +60,7 @@ public:
 	// 	return result;
 	// }
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
 		AlignmentResult result;
@@ -76,7 +77,7 @@ public:
 			// 	continue;
 			// }
 			logger << BufferedWriter::Flush;
-			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i]);
+			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
 			result.alignments.push_back(item);
 			// addAlignmentNodes(triedAlignmentNodes, item);
@@ -91,7 +92,7 @@ public:
 
 private:
 
-	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit) const
+	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(seedHit.seqPos >= 0);
 		assert(seedHit.seqPos < sequence.size());
@@ -112,13 +113,13 @@ private:
 		{
 			assert(sequence.size() >= seedHit.seqPos + params.graph.DBGOverlap);
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + params.graph.DBGOverlap));
-			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId);
+			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reusableState);
 			result.backward.trace = reverseTrace(result.backward.trace, seedHit.seqPos - 1);
 		}
 		if (seedHit.seqPos < sequence.size() - 1)
 		{
 			auto forwardPart = sequence.substr(seedHit.seqPos);
-			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId);
+			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, reusableState);
 			for (auto& item : result.forward.trace)
 			{
 				item.second += seedHit.seqPos;
@@ -140,12 +141,12 @@ private:
 		return trace;
 	}
 
-	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit) const
+	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
 		auto timeStart = std::chrono::system_clock::now();
 
-		auto trace = getTwoDirectionalTrace(sequence, seedHit);
+		auto trace = getTwoDirectionalTrace(sequence, seedHit, reusableState);
 
 #ifndef NDEBUG
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);

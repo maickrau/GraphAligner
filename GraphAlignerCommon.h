@@ -1,10 +1,58 @@
 #ifndef GraphAlignerCommon_h
 #define GraphAlignerCommon_h
 
+#include <vector>
+#include "AlignmentGraph.h"
+#include "ArrayPriorityQueue.h"
+#include "NodeSlice.h"
+#include "WordSlice.h"
+
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerCommon
 {
 public:
+	class NodeWithPriority
+	{
+	public:
+		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
+		bool operator>(const NodeWithPriority& other) const
+		{
+		return priority > other.priority;
+		}
+		bool operator<(const NodeWithPriority& other) const
+		{
+		return priority < other.priority;
+		}
+		LengthType node;
+		size_t offset;
+		size_t endOffset;
+		int priority;
+	};
+	class AlignerGraphsizedState
+	{
+	public:
+		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth) :
+		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1),
+		nodesliceMap(),
+		currentBand(),
+		previousBand()
+		{
+			nodesliceMap.resize(graph.NodeSize(), {0, 0, 0, 0, 0});
+			currentBand.resize(graph.NodeSize(), false);
+			previousBand.resize(graph.NodeSize(), false);
+		}
+		void clear()
+		{
+			calculableQueue.clear();
+			nodesliceMap.assign(nodesliceMap.size(), {0, 0, 0, 0, 0});
+			currentBand.assign(currentBand.size(), false);
+			previousBand.assign(previousBand.size(), false);
+		}
+		ArrayPriorityQueue<NodeWithPriority> calculableQueue;
+		std::vector<typename NodeSlice<typename WordContainer<LengthType, ScoreType, Word>::Slice>::MapItem> nodesliceMap;
+		std::vector<bool> currentBand;
+		std::vector<bool> previousBand;
+	};
 	typedef std::pair<LengthType, LengthType> MatrixPosition;
 	class Params
 	{

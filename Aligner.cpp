@@ -95,6 +95,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, std::vector<vg::Alignment>& alignmentsOut, bool hasMergedAlignmentOut)
 {
 	assertSetRead("Before any read");
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth) };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (!params.quietMode)
@@ -136,13 +137,14 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq));
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq), reusableState);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
 		{
 			coutoutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
 			cerroutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
+			reusableState.clear();
 			continue;
 		}
 
@@ -166,6 +168,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			}
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
+				reusableState.clear();
 				continue;
 			}
 			numAlignments += 1;

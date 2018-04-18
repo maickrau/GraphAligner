@@ -27,6 +27,7 @@ class GraphAlignerBitvectorBanded
 private:
 	using BV = GraphAlignerBitvectorCommon<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
+	using AlignerGraphsizedState = typename Common::AlignerGraphsizedState;
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
@@ -34,9 +35,7 @@ private:
 	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
 	using EqVector = typename BV::EqVector;
-	using NodeWithPriority = typename BV::NodeWithPriority;
-	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
-	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
+	using NodeWithPriority = typename Common::NodeWithPriority;
 	const Params& params;
 	class DPSlice
 	{
@@ -366,14 +365,11 @@ private:
 public:
 
 	GraphAlignerBitvectorBanded(const Params& params) :
-	calculableQueue(WordConfiguration<Word>::WordSize + std::max(params.initialBandwidth, params.rampBandwidth) + 1),
-	nodesliceMap(),
 	params(params)
 	{
-		nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0, 0, 0});
 	}
 
-	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId) const
+	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId, AlignerGraphsizedState& reusableState) const
 	{
 		std::vector<size_t> nodes;
 		nodes = params.graph.nodeLookup.at(bigraphNodeId);
@@ -381,7 +377,7 @@ public:
 		size_t samplingFrequency = getSamplingFrequency(sequence.size());
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceOneNodeGroup(nodes);
-		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, samplingFrequency);
+		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, samplingFrequency, reusableState);
 		removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() == 0)
 		{
@@ -392,7 +388,7 @@ public:
 
 		OnewayTrace result;
 
-		result = getTraceFromTable(sequence, slice);
+		result = getTraceFromTable(sequence, slice, reusableState);
 		size_t backtraceableSize = sequence.size() - params.graph.DBGOverlap;
 		while (result.trace.size() > 0 && result.trace.back().second >= backtraceableSize)
 		{
@@ -517,7 +513,7 @@ public:
 	}
 private:
 
-	OnewayTrace getTraceFromTable(const std::string& sequence, const DPTable& slice) const
+	OnewayTrace getTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
 	{
 		assert(slice.bandwidthPerSlice.size() == slice.correctness.size());
 		if (slice.slices.size() == 0)
@@ -549,7 +545,7 @@ private:
 				continue;
 			}
 			if (lastBacktraceOverrideStartJ == slice.slices[i].j + WordConfiguration<Word>::WordSize) continue;
-			auto partTable = getSlicesFromTable(sequence, lastBacktraceOverrideStartJ, slice, i);
+			auto partTable = getSlicesFromTable(sequence, lastBacktraceOverrideStartJ, slice, i, reusableState);
 			assert(partTable.size() > 0);
 			if (i == slice.slices.size() - 1)
 			{
@@ -1252,7 +1248,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<NodeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max();
 		LengthType currentMinimumIndex;
@@ -1470,9 +1466,9 @@ private:
 #endif
 	}
 
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<size_t>& partOfComponent, std::vector<bool>& currentBand, int bandwidth) const
+	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<NodeWithPriority>& calculableQueue, int bandwidth) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, partOfComponent, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 		slice.bandwidth = bandwidth;
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreIndex = sliceResult.minScoreIndex;
@@ -1486,14 +1482,14 @@ private:
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<size_t>& partOfComponent, std::vector<bool>& processed, int bandwidth) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<WordSlice>::MapItem>& nodesliceMap, ArrayPriorityQueue<NodeWithPriority>& calculableQueue, int bandwidth) const
 	{
 		DPSlice bandTest { &nodesliceMap };
 		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 		bandTest.correctness = previous.correctness;
 		bandTest.scores.reserve(previous.numCells);
 
-		fillDPSlice(sequence, bandTest, previous, previousBand, partOfComponent, currentBand, bandwidth);
+		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		if (bandTest.cellsProcessed <= params.maxCellsPerSlice && sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize) verifySliceBitvector(sequence, bandTest, previous);
@@ -1554,7 +1550,7 @@ private:
 	}
 #endif
 
-	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency) const
+	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, size_t samplingFrequency, AlignerGraphsizedState& reusableState) const
 	{
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
@@ -1562,17 +1558,12 @@ private:
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
 		result.samplingFrequency = samplingFrequency;
-		std::vector<bool> previousBand;
-		std::vector<bool> currentBand;
 		std::vector<size_t> partOfComponent;
-		previousBand.resize(params.graph.NodeSize(), false);
-		currentBand.resize(params.graph.NodeSize(), false);
-		partOfComponent.resize(params.graph.NodeSize(), std::numeric_limits<size_t>::max());
 		{
 			auto initialOrder = initialSlice.nodes;
 			for (auto node : initialOrder)
 			{
-				previousBand[node] = true;
+				reusableState.previousBand[node] = true;
 			}
 		}
 #ifndef NDEBUG
@@ -1582,8 +1573,6 @@ private:
 		DPSlice storeSlice = lastSlice;
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
-		std::vector<bool> processed;
-		processed.resize(params.graph.SizeInBp(), false);
 		size_t rampRedoIndex = -1;
 		size_t rampUntil = 0;
 		DPSlice backtraceOverridePreslice = lastSlice;
@@ -1601,7 +1590,7 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto timeStart = std::chrono::system_clock::now();
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, processed, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.nodesliceMap, reusableState.calculableQueue, bandwidth);
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
@@ -1637,19 +1626,29 @@ private:
 #ifndef NDEBUG
 				debugLastProcessedSlice = slice-1;
 #endif
+				for (auto node : lastSlice.nodes)
+				{
+					assert(reusableState.previousBand[node]);
+					reusableState.previousBand[node] = false;
+				}
+				for (auto node : newSlice.nodes)
+				{
+					assert(reusableState.currentBand[node]);
+					reusableState.currentBand[node] = false;
+				}
 				break;
 			}
 			if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && params.rampBandwidth > params.initialBandwidth)
 			{
 				for (auto node : newSlice.nodes)
 				{
-					assert(currentBand[node]);
-					currentBand[node] = false;
+					assert(reusableState.currentBand[node]);
+					reusableState.currentBand[node] = false;
 				}
 				for (auto node : lastSlice.nodes)
 				{
-					assert(previousBand[node]);
-					previousBand[node] = false;
+					assert(reusableState.previousBand[node]);
+					reusableState.previousBand[node] = false;
 				}
 				newSlice.scores.clearVectorMap();
 				rampUntil = slice;
@@ -1657,8 +1656,8 @@ private:
 				std::swap(lastSlice, rampSlice);
 				for (auto node : lastSlice.nodes)
 				{
-					assert(!previousBand[node]);
-					previousBand[node] = true;
+					assert(!reusableState.previousBand[node]);
+					reusableState.previousBand[node] = true;
 				}
 				while (result.bandwidthPerSlice.size() > slice+1) result.bandwidthPerSlice.pop_back();
 				while (result.correctness.size() > slice+1) result.correctness.pop_back();
@@ -1783,8 +1782,8 @@ private:
 			}
 			for (auto node : lastSlice.nodes)
 			{
-				assert(previousBand[node]);
-				previousBand[node] = false;
+				assert(reusableState.previousBand[node]);
+				reusableState.previousBand[node] = false;
 			}
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
@@ -1796,10 +1795,33 @@ private:
 			assert(newSlice.minScoreIndex < params.graph.NodeEnd(debugMinimumNode));
 			assert(debugslice[newSlice.minScoreIndex - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
 #endif
+			if (slice == numSlices - 1)
+			{
+
+				for (auto node : newSlice.nodes)
+				{
+					assert(reusableState.currentBand[node]);
+					reusableState.currentBand[node] = false;
+				}
+			}
+			else
+			{
+				std::swap(reusableState.previousBand, reusableState.currentBand);
+			}
 			lastSlice = newSlice.getFrozenSqrtEndScores();
 			newSlice.scores.clearVectorMap();
-			std::swap(previousBand, currentBand);
 		}
+
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(reusableState.calculableQueue.size() == 0);
+		for (size_t i = 0; i < reusableState.currentBand.size(); i++)
+		{
+			assert(!reusableState.currentBand[i]);
+			assert(!reusableState.previousBand[i]);
+			assert(reusableState.nodesliceMap[i].start == 0);
+			assert(reusableState.nodesliceMap[i].end == 0);
+		}
+#endif
 
 		if (backtraceOverriding)
 		{
@@ -1849,7 +1871,7 @@ private:
 		return result;
 	}
 
-	std::vector<DPSlice> getSlicesFromTable(const std::string& sequence, LengthType overrideLastJ, const DPTable& table, size_t startIndex) const
+	std::vector<DPSlice> getSlicesFromTable(const std::string& sequence, LengthType overrideLastJ, const DPTable& table, size_t startIndex, AlignerGraphsizedState& reusableState) const
 	{
 		assert(startIndex < table.slices.size());
 		size_t startSlice = (table.slices[startIndex].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
@@ -1864,17 +1886,11 @@ private:
 		std::vector<DPSlice> result;
 		size_t realCells = 0;
 		size_t cellsProcessed = 0;
-		std::vector<bool> previousBand;
-		std::vector<bool> currentBand;
-		std::vector<size_t> partOfComponent;
-		previousBand.resize(params.graph.NodeSize(), false);
-		currentBand.resize(params.graph.NodeSize(), false);
-		partOfComponent.resize(params.graph.NodeSize(), std::numeric_limits<size_t>::max());
 		{
 			auto initialOrder = initialSlice.nodes;
 			for (auto node : initialOrder)
 			{
-				previousBand[node] = true;
+				reusableState.previousBand[node] = true;
 			}
 		}
 #ifndef NDEBUG
@@ -1883,15 +1899,13 @@ private:
 		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();
 		// assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
-		std::vector<bool> processed;
-		processed.resize(params.graph.SizeInBp(), false);
 		for (size_t slice = startSlice; slice < endSlice; slice++)
 		{
 			int bandwidth = table.bandwidthPerSlice[slice];
 #ifndef NDEBUG
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, previousBand, currentBand, partOfComponent, processed, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.nodesliceMap, reusableState.calculableQueue, bandwidth);
 			assert(result.size() == 0 || newSlice.j == result.back().j + WordConfiguration<Word>::WordSize);
 
 			size_t sliceCells = 0;
@@ -1906,8 +1920,8 @@ private:
 			result.push_back(newSlice.getFrozenScores());
 			for (auto node : lastSlice.nodes)
 			{
-				assert(previousBand[node]);
-				previousBand[node] = false;
+				assert(reusableState.previousBand[node]);
+				reusableState.previousBand[node] = false;
 			}
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
@@ -1919,9 +1933,20 @@ private:
 			assert(newSlice.minScoreIndex < params.graph.NodeEnd(debugMinimumNode));
 			assert(debugslice[newSlice.minScoreIndex - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
 #endif
+			if (slice == endSlice-1)
+			{
+				for (auto node : newSlice.nodes)
+				{
+					assert(reusableState.currentBand[node]);
+					reusableState.currentBand[node] = false;
+				}
+			}
+			else
+			{
+				std::swap(reusableState.previousBand, reusableState.currentBand);
+			}
 			lastSlice = newSlice.getFrozenSqrtEndScores();
 			newSlice.scores.clearVectorMap();
-			std::swap(previousBand, currentBand);
 		}
 #ifndef NDEBUG
 		for (size_t i = 1; i < result.size(); i++)
@@ -1929,6 +1954,18 @@ private:
 			assert(result[i].minScore >= result[i-1].minScore);
 		}
 #endif
+
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(reusableState.calculableQueue.size() == 0);
+		for (size_t i = 0; i < reusableState.currentBand.size(); i++)
+		{
+			assert(!reusableState.currentBand[i]);
+			assert(!reusableState.previousBand[i]);
+			assert(reusableState.nodesliceMap[i].start == 0);
+			assert(reusableState.nodesliceMap[i].end == 0);
+		}
+#endif
+
 		return result;
 	}
 
@@ -1985,7 +2022,7 @@ private:
 		return samplingFrequency;
 	}
 
-	OnewayTrace getBacktraceFullStart(std::string sequence) const
+	OnewayTrace getBacktraceFullStart(std::string sequence, AlignerGraphsizedState& reusableState) const
 	{
 		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
 		for (int i = 0; i < padding; i++)
@@ -2001,11 +2038,11 @@ private:
 			startSlice.nodes.push_back(i);
 		}
 		size_t samplingFrequency = getSamplingFrequency(sequence.size());
-		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency);
+		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency, reusableState);
 		removeWronglyAlignedEnd(slice);
 		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
-		auto result = getTraceFromTable(sequence, slice);
+		auto result = getTraceFromTable(sequence, slice, reusableState);
 		while (result.trace.back().second >= sequence.size() - padding)
 		{
 			result.trace.pop_back();
