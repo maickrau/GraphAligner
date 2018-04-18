@@ -12,14 +12,14 @@
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerCommon.h"
 #include "GraphAlignerVGAlignment.h"
-#include "GraphAlignerBitvector.h"
+#include "GraphAlignerBitvectorBanded.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
 {
 private:
 	using VGAlignment = GraphAlignerVGAlignment<LengthType, ScoreType, Word>;
-	using BitvectorAligner = GraphAlignerBitvector<LengthType, ScoreType, Word>;
+	using BitvectorAligner = GraphAlignerBitvectorBanded<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
 	using SeedHit = typename Common::SeedHit;

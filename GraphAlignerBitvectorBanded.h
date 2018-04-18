@@ -1,5 +1,5 @@
-#ifndef GraphAlignerBitvector_h
-#define GraphAlignerBitvector_h
+#ifndef GraphAlignerBitvectorBanded_h
+#define GraphAlignerBitvectorBanded_h
 
 #include <algorithm>
 #include <string>
@@ -13,6 +13,7 @@
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
+#include "GraphAlignerBitvectorCommon.h"
 #include "GraphAlignerCommon.h"
 #include "ArrayPriorityQueue.h"
 
@@ -21,27 +22,10 @@ thread_local int debugLastRowMinScore;
 #endif
 
 template <typename LengthType, typename ScoreType, typename Word>
-class GraphAlignerBitvector
+class GraphAlignerBitvectorBanded
 {
 private:
-	class NodeWithPriority
-	{
-	public:
-		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
-		bool operator>(const NodeWithPriority& other) const
-		{
-			return priority > other.priority;
-		}
-		bool operator<(const NodeWithPriority& other) const
-		{
-			return priority < other.priority;
-		}
-		LengthType node;
-		size_t offset;
-		size_t endOffset;
-		int priority;
-	};
-
+	using BV = GraphAlignerBitvectorCommon<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
@@ -49,47 +33,11 @@ private:
 	using OnewayTrace = typename Common::OnewayTrace;
 	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
+	using EqVector = typename BV::EqVector;
+	using NodeWithPriority = typename BV::NodeWithPriority;
 	mutable ArrayPriorityQueue<NodeWithPriority> calculableQueue;
 	mutable std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
 	const Params& params;
-	class EqVector
-	{
-	public:
-		EqVector(Word BA, Word BT, Word BC, Word BG) :
-		BA(BA),
-		BT(BT),
-		BC(BC),
-		BG(BG)
-		{
-		}
-		Word getEq(char c) const
-		{
-			switch(c)
-			{
-				case 'A':
-				case 'a':
-					return BA;
-				case 'T':
-				case 't':
-					return BT;
-				case 'C':
-				case 'c':
-					return BC;
-				case 'G':
-				case 'g':
-					return BG;
-				case '-':
-				default:
-					assert(false);
-			}
-			assert(false);
-			return 0;
-		}
-		Word BA;
-		Word BT;
-		Word BC;
-		Word BG;
-	};
 	class DPSlice
 	{
 	public:
@@ -417,7 +365,7 @@ private:
 	};
 public:
 
-	GraphAlignerBitvector(const Params& params) :
+	GraphAlignerBitvectorBanded(const Params& params) :
 	calculableQueue(WordConfiguration<Word>::WordSize + std::max(params.initialBandwidth, params.rampBandwidth) + 1),
 	nodesliceMap(),
 	params(params)
@@ -850,7 +798,7 @@ private:
 				WordSlice upNeighborSlice = previousSlice.node(neighbor).back();
 				if (neighborSlice.sliceExists && neighborSlice.minScore <= quitScore && upNeighborSlice.sliceExists && upNeighborSlice.scoreEnd <= previousSliceQuitScore)
 				{
-					assertSliceCorrectness(neighborSlice, upNeighborSlice, previousBand[neighbor]);
+					BV::assertSliceCorrectness(neighborSlice, upNeighborSlice, previousBand[neighbor]);
 				}
 			}
 #endif
@@ -890,9 +838,9 @@ private:
 				}
 			}
 			if (!foundSomething) continue;
-			assertSliceCorrectness(previous, previousUp, foundOneUp);
+			BV::assertSliceCorrectness(previous, previousUp, foundOneUp);
 			if (!hasRealNeighbor) EqHere &= 1;
-			auto resultHere = getNextSlice(EqHere, previous, up.sliceExists, up.sliceExists && foundOneUp, foundOneUp, previousEq, previousUp, up);
+			auto resultHere = BV::getNextSlice(EqHere, previous, up.sliceExists, up.sliceExists && foundOneUp, foundOneUp, previousEq, previousUp, up);
 			if (!foundOne)
 			{
 				result = resultHere;
@@ -948,63 +896,6 @@ private:
 		return true;
 	}
 
-	WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous, WordSlice up) const
-	{
-		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
-		//pages 405 and 408
-
-		auto oldValue = slice.scoreBeforeStart;
-		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
-		slice.scoreBeforeExists = upInsideBand;
-		if (!diagonalInsideBand) Eq &= ~((Word)1);
-		if (!upleftInsideBand)
-		{
-			slice.scoreBeforeStart += 1;
-		}
-		else
-		{
-			const auto lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize - 1);
-			assert(slice.scoreBeforeStart <= previous.scoreEnd);
-			slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
-		}
-		auto hin = slice.scoreBeforeStart - oldValue;
-
-		Word Xv = Eq | slice.VN;
-		//between 7 and 8
-		if (hin < 0) Eq |= 1;
-		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
-		Word Ph = slice.VN | ~(Xh | slice.VP);
-		Word Mh = slice.VP & Xh;
-		// if (~Ph & confirmedMask) confirmTentative = true;
-		const Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
-		if (Ph & lastBitMask)
-		{
-			slice.scoreEnd += 1;
-		}
-		else if (Mh & lastBitMask)
-		{
-			slice.scoreEnd -= 1;
-		}
-		Ph <<= 1;
-		Mh <<= 1;
-		//between 16 and 17
-		if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
-		slice.VP = Mh | ~(Xv | Ph);
-		slice.VN = Ph & Xv;
-
-		slice.sliceExists = true;
-
-#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
-		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
-		assert(slice.scoreBeforeStart >= debugLastRowMinScore);
-		assert(slice.scoreEnd >= debugLastRowMinScore);
-#endif
-
-		return slice;
-	}
-
 	class NodeCalculationResult
 	{
 	public:
@@ -1012,24 +903,6 @@ private:
 		LengthType minScoreIndex;
 		size_t cellsProcessed;
 	};
-
-	void assertSliceCorrectness(const WordSlice& current, const WordSlice& up, bool previousBand) const
-	{
-#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(current.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(current.VN);
-		assert(current.scoreEnd == current.scoreBeforeStart + wcvp - wcvn);
-
-		assert(current.scoreBeforeStart >= 0);
-		assert(current.scoreEnd >= 0);
-		assert(current.scoreBeforeStart <= current.scoreEnd + WordConfiguration<Word>::WordSize);
-		assert(current.scoreEnd <= current.scoreBeforeStart + WordConfiguration<Word>::WordSize);
-		assert((current.VP & current.VN) == WordConfiguration<Word>::AllZeros);
-
-		assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
-		assert(current.scoreBeforeStart >= 0);
-#endif
-	}
 
 	NodeCalculationResult calculateNode(size_t i, size_t j, size_t startIndex, size_t endIndex, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ScoreType previousSliceQuitScore, ScoreType quitScore, int bandwidth) const
 	{
@@ -1072,7 +945,7 @@ private:
 					result.minScoreIndex = nodeStart;
 					quitScore = std::min(quitScore, result.minScore + bandwidth);
 				}
-				assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
+				BV::assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 			}
 			else
 			{
@@ -1090,7 +963,7 @@ private:
 					result.minScoreIndex = nodeStart;
 					quitScore = std::min(quitScore, result.minScore + bandwidth);
 				}
-				assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
+				BV::assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 			}
 		}
 		else
@@ -1111,7 +984,7 @@ private:
 				result.minScoreIndex = nodeStart + startIndex;
 				quitScore = std::min(quitScore, result.minScore + bandwidth);
 			}
-			assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
+			BV::assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 		}
 
 		if (oldWordSlice.sliceExists)
@@ -1149,7 +1022,7 @@ private:
 
 			oldWordSlice = slice[w];
 
-			currentWordSlice = getNextSlice(Eq, previousWordSlice, upWordSliceExists, leftUpWordSliceExists && upWordSliceExists, leftUpWordSliceExists, (j == 0 && previousBand[i]) || (j > 0 && graphChar == sequence[j-1]), upPreviousWordSlice, upWordSlice);
+			currentWordSlice = BV::getNextSlice(Eq, previousWordSlice, upWordSliceExists, leftUpWordSliceExists && upWordSliceExists, leftUpWordSliceExists, (j == 0 && previousBand[i]) || (j > 0 && graphChar == sequence[j-1]), upPreviousWordSlice, upWordSlice);
 			if (upWordSliceExists && currentWordSlice.scoreBeforeStart > upWordSlice.scoreEnd)
 			{
 				auto mergable = getSourceSliceFromScore(upWordSlice.scoreEnd);
@@ -1158,7 +1031,7 @@ private:
 			}
 
 			assert(previousBand[i] || currentWordSlice.scoreBeforeStart == j || currentWordSlice.scoreBeforeStart == previousWordSlice.scoreBeforeStart + 1);
-			assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
+			BV::assertSliceCorrectness(currentWordSlice, upWordSlice, upWordSliceExists);
 
 			if (currentWordSlice.scoreEnd < result.minScore)
 			{
@@ -1506,15 +1379,6 @@ private:
 		return result;
 	}
 
-	WordSlice flattenWordSlice(WordSlice slice, size_t row) const
-	{
-		Word mask = ~(WordConfiguration<Word>::AllOnes << row);
-		slice.VP &= mask;
-		slice.VN &= mask;
-		slice.scoreEnd = slice.scoreBeforeStart + WordConfiguration<Word>::popcount(slice.VP) - WordConfiguration<Word>::popcount(slice.VN);
-		return slice;
-	}
-
 	void flattenLastSliceEnd(NodeSlice<WordSlice>& slice, NodeCalculationResult& sliceCalc, LengthType j, size_t sequenceSize) const
 	{
 		assert(j < sequenceSize);
@@ -1525,7 +1389,7 @@ private:
 		{
 			for (size_t i = 0; i < node.second.size(); i++)
 			{
-				auto wordSliceResult = flattenWordSlice(node.second[i], sequenceSize - j);
+				auto wordSliceResult = BV::flattenWordSlice(node.second[i], sequenceSize - j);
 				node.second[i] = wordSliceResult;
 				if (wordSliceResult.scoreEnd < sliceCalc.minScore)
 				{
