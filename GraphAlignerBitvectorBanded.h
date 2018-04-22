@@ -1620,6 +1620,25 @@ private:
 			realCells += newSlice.numCells;
 			cellsProcessed += newSlice.cellsProcessed;
 
+			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
+			{
+				newSlice.scores.clearVectorMap();
+#ifndef NDEBUG
+				debugLastProcessedSlice = slice-1;
+#endif
+				for (auto node : lastSlice.nodes)
+				{
+					assert(reusableState.previousBand[node]);
+					reusableState.previousBand[node] = false;
+				}
+				for (auto node : newSlice.nodes)
+				{
+					assert(reusableState.currentBand[node]);
+					reusableState.currentBand[node] = false;
+				}
+				break;
+			}
+
 			if (!newSlice.correctness.CorrectFromCorrect())
 			{
 				newSlice.scores.clearVectorMap();
