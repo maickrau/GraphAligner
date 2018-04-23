@@ -381,7 +381,6 @@ public:
 		removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() == 0)
 		{
-			assert(slice.bandwidthPerSlice.size() == 0);
 			return OnewayTrace::TraceFailed();
 		}
 		assert(slice.slices.back().minScore <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
@@ -1499,6 +1498,7 @@ private:
 
 	void removeWronglyAlignedEnd(DPTable& table) const
 	{
+		if (table.slices.size() == 0) return;
 		bool currentlyCorrect = table.correctness.back().CurrentlyCorrect();
 		while (!currentlyCorrect)
 		{
@@ -1859,32 +1859,38 @@ private:
 			}
 		}
 #ifndef NDEBUF
-		volatile
-#endif
-		size_t lastExisting = 0;
-		// assert(debugLastProcessedSlice == -1 || lastExisting == debugLastProcessedSlice / samplingFrequency || lastExisting == debugLastProcessedSlice / samplingFrequency + 1);
-		// storeSlices.erase(storeSlices.begin() + lastExisting + 1, storeSlices.end());
-		// result.slices = storeSlices;
-		assert(result.bandwidthPerSlice.size() == debugLastProcessedSlice + 1);
-#ifndef NDEBUG
-		assert(result.slices.size() > 0);
-		for (size_t i = 0; i < result.slices.size(); i++)
+		if (result.slices.size() > 0)
 		{
-			// assert(i == 0 || result.slices[i].j / WordConfiguration<Word>::WordSize / samplingFrequency == i-1);
-			assert(i <= 1 || result.slices[i].j > result.slices[i-1].j);
-			// assert(i != 1 || result.slices[i].j >= 0);
+			volatile size_t lastExisting = 0;
+			// assert(debugLastProcessedSlice == -1 || lastExisting == debugLastProcessedSlice / samplingFrequency || lastExisting == debugLastProcessedSlice / samplingFrequency + 1);
+			// storeSlices.erase(storeSlices.begin() + lastExisting + 1, storeSlices.end());
+			// result.slices = storeSlices;
+			assert(result.bandwidthPerSlice.size() == debugLastProcessedSlice + 1);
+			assert(result.slices.size() > 0);
+			for (size_t i = 0; i < result.slices.size(); i++)
+			{
+				// assert(i == 0 || result.slices[i].j / WordConfiguration<Word>::WordSize / samplingFrequency == i-1);
+				assert(i <= 1 || result.slices[i].j > result.slices[i-1].j);
+				// assert(i != 1 || result.slices[i].j >= 0);
+			}
+			for (size_t i = 1; i < result.slices.size(); i++)
+			{
+				assert(result.slices[i].minScore >= result.slices[i-1].minScore);
+			}
+			for (size_t i = 0; i < result.backtraceOverrides.size(); i++)
+			{
+				assert(result.backtraceOverrides[i].endj >= result.backtraceOverrides[i].startj);
+			}
+			for (size_t i = 1; i < result.backtraceOverrides.size(); i++)
+			{
+				assert(result.backtraceOverrides[i].startj > result.backtraceOverrides[i-1].endj);
+			}
 		}
-		for (size_t i = 1; i < result.slices.size(); i++)
+		else
 		{
-			assert(result.slices[i].minScore >= result.slices[i-1].minScore);
-		}
-		for (size_t i = 0; i < result.backtraceOverrides.size(); i++)
-		{
-			assert(result.backtraceOverrides[i].endj >= result.backtraceOverrides[i].startj);
-		}
-		for (size_t i = 1; i < result.backtraceOverrides.size(); i++)
-		{
-			assert(result.backtraceOverrides[i].startj > result.backtraceOverrides[i-1].endj);
+			assert(result.backtraceOverrides.size() == 0);
+			assert(result.bandwidthPerSlice.size() == 0);
+			assert(result.correctness.size() == 0);
 		}
 #endif
 		return result;
@@ -2059,6 +2065,10 @@ private:
 		size_t samplingFrequency = getSamplingFrequency(sequence.size());
 		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, samplingFrequency, reusableState);
 		removeWronglyAlignedEnd(slice);
+		if (slice.slices.size() == 0)
+		{
+			return OnewayTrace::TraceFailed();
+		}
 		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
 
 		auto result = getTraceFromTable(sequence, slice, reusableState);
