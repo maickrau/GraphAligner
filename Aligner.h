@@ -21,5 +21,6 @@ struct AlignerParams
 };
 
 void alignReads(AlignerParams params);
+void wabiExperiments(AlignerParams params);
 
 #endif

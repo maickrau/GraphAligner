@@ -43,9 +43,8 @@ public:
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 	int DBGOverlap;
+	std::vector<std::vector<size_t>> TopologicalOrderOfComponents() const;
 
-private:
-	void AddNode(int nodeId, int offset, std::string sequence, bool reverseNode);
 	std::vector<size_t> nodeStart;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::vector<size_t> nodeOffset;
@@ -55,6 +54,10 @@ private:
 	std::vector<bool> reverse;
 	std::vector<bool> nodeSequencesATorCG;
 	std::vector<bool> nodeSequencesACorTG;
+
+private:
+	void connect(size_t node, std::vector<std::vector<size_t>>& result, size_t& indexnum, std::vector<size_t>& index, std::vector<size_t>& lowlink, std::vector<bool>& onStack, std::vector<size_t>& S) const;
+	void AddNode(int nodeId, int offset, std::string sequence, bool reverseNode);
 	size_t dummyNodeStart;
 	size_t dummyNodeEnd;
 	bool finalized;
@@ -65,6 +68,8 @@ private:
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
+	template <typename LengthType, typename ScoreType, typename Word>
+	friend class GraphAlignerBitvectorFull;
 };
 
 

@@ -13,6 +13,8 @@
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
+#include "GraphAlignerBitvectorFull.h"
+#include "GraphAlignerCellbycellFull.h"
 
 bool is_file_exist(std::string fileName)
 {
@@ -326,5 +328,102 @@ void alignReads(AlignerParams params)
 		std::ofstream resultFile { params.outputAlignmentFile, std::ios::out | std::ios::binary };
 		stream::write_buffered(resultFile, finalResult, 0);
 		std::cout << "write finished" << std::endl;
+	}
+}
+
+void wabiExperiments(AlignerParams params)
+{
+	std::cout << "load graph" << std::endl;
+	auto alignmentGraph = getGraph(params.graphFile);
+	std::cout << "load reads" << std::endl;
+	auto fastqs = loadFastqFromFile(params.fastqFile);
+
+	std::cout << "preprocess graph" << std::endl;
+	auto componentOrder = alignmentGraph.TopologicalOrderOfComponents();
+	bool isAcyclic = true;
+	bool isTree = true;
+	for (size_t i = 0; i < componentOrder.size(); i++)
+	{
+		if (componentOrder[i].size() > 1)
+		{
+			isAcyclic = false;
+			break;
+		}
+	}
+	for (size_t i = 0; i < alignmentGraph.NodeSize(); i++)
+	{
+		if (alignmentGraph.inNeighbors[i].size() > 1)
+		{
+			isTree = false;
+			break;
+		}
+	}
+
+	if (isTree)
+	{
+		assert(isAcyclic);
+		std::cout << "The graph is linear / a tree / a forest" << std::endl;
+	}
+	else if (isAcyclic)
+	{
+		std::cout << "The graph is a DAG" << std::endl;
+	}
+	else
+	{
+		std::cout << "The graph is cyclic" << std::endl;
+	}
+	std::cout << "Nodes: " << alignmentGraph.NodeSize() << std::endl;
+	std::cout << "BPs: " << alignmentGraph.SizeInBp() << std::endl;
+
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params alignerParams { 0, 0, alignmentGraph, 0, false, false };
+
+	GraphAlignerBitvectorFull<size_t, int32_t, uint64_t> bv { alignerParams, componentOrder };
+	GraphAlignerCellbycellFull<size_t, int32_t, uint64_t> cbc { alignerParams, componentOrder };
+	if (isAcyclic)
+	{
+		std::vector<int32_t> bvScores;
+		std::vector<int32_t> cbcScores;
+		bvScores.reserve(fastqs.size());
+		cbcScores.reserve(fastqs.size());
+		std::cout << "start bitvector alignment" << std::endl;
+		auto timeStart = std::chrono::steady_clock::now();
+		for (auto fastq : fastqs)
+		{
+			size_t score = bv.alignAndGetScoreAcyclic(fastq.sequence);
+			bvScores.push_back(score);
+		}
+		auto timeEnd = std::chrono::steady_clock::now();
+		size_t bitvectorMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count();
+		std::cout << "bitvector took " << bitvectorMicroseconds << "us" << std::endl;
+		std::cout << "start cellbycell alignment" << std::endl;
+		timeStart = std::chrono::steady_clock::now();
+		for (auto fastq : fastqs)
+		{
+			size_t score = cbc.alignAndGetScoreAcyclic(fastq.sequence);
+			cbcScores.push_back(score);
+		}
+		timeEnd = std::chrono::steady_clock::now();
+		size_t cellbycellMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count();
+		std::cout << "cellbycell took " << cellbycellMicroseconds << "us" << std::endl;
+		std::cout << "ratio: " << ((double)cellbycellMicroseconds / (double)bitvectorMicroseconds) << std::endl;
+		bool scoresOK = true;
+		for (size_t i = 0; i < bvScores.size(); i++)
+		{
+			if (bvScores[i] != cbcScores[i])
+			{
+				std::cout << "SCORES DON'T MATCH for read " << fastqs[i].seq_id << ": bitvector " << bvScores[i] << " cellbycell " << cbcScores[i] << std::endl;
+				scoresOK = false;
+			}
+		}
+		if (scoresOK) std::cout << "scores match" << std::endl;
+	}
+	else
+	{
+		assert(false);
+		// for (auto fastq : fastqs)
+		// {
+		// 	size_t score = bv.alignAndGetScore(fastq.sequence);
+		// 	std::cout << fastq.seq_id << "\t" << score << std::endl;
+		// }
 	}
 }

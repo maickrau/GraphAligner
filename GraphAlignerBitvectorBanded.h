@@ -1258,33 +1258,7 @@ private:
 		LengthType currentMinimumIndex;
 		size_t cellsProcessed = 0;
 
-		//preprocessed bitvectors for character equality
-		Word BA = WordConfiguration<Word>::AllZeros;
-		Word BT = WordConfiguration<Word>::AllZeros;
-		Word BC = WordConfiguration<Word>::AllZeros;
-		Word BG = WordConfiguration<Word>::AllZeros;
-		for (int i = 0; i < WordConfiguration<Word>::WordSize && j+i < sequence.size(); i++)
-		{
-			Word mask = ((Word)1) << i;
-			if (Common::characterMatch(sequence[j+i], 'A')) BA |= mask;
-			if (Common::characterMatch(sequence[j+i], 'C')) BC |= mask;
-			if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
-			if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
-		}
-		if (j + WordConfiguration<Word>::WordSize > sequence.size())
-		{
-			Word mask = WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size());
-			assert((BA & mask) == 0);
-			assert((BT & mask) == 0);
-			assert((BC & mask) == 0);
-			assert((BG & mask) == 0);
-			BA |= mask;
-			BT |= mask;
-			BC |= mask;
-			BG |= mask;
-		}
-		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
-		EqVector EqV {BA, BT, BC, BG};
+		EqVector EqV = BV::getEqVector(sequence, j);
 
 		for (auto node : previousNodes)
 		{

@@ -20,23 +20,10 @@ nodeSequencesATorCG(),
 nodeSequencesACorTG(),
 finalized(false)
 {
-	//add the start dummy node as the first node
-	dummyNodeStart = 0;
-	nodeIDs.push_back(0);
-	nodeStart.push_back(0);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
-	reverse.push_back(false);
-	nodeOffset.push_back(false);
-	nodeSequencesATorCG.push_back(false);
-	nodeSequencesACorTG.push_back(false);
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes, size_t sequenceLength)
 {
-	numNodes += 2; //dummy start and end nodes
-	numSplitNodes += 2; //dummy start and end nodes
-	sequenceLength += 2; //dummy start and end nodes
 	nodeSequencesATorCG.reserve(sequenceLength);
 	nodeSequencesACorTG.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
@@ -89,27 +76,27 @@ void AlignmentGraph::AddNode(int nodeId, int offset, std::string sequence, bool 
 		{
 			case 'A':
 			case 'a':
-				nodeSequencesATorCG.push_back(false);
-				nodeSequencesACorTG.push_back(false);
-				break;
+			nodeSequencesATorCG.push_back(false);
+			nodeSequencesACorTG.push_back(false);
+			break;
 			case 't':
 			case 'T':
-				nodeSequencesATorCG.push_back(false);
-				nodeSequencesACorTG.push_back(true);
-				break;
+			nodeSequencesATorCG.push_back(false);
+			nodeSequencesACorTG.push_back(true);
+			break;
 			case 'c':
 			case 'C':
-				nodeSequencesATorCG.push_back(true);
-				nodeSequencesACorTG.push_back(false);
-				break;
+			nodeSequencesATorCG.push_back(true);
+			nodeSequencesACorTG.push_back(false);
+			break;
 			case 'g':
 			case 'G':
-				nodeSequencesATorCG.push_back(true);
-				nodeSequencesACorTG.push_back(true);
-				break;
+			nodeSequencesATorCG.push_back(true);
+			nodeSequencesACorTG.push_back(true);
+			break;
 			default:
-				assert(false);
-				std::abort();
+			assert(false);
+			std::abort();
 		}
 	}
 	assert(nodeIDs.size() == nodeStart.size());
@@ -136,16 +123,6 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 
 void AlignmentGraph::Finalize(int wordSize)
 {
-	//add the end dummy node as the last node
-	dummyNodeEnd = nodeSequencesATorCG.size();
-	nodeIDs.push_back(0);
-	nodeStart.push_back(nodeSequencesATorCG.size());
-	reverse.push_back(false);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
-	nodeSequencesATorCG.push_back(false);
-	nodeSequencesACorTG.push_back(false);
-	nodeOffset.push_back(false);
 	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
 	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
@@ -282,8 +259,6 @@ size_t AlignmentGraph::NodeLength(size_t index) const
 char AlignmentGraph::NodeSequences(size_t index) const
 {
 	assert(index < nodeSequencesATorCG.size());
-	//dummy nodes
-	if (index == 0 || index == nodeSequencesACorTG.size()-1) return '-';
 	int first = nodeSequencesATorCG[index];
 	int second = nodeSequencesACorTG[index];
 	return "ATCG"[first*2+second];
@@ -391,4 +366,81 @@ size_t AlignmentGraph::MinDistance(size_t pos, const std::vector<size_t>& target
 		}
 	}
 	return mindist;
+}
+
+void AlignmentGraph::connect(size_t node, std::vector<std::vector<size_t>>& result, size_t& indexnum, std::vector<size_t>& index, std::vector<size_t>& lowlink, std::vector<bool>& onStack, std::vector<size_t>& S) const
+{
+	index[node] = indexnum;
+	lowlink[node] = indexnum;
+	indexnum++;
+	S.push_back(node);
+	onStack[node] = true;
+	for (auto neighbor : outNeighbors[node])
+	{
+		if (index[neighbor] == -1)
+		{
+			connect(neighbor, result, indexnum, index, lowlink, onStack, S);
+			lowlink[node] = std::min(lowlink[neighbor], lowlink[node]);
+		}
+		else if (onStack[neighbor])
+		{
+			lowlink[node] = std::min(lowlink[node], index[neighbor]);
+		}
+	}
+	if (lowlink[node] == index[node])
+	{
+		result.emplace_back();
+		while (true)
+		{
+			auto w = S.back();
+			S.pop_back();
+			onStack[w] = false;
+			result.back().push_back(w);
+			if (w == node) break;
+		}
+	}
+}
+
+//https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
+std::vector<std::vector<size_t>> AlignmentGraph::TopologicalOrderOfComponents() const
+{
+	std::vector<size_t> index;
+	std::vector<size_t> lowlink;
+	std::vector<bool> onStack;
+	std::vector<size_t> S;
+	index.resize(NodeSize(), -1);
+	lowlink.resize(NodeSize(), -1);
+	onStack.resize(NodeSize(), false);
+	size_t indexnum = 0;
+	std::vector<std::vector<size_t>> result;
+	for (size_t i = 0; i < NodeSize(); i++)
+	{
+		if (index[i] == -1) connect(i, result, indexnum, index, lowlink, onStack, S);
+	}
+	std::reverse(result.begin(), result.end());
+	assert(result.size() > 0);
+	assert(result[0].size() > 0);
+	assert(result.back().size() > 0);
+#ifndef NDEBUG
+	//verify that it's correct
+	std::vector<size_t> componentOfNode;
+	componentOfNode.resize(NodeSize(), -1);
+	for (size_t component = 0; component < result.size(); component++)
+	{
+		assert(result[component].size() > 0);
+		for (auto node : result[component])
+		{
+			componentOfNode[node] = component;
+		}
+	}
+	for (size_t i = 0; i < NodeSize(); i++)
+	{
+		assert(componentOfNode[i] != -1);
+		for (auto neighbor : inNeighbors[i])
+		{
+			assert(componentOfNode[neighbor] <= componentOfNode[i]);
+		}
+	}
+#endif
+	return result;
 }

@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 	params.sloppyOptimizations = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:qu")) != -1)
+	while ((c = getopt(argc, argv, "g:f:")) != -1)
 	{
 		switch(c)
 		{
@@ -50,71 +50,13 @@ int main(int argc, char** argv)
 			case 'f':
 				params.fastqFile = std::string(optarg);
 				break;
-			case 't':
-				params.numThreads = std::stoi(optarg);
-				break;
-			case 'b':
-				params.initialBandwidth = std::stoi(optarg);
-				break;
-			case 'B':
-				params.rampBandwidth = std::stoi(optarg);
-				break;
-			case 'i':
-				initialFullBand = true;
-				break;
-			case 's':
-				params.seedFile = std::string(optarg);
-				break;
-			case 'd':
-				params.dynamicRowStart = std::stoi(optarg);
-				break;
-			case 'C':
-				params.maxCellsPerSlice = std::stol(optarg);
-				break;
-			case 'a':
-				params.outputAlignmentFile = std::string(optarg);
-				break;
-			case 'q':
-				params.quietMode = true;
-				break;
-			case 'u':
-				params.sloppyOptimizations = true;
-				break;
 		}
 	}
 
-	if (params.dynamicRowStart % 64 != 0)
-	{
-		std::cerr << "dynamic row start has to be a multiple of 64" << std::endl;
-		std::exit(0);
-	}
-
-	if (params.numThreads < 1)
-	{
-		std::cerr << "number of threads must be >= 1" << std::endl;
-		std::exit(0);
-	}
-
-	if (params.initialBandwidth < 1)
-	{
-		std::cerr << "bandwidth must be >= 1" << std::endl;
-		std::exit(0);
-	}
-
-	if (params.rampBandwidth != 0 && params.rampBandwidth <= params.initialBandwidth)
-	{
-		std::cerr << "backup bandwidth must be higher than initial bandwidth" << std::endl;
-		std::exit(0);
-	}
-
-	if (!initialFullBand && params.seedFile == "")
-	{
-		std::cerr << "either initial full band or seed file must be set" << std::endl;
-		std::exit(0);
-	}
-
+	std::cout << "preprocess bitvectors" << std::endl;
 	ByteStuff::precalculateByteStuff();
-	alignReads(params);
+	wabiExperiments(params);
+	// alignReads(params);
 
 	return 0;
 }

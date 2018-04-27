@@ -81,6 +81,37 @@ public:
 		Word BG;
 	};
 
+	static EqVector getEqVector(const std::string& sequence, size_t pos)
+	{
+		//preprocessed bitvectors for character equality
+		Word BA = WordConfiguration<Word>::AllZeros;
+		Word BT = WordConfiguration<Word>::AllZeros;
+		Word BC = WordConfiguration<Word>::AllZeros;
+		Word BG = WordConfiguration<Word>::AllZeros;
+		for (int i = 0; i < WordConfiguration<Word>::WordSize && pos+i < sequence.size(); i++)
+		{
+			Word mask = ((Word)1) << i;
+			if (Common::characterMatch(sequence[pos+i], 'A')) BA |= mask;
+			if (Common::characterMatch(sequence[pos+i], 'C')) BC |= mask;
+			if (Common::characterMatch(sequence[pos+i], 'T')) BT |= mask;
+			if (Common::characterMatch(sequence[pos+i], 'G')) BG |= mask;
+		}
+		if (pos + WordConfiguration<Word>::WordSize > sequence.size())
+		{
+			Word mask = WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - pos + sequence.size());
+			assert((BA & mask) == 0);
+			assert((BT & mask) == 0);
+			assert((BC & mask) == 0);
+			assert((BG & mask) == 0);
+			BA |= mask;
+			BT |= mask;
+			BC |= mask;
+			BG |= mask;
+		}
+		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		return EqVector {BA, BT, BC, BG};
+	}
+
 	static void assertSliceCorrectness(const WordSlice& current, const WordSlice& up, bool previousBand)
 	{
 	#ifndef NDEBUG
