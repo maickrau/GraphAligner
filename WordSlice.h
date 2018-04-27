@@ -246,7 +246,7 @@ private:
 
 	ScoreType minScoreCellByCell() const
 	{
-		ScoreType minScore = std::numeric_limits<ScoreType>::max();
+		ScoreType minScore = scoreBeforeStart;
 		ScoreType scoreHere = scoreBeforeStart;
 		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
 		{
@@ -293,9 +293,7 @@ private:
 		possibleLocalMinima >>= 1;
 		//leftmost bit might be a minimum if there is no VP to its right
 		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
-		ScoreType result = scoreBeforeStart + (VP & 1) - (VN & 1);
-		//the score is inited to the first cell at the start
-		possibleLocalMinima &= ~((Word)1);
+		ScoreType result = scoreBeforeStart;
 		while (possibleLocalMinima != 0)
 		{
 			//all cells from the right up to the first minimum are one

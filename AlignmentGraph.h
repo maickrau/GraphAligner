@@ -43,7 +43,7 @@ public:
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
 	int DBGOverlap;
-	std::vector<std::vector<size_t>> TopologicalOrderOfComponents() const;
+	std::pair<std::vector<std::vector<size_t>>, std::vector<size_t>> TopologicalOrderOfComponents() const;
 
 	std::vector<size_t> nodeStart;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;

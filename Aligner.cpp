@@ -342,21 +342,36 @@ void wabiExperiments(AlignerParams params)
 	auto componentOrder = alignmentGraph.TopologicalOrderOfComponents();
 	bool isAcyclic = true;
 	bool isTree = true;
-	for (size_t i = 0; i < componentOrder.size(); i++)
+	for (size_t i = 0; i < componentOrder.first.size(); i++)
 	{
-		if (componentOrder[i].size() > 1)
+		if (componentOrder.first[i].size() > 1)
 		{
 			isAcyclic = false;
 			break;
 		}
-	}
-	for (size_t i = 0; i < alignmentGraph.NodeSize(); i++)
-	{
-		if (alignmentGraph.inNeighbors[i].size() > 1)
+		for (auto neighbor : alignmentGraph.inNeighbors[componentOrder.first[i][0]])
 		{
-			isTree = false;
-			break;
+			if (neighbor == componentOrder.first[i][0])
+			{
+				isAcyclic = false;
+				break;
+			}
 		}
+	}
+	if (isAcyclic)
+	{
+		for (size_t i = 0; i < alignmentGraph.NodeSize(); i++)
+		{
+			if (alignmentGraph.inNeighbors[i].size() > 1)
+			{
+				isTree = false;
+				break;
+			}
+		}
+	}
+	else
+	{
+		isTree = false;
 	}
 
 	if (isTree)
@@ -372,58 +387,69 @@ void wabiExperiments(AlignerParams params)
 	{
 		std::cout << "The graph is cyclic" << std::endl;
 	}
+	size_t numEdges = 0;
+	for (const auto& list : alignmentGraph.inNeighbors)
+	{
+		numEdges += list.size();
+	}
 	std::cout << "Nodes: " << alignmentGraph.NodeSize() << std::endl;
+	std::cout << "Edges: " << numEdges << std::endl;
 	std::cout << "BPs: " << alignmentGraph.SizeInBp() << std::endl;
 
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params alignerParams { 0, 0, alignmentGraph, 0, false, false };
 
-	GraphAlignerBitvectorFull<size_t, int32_t, uint64_t> bv { alignerParams, componentOrder };
-	GraphAlignerCellbycellFull<size_t, int32_t, uint64_t> cbc { alignerParams, componentOrder };
-	if (isAcyclic)
+	GraphAlignerBitvectorFull<size_t, int32_t, uint64_t> bv { alignerParams, componentOrder.first, componentOrder.second };
+	GraphAlignerCellbycellFull<size_t, int32_t, uint64_t> cbc { alignerParams, componentOrder.first, componentOrder.second };
+
+	std::vector<int32_t> bvScores;
+	std::vector<int32_t> cbcScores;
+	bvScores.reserve(fastqs.size());
+	cbcScores.reserve(fastqs.size());
+	std::cout << "start bitvector alignment" << std::endl;
+	auto bvtimeStart = std::chrono::steady_clock::now();
+	for (auto fastq : fastqs)
 	{
-		std::vector<int32_t> bvScores;
-		std::vector<int32_t> cbcScores;
-		bvScores.reserve(fastqs.size());
-		cbcScores.reserve(fastqs.size());
-		std::cout << "start bitvector alignment" << std::endl;
-		auto timeStart = std::chrono::steady_clock::now();
-		for (auto fastq : fastqs)
+		size_t score;
+		if (isAcyclic)
 		{
-			size_t score = bv.alignAndGetScoreAcyclic(fastq.sequence);
-			bvScores.push_back(score);
+			score = bv.alignAndGetScoreAcyclic(fastq.sequence);
 		}
-		auto timeEnd = std::chrono::steady_clock::now();
-		size_t bitvectorMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count();
-		std::cout << "bitvector took " << bitvectorMicroseconds << "us" << std::endl;
-		std::cout << "start cellbycell alignment" << std::endl;
-		timeStart = std::chrono::steady_clock::now();
-		for (auto fastq : fastqs)
+		else
 		{
-			size_t score = cbc.alignAndGetScoreAcyclic(fastq.sequence);
-			cbcScores.push_back(score);
+			score = bv.alignAndGetScore(fastq.sequence);
 		}
-		timeEnd = std::chrono::steady_clock::now();
-		size_t cellbycellMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeStart).count();
-		std::cout << "cellbycell took " << cellbycellMicroseconds << "us" << std::endl;
-		std::cout << "ratio: " << ((double)cellbycellMicroseconds / (double)bitvectorMicroseconds) << std::endl;
-		bool scoresOK = true;
-		for (size_t i = 0; i < bvScores.size(); i++)
-		{
-			if (bvScores[i] != cbcScores[i])
-			{
-				std::cout << "SCORES DON'T MATCH for read " << fastqs[i].seq_id << ": bitvector " << bvScores[i] << " cellbycell " << cbcScores[i] << std::endl;
-				scoresOK = false;
-			}
-		}
-		if (scoresOK) std::cout << "scores match" << std::endl;
+		bvScores.push_back(score);
 	}
-	else
+	auto bvtimeEnd = std::chrono::steady_clock::now();
+	size_t bitvectorMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(bvtimeEnd - bvtimeStart).count();
+	std::cout << "bitvector took " << bitvectorMicroseconds << "us" << std::endl;
+	std::cout << "start cellbycell alignment" << std::endl;
+	auto cbctimeStart = std::chrono::steady_clock::now();
+	for (auto fastq : fastqs)
 	{
-		assert(false);
-		// for (auto fastq : fastqs)
-		// {
-		// 	size_t score = bv.alignAndGetScore(fastq.sequence);
-		// 	std::cout << fastq.seq_id << "\t" << score << std::endl;
-		// }
+		size_t score;
+		if (isAcyclic)
+		{
+			score = cbc.alignAndGetScoreAcyclic(fastq.sequence);
+		}
+		else
+		{
+			score = cbc.alignAndGetScore(fastq.sequence);
+		}
+		cbcScores.push_back(score);
 	}
+	auto cbctimeEnd = std::chrono::steady_clock::now();
+	size_t cellbycellMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(cbctimeEnd - cbctimeStart).count();
+	std::cout << "cellbycell took " << cellbycellMicroseconds << "us" << std::endl;
+	std::cout << "ratio: " << ((double)cellbycellMicroseconds / (double)bitvectorMicroseconds) << std::endl;
+	bool scoresOK = true;
+	for (size_t i = 0; i < bvScores.size(); i++)
+	{
+		if (bvScores[i] != cbcScores[i])
+		{
+			std::cout << "SCORES DON'T MATCH for read " << fastqs[i].seq_id << ": bitvector " << bvScores[i] << " cellbycell " << cbcScores[i] << std::endl;
+			scoresOK = false;
+		}
+	}
+	if (scoresOK) std::cout << "scores match" << std::endl;
 }

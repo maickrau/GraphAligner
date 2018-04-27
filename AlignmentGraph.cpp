@@ -402,7 +402,7 @@ void AlignmentGraph::connect(size_t node, std::vector<std::vector<size_t>>& resu
 }
 
 //https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
-std::vector<std::vector<size_t>> AlignmentGraph::TopologicalOrderOfComponents() const
+std::pair<std::vector<std::vector<size_t>>, std::vector<size_t>> AlignmentGraph::TopologicalOrderOfComponents() const
 {
 	std::vector<size_t> index;
 	std::vector<size_t> lowlink;
@@ -421,26 +421,26 @@ std::vector<std::vector<size_t>> AlignmentGraph::TopologicalOrderOfComponents() 
 	assert(result.size() > 0);
 	assert(result[0].size() > 0);
 	assert(result.back().size() > 0);
-#ifndef NDEBUG
-	//verify that it's correct
-	std::vector<size_t> componentOfNode;
-	componentOfNode.resize(NodeSize(), -1);
+	std::vector<size_t> belongsToComponent;
+	belongsToComponent.resize(NodeSize(), -1);
 	for (size_t component = 0; component < result.size(); component++)
 	{
 		assert(result[component].size() > 0);
 		for (auto node : result[component])
 		{
-			componentOfNode[node] = component;
+			belongsToComponent[node] = component;
 		}
 	}
+#ifndef NDEBUG
+	//verify that it's correct
 	for (size_t i = 0; i < NodeSize(); i++)
 	{
-		assert(componentOfNode[i] != -1);
+		assert(belongsToComponent[i] != -1);
 		for (auto neighbor : inNeighbors[i])
 		{
-			assert(componentOfNode[neighbor] <= componentOfNode[i]);
+			assert(belongsToComponent[neighbor] <= belongsToComponent[i]);
 		}
 	}
 #endif
-	return result;
+	return std::make_pair(result, belongsToComponent);
 }

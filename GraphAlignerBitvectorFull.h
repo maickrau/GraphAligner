@@ -17,10 +17,29 @@ private:
 	using Params = typename Common::Params;
 	const Params params;
 	const std::vector<std::vector<size_t>> componentOrder;
+	const std::vector<size_t> belongsToComponent;
+	class EdgeWithPriority
+	{
+	public:
+		EdgeWithPriority(LengthType targetNode, ScoreType priority, bool full) :
+		targetNode(targetNode),
+		priority(priority),
+		full(full)
+		{
+		}
+		LengthType targetNode;
+		ScoreType priority;
+		bool full;
+		bool operator>(const EdgeWithPriority& other) const
+		{
+			return priority > other.priority;
+		}
+	};
 public:
-	GraphAlignerBitvectorFull(const Params& params, const std::vector<std::vector<size_t>>& componentOrder) :
+	GraphAlignerBitvectorFull(const Params& params, const std::vector<std::vector<size_t>>& componentOrder, const std::vector<size_t>& belongsToComponent) :
 	params(params),
-	componentOrder(componentOrder)
+	componentOrder(componentOrder),
+	belongsToComponent(belongsToComponent)
 	{
 	}
 
@@ -51,6 +70,10 @@ public:
 					cellbycellValue = std::min(cellbycellValue, currentSlice[w-1].getValue(0)+1);
 				}
 				assert(currentSlice[w].getValue(0) == cellbycellValue);
+			}
+			else
+			{
+				assert(currentSlice[w].getValue(0) == (match ? 0 : 1));
 			}
 			for (size_t cell = 1; cell < WordConfiguration<Word>::WordSize && j+cell < sequence.size(); cell++)
 			{
@@ -93,7 +116,7 @@ public:
 				calculateNodeAcyclic(currentSlice, previousSlice, sequence, EqV, j, component[0]);
 			}
 			// verifyCorrectness(currentSlice, previousSlice, sequence, EqV, j);
-			std::swap(currentSlice, previousSlice);
+			std::swap(previousSlice, currentSlice);
 		}
 		size_t extra = slices * WordConfiguration<Word>::WordSize - sequence.size();
 		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
@@ -107,27 +130,169 @@ public:
 		return minScore;
 	}
 
-	// ScoreType alignAndGetScore(const std::string& sequence) const
-	// {
-	// 	std::vector<WordSlice> currentSlice;
-	// 	std::vector<WordSlice> previousSlice;
-	// 	currentSlice.resize(params.graph.NodeSequencesSize() { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
-	// 	previousSlice.resize(params.graph.NodeSequencesSize() { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0, 0, true });
-	// 	ArrayPriorityQueue<NodeWithPriority> calculableQueue { sequence.size() };
-	// 	int slices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-	// 	for (int slice = 0; slice < slices.size(); slice++)
-	// 	{
-	// 		size_t j = slice * WordConfiguration<Word>::WordSize;
-	// 		EqVector EqV = BV::getEqVector(sequence, j);
+	ScoreType alignAndGetScore(const std::string& sequence) const
+	{
+		std::vector<WordSlice> currentSlice;
+		std::vector<WordSlice> previousSlice;
+		currentSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
+		previousSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0, 0, true });
+		int slices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		for (int slice = 0; slice < slices; slice++)
+		{
+			size_t j = slice * WordConfiguration<Word>::WordSize;
+			EqVector EqV = BV::getEqVector(sequence, j);
+			for (auto component : componentOrder)
+			{
+				if (component.size() == 1)
+				{
+					bool isAcyclic = true;
+					for (auto neighbor : params.graph.inNeighbors[component[0]])
+					{
+						if (neighbor == component[0])
+						{
+							isAcyclic = false;
+							break;
+						}
+					}
+					if (isAcyclic)
+					{
+						calculateNodeAcyclic(currentSlice, previousSlice, sequence, EqV, j, component[0]);
+						currentSlice[params.graph.NodeEnd(component[0])-1].calcMinScore();
+						currentSlice[params.graph.NodeEnd(component[0])-1].sliceExists = true;
+						continue;
+					}
+				}
+				calculateCyclicComponent(sequence, component, EqV, currentSlice, previousSlice, j);
+			}
+			// verifyCorrectness(currentSlice, previousSlice, sequence, EqV, j);
+			std::swap(previousSlice, currentSlice);
+			currentSlice.assign(currentSlice.size(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
+		}
+		size_t extra = slices * WordConfiguration<Word>::WordSize - sequence.size();
+		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
+		assert(scorepos < WordConfiguration<Word>::WordSize);
 
-	// 		while (calculableQueue.size() > 0)
-	// 		{
-				
-	// 		}
-	// 		std::swap(previousSlice, currentSlice);
-	// 	}
-	// }
+		ScoreType minScore = std::numeric_limits<ScoreType>::max();
+		for (size_t i = 0; i < previousSlice.size(); i++)
+		{
+			minScore = std::min(minScore, previousSlice[i].getValue(scorepos));
+		}
+		return minScore;
+	}
 private:
+
+	void calculateCyclicComponent(const std::string& sequence, const std::vector<size_t>& nodes, const EqVector& EqV, std::vector<WordSlice>& currentSlice, const std::vector<WordSlice>& previousSlice, size_t j) const
+	{
+		std::priority_queue<EdgeWithPriority, std::vector<EdgeWithPriority>, std::greater<EdgeWithPriority>> calculables;
+		size_t stillInQueues = 0;
+		for (auto node : nodes)
+		{
+			auto start = params.graph.NodeStart(node);
+			ScoreType startPriority = std::numeric_limits<ScoreType>::max();
+			for (size_t i = 0; i < params.graph.NodeLength(node); i++)
+			{
+				currentSlice[start+i] = { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousSlice[start+i].scoreEnd+WordConfiguration<Word>::WordSize, previousSlice[start+i].scoreEnd, true };
+				startPriority = std::min(startPriority, previousSlice[start+i].scoreEnd);
+			}
+			calculables.emplace(node, startPriority, true);
+			for (auto neighbor : params.graph.inNeighbors[node])
+			{
+				if (belongsToComponent[neighbor] < belongsToComponent[node])
+				{
+					auto u = params.graph.NodeEnd(neighbor)-1;
+					auto slice = currentSlice[u];
+					assert(slice.sliceExists);
+					assert(slice.minScore >= 0);
+					assert(slice.minScore != std::numeric_limits<ScoreType>::max());
+					auto graphChar = params.graph.NodeSequences(start);
+					Word Eq = EqV.getEq(graphChar);
+					WordSlice newSlice = BV::getNextSlice(Eq, currentSlice[u], true, true, true, (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[u], previousSlice[start]);
+					if (newSlice.scoreBeforeStart > previousSlice[start].scoreEnd)
+					{
+						auto vertical = getSourceSliceFromScore(previousSlice[start].scoreEnd);
+						newSlice = newSlice.mergeWithVertical(vertical);
+						newSlice.scoreBeforeExists = true;
+					}
+					if (currentSlice[start].sliceExists)
+					{
+						newSlice = newSlice.mergeWith(currentSlice[start]);
+					}
+					currentSlice[start] = newSlice;
+				}
+			}
+		}
+		while (calculables.size() > 0)
+		{
+			auto top = calculables.top();
+			calculables.pop();
+			stillInQueues--;
+			auto start = params.graph.NodeStart(top.targetNode);
+			auto end = params.graph.NodeEnd(top.targetNode);
+			bool calculatedToEnd = true;
+			for (size_t w = start+1; w < end; w++)
+			{
+				auto graphChar = params.graph.NodeSequences(w);
+				Word Eq = EqV.getEq(graphChar);
+				WordSlice oldSlice = currentSlice[w];
+				WordSlice newSlice = BV::getNextSlice(Eq, currentSlice[w-1], true, true, true, (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[w-1], previousSlice[w]);
+				if (newSlice.scoreBeforeStart > previousSlice[w].scoreEnd)
+				{
+					auto vertical = getSourceSliceFromScore(previousSlice[w].scoreEnd);
+					newSlice = newSlice.mergeWithVertical(vertical);
+					newSlice.scoreBeforeExists = true;
+				}
+				if (oldSlice.sliceExists)
+				{
+					BV::assertSliceCorrectness(oldSlice, previousSlice[w], true);
+					newSlice = newSlice.mergeWith(oldSlice);
+					if (!top.full)
+					{
+						auto newPriority = newSlice.changedMinScore(oldSlice);
+						if (newPriority == std::numeric_limits<ScoreType>::max())
+						{
+							calculatedToEnd = false;
+							break;
+						}
+					}
+				}
+				currentSlice[w] = newSlice;
+			}
+			if (calculatedToEnd)
+			{
+				for (auto neighbor : params.graph.outNeighbors[top.targetNode])
+				{
+					if (belongsToComponent[neighbor] == belongsToComponent[top.targetNode])
+					{
+						auto u = params.graph.NodeStart(neighbor);
+						auto graphChar = params.graph.NodeSequences(u);
+						Word Eq = EqV.getEq(graphChar);
+						WordSlice oldSlice = currentSlice[u];
+						WordSlice newSlice = BV::getNextSlice(Eq, currentSlice[end-1], true, true, true, (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[end-1], previousSlice[u]);
+						if (newSlice.scoreBeforeStart > previousSlice[u].scoreEnd)
+						{
+							auto vertical = getSourceSliceFromScore(previousSlice[u].scoreEnd);
+							newSlice = newSlice.mergeWithVertical(vertical);
+							newSlice.scoreBeforeExists = true;
+						}
+						ScoreType newPriority;
+						BV::assertSliceCorrectness(oldSlice, previousSlice[u], true);
+						newSlice = newSlice.mergeWith(oldSlice);
+						newSlice.calcMinScore();
+						newPriority = newSlice.changedMinScore(oldSlice);
+						BV::assertSliceCorrectness(newSlice, previousSlice[u], true);
+						if (newPriority == std::numeric_limits<ScoreType>::max())
+						{
+							calculatedToEnd = false;
+							continue;
+						}
+						currentSlice[u] = newSlice;
+						calculables.emplace(neighbor, newPriority, false);
+						stillInQueues++;
+					}
+				}
+			}
+		}
+	}
 
 	WordSlice getSourceSliceFromScore(ScoreType previousScore) const
 	{
@@ -197,12 +362,14 @@ private:
 		auto end = params.graph.NodeEnd(node);
 		auto length = end-start;
 		currentSlice[start] = getStartSliceAcyclic(currentSlice, previousSlice, sequence, EqV, j, node, start, (j == 0) || (j > 0 && params.graph.NodeSequences(start) == sequence[j-1]));
+		currentSlice[start].scoreBeforeExists = true;
 		if (currentSlice[start].scoreBeforeStart > previousSlice[start].scoreEnd)
 		{
 			auto vertical = getSourceSliceFromScore(previousSlice[start].scoreEnd);
 			currentSlice[start] = currentSlice[start].mergeWithVertical(vertical);
 			currentSlice[start].scoreBeforeExists = true;
 		}
+		BV::assertSliceCorrectness(currentSlice[start], previousSlice[start], true);
 		for (size_t w = start+1; w < end; w++)
 		{
 			char graphChar = params.graph.NodeSequences(w);
@@ -214,6 +381,7 @@ private:
 				currentSlice[w] = currentSlice[w].mergeWithVertical(vertical);
 			}
 			currentSlice[w].scoreBeforeExists = true;
+			BV::assertSliceCorrectness(currentSlice[w], previousSlice[w], true);
 		}
 	}
 
