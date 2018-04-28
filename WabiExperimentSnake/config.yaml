@@ -1,0 +1,10 @@
+# input reference sequence
+input_seq: ecoli_10000.fasta
+# https://github.com/GATB/bcalm
+bcalm_bin_path: bcalm/build/bcalm
+bcalm_convert_path: bcalm/scripts/convertToGFA.py
+# https://github.com/pfaucon/PBSIM-PacBio-Simulator
+pbsim_bin_path: PBSIM-PacBio-Simulator/src/pbsim
+pbsim_config_path: PBSIM-PacBio-Simulator/data/model_qc_clr
+
+aligner_bin_path: ../bin
