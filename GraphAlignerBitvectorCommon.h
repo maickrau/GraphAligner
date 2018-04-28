@@ -187,6 +187,47 @@ public:
 		return slice;
 	}
 
+	static WordSlice getNextSliceFullBand(Word Eq, WordSlice slice, bool previousEq, WordSlice previous)
+	{
+		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
+		//pages 405 and 408
+
+		auto oldValue = slice.scoreBeforeStart;
+		const Word lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize - 1);
+		assert(slice.scoreBeforeStart <= previous.scoreEnd);
+		slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
+		auto hin = slice.scoreBeforeStart - oldValue;
+
+		Word Xv = Eq | slice.VN;
+		//between 7 and 8
+		if (hin < 0) Eq |= 1;
+		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
+		Word Ph = slice.VN | ~(Xh | slice.VP);
+		Word Mh = slice.VP & Xh;
+		if (Ph & lastBitMask)
+		{
+			slice.scoreEnd += 1;
+		}
+		else if (Mh & lastBitMask)
+		{
+			slice.scoreEnd -= 1;
+		}
+		Ph <<= 1;
+		Mh <<= 1;
+		//between 16 and 17
+		if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
+		slice.VP = Mh | ~(Xv | Ph);
+		slice.VN = Ph & Xv;
+
+#ifndef NDEBUG
+		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
+		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
+		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
+#endif
+
+		return slice;
+	}
+
 	static WordSlice flattenWordSlice(WordSlice slice, size_t row)
 	{
 		Word mask = ~(WordConfiguration<Word>::AllOnes << row);
