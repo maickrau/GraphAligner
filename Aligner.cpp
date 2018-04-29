@@ -392,8 +392,10 @@ void wabiExperiments(AlignerParams params)
 	{
 		numEdges += list.size();
 	}
-	std::cout << "Nodes: " << alignmentGraph.NodeSize() << std::endl;
-	std::cout << "Edges: " << numEdges << std::endl;
+	std::cout << "Collapsed nodes: " << alignmentGraph.NodeSize() << std::endl;
+	std::cout << "Collapsed edges: " << numEdges << std::endl;
+	std::cout << "Nodes: " << alignmentGraph.SizeInBp() << std::endl;
+	std::cout << "Edges: " << numEdges + alignmentGraph.SizeInBp() - alignmentGraph.NodeSize() << std::endl;
 	std::cout << "BPs: " << alignmentGraph.SizeInBp() << std::endl;
 
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params alignerParams { 0, 0, alignmentGraph, 0, false, false };
