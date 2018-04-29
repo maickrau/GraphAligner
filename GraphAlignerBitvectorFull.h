@@ -110,10 +110,10 @@ public:
 		{
 			size_t j = slice * WordConfiguration<Word>::WordSize;
 			EqVector EqV = BV::getEqVector(sequence, j);
-			for (auto component : componentOrder)
+			for (size_t i = 0; i < componentOrder.size(); i++)
 			{
-				assert(component.size() == 1);
-				calculateNodeAcyclic(currentSlice, previousSlice, sequence, EqV, j, component[0]);
+				assert(componentOrder[i].size() == 1);
+				calculateNodeAcyclic(currentSlice, previousSlice, sequence, EqV, j, componentOrder[i][0]);
 			}
 			// verifyCorrectness(currentSlice, previousSlice, sequence, EqV, j);
 			std::swap(previousSlice, currentSlice);

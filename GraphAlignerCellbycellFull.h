@@ -34,10 +34,10 @@ public:
 		}
 		for (size_t j = 1; j < sequence.size(); j++)
 		{
-			for (auto component : componentOrder)
+			for (size_t i = 0; i < componentOrder.size(); i++)
 			{
-				assert(component.size() == 1);
-				calculateNodeAcyclic(currentSlice, previousSlice, sequence, j, component[0]);
+				assert(componentOrder[i].size() == 1);
+				calculateNodeAcyclic(currentSlice, previousSlice, sequence, j, componentOrder[i][0]);
 			}
 			// verifyCorrectness(currentSlice, previousSlice, sequence[j]);
 			std::swap(currentSlice, previousSlice);
