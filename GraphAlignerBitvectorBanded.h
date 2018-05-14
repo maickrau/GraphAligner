@@ -1697,7 +1697,7 @@ private:
 #ifdef SLICEVERBOSE
 					std::cerr << " preslicej " << backtraceOverridePreslice.j << " lastslicej " << lastSlice.j;
 #endif
-					if (backtraceOverridePreslice.j > lastSlice.j)
+					if (backtraceOverridePreslice.j > lastSlice.j || lastSlice.j == -WordConfiguration<Word>::WordSize)
 					{
 #ifdef SLICEVERBOSE
 						std::cerr << " empty backtrace override";
