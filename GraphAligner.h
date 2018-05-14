@@ -68,7 +68,9 @@ public:
 		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			logger << "seed " << i << "/" << seedHits.size() << " " << seedHits[i].nodeID << (seedHits[i].reverse ? "-" : "+") << "," << seedHits[i].seqPos;
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
+			assertSetRead(seq_id, seedInfo);
 			// auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
 			// auto pos = std::get<1>(seedHits[i]);
 			// if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
@@ -86,6 +88,7 @@ public:
 				break;
 			}
 		}
+		assertSetRead(seq_id, "No seed");
 
 		return result;
 	}

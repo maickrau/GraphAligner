@@ -94,7 +94,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 
 void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, std::vector<vg::Alignment>& alignmentsOut, bool hasMergedAlignmentOut)
 {
-	assertSetRead("Before any read");
+	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth) };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
@@ -114,7 +114,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			fastQs.pop_back();
 			fastqSize = fastQs.size();
 		}
-		assertSetRead(fastq->seq_id);
+		assertSetRead(fastq->seq_id, "No seed");
 		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 
@@ -205,7 +205,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			coutoutput << "alignment write finished" << BufferedWriter::Flush;
 		}
 	}
-	assertSetRead("After all reads");
+	assertSetRead("After all reads", "No seed");
 	coutoutput << "thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
 }
 
@@ -235,7 +235,7 @@ AlignmentGraph getGraph(std::string graphFile)
 
 void alignReads(AlignerParams params)
 {
-	assertSetRead("Preprocessing");
+	assertSetRead("Preprocessing", "No seed");
 
 	std::vector<FastQ> fastqs;
 	if (is_file_exist(params.fastqFile)){
@@ -287,7 +287,7 @@ void alignReads(AlignerParams params)
 
 	std::vector<std::thread> threads;
 
-	assertSetRead("Running alignments");
+	assertSetRead("Running alignments", "No seed");
 	std::mutex readMutex;
 
 	std::vector<size_t> numAlnsPerThread;
@@ -306,7 +306,7 @@ void alignReads(AlignerParams params)
 	{
 		threads[i].join();
 	}
-	assertSetRead("Postprocessing");
+	assertSetRead("Postprocessing", "No seed");
 
 	size_t numAlignments = 0;
 	for (size_t i = 0; i < params.numThreads; i++)

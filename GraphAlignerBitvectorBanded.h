@@ -1678,6 +1678,13 @@ private:
 					assert(!reusableState.previousBand[node]);
 					reusableState.previousBand[node] = true;
 				}
+				if (slice == -1)
+				{
+					result.bandwidthPerSlice.clear();
+					result.correctness.clear();
+					result.slices.clear();
+					result.backtraceOverrides.clear();
+				}
 				while (result.bandwidthPerSlice.size() > slice+1) result.bandwidthPerSlice.pop_back();
 				while (result.correctness.size() > slice+1) result.correctness.pop_back();
 				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
