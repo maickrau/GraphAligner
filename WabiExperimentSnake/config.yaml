@@ -7,4 +7,4 @@ bcalm_convert_path: bcalm/scripts/convertToGFA.py
 pbsim_bin_path: PBSIM-PacBio-Simulator/src/pbsim
 pbsim_config_path: PBSIM-PacBio-Simulator/data/model_qc_clr
 
-aligner_bin_path: ../bin
+aligner_bin_path: ../bin/Aligner
