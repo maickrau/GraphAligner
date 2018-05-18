@@ -11,10 +11,11 @@ https://github.com/pfaucon/PBSIM-PacBio-Simulator
 8. For multiple runs: copy (genomename)_summary.txt somewhere, rm WabiExperimentSnake/results/(genomename)_*.txt and repeat steps 6-8
 
 The files (genomename)_(graphname).txt will have:
--Graph type (linear/tree/forest or DAG or cyclic)
--The size of the graph (nodes, edges): Nodes/edges is one-character nodes (the size reported in the paper), Collapsed nodes/edges is nodes with linear parts collaped into one node
--Time of the alignment for bitvector and cellbycell, and the ratio
--Sanity check that the bitvector and cellbycell produce the same results
+- Graph type (linear/tree/forest or DAG or cyclic)
+- The size of the graph (nodes, edges): Nodes/edges is one-character nodes (the size reported in the paper), Collapsed nodes/edges is nodes with linear parts collaped into one node
+- Time of the alignment for bitvector and cellbycell, and the ratio
+- Sanity check that the bitvector and cellbycell produce the same results
+
 The output of (genomename)_summary.txt will have:
--Times for the bitvector and the cellbycell for each graph and the ratio for that run
--There is also one extra graph, the onechar graph, which is the linear graph with each node split into one character labels. This was not included in the paper because cellbycell has 64x node overhead compared to bitvector, so it's not a fair comparison. The linear graph is the fair version of this graph. The bitvector gets about a 16x speedup for the onechar graph compared to 10x for the linear graph.
+- Times for the bitvector and the cellbycell for each graph and the ratio for that run
+- There is also one extra graph, the onechar graph, which is the linear graph with each node split into one character labels. This was not included in the paper because cellbycell has 64x node overhead compared to bitvector, so it's not a fair comparison. The linear graph is the fair version of this graph. The bitvector gets about a 16x speedup for the onechar graph compared to 10x for the linear graph.
