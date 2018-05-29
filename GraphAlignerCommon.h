@@ -28,6 +28,25 @@ public:
 		size_t endOffset;
 		int priority;
 	};
+	class EdgeWithPriority
+	{
+	public:
+		EdgeWithPriority(LengthType target, size_t offset, size_t endOffset, int priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingUp) : target(target), offset(offset), endOffset(endOffset), priority(priority), incoming(incoming), incomingUp(incomingUp) {}
+		bool operator>(const EdgeWithPriority& other) const
+		{
+			return priority > other.priority;
+		}
+		bool operator<(const EdgeWithPriority& other) const
+		{
+			return priority < other.priority;
+		}
+		LengthType target;
+		size_t offset;
+		size_t endOffset;
+		int priority;
+		WordSlice<LengthType, ScoreType, Word> incoming;
+		WordSlice<LengthType, ScoreType, Word> incomingUp;
+	};
 	class AlignerGraphsizedState
 	{
 	public:
@@ -48,7 +67,7 @@ public:
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
-		ArrayPriorityQueue<NodeWithPriority> calculableQueue;
+		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<typename WordContainer<LengthType, ScoreType, Word>::Slice>::MapItem> nodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
