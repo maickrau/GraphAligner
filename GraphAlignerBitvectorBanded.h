@@ -75,34 +75,6 @@ private:
 		{
 			return numCells * sizeof(typename WordContainer<LengthType, ScoreType, Word>::TinySlice) + scores.size() * (sizeof(size_t) * 3 + sizeof(int));
 		}
-		DPSlice getFrozenSqrtEndScores() const
-		{
-			DPSlice result;
-			result.scores = scores.getFrozenSqrtEndScores();
-			result.minScore = minScore;
-			result.minScoreIndex = minScoreIndex;
-			result.nodes = nodes;
-			result.correctness = correctness;
-			result.j = j;
-			result.bandwidth = bandwidth;
-			result.cellsProcessed = cellsProcessed;
-			result.numCells = numCells;
-			return result;
-		}
-		DPSlice getFrozenScores() const
-		{
-			DPSlice result;
-			result.scores = scores.getFrozenScores();
-			result.minScore = minScore;
-			result.minScoreIndex = minScoreIndex;
-			result.nodes = nodes;
-			result.correctness = correctness;
-			result.j = j;
-			result.bandwidth = bandwidth;
-			result.cellsProcessed = cellsProcessed;
-			result.numCells = numCells;
-			return result;
-		}
 	};
 	class BacktraceOverride
 	{
@@ -1464,7 +1436,7 @@ private:
 #ifndef NDEBUG
 		debugLastRowMinScore = 0;
 #endif
-		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();
+		DPSlice lastSlice = initialSlice;
 		DPSlice storeSlice = lastSlice;
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
@@ -1639,7 +1611,7 @@ private:
 				assert(!lastSlice.cellsProcessed < params.BacktraceOverrideCutoff);
 				backtraceOverridePreslice = lastSlice;
 				backtraceOverriding = true;
-				backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
+				backtraceOverrideTemps.push_back(newSlice);
 			}
 			else if (backtraceOverriding)
 			{
@@ -1660,7 +1632,7 @@ private:
 #ifdef SLICEVERBOSE
 					std::cerr << " push slice j " << lastSlice.j;
 #endif
-					storeSlice = newSlice.getFrozenSqrtEndScores();
+					storeSlice = newSlice;
 					//empty memory
 					{
 						decltype(backtraceOverrideTemps) tmp;
@@ -1672,7 +1644,7 @@ private:
 #ifdef SLICEVERBOSE
 					std::cerr << " continue backtrace override";
 #endif
-					backtraceOverrideTemps.push_back(newSlice.getFrozenScores());
+					backtraceOverrideTemps.push_back(newSlice);
 				}
 			}
 #ifdef SLICEVERBOSE
@@ -1691,12 +1663,12 @@ private:
 #ifdef SLICEVERBOSE
 					std::cerr << " push slice j " << storeSlice.j;
 #endif
-					storeSlice = newSlice.getFrozenSqrtEndScores();
+					storeSlice = newSlice;
 				}
 			}
 			if (newSlice.EstimatedMemoryUsage() < storeSlice.EstimatedMemoryUsage())
 			{
-				storeSlice = newSlice.getFrozenSqrtEndScores();
+				storeSlice = newSlice;
 			}
 			for (auto node : lastSlice.nodes)
 			{
@@ -1726,7 +1698,7 @@ private:
 			{
 				std::swap(reusableState.previousBand, reusableState.currentBand);
 			}
-			lastSlice = std::move(newSlice);
+			lastSlice = newSlice;
 		}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
@@ -1819,7 +1791,7 @@ private:
 #ifndef NDEBUG
 		debugLastRowMinScore = 0;
 #endif
-		DPSlice lastSlice = initialSlice.getFrozenSqrtEndScores();
+		DPSlice lastSlice = initialSlice;
 		// assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
 		for (size_t slice = startSlice; slice < endSlice; slice++)
@@ -1840,7 +1812,7 @@ private:
 			cellsProcessed += newSlice.cellsProcessed;
 
 			// assert(slice == endSlice-1 || newSlice.correctness.CurrentlyCorrect());
-			result.push_back(newSlice.getFrozenScores());
+			result.push_back(newSlice);
 			for (auto node : lastSlice.nodes)
 			{
 				assert(reusableState.previousBand[node]);
@@ -1909,7 +1881,7 @@ private:
 			slice[i] = {0, 0, 0, 0, false};
 			slice[i].sliceExists = true;
 		}
-		return result.getFrozenSqrtEndScores();
+		return result;
 	}
 
 	DPSlice getInitialSliceOneNodeGroup(const std::vector<LengthType>& nodeIndices) const
@@ -1933,7 +1905,7 @@ private:
 				slice[i].sliceExists = true;
 			}
 		}
-		return result.getFrozenSqrtEndScores();
+		return result;
 	}
 
 	int getSamplingFrequency(size_t sequenceLen) const

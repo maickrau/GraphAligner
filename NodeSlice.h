@@ -1,6 +1,7 @@
 #ifndef NodeSlice_h
 #define NodeSlice_h
 
+#include <memory>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -20,7 +21,6 @@ template <typename LengthType, typename ScoreType, typename Word>
 class WordContainer
 {
 public:
-	enum FrozenType { FullyMutable, FrozenScores, FrozenLastRow };
 	typedef WordSlice<LengthType, ScoreType, Word> Slice;
 	class SmallSlice
 	{
@@ -287,9 +287,7 @@ public:
 		int _minScore;
 	};
 	WordContainer() :
-	minEndScore(0),
-	minStartScore(0),
-	frozen(FullyMutable)
+	mutableSlices()
 	{
 	}
 	ContainerView getView(size_t start, size_t end, int minScore)
@@ -302,85 +300,11 @@ public:
 	}
 	Slice& operator[](size_t index)
 	{
-		assert(frozen == FullyMutable);
 		return mutableSlices[index];
 	}
 	const Slice operator[](size_t index) const
 	{
-		return getSlice(index);
-	}
-	const Slice getSlice(size_t index) const
-	{
-		if (frozen == FullyMutable)
-		{
-			return mutableSlices[index];
-		}
-		else if (frozen == FrozenLastRow)
-		{
-			bool VP = frozenSqrtSlices[index].VPVNLastBit & 1;
-			bool VN = frozenSqrtSlices[index].VPVNLastBit & 2;
-			Slice result { (Word)VP << 63, (Word)VN << 63, minEndScore + frozenSqrtSlices[index].plusMinScore, minEndScore + frozenSqrtSlices[index].plusMinScore - (VP ? 1 : 0) + (VN ? 1 : 0), false };
-			if (frozenSqrtSlices[index].VPVNLastBit & 4)
-			{
-				result.sliceExists = true;
-			}
-			return result;
-		}
-		else
-		{
-			Slice result { frozenSlices[index].VP, frozenSlices[index].VN, 0, minStartScore + frozenSlices[index].plusMinScore, false };
-			result.scoreEnd = result.scoreBeforeStart + frozenSlices[index].minPlusEndScore;
-			result.sliceExists = frozenSlices[index].sliceExists;
-			return result;
-		}
-	}
-	WordContainer getFrozenScores() const
-	{
-		if (frozen == FrozenScores) return *this;
-		assert(frozen == FullyMutable);
-		WordContainer result;
-		result.frozen = FrozenScores;
-		result.frozenSlices.resize(mutableSlices.size());
-		result.minStartScore = mutableSlices[0].scoreBeforeStart;
-		for (size_t i = 1; i < mutableSlices.size(); i++)
-		{
-			result.minStartScore = std::min(result.minStartScore, mutableSlices[i].scoreBeforeStart);
-		}
-		for (size_t i = 0; i < mutableSlices.size(); i++)
-		{
-			result.frozenSlices[i].VP = mutableSlices[i].VP;
-			result.frozenSlices[i].VN = mutableSlices[i].VN;
-			assert(mutableSlices[i].scoreBeforeStart >= result.minStartScore);
-			assert(mutableSlices[i].scoreBeforeStart - result.minStartScore < std::numeric_limits<decltype(frozenSlices[i].plusMinScore)>::max());
-			result.frozenSlices[i].plusMinScore = mutableSlices[i].scoreBeforeStart - result.minStartScore;
-			result.frozenSlices[i].minPlusEndScore = mutableSlices[i].scoreEnd - mutableSlices[i].scoreBeforeStart;
-			result.frozenSlices[i].sliceExists = mutableSlices[i].sliceExists;
-		}
-		return result;
-	}
-	WordContainer getFrozenSqrtEndScores() const
-	{
-		if (frozen == FrozenLastRow) return *this;
-		assert(frozen == FullyMutable);
-		WordContainer result;
-		result.frozen = FrozenLastRow;
-		result.frozenSqrtSlices.resize(mutableSlices.size());
-		result.minEndScore = mutableSlices[0].scoreEnd;
-		for (size_t i = 1; i < mutableSlices.size(); i++)
-		{
-			result.minEndScore = std::min(result.minEndScore, mutableSlices[i].scoreEnd);
-		}
-		for (size_t i = 0; i < mutableSlices.size(); i++)
-		{
-			result.frozenSqrtSlices[i].VPVNLastBit = 0;
-			result.frozenSqrtSlices[i].VPVNLastBit |= mutableSlices[i].VP >> 63;
-			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].VN >> 62) & 2;
-			result.frozenSqrtSlices[i].VPVNLastBit |= (mutableSlices[i].sliceExists) ? 4 : 0;
-			assert(mutableSlices[i].scoreEnd >= result.minEndScore);
-			assert(mutableSlices[i].scoreEnd - result.minEndScore < std::numeric_limits<decltype(frozenSqrtSlices[i].plusMinScore)>::max());
-			result.frozenSqrtSlices[i].plusMinScore = mutableSlices[i].scoreEnd - result.minEndScore;
-		}
-		return result;
+		return mutableSlices[index];
 	}
 	iterator begin()
 	{
@@ -400,16 +324,14 @@ public:
 	}
 	size_t size() const
 	{
-		return frozen == FullyMutable ? mutableSlices.size() : frozen == FrozenScores ? frozenSlices.size() : frozenSqrtSlices.size();
+		return mutableSlices.size();
 	}
 	void resize(size_t size, Slice value)
 	{
-		assert(frozen == FullyMutable);
 		mutableSlices.resize(size, value);
 	}
 	Slice& back()
 	{
-		assert(frozen == FullyMutable);
 		return mutableSlices.back();
 	}
 	const Slice back() const
@@ -418,17 +340,10 @@ public:
 	}
 	void reserve(size_t size)
 	{
-		assert(frozen == FullyMutable);
 		mutableSlices.reserve(size);
 	}
-	ScoreType minScore;
 private:
-	ScoreType minEndScore;
-	ScoreType minStartScore;
-	FrozenType frozen;
 	std::vector<Slice> mutableSlices;
-	std::vector<SmallSlice> frozenSlices;
-	std::vector<TinySlice> frozenSqrtSlices;
 };
 
 template <typename T>
@@ -461,11 +376,11 @@ public:
 			{
 				auto nodeindex = slice->activeVectorMapIndices[indexPos];
 				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, slice->slices.getView(info.start, info.end, info.minScore));
+				return std::make_pair(nodeindex, slice->slices->getView(info.start, info.end, info.minScore));
 			}
 			else
 			{
-				return std::make_pair(mappos->first, slice->slices.getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
+				return std::make_pair(mappos->first, slice->slices->getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
 			}
 		}
 		const std::pair<size_t, const View> operator*() const
@@ -474,11 +389,11 @@ public:
 			{
 				auto nodeindex = slice->activeVectorMapIndices[indexPos];
 				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, slice->slices.getView(info.start, info.end, info.minScore));
+				return std::make_pair(nodeindex, slice->slices->getView(info.start, info.end, info.minScore));
 			}
 			else
 			{
-				return std::make_pair(mappos->first, slice->slices.getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
+				return std::make_pair(mappos->first, slice->slices->getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
 			}
 		}
 		NodeSliceIterator& operator++()
@@ -528,11 +443,11 @@ public:
 			{
 				auto nodeindex = slice->activeVectorMapIndices[indexPos];
 				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, slice->slices.getView(info.start, info.end, info.minScore));
+				return std::make_pair(nodeindex, slice->slices->getView(info.start, info.end, info.minScore));
 			}
 			else
 			{
-				return std::make_pair(mappos->first, slice->slices.getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
+				return std::make_pair(mappos->first, slice->slices->getView(mappos->second.start, mappos->second.end, mappos->second.minScore));
 			}
 		}
 		NodeSliceConstIterator& operator++()
@@ -561,28 +476,32 @@ public:
 		size_t indexPos;
 	};
 	NodeSlice() :
-	vectorMap(nullptr)
+	vectorMap(nullptr),
+	nodes(new MapType),
+	slices(new Container)
 	{
 	}
 	NodeSlice(std::vector<NodeSliceMapItem>* vectorMap) :
-	vectorMap(vectorMap)
+	vectorMap(vectorMap),
+	nodes(new MapType),
+	slices(new Container)
 	{
 	}
 	void convertVectorArrayToMap()
 	{
-		assert(nodes.size() == 0);
+		assert(nodes->size() == 0);
 		assert(vectorMap != nullptr);
-		nodes.reserve(activeVectorMapIndices.size());
+		nodes->reserve(activeVectorMapIndices.size());
 		for (auto index : activeVectorMapIndices)
 		{
-			nodes[index] = (*vectorMap)[index];
+			(*nodes)[index] = (*vectorMap)[index];
 		}
 		clearVectorMap();
 		vectorMap = nullptr;
 	}
 	void reserve(size_t size)
 	{
-		slices.reserve(size);
+		slices->reserve(size);
 	}
 	void addNode(size_t nodeIndex, size_t size)
 	{
@@ -594,25 +513,25 @@ public:
 		{
 			assert(nodeIndex < vectorMap->size());
 			assert((*vectorMap)[nodeIndex].start == (*vectorMap)[nodeIndex].end);
-			(*vectorMap)[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
+			(*vectorMap)[nodeIndex] = { slices->size(), slices->size() + size, 0, size, 0 };
 			activeVectorMapIndices.push_back(nodeIndex);
 		}
 		else
 		{
-			assert(nodes.find(nodeIndex) == nodes.end());
-			nodes[nodeIndex] = { slices.size(), slices.size() + size, 0, size, 0 };
+			assert(nodes->find(nodeIndex) == nodes->end());
+			(*nodes)[nodeIndex] = { slices->size(), slices->size() + size, 0, size, 0 };
 		}
-		slices.resize(slices.size() + size, value);
+		slices->resize(slices->size() + size, value);
 	}
 	View node(size_t nodeIndex)
 	{
 		auto item = getMapItem(nodeIndex);
-		return slices.getView(item.start, item.end, item.minScore);
+		return slices->getView(item.start, item.end, item.minScore);
 	}
 	const View node(size_t nodeIndex) const
 	{
 		auto item = getMapItem(nodeIndex);
-		return slices.getView(item.start, item.end, item.minScore);
+		return slices->getView(item.start, item.end, item.minScore);
 	}
 	bool hasNode(size_t nodeIndex) const
 	{
@@ -623,7 +542,7 @@ public:
 		}
 		else
 		{
-			return nodes.find(nodeIndex) != nodes.end();
+			return nodes->find(nodeIndex) != nodes->end();
 		}
 	}
 	int minScore(size_t nodeIndex) const
@@ -663,70 +582,52 @@ public:
 		}
 		else
 		{
-			return nodes.size();
+			return nodes->size();
 		}
 	}
 	NodeSliceIterator begin()
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceIterator { this, nodes.end(), 0 };
+			return NodeSliceIterator { this, nodes->end(), 0 };
 		}
 		else
 		{
-			return NodeSliceIterator { this, nodes.begin() };
+			return NodeSliceIterator { this, nodes->begin() };
 		}
 	}
 	NodeSliceIterator end()
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceIterator { this, nodes.end(), activeVectorMapIndices.size() };
+			return NodeSliceIterator { this, nodes->end(), activeVectorMapIndices.size() };
 		}
 		else
 		{
-			return NodeSliceIterator { this, nodes.end() };
+			return NodeSliceIterator { this, nodes->end() };
 		}
 	}
 	NodeSliceConstIterator begin() const
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceConstIterator { this, nodes.end(), 0 };
+			return NodeSliceConstIterator { this, nodes->end(), 0 };
 		}
 		else
 		{
-			return NodeSliceConstIterator { this, nodes.begin() };
+			return NodeSliceConstIterator { this, nodes->begin() };
 		}
 	}
 	NodeSliceConstIterator end() const
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceConstIterator { this, nodes.end(), activeVectorMapIndices.size() };
+			return NodeSliceConstIterator { this, nodes->end(), activeVectorMapIndices.size() };
 		}
 		else
 		{
-			return NodeSliceConstIterator { this, nodes.end() };
+			return NodeSliceConstIterator { this, nodes->end() };
 		}
-	}
-	NodeSlice getFrozenSqrtEndScores() const
-	{
-		NodeSlice result;
-		result.slices = slices.getFrozenSqrtEndScores();
-		//copy the map always to make sure that the memory arena gets reused
-		result.nodes = nodes;
-		assert(vectorMap == nullptr);
-		return result;
-	}
-	NodeSlice getFrozenScores() const
-	{
-		NodeSlice result;
-		result.slices = slices.getFrozenScores();
-		//copy the map always to make sure that the memory arena gets reused
-		result.nodes = nodes;
-		assert(vectorMap == nullptr);
-		return result;
 	}
 private:
 	void clearVectorMap()
@@ -754,8 +655,8 @@ private:
 		}
 		else
 		{
-			auto found = nodes.find(nodeIndex);
-			assert(found != nodes.end());
+			auto found = nodes->find(nodeIndex);
+			assert(found != nodes->end());
 			return found->second;
 		}
 	}
@@ -769,15 +670,15 @@ private:
 		}
 		else
 		{
-			auto found = nodes.find(nodeIndex);
-			assert(found != nodes.end());
+			auto found = nodes->find(nodeIndex);
+			assert(found != nodes->end());
 			return found->second;
 		}
 	}
 	std::vector<NodeSliceMapItem>* vectorMap;
 	std::vector<size_t> activeVectorMapIndices;
-	MapType nodes;
-	Container slices;
+	std::shared_ptr<MapType> nodes;
+	std::shared_ptr<Container> slices;
 	friend class NodeSliceIterator;
 	friend class NodeSliceConstIterator;
 };
