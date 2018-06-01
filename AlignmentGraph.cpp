@@ -20,23 +20,10 @@ nodeSequencesATorCG(),
 nodeSequencesACorTG(),
 finalized(false)
 {
-	//add the start dummy node as the first node
-	dummyNodeStart = 0;
-	nodeIDs.push_back(0);
-	nodeStart.push_back(0);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
-	reverse.push_back(false);
-	nodeOffset.push_back(false);
-	nodeSequencesATorCG.push_back(false);
-	nodeSequencesACorTG.push_back(false);
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes, size_t sequenceLength)
 {
-	numNodes += 2; //dummy start and end nodes
-	numSplitNodes += 2; //dummy start and end nodes
-	sequenceLength += 2; //dummy start and end nodes
 	nodeSequencesATorCG.reserve(sequenceLength);
 	nodeSequencesACorTG.reserve(sequenceLength);
 	nodeLookup.reserve(numNodes);
@@ -136,16 +123,6 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 
 void AlignmentGraph::Finalize(int wordSize)
 {
-	//add the end dummy node as the last node
-	dummyNodeEnd = nodeSequencesATorCG.size();
-	nodeIDs.push_back(0);
-	nodeStart.push_back(nodeSequencesATorCG.size());
-	reverse.push_back(false);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
-	nodeSequencesATorCG.push_back(false);
-	nodeSequencesACorTG.push_back(false);
-	nodeOffset.push_back(false);
 	assert(nodeSequencesATorCG.size() == nodeSequencesACorTG.size());
 	assert(nodeSequencesATorCG.size() >= nodeStart.size());
 	assert(inNeighbors.size() == nodeStart.size());
@@ -282,8 +259,6 @@ size_t AlignmentGraph::NodeLength(size_t index) const
 char AlignmentGraph::NodeSequences(size_t index) const
 {
 	assert(index < nodeSequencesATorCG.size());
-	//dummy nodes
-	if (index == 0 || index == nodeSequencesACorTG.size()-1) return '-';
 	int first = nodeSequencesATorCG[index];
 	int second = nodeSequencesACorTG[index];
 	return "ATCG"[first*2+second];

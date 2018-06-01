@@ -28,16 +28,6 @@ public:
 		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		size_t pos = 0;
 		size_t oldNode = params.graph.IndexToNode(trace[0].first);
-		while (oldNode == params.graph.dummyNodeStart)
-		{
-			pos++;
-			if (pos == trace.size()) return emptyAlignment(0, cellsProcessed);
-			assert(pos < trace.size());
-			assert(trace[pos].second >= trace[pos-1].second);
-			oldNode = params.graph.IndexToNode(trace[pos].first);
-			assert(oldNode < params.graph.nodeIDs.size());
-		}
-		if (oldNode == params.graph.dummyNodeEnd) return emptyAlignment(0, cellsProcessed);
 		int rank = 0;
 		int oldNodeId = params.graph.nodeIDs[oldNode];
 		auto vgmapping = path->add_mapping();
@@ -53,7 +43,6 @@ public:
 		MatrixPosition btBeforeNode = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
-			if (params.graph.IndexToNode(trace[pos].first) == params.graph.dummyNodeEnd) break;
 			if (params.graph.IndexToNode(trace[pos].first) == oldNode)
 			{
 				btNodeEnd = trace[pos];

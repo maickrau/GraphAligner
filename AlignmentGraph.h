@@ -55,8 +55,6 @@ private:
 	std::vector<bool> reverse;
 	std::vector<bool> nodeSequencesATorCG;
 	std::vector<bool> nodeSequencesACorTG;
-	size_t dummyNodeStart;
-	size_t dummyNodeEnd;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
