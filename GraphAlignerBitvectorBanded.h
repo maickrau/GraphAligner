@@ -1383,6 +1383,8 @@ private:
 
 		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
 
+		bandTest.scores.convertVectorArrayToMap();
+
 #ifdef EXTRACORRECTNESSASSERTIONS
 		if (bandTest.cellsProcessed <= params.maxCellsPerSlice && sequence.size() >= bandTest.j + WordConfiguration<Word>::WordSize) verifySliceBitvector(sequence, bandTest, previous);
 #endif
@@ -1515,7 +1517,6 @@ private:
 
 			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
 			{
-				newSlice.scores.clearVectorMap();
 #ifndef NDEBUG
 				debugLastProcessedSlice = slice-1;
 #endif
@@ -1534,7 +1535,6 @@ private:
 
 			if (!newSlice.correctness.CorrectFromCorrect())
 			{
-				newSlice.scores.clearVectorMap();
 #ifndef NDEBUG
 				debugLastProcessedSlice = slice-1;
 #endif
@@ -1562,7 +1562,6 @@ private:
 					assert(reusableState.previousBand[node]);
 					reusableState.previousBand[node] = false;
 				}
-				newSlice.scores.clearVectorMap();
 				rampUntil = slice;
 				std::swap(slice, rampRedoIndex);
 				std::swap(lastSlice, rampSlice);
@@ -1727,8 +1726,7 @@ private:
 			{
 				std::swap(reusableState.previousBand, reusableState.currentBand);
 			}
-			lastSlice = newSlice.getFrozenSqrtEndScores();
-			newSlice.scores.clearVectorMap();
+			lastSlice = std::move(newSlice);
 		}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
@@ -1870,8 +1868,7 @@ private:
 			{
 				std::swap(reusableState.previousBand, reusableState.currentBand);
 			}
-			lastSlice = newSlice.getFrozenSqrtEndScores();
-			newSlice.scores.clearVectorMap();
+			lastSlice = std::move(newSlice);
 		}
 #ifndef NDEBUG
 		for (size_t i = 1; i < result.size(); i++)

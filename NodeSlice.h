@@ -568,20 +568,17 @@ public:
 	vectorMap(vectorMap)
 	{
 	}
-	void clearVectorMap()
+	void convertVectorArrayToMap()
 	{
+		assert(nodes.size() == 0);
 		assert(vectorMap != nullptr);
-		NodeSliceMapItem empty;
-		empty.start = 0;
-		empty.end = 0;
-		empty.minScore = 0;
-		empty.startOffset = 0;
-		empty.endOffset = 0;
+		nodes.reserve(activeVectorMapIndices.size());
 		for (auto index : activeVectorMapIndices)
 		{
-			(*vectorMap)[index] = empty;
+			nodes[index] = (*vectorMap)[index];
 		}
-		activeVectorMapIndices.clear();
+		clearVectorMap();
+		vectorMap = nullptr;
 	}
 	void reserve(size_t size)
 	{
@@ -719,14 +716,7 @@ public:
 		result.slices = slices.getFrozenSqrtEndScores();
 		//copy the map always to make sure that the memory arena gets reused
 		result.nodes = nodes;
-		if (vectorMap != nullptr)
-		{
-			result.nodes.reserve(activeVectorMapIndices.size());
-			for (auto index : activeVectorMapIndices)
-			{
-				result.nodes[index] = (*vectorMap)[index];
-			}
-		}
+		assert(vectorMap == nullptr);
 		return result;
 	}
 	NodeSlice getFrozenScores() const
@@ -735,17 +725,25 @@ public:
 		result.slices = slices.getFrozenScores();
 		//copy the map always to make sure that the memory arena gets reused
 		result.nodes = nodes;
-		if (vectorMap != nullptr)
-		{
-			result.nodes.reserve(activeVectorMapIndices.size());
-			for (auto index : activeVectorMapIndices)
-			{
-				result.nodes[index] = (*vectorMap)[index];
-			}
-		}
+		assert(vectorMap == nullptr);
 		return result;
 	}
 private:
+	void clearVectorMap()
+	{
+		assert(vectorMap != nullptr);
+		NodeSliceMapItem empty;
+		empty.start = 0;
+		empty.end = 0;
+		empty.minScore = 0;
+		empty.startOffset = 0;
+		empty.endOffset = 0;
+		for (auto index : activeVectorMapIndices)
+		{
+			(*vectorMap)[index] = empty;
+		}
+		activeVectorMapIndices.clear();
+	}
 	NodeSliceMapItem& getMapItem(size_t nodeIndex)
 	{
 		if (vectorMap != nullptr)
