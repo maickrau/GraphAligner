@@ -773,14 +773,13 @@ private:
 		size_t cellsProcessed;
 	};
 
-	NodeCalculationResult calculateNode(size_t i, size_t j, size_t startIndex, size_t endIndex, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ScoreType previousSliceQuitScore, ScoreType quitScore, int bandwidth, const WordSlice& incoming, const WordSlice& incomingUp) const
+	NodeCalculationResult calculateNode(size_t i, typename WordContainer<LengthType, ScoreType, Word>::ContainerView& slice, size_t j, size_t startIndex, size_t endIndex, const std::string& sequence, const EqVector& EqV, NodeSlice<WordSlice>& currentSlice, const NodeSlice<WordSlice>& previousSlice, const std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ScoreType previousSliceQuitScore, ScoreType quitScore, int bandwidth, const WordSlice& incoming, const WordSlice& incomingUp) const
 	{
 		BV::assertSliceCorrectness(incoming, incomingUp, incomingUp.sliceExists);
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreIndex = -1;
 		result.cellsProcessed = 0;
-		auto slice = currentSlice.node(i);
 		const auto oldSlice = previousBand[i] ? previousSlice.node(i) : slice;
 		assert(slice.size() == params.graph.NodeEnd(i) - params.graph.NodeStart(i));
 		assert(startIndex < slice.size());
@@ -1162,25 +1161,24 @@ private:
 			}
 			assert(currentBand[i]);
 			calculableQueue.pop();
-			auto oldEnd = currentSlice.node(i).back();
+			auto thisNode = currentSlice.node(i);
+			auto oldEnd = thisNode.back();
 #ifdef EXTRACORRECTNESSASSERTIONS
 			std::vector<WordSlice> debugOldNode;
-			auto debugNode = currentSlice.node(i);
-			for (size_t ii = 0; ii < debugNode.size(); ii++)
+			for (size_t ii = 0; ii < thisNode.size(); ii++)
 			{
-				debugOldNode.push_back(debugNode[ii]);
+				debugOldNode.push_back(thisNode[ii]);
 			}
 #endif
-			auto nodeCalc = calculateNode(i, j, offset, endOffset, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand, previousQuitScore, currentMinScoreAtEndRow + bandwidth, bandwidth, incoming, incomingUp);
+			auto nodeCalc = calculateNode(i, thisNode, j, offset, endOffset, sequence, EqV, currentSlice, previousSlice, currentBand, previousBand, previousQuitScore, currentMinScoreAtEndRow + bandwidth, bandwidth, incoming, incomingUp);
 			assert(nodeCalc.minScore <= previousQuitScore + WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
-			auto newEnd = currentSlice.node(i).back();
+			auto newEnd = thisNode.back();
 #ifdef EXTRACORRECTNESSASSERTIONS
-			auto debugNewNode = currentSlice.node(i);
 			for (size_t debugi = 0; debugi < debugOldNode.size(); debugi++)
 			{
-				assertBitvectorConfirmedAreConsistent(debugNewNode[debugi], debugOldNode[debugi], currentMinScoreAtEndRow + bandwidth);
+				assertBitvectorConfirmedAreConsistent(thisNode[debugi], debugOldNode[debugi], currentMinScoreAtEndRow + bandwidth);
 			}
 #endif
 			if (newEnd.scoreBeforeStart != oldEnd.scoreBeforeStart || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
@@ -1203,12 +1201,11 @@ private:
 				}
 			}
 #ifndef NDEBUG
-			auto debugslice = currentSlice.node(i);
 			if (nodeCalc.minScore <= currentMinScoreAtEndRow + bandwidth)
 			{
 				assert(nodeCalc.minScoreIndex >= params.graph.NodeStart(i));
 				assert(nodeCalc.minScoreIndex < params.graph.NodeEnd(i));
-				assert(debugslice[nodeCalc.minScoreIndex - params.graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
+				assert(thisNode[nodeCalc.minScoreIndex - params.graph.NodeStart(i)].scoreEnd == nodeCalc.minScore);
 			}
 #endif
 			if (nodeCalc.minScore < currentMinimumScore)
