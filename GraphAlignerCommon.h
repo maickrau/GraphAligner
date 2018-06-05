@@ -79,8 +79,8 @@ public:
 		//cutoff for doing the backtrace in the sqrt-slice pass
 		//"bulges" in the band are responsible for almost all of the time spent aligning,
 		//and this way they don't need to be recalculated, saving about half of the time.
-		//semi-arbitrarily fifty thousand, empirically a good enough cutoff
-		static constexpr size_t BacktraceOverrideCutoff = 50000;
+		//semi-arbitrarily twenty five thousand, empirically a good enough cutoff
+		static constexpr size_t BacktraceOverrideCutoff = 25000;
 		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
