@@ -113,7 +113,9 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
+	std::cout << "Precalculating bitvectors" << std::endl;
 	ByteStuff::precalculateByteStuff();
+	std::cout << "Bitvectors precalculated" << std::endl;
 	alignReads(params);
 
 	return 0;

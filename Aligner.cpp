@@ -115,8 +115,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			fastqSize = fastQs.size();
 		}
 		assertSetRead(fastq->seq_id, "No seed");
-		coutoutput << "thread " << threadnum << " " << fastqSize << " left\n";
-		coutoutput << "read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
+		coutoutput << "Thread " << threadnum << " " << fastqSize << " left\n";
+		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 
 		AlignmentResult alignments;
 
@@ -131,10 +131,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			{
 				if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
 				{
-					coutoutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-					cerroutput << "read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-					coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
+					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
 				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq), reusableState);
@@ -142,8 +142,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
 		{
-			coutoutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
-			cerroutput << "read " << fastq->seq_id << "alignment failed (assertion!)" << BufferedWriter::Flush;
+			coutoutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
+			cerroutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			reusableState.clear();
 			continue;
 		}
@@ -151,8 +151,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
 		{
-			coutoutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-			cerroutput << "read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+			coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+			cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			continue;
 		}
 
@@ -181,10 +181,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
 
-		coutoutput << "read " << fastq->seq_id << " took " << timems << "ms" << BufferedWriter::Flush;
-		coutoutput << "read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
+		coutoutput << "Read " << fastq->seq_id << " took " << timems << "ms" << BufferedWriter::Flush;
+		coutoutput << "Read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
-		coutoutput << "thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
+		coutoutput << "Thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
 		if (hasMergedAlignmentOut)
 		{
 			alignmentsOut.insert(alignmentsOut.end(), alignmentvec.begin(), alignmentvec.end());
@@ -199,20 +199,20 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			filename += ".gam";
 			std::replace(filename.begin(), filename.end(), '/', '_');
 			std::replace(filename.begin(), filename.end(), ':', '_');
-			coutoutput << "write alignment to " << filename << BufferedWriter::Flush;
+			coutoutput << "Write alignment to " << filename << BufferedWriter::Flush;
 			std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
 			stream::write_buffered(alignmentOut, alignmentvec, 0);
-			coutoutput << "alignment write finished" << BufferedWriter::Flush;
+			coutoutput << "Alignment written" << BufferedWriter::Flush;
 		}
 	}
 	assertSetRead("After all reads", "No seed");
-	coutoutput << "thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
+	coutoutput << "Thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
 }
 
 AlignmentGraph getGraph(std::string graphFile)
 {
 	if (is_file_exist(graphFile)){
-		std::cout << "load graph from " << graphFile << std::endl;
+		std::cout << "Load graph from " << graphFile << std::endl;
 	}
 	else{
 		std::cerr << "No graph file exists" << std::endl;
@@ -239,6 +239,7 @@ void alignReads(AlignerParams params)
 
 	std::vector<FastQ> fastqs;
 	if (is_file_exist(params.fastqFile)){
+		std::cout << "Load reads from " << params.fastqFile << std::endl;
 		fastqs = loadFastqFromFile(params.fastqFile);
 		std::cout << fastqs.size() << " reads" << std::endl;
 	}
@@ -255,11 +256,15 @@ void alignReads(AlignerParams params)
 		std::map<std::string, std::vector<vg::Alignment>> seeds;
 		{
 			if (is_file_exist(params.seedFile)){
+				std::cout << "Load seeds from " << params.seedFile << std::endl;
 				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
-				std::function<void(vg::Alignment&)> alignmentLambda = [&seeds](vg::Alignment& a) {
+				size_t numSeeds = 0;
+				std::function<void(vg::Alignment&)> alignmentLambda = [&seeds, &numSeeds](vg::Alignment& a) {
 					seeds[a.name()].push_back(a);
+					numSeeds += 1;
 				};
 				stream::for_each(seedfile, alignmentLambda);
+				std::cout << numSeeds << " seeds" << std::endl;
 			}
 			else {
 				std::cerr << "No seeds file exists" << std::endl;
@@ -297,6 +302,7 @@ void alignReads(AlignerParams params)
 	bool hasMergedAlignmentOut = params.outputAlignmentFile != "";
 	resultsPerThread.resize(params.numThreads);
 
+	std::cout << "Align" << std::endl;
 	for (int i = 0; i < params.numThreads; i++)
 	{
 		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &resultsPerThread, hasMergedAlignmentOut]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], resultsPerThread[i], hasMergedAlignmentOut); });
@@ -314,20 +320,20 @@ void alignReads(AlignerParams params)
 		numAlignments += numAlnsPerThread[i];
 	}
 
-	std::cout << "final result has " << numAlignments << " alignments" << std::endl;
+	std::cout << "Final result has " << numAlignments << " alignments" << std::endl;
 	if (hasMergedAlignmentOut)
 	{
 		assert(params.outputAlignmentFile != "");
-		std::cout << "merge alignments for writing" << std::endl;
+		std::cout << "Merge alignments for writing" << std::endl;
 		std::vector<vg::Alignment> finalResult;
 		finalResult.reserve(numAlignments);
 		for (size_t i = 0; i < resultsPerThread.size(); i++)
 		{
 			finalResult.insert(finalResult.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
 		}
-		std::cout << "write to " << params.outputAlignmentFile << std::endl;
+		std::cout << "Write merged alignments to " << params.outputAlignmentFile << std::endl;
 		std::ofstream resultFile { params.outputAlignmentFile, std::ios::out | std::ios::binary };
 		stream::write_buffered(resultFile, finalResult, 0);
-		std::cout << "write finished" << std::endl;
+		std::cout << "Write finished" << std::endl;
 	}
 }
