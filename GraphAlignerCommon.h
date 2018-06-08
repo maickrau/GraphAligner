@@ -31,7 +31,7 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, size_t offset, size_t endOffset, int priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingUp) : target(target), offset(offset), endOffset(endOffset), priority(priority), incoming(incoming), incomingUp(incomingUp) {}
+		EdgeWithPriority(LengthType target, size_t offset, size_t endOffset, int priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingUp, bool incomingUpExists) : target(target), offset(offset), endOffset(endOffset), priority(priority), incoming(incoming), incomingUp(incomingUp), incomingUpExists(incomingUpExists) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -46,6 +46,7 @@ public:
 		int priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
 		WordSlice<LengthType, ScoreType, Word> incomingUp;
+		bool incomingUpExists;
 	};
 	class AlignerGraphsizedState
 	{
