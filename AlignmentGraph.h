@@ -7,8 +7,7 @@
 #include <unordered_map>
 #include <tuple>
 #include "ThreadReadAssertion.h"
-
-class CycleCutCalculation;
+#include "DNAString.h"
 
 class AlignmentGraph
 {
@@ -53,8 +52,7 @@ private:
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
-	std::vector<bool> nodeSequencesATorCG;
-	std::vector<bool> nodeSequencesACorTG;
+	DNAString<size_t> nodeSequences;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
