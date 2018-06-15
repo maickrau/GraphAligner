@@ -960,27 +960,6 @@ private:
 		for (auto pair : current.scores)
 		{
 			auto start = params.graph.NodeStart(pair.first);
-			for (size_t i = 1; i < pair.second.size(); i++)
-			{
-				volatile bool match = Common::characterMatch(sequence[current.j], params.graph.NodeSequences(start+i));
-				volatile ScoreType foundMinScore = uninitScore;
-				foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, 0, start+i-1, uninitScore)+1);
-				if (previous.scores.hasNode(pair.first))
-				{
-					foundMinScore = volmin(foundMinScore, getValueIfExists(params, previous, lastrow, start+i, uninitScore)+1);
-					foundMinScore = volmin(foundMinScore, getValueIfExists(params, previous, lastrow, start+i-1, uninitScore) + (match ? 0 : 1));
-				}
-				if (cellExists(pair.second[i], 0, current.minScore + current.bandwidth)) assert(getValueIfExists(params, current, 0, start+i, uninitScore) == foundMinScore);
-				for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
-				{
-					match = Common::characterMatch(sequence[current.j+j], params.graph.NodeSequences(start+i));
-					foundMinScore = uninitScore;
-					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j-1, start+i, uninitScore)+1);
-					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j, start+i-1, uninitScore)+1);
-					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j-1, start+i-1, uninitScore)+(match ? 0 : 1));
-					if (cellExists(pair.second[i], j, current.minScore + current.bandwidth)) assert(getValueIfExists(params, current, j, start+i, uninitScore) == foundMinScore);
-				}
-			}
 			volatile ScoreType foundMinScore = uninitScore;
 			volatile bool match = Common::characterMatch(sequence[current.j], params.graph.NodeSequences(start));
 			if (current.j == 0 && previous.scores.hasNode(pair.first))
@@ -1015,6 +994,27 @@ private:
 					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j-1, params.graph.NodeEnd(neighbor)-1, uninitScore)+(match ? 0 : 1));
 				}
 				if (cellExists(pair.second[0], j, current.minScore + current.bandwidth)) assert(getValueIfExists(params, current, j, start, uninitScore) == foundMinScore);
+			}
+			for (size_t i = 1; i < pair.second.size(); i++)
+			{
+				volatile bool match = Common::characterMatch(sequence[current.j], params.graph.NodeSequences(start+i));
+				volatile ScoreType foundMinScore = uninitScore;
+				foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, 0, start+i-1, uninitScore)+1);
+				if (previous.scores.hasNode(pair.first))
+				{
+					foundMinScore = volmin(foundMinScore, getValueIfExists(params, previous, lastrow, start+i, uninitScore)+1);
+					foundMinScore = volmin(foundMinScore, getValueIfExists(params, previous, lastrow, start+i-1, uninitScore) + (match ? 0 : 1));
+				}
+				if (cellExists(pair.second[i], 0, current.minScore + current.bandwidth)) assert(getValueIfExists(params, current, 0, start+i, uninitScore) == foundMinScore);
+				for (int j = 1; j < WordConfiguration<Word>::WordSize; j++)
+				{
+					match = Common::characterMatch(sequence[current.j+j], params.graph.NodeSequences(start+i));
+					foundMinScore = uninitScore;
+					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j-1, start+i, uninitScore)+1);
+					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j, start+i-1, uninitScore)+1);
+					foundMinScore = volmin(foundMinScore, getValueIfExists(params, current, j-1, start+i-1, uninitScore)+(match ? 0 : 1));
+					if (cellExists(pair.second[i], j, current.minScore + current.bandwidth)) assert(getValueIfExists(params, current, j, start+i, uninitScore) == foundMinScore);
+				}
 			}
 		}
 	}
@@ -1111,36 +1111,80 @@ private:
 		EqVector EqV {BA, BT, BC, BG};
 
 		assert(previousNodes.size() > 0);
-		for (auto node : previousNodes)
+		if (j == 0)
 		{
-			if (previousSlice.minScore(node) <= previousQuitScore)
+			for (auto node : previousNodes)
 			{
-				auto startIndex = previousSlice.startIndex(node);
-				WordSlice wordSlice = previousSlice.node(node)[startIndex];
-				ScoreType priority = previousSlice.minScore(node) - previousMinScore;
+				assert(previousSlice.minScore(node) == 0);
+				auto start = params.graph.NodeStart(node);
 				currentSlice.addNode(node, params.graph.NodeLength(node), WordSlice {0, 0, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max(), 0 });
 				currentBand[node] = true;
-				WordSlice startSlice = getSourceSliceFromScore(wordSlice.scoreEnd);
-				if (startSlice.scoreEnd < currentMinimumScore)
+				auto thisNode = currentSlice.node(node);
+				ScoreType minScore = WordConfiguration<Word>::WordSize;
+				if (EqV.getEq(params.graph.NodeSequences(start)) & 1)
 				{
-					currentMinimumScore = startSlice.scoreEnd;
-					currentMinimumIndex = params.graph.NodeStart(node) + startIndex;
+					thisNode[0] = WordSlice {WordConfiguration<Word>::AllOnes ^ (Word)1, 0, WordConfiguration<Word>::WordSize-1, 0, 0 };
 				}
-				currentSlice.setMinScore(node, startSlice.scoreEnd);
-				currentSlice.setStartIndex(node, startIndex);
-				startSlice.scoreBeforeExists = true;
-				currentSlice.node(node)[startIndex] = startSlice;
-				assert(wordSlice.sliceExists);
-				BV::assertSliceCorrectness(startSlice, wordSlice, true);
-				if (startIndex != params.graph.NodeLength(node)-1)
+				else
 				{
-					calculableQueue.insert(priority, EdgeWithPriority { node, previousSlice.startIndex(node)+1, previousSlice.endIndex(node), priority, startSlice, wordSlice, true });
+					thisNode[0] = WordSlice {WordConfiguration<Word>::AllOnes, 0, WordConfiguration<Word>::WordSize, 0, 0 };
+				}
+				thisNode[0].scoreBeforeExists = true;
+				thisNode[0].sliceExists = true;
+				if (thisNode[0].scoreEnd < currentMinimumScore)
+				{
+					currentMinimumScore = thisNode[0].scoreEnd;
+					currentMinimumIndex = start;
+				}
+				currentSlice.setMinScore(node, thisNode[0].scoreEnd);
+				currentSlice.setStartIndex(node, 0);
+				WordSlice upSlice = previousSlice.node(node)[0];
+				if (thisNode.size() > 1)
+				{
+					calculableQueue.insert(0, EdgeWithPriority { node, 1, 0, 0, thisNode[0], upSlice, true });
 				}
 				else
 				{
 					for (auto neighbor : params.graph.outNeighbors[node])
 					{
-						calculableQueue.insert(priority, EdgeWithPriority { neighbor, 0, 0, priority, startSlice, wordSlice, true });
+						calculableQueue.insert(0, EdgeWithPriority { neighbor, 0, 0, 0, thisNode.back(), upSlice, true });
+					}
+				}
+			}
+		}
+		else
+		{
+			for (auto node : previousNodes)
+			{
+				if (previousSlice.minScore(node) <= previousQuitScore)
+				{
+					auto startIndex = previousSlice.startIndex(node);
+					WordSlice wordSlice = previousSlice.node(node)[startIndex];
+					ScoreType priority = previousSlice.minScore(node) - previousMinScore;
+					currentSlice.addNode(node, params.graph.NodeLength(node), WordSlice {0, 0, std::numeric_limits<ScoreType>::max(), std::numeric_limits<ScoreType>::max(), 0 });
+					currentBand[node] = true;
+					WordSlice startSlice = getSourceSliceFromScore(wordSlice.scoreEnd);
+					if (startSlice.scoreEnd < currentMinimumScore)
+					{
+						currentMinimumScore = startSlice.scoreEnd;
+						currentMinimumIndex = params.graph.NodeStart(node) + startIndex;
+					}
+					currentSlice.setMinScore(node, startSlice.scoreEnd);
+					currentSlice.setStartIndex(node, startIndex);
+					startSlice.scoreBeforeExists = true;
+					currentSlice.node(node)[startIndex] = startSlice;
+					assert(wordSlice.sliceExists);
+					BV::assertSliceCorrectness(startSlice, wordSlice, true);
+					if (startIndex != params.graph.NodeLength(node)-1)
+					{
+						calculableQueue.insert(priority, EdgeWithPriority { node, previousSlice.startIndex(node)+1, previousSlice.endIndex(node), priority, startSlice, wordSlice, true });
+					}
+					else
+					{
+						for (auto neighbor : params.graph.outNeighbors[node])
+						{
+							calculableQueue.insert(priority, EdgeWithPriority { neighbor, 0, 0, priority, startSlice, wordSlice, true });
+						}
 					}
 				}
 			}
