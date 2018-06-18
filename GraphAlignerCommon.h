@@ -31,7 +31,7 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, size_t offset, size_t endOffset, int priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingUp, bool incomingUpExists) : target(target), offset(offset), endOffset(endOffset), priority(priority), incoming(incoming), incomingUp(incomingUp), incomingUpExists(incomingUpExists) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming) : target(target), priority(priority), incoming(incoming) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -41,12 +41,8 @@ public:
 			return priority < other.priority;
 		}
 		LengthType target;
-		size_t offset;
-		size_t endOffset;
 		int priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
-		WordSlice<LengthType, ScoreType, Word> incomingUp;
-		bool incomingUpExists;
 	};
 	class AlignerGraphsizedState
 	{
@@ -57,19 +53,19 @@ public:
 		currentBand(),
 		previousBand()
 		{
-			nodesliceMap.resize(graph.NodeSize(), {0, 0, 0, 0, 0});
+			nodesliceMap.resize(graph.NodeSize(), {});
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
 			calculableQueue.clear();
-			nodesliceMap.assign(nodesliceMap.size(), {0, 0, 0, 0, 0});
+			nodesliceMap.assign(nodesliceMap.size(), {});
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
-		std::vector<typename NodeSlice<typename WordContainer<LengthType, ScoreType, Word>::Slice>::MapItem> nodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> nodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 	};
@@ -91,10 +87,10 @@ public:
 		sloppyOptimizations(sloppyOptimizations)
 		{
 		}
-		const size_t maxCellsPerSlice;
 		const LengthType initialBandwidth;
 		const LengthType rampBandwidth;
 		const AlignmentGraph& graph;
+		const size_t maxCellsPerSlice;
 		const bool quietMode;
 		const bool sloppyOptimizations;
 	};
