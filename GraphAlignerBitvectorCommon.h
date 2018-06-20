@@ -28,12 +28,12 @@ public:
 	class EqVector
 	{
 	public:
-		EqVector(Word BA, Word BT, Word BC, Word BG) :
-		BA(BA),
-		BT(BT),
-		BC(BC),
-		BG(BG)
+		EqVector(Word BA, Word BT, Word BC, Word BG)
 		{
+			masks[0] = BA;
+			masks[1] = BC;
+			masks[2] = BG;
+			masks[3] = BT;
 		}
 		Word getEq(char c) const
 		{
@@ -41,16 +41,16 @@ public:
 			{
 				case 'A':
 				case 'a':
-					return BA;
-				case 'T':
-				case 't':
-					return BT;
+					return masks[0];
 				case 'C':
 				case 'c':
-					return BC;
+					return masks[1];
 				case 'G':
 				case 'g':
-					return BG;
+					return masks[2];
+				case 'T':
+				case 't':
+					return masks[3];
 				case '-':
 				default:
 					assert(false);
@@ -58,10 +58,11 @@ public:
 			assert(false);
 			return 0;
 		}
-		Word BA;
-		Word BT;
-		Word BC;
-		Word BG;
+		Word getEqI(size_t i) const
+		{
+			return masks[i];
+		}
+		Word masks[4];
 	};
 
 	GraphAlignerBitvectorCommon() = delete;

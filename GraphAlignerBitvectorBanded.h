@@ -423,8 +423,7 @@ private:
 			{
 				pos = chunk * WordConfiguration<Word>::WordSize + offset;
 				if (pos >= nodeLength) break;
-				graphChar = params.graph.NodeSequences(nodeStart+pos);
-				Eq = EqV.getEq(graphChar);
+				Eq = EqV.getEqI(params.graph.NodeSequencesI(nodeStart+pos));
 				Eq &= forceEq;
 				if ((HN & 1) && (scoreBefore == scoreComparison - 1))
 				{
@@ -479,8 +478,7 @@ private:
 		auto nodeStart = params.graph.NodeStart(i);
 		auto nodeLength = params.graph.NodeLength(i);
 
-		char graphChar = params.graph.NodeSequences(nodeStart);
-		Word Eq = EqV.getEq(graphChar);
+		Word Eq = EqV.getEqI(params.graph.NodeSequencesI(nodeStart));
 
 		Word hinP;
 		Word hinN;
@@ -638,8 +636,7 @@ private:
 			{
 				pos = chunk * WordConfiguration<Word>::WordSize + offset;
 				if (pos >= nodeLength) break;
-				graphChar = params.graph.NodeSequences(nodeStart+pos);
-				Eq = EqV.getEq(graphChar);
+				Eq = EqV.getEqI(params.graph.NodeSequencesI(nodeStart+pos));
 				Eq &= forceEq;
 				std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, HP & 1, HN & 1);
 				if (forceUntil >= pos)

@@ -232,6 +232,12 @@ char AlignmentGraph::NodeSequences(size_t index) const
 	return nodeSequences.getChar(index);
 }
 
+size_t AlignmentGraph::NodeSequencesI(size_t index) const
+{
+	assert(index < nodeSequences.size());
+	return nodeSequences.getCharI(index);
+}
+
 size_t AlignmentGraph::NodeSequencesSize() const
 {
 	return nodeSequences.size();

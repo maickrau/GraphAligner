@@ -12,8 +12,10 @@
 class AlignmentGraph
 {
 public:
-	//arbitrarily 100, shouldn't be too small because of per-node overhead, and not too high because of in-band-but-not-calculated overhead
-	static constexpr int SPLIT_NODE_SIZE = 100;
+	//arbitrarily 64
+	//determines extra band size, shouldn't be too high because of extra slices
+	//should be 0 mod wordsize, otherwise storage has overhead
+	static constexpr int SPLIT_NODE_SIZE = 64;
 
 	typedef std::pair<size_t, size_t> MatrixPosition;
 	class SeedHit
@@ -37,6 +39,7 @@ public:
 	size_t NodeEnd(size_t nodeIndex) const;
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t index) const;
+	size_t NodeSequencesI(size_t index) const;
 	size_t NodeSequencesSize() const;
 	size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;

@@ -66,7 +66,7 @@ public:
 	{
 		return "ACGT"[getCharI(pos)];
 	}
-	int getCharI(size_t pos) const
+	Word getCharI(size_t pos) const
 	{
 		size_t block = pos / CHARSINBLOCK;
 		size_t offset = (pos % CHARSINBLOCK) * 2;
