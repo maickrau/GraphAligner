@@ -431,9 +431,9 @@ private:
 					assert(previousSlice.exists);
 					assert(ws.getScoreBeforeStart() == scoreBefore);
 					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, 0, 0);
-// #ifdef EXTRACORRECTNESSASSERTIONS
+#ifdef EXTRACORRECTNESSASSERTIONS
 					assertSliceCorrectness(ws, newWs, Eq, 0);
-// #endif
+#endif
 				}
 				else if (scoreBefore < scoreComparison)
 				{
@@ -442,9 +442,9 @@ private:
 					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, 1, 0);
 					newWs.VP &= ~(Word)1;
 					newWs.VN |= 1;
-// #ifdef EXTRACORRECTNESSASSERTIONS
+#ifdef EXTRACORRECTNESSASSERTIONS
 					assertSliceCorrectness(ws, newWs, Eq, 1);
-// #endif
+#endif
 				}
 				else
 				{
@@ -452,9 +452,9 @@ private:
 					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, HP & 1, HN & 1);
 					newWs.VP &= forceVP;
 					newWs.VN |= forceVN;
-// #ifdef EXTRACORRECTNESSASSERTIONS
+#ifdef EXTRACORRECTNESSASSERTIONS
 					assertSliceCorrectness(ws, newWs, Eq, (HP & 1) - (HN & 1));
-// #endif
+#endif
 				}
 				assert(forceVN == 0 || scoreBefore < scoreComparison || newWs.getScoreBeforeStart() == ws.getScoreBeforeStart() + 1);
 				ws = newWs;
@@ -672,86 +672,6 @@ private:
 		return result;
 	}
 
-	static bool cellExists(const Params& params, const DPSlice& slice, LengthType row, LengthType w)
-	{
-		auto node = params.graph.IndexToNode(w);
-		auto offset = w - params.graph.NodeStart(node);
-		if (!slice.scores.hasNode(node)) return false;
-		auto wordslice = slice.scores.node(node)[offset];
-		return wordslice.sliceExists;
-	}
-
-	bool cellExists(const DPSlice& slice, LengthType row, LengthType w) const
-	{
-		return cellExists(params, slice, row, w);
-	}
-
-	static ScoreType getValueIfExists(const Params& params, const DPSlice& slice, int row, LengthType cell, ScoreType defaultValue)
-	{
-		auto nodeIndex = params.graph.IndexToNode(cell);
-		if (!slice.scores.hasNode(nodeIndex)) return defaultValue;
-		auto wordslice = slice.scores.node(nodeIndex)[cell - params.graph.NodeStart(nodeIndex)];
-		if (cellExists(wordslice, row, slice.minScore + slice.bandwidth)) return wordslice.getValue(row);
-		return defaultValue;
-	}
-
-	ScoreType getValueIfExists(const DPSlice& slice, int row, LengthType cell, ScoreType defaultValue) const
-	{
-		return getValueIfExists(params, slice, row, cell, defaultValue);
-	}
-
-	static bool cellExists(WordSlice slice, int row, int maxScore)
-	{
-		if (!slice.sliceExists) return false;
-		auto score = slice.getValue(row);
-		return score <= maxScore;
-	}
-
-	static ScoreType getValueOrMax(const Params& params, const DPTable& band, LengthType j, LengthType w, ScoreType max)
-	{
-		//todo fix
-		// auto node = params.graph.IndexToNode(w);
-		// auto slice = (j - band.startj) / WordConfiguration<Word>::WordSize / band.samplingFrequency;
-		// assert(band.slices[slice].j == (j / WordConfiguration<Word>::WordSize) * WordConfiguration<Word>::WordSize);
-		// if (!band.slices[slice].scores.hasNode(node)) return max;
-		// auto word = band.slices[slice].scores.node(node)[w - params.graph.NodeStart(node)];
-		// auto off = j % WordConfiguration<Word>::WordSize;
-		// return word.getValue(off);
-	}
-
-	static ScoreType getValueOrMax(const Params& params, const DPSlice& slice, LengthType j, LengthType w, ScoreType max)
-	{
-		//todo fix
-		// assert(j >= 0);
-		// assert(j < WordConfiguration<Word>::WordSize);
-		// auto node = params.graph.IndexToNode(w);
-		// if (!slice.scores.hasNode(node)) return max;
-		// auto word = slice.scores.node(node)[w - params.graph.NodeStart(node)];
-		// auto off = j % WordConfiguration<Word>::WordSize;
-		// return word.getValue(off);
-	}
-
-	static ScoreType getValue(const Params& params, const DPSlice& slice, LengthType j, LengthType w)
-	{
-		//todo fix
-		// assert(j >= 0);
-		// assert(j < WordConfiguration<Word>::WordSize);
-		// auto node = params.graph.IndexToNode(w);
-		// auto word = slice.scores.node(node)[w - params.graph.NodeStart(node)];
-		// auto off = j % WordConfiguration<Word>::WordSize;
-		// return word.getValue(off);
-	}
-
-	static ScoreType getValue(const Params& params, const DPTable& band, LengthType j, LengthType w)
-	{
-		// auto node = params.graph.IndexToNode(w);
-		// auto slice = (j - band.startj) / WordConfiguration<Word>::WordSize / band.samplingFrequency;
-		// assert(band.slices[slice].j == (j / WordConfiguration<Word>::WordSize) * WordConfiguration<Word>::WordSize);
-		// auto word = band.slices[slice].scores.node(node)[w - params.graph.NodeStart(node)];
-		// auto off = j % WordConfiguration<Word>::WordSize;
-		// return word.getValue(off);
-	}
-
 #ifdef EXTRACORRECTNESSASSERTIONS
 	void assertBitvectorConfirmedAreConsistent(WordSlice newslice, WordSlice oldslice, ScoreType quitScore) const
 	{
@@ -763,9 +683,7 @@ private:
 			if (oldScore <= quitScore) assert(newslice.getValue(i) <= oldslice.getValue(i));
 		}
 	}
-#endif
 
-#ifdef EXTRACORRECTNESSASSERTIONS
 	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word>& currentSlice, const NodeSlice<LengthType, ScoreType, Word>& previousSlice, const std::string& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore) const
 	{
 		for (auto pair : currentSlice)
@@ -1252,104 +1170,6 @@ private:
 			}
 		}
 #endif
-		return result;
-	}
-
-	std::vector<DPSlice> getSlicesFromTable(const std::string& sequence, LengthType overrideLastJ, const DPTable& table, size_t startIndex, AlignerGraphsizedState& reusableState) const
-	{
-		assert(startIndex < table.slices.size());
-		size_t startSlice = (table.slices[startIndex].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
-		assert(overrideLastJ > startSlice * WordConfiguration<Word>::WordSize);
-		size_t endSlice;
-		if (startIndex == table.slices.size()-1) endSlice = table.bandwidthPerSlice.size(); else endSlice = (table.slices[startIndex+1].j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize;
-		if (endSlice * WordConfiguration<Word>::WordSize >= overrideLastJ) endSlice = (overrideLastJ / WordConfiguration<Word>::WordSize);
-		assert(endSlice > startSlice);
-		assert(endSlice <= table.bandwidthPerSlice.size());
-		assert(startIndex < table.slices.size());
-		const auto& initialSlice = table.slices[startIndex];
-		std::vector<DPSlice> result;
-		size_t realCells = 0;
-		size_t cellsProcessed = 0;
-		{
-			auto initialOrder = initialSlice.nodes;
-			for (auto node : initialOrder)
-			{
-				reusableState.previousBand[node] = true;
-			}
-		}
-#ifndef NDEBUG
-		debugLastRowMinScore = 0;
-#endif
-		DPSlice lastSlice = initialSlice;
-		// assert(lastSlice.correctness.CurrentlyCorrect());
-		DPSlice rampSlice = lastSlice;
-		for (size_t slice = startSlice; slice < endSlice; slice++)
-		{
-			int bandwidth = table.bandwidthPerSlice[slice];
-#ifndef NDEBUG
-			debugLastRowMinScore = lastSlice.minScore;
-#endif
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.nodesliceMap, reusableState.calculableQueue, bandwidth);
-			assert(result.size() == 0 || newSlice.j == result.back().j + WordConfiguration<Word>::WordSize);
-
-			size_t sliceCells = 0;
-			for (auto node : newSlice.nodes)
-			{
-				sliceCells += params.graph.NodeEnd(node) - params.graph.NodeStart(node);
-			}
-			realCells += sliceCells;
-			cellsProcessed += newSlice.cellsProcessed;
-
-			// assert(slice == endSlice-1 || newSlice.correctness.CurrentlyCorrect());
-			result.push_back(newSlice);
-			for (auto node : lastSlice.nodes)
-			{
-				assert(reusableState.previousBand[node]);
-				reusableState.previousBand[node] = false;
-			}
-			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
-			assert(newSlice.minScore >= lastSlice.minScore);
-#ifndef NDEBUG
-			auto debugMinimumNode = params.graph.IndexToNode(newSlice.minScoreIndex);
-			assert(newSlice.scores.hasNode(debugMinimumNode));
-			auto debugslice = newSlice.scores.node(debugMinimumNode);
-			assert(newSlice.minScoreIndex >= params.graph.NodeStart(debugMinimumNode));
-			assert(newSlice.minScoreIndex < params.graph.NodeEnd(debugMinimumNode));
-			assert(debugslice[newSlice.minScoreIndex - params.graph.NodeStart(debugMinimumNode)].scoreEnd == newSlice.minScore);
-#endif
-			if (slice == endSlice-1)
-			{
-				for (auto node : newSlice.nodes)
-				{
-					assert(reusableState.currentBand[node]);
-					reusableState.currentBand[node] = false;
-				}
-			}
-			else
-			{
-				std::swap(reusableState.previousBand, reusableState.currentBand);
-			}
-			lastSlice = std::move(newSlice);
-		}
-#ifndef NDEBUG
-		for (size_t i = 1; i < result.size(); i++)
-		{
-			assert(result[i].minScore >= result[i-1].minScore);
-		}
-#endif
-
-#ifdef EXTRACORRECTNESSASSERTIONS
-		assert(reusableState.calculableQueue.size() == 0);
-		for (size_t i = 0; i < reusableState.currentBand.size(); i++)
-		{
-			assert(!reusableState.currentBand[i]);
-			assert(!reusableState.previousBand[i]);
-			assert(reusableState.nodesliceMap[i].start == 0);
-			assert(reusableState.nodesliceMap[i].end == 0);
-			assert(!reusableState.nodesliceMap[i].exists);
-		}
-#endif
-
 		return result;
 	}
 
