@@ -316,15 +316,17 @@ private:
 #ifndef NDEBUG
 	void verifyTrace(const std::vector<MatrixPosition>& trace, const std::string& sequence, volatile ScoreType score) const
 	{
-		volatile ScoreType realscore = 0;
-		realscore += Common::characterMatch(sequence[0], params.graph.NodeSequences(trace[0].first)) ? 0 : 1;
 		for (size_t i = 1; i < trace.size(); i++)
 		{
 			auto newpos = trace[i];
 			auto oldpos = trace[i-1];
+			auto oldSlice = oldpos.second / WordConfiguration<Word>::WordSize;
+			auto newSlice = newpos.second / WordConfiguration<Word>::WordSize;
+			auto oldNodeIndex = params.graph.IndexToNode(oldpos.first);
+			auto newNodeIndex = params.graph.IndexToNode(newpos.first);
+			if (oldSlice == newSlice && oldNodeIndex == newNodeIndex) continue;
 			assert(newpos.second == oldpos.second || newpos.second == oldpos.second+1);
 			assert(newpos.second != oldpos.second || newpos.first != oldpos.first);
-			auto oldNodeIndex = params.graph.IndexToNode(oldpos.first);
 			if (oldpos.first == params.graph.NodeEnd(oldNodeIndex)-1)
 			{
 				auto newNodeIndex = params.graph.IndexToNode(newpos.first);
@@ -334,26 +336,7 @@ private:
 			{
 				assert(newpos.first == oldpos.first || newpos.first == oldpos.first+1);
 			}
-			bool diagonal = true;
-			if (newpos.second == oldpos.second) diagonal = false;
-			if (newpos.first == oldpos.first)
-			{
-				auto newNodeIndex = params.graph.IndexToNode(newpos.first);
-				if (newpos.second == oldpos.second+1 && params.graph.NodeEnd(newNodeIndex) == params.graph.NodeStart(newNodeIndex)+1 && std::find(params.graph.outNeighbors[newNodeIndex].begin(), params.graph.outNeighbors[newNodeIndex].end(), newNodeIndex) != params.graph.outNeighbors[newNodeIndex].end())
-				{
-					//one node self-loop, diagonal is valid
-				}
-				else
-				{
-					diagonal = false;
-				}
-			}
-			if (!diagonal || !Common::characterMatch(sequence[newpos.second], params.graph.NodeSequences(newpos.first)))
-			{
-				realscore++;
-			}
 		}
-		// assert(score == realscore);
 	}
 #endif
 

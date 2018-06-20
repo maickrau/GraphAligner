@@ -172,7 +172,7 @@ public:
 		nodes->reserve(activeVectorMapIndices.size());
 		for (auto index : activeVectorMapIndices)
 		{
-			(*nodes)[index] = (*vectorMap)[index];
+			if ((*vectorMap)[index].exists) (*nodes)[index] = (*vectorMap)[index];
 		}
 		clearVectorMap();
 		vectorMap = nullptr;

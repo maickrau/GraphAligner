@@ -31,7 +31,7 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming) : target(target), priority(priority), incoming(incoming) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -43,6 +43,7 @@ public:
 		LengthType target;
 		int priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
+		bool skipFirst;
 	};
 	class AlignerGraphsizedState
 	{
