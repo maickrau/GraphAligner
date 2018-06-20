@@ -70,7 +70,7 @@ public:
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 	};
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params
 	{
 	public:
