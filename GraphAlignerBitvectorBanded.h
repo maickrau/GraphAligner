@@ -47,9 +47,12 @@ private:
 		scores(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
-		bandwidth(0),
 		cellsProcessed(0),
-		numCells(0)
+		bandwidth(0)
+#ifdef SLICEVERBOSE
+		,nodesProcessed(0)
+		,numCells(0)
+#endif
 		{}
 		DPSlice(std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem>* vectorMap) :
 		minScore(std::numeric_limits<ScoreType>::min()),
@@ -58,9 +61,12 @@ private:
 		scores(vectorMap),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
-		bandwidth(0),
 		cellsProcessed(0),
-		numCells(0)
+		bandwidth(0)
+#ifdef SLICEVERBOSE
+		,nodesProcessed(0)
+		,numCells(0)
+#endif
 		{}
 		ScoreType minScore;
 		LengthType minScoreNode;
@@ -68,9 +74,12 @@ private:
 		NodeSlice<LengthType, ScoreType, Word> scores;
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
-		int bandwidth;
 		size_t cellsProcessed;
+		size_t bandwidth;
+#ifdef SLICEVERBOSE
+		size_t nodesProcessed;
 		size_t numCells;
+#endif
 		DPSlice getMapSlice() const
 		{
 			DPSlice result;
@@ -80,9 +89,12 @@ private:
 			result.scores = scores.getMapSlice();
 			result.correctness = correctness;
 			result.j = j;
-			result.bandwidth = bandwidth;
 			result.cellsProcessed = cellsProcessed;
+			result.bandwidth = bandwidth;
+#ifdef SLICEVERBOSE
+			result.nodesProcessed = nodesProcessed;
 			result.numCells = numCells;
+#endif
 			return result;
 		}
 	};
@@ -361,6 +373,9 @@ private:
 		LengthType minScoreNode;
 		LengthType minScoreNodeOffset;
 		size_t cellsProcessed;
+#ifdef SLICEVERBOSE
+		size_t nodesProcessed;
+#endif
 	};
 
 	void assertSliceCorrectness(WordSlice oldSlice, WordSlice newSlice, Word Eq, int hin) const
@@ -474,7 +489,9 @@ private:
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreNode = -1;
 		result.minScoreNodeOffset = -1;
+#ifdef SLICEVERBOSE
 		result.cellsProcessed = 0;
+#endif
 		auto nodeLength = params.graph.NodeLength(i);
 		AlignmentGraph::NodeChunkSequence nodeChunks = params.graph.NodeChunks(i);
 
@@ -792,6 +809,9 @@ private:
 		LengthType currentMinimumNode = -1;
 		LengthType currentMinimumNodeOffset = -1;
 		size_t cellsProcessed = 0;
+#ifdef SLICEVERBOSE
+		size_t nodesProcessed = 0;
+#endif
 
 		EqVector EqV = BV::getEqVector(sequence, j);
 
@@ -887,6 +907,9 @@ private:
 			}
 			assert(currentMinimumScore == currentMinScoreAtEndRow);
 			cellsProcessed += nodeCalc.cellsProcessed;
+#ifdef SLICEVERBOSE
+			nodesProcessed++;
+#endif
 			if (cellsProcessed > params.maxCellsPerSlice) break;
 		}
 
@@ -900,6 +923,9 @@ private:
 		result.minScoreNode = currentMinimumNode;
 		result.minScoreNodeOffset = currentMinimumNodeOffset;
 		result.cellsProcessed = cellsProcessed;
+#ifdef SLICEVERBOSE
+		result.nodesProcessed = nodesProcessed;
+#endif
 
 		if (j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
@@ -951,12 +977,15 @@ private:
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
 		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
-		slice.bandwidth = bandwidth;
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
 		slice.minScoreNodeOffset = sliceResult.minScoreNodeOffset;
 		slice.minScore = sliceResult.minScore;
+		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
+		slice.bandwidth = bandwidth;
 		assert(slice.minScore >= previousSlice.minScore);
+#ifdef SLICEVERBOSE
+		slice.nodesProcessed = sliceResult.nodesProcessed;
 		for (auto node : slice.scores)
 		{
 			if (currentBand[node.first])
@@ -964,7 +993,7 @@ private:
 				slice.numCells += params.graph.NodeLength(node.first);
 			}
 		}
-		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
+#endif
 	}
 
 	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
@@ -997,7 +1026,6 @@ private:
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		DPTable result;
-		size_t realCells = 0;
 		size_t cellsProcessed = 0;
 		std::vector<size_t> partOfComponent;
 		{
@@ -1030,7 +1058,7 @@ private:
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
-			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " slices " << newSlice.numCells << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
+			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " nodes " << newSlice.scores.size() << " slices " << newSlice.numCells << " nodesprocessed " << newSlice.nodesProcessed << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
 #endif
 
 			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())))
@@ -1040,7 +1068,6 @@ private:
 			}
 			assert(newSlice.j == lastSlice.j + WordConfiguration<Word>::WordSize);
 
-			realCells += newSlice.numCells;
 			cellsProcessed += newSlice.cellsProcessed;
 
 			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
