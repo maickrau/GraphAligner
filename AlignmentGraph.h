@@ -7,7 +7,6 @@
 #include <unordered_map>
 #include <tuple>
 #include "ThreadReadAssertion.h"
-#include "DNAString.h"
 
 
 class AlignmentGraph
