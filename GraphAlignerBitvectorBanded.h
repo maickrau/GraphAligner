@@ -45,7 +45,6 @@ private:
 		minScoreNode(-1),
 		minScoreNodeOffset(-1),
 		scores(),
-		nodes(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		bandwidth(0),
@@ -57,7 +56,6 @@ private:
 		minScoreNode(-1),
 		minScoreNodeOffset(-1),
 		scores(vectorMap),
-		nodes(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		bandwidth(0),
@@ -68,35 +66,33 @@ private:
 		LengthType minScoreNode;
 		LengthType minScoreNodeOffset;
 		NodeSlice<LengthType, ScoreType, Word> scores;
-		std::vector<size_t> nodes;
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
 		int bandwidth;
 		size_t cellsProcessed;
 		size_t numCells;
+		DPSlice getMapSlice() const
+		{
+			DPSlice result;
+			result.minScore = minScore;
+			result.minScoreNode = minScoreNode;
+			result.minScoreNodeOffset = minScoreNodeOffset;
+			result.scores = scores.getMapSlice();
+			result.correctness = correctness;
+			result.j = j;
+			result.bandwidth = bandwidth;
+			result.cellsProcessed = cellsProcessed;
+			result.numCells = numCells;
+			return result;
+		}
 	};
 	class DPTable
 	{
 	public:
 		DPTable() :
-		slices(),
-		bandwidthPerSlice(),
-		correctness()
+		slices()
 		{}
 		std::vector<DPSlice> slices;
-		std::vector<ScoreType> bandwidthPerSlice;
-		std::vector<AlignmentCorrectnessEstimationState> correctness;
-	};
-	class TwoDirectionalSplitAlignment
-	{
-	public:
-		size_t EstimatedCorrectlyAligned() const
-		{
-			return (forward.bandwidthPerSlice.size() + backward.bandwidthPerSlice.size()) * WordConfiguration<Word>::WordSize;
-		}
-		size_t sequenceSplitIndex;
-		DPTable forward;
-		DPTable backward;
 	};
 public:
 
@@ -749,7 +745,7 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word>& currentSlice, const NodeSlice<LengthType, ScoreType, Word>& previousSlice, const std::vector<LengthType>& previousNodes, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word>& currentSlice, const NodeSlice<LengthType, ScoreType, Word>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		LengthType currentMinimumNode = -1;
@@ -758,7 +754,7 @@ private:
 
 		EqVector EqV = BV::getEqVector(sequence, j);
 
-		assert(previousNodes.size() > 0);
+		assert(previousSlice.size() > 0);
 		if (j == 0)
 		{
 			for (auto node : previousSlice)
@@ -886,6 +882,7 @@ private:
 				slice.node(node.first).exists = false;
 			}
 		}
+		slice.removeNonExistant();
 	}
 
 	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word>& slice, NodeCalculationResult& sliceCalc, LengthType j, size_t sequenceSize) const
@@ -912,7 +909,7 @@ private:
 
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, previousSlice.nodes, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 		slice.bandwidth = bandwidth;
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
@@ -923,7 +920,6 @@ private:
 		{
 			if (currentBand[node.first])
 			{
-				slice.nodes.push_back(node.first);
 				slice.numCells += params.graph.NodeLength(node.first);
 			}
 		}
@@ -938,7 +934,7 @@ private:
 
 		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
 
-		bandTest.scores.convertVectorArrayToMap();
+		bandTest.scores.createNodeMap();
 
 		return bandTest;
 	}
@@ -946,19 +942,13 @@ private:
 	void removeWronglyAlignedEnd(DPTable& table) const
 	{
 		if (table.slices.size() == 0) return;
-		bool currentlyCorrect = table.correctness.back().CurrentlyCorrect();
+		bool currentlyCorrect = table.slices.back().correctness.CurrentlyCorrect();
 		while (!currentlyCorrect)
 		{
-			currentlyCorrect = table.correctness.back().FalseFromCorrect();
-			table.correctness.pop_back();
-			table.bandwidthPerSlice.pop_back();
-			if (table.correctness.size() == 0) break;
+			currentlyCorrect = table.slices.back().correctness.FalseFromCorrect();
+			table.slices.pop_back();
+			if (table.slices.size() == 0) break;
 		}
-		if (table.correctness.size() == 0)
-		{
-			table.slices.clear();
-		}
-		while (table.slices.size() > 1 && table.slices.back().j >= table.correctness.size() * WordConfiguration<Word>::WordSize) table.slices.pop_back();
 	}
 
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState) const
@@ -970,10 +960,9 @@ private:
 		size_t cellsProcessed = 0;
 		std::vector<size_t> partOfComponent;
 		{
-			auto initialOrder = initialSlice.nodes;
-			for (auto node : initialOrder)
+			for (auto node : initialSlice.scores)
 			{
-				reusableState.previousBand[node] = true;
+				reusableState.previousBand[node.first] = true;
 			}
 		}
 #ifndef NDEBUG
@@ -981,8 +970,6 @@ private:
 #endif
 		DPSlice lastSlice = initialSlice;
 		result.slices.push_back(initialSlice);
-		result.correctness.push_back(initialSlice.correctness);
-		result.bandwidthPerSlice.push_back(1);
 		assert(lastSlice.correctness.CurrentlyCorrect());
 		DPSlice rampSlice = lastSlice;
 		size_t rampRedoIndex = -1;
@@ -998,20 +985,16 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto timeStart = std::chrono::system_clock::now();
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.nodesliceMap, reusableState.calculableQueue, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth);
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
 			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " slices " << newSlice.numCells << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
 #endif
 
-			if (rampUntil == slice && newSlice.cellsProcessed >= params.BacktraceOverrideCutoff)
+			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())))
 			{
-				rampUntil++;
-			}
-			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())) && newSlice.cellsProcessed < params.BacktraceOverrideCutoff)
-			{
-				rampSlice = lastSlice;
+				rampSlice = lastSlice.getMapSlice();
 				rampRedoIndex = slice-1;
 			}
 			assert(newSlice.j == lastSlice.j + WordConfiguration<Word>::WordSize);
@@ -1024,16 +1007,18 @@ private:
 #ifndef NDEBUG
 				debugLastProcessedSlice = slice-1;
 #endif
-				for (auto node : lastSlice.nodes)
+				for (auto node : lastSlice.scores)
 				{
-					assert(reusableState.previousBand[node]);
-					reusableState.previousBand[node] = false;
+					assert(reusableState.previousBand[node.first]);
+					reusableState.previousBand[node.first] = false;
 				}
-				for (auto node : newSlice.nodes)
+				for (auto node : newSlice.scores)
 				{
-					assert(reusableState.currentBand[node]);
-					reusableState.currentBand[node] = false;
+					assert(reusableState.currentBand[node.first]);
+					reusableState.currentBand[node.first] = false;
 				}
+				lastSlice.scores.removeVectorArray();
+				newSlice.scores.removeVectorArray();
 				break;
 			}
 
@@ -1042,54 +1027,51 @@ private:
 #ifndef NDEBUG
 				debugLastProcessedSlice = slice-1;
 #endif
-				for (auto node : lastSlice.nodes)
+				for (auto node : lastSlice.scores)
 				{
-					assert(reusableState.previousBand[node]);
-					reusableState.previousBand[node] = false;
+					assert(reusableState.previousBand[node.first]);
+					reusableState.previousBand[node.first] = false;
 				}
-				for (auto node : newSlice.nodes)
+				for (auto node : newSlice.scores)
 				{
-					assert(reusableState.currentBand[node]);
-					reusableState.currentBand[node] = false;
+					assert(reusableState.currentBand[node.first]);
+					reusableState.currentBand[node.first] = false;
 				}
+				lastSlice.scores.removeVectorArray();
+				newSlice.scores.removeVectorArray();
 				break;
 			}
 			if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && params.rampBandwidth > params.initialBandwidth)
 			{
-				for (auto node : newSlice.nodes)
+				for (auto node : newSlice.scores)
 				{
-					assert(reusableState.currentBand[node]);
-					reusableState.currentBand[node] = false;
+					assert(reusableState.currentBand[node.first]);
+					reusableState.currentBand[node.first] = false;
 				}
-				for (auto node : lastSlice.nodes)
+				for (auto node : lastSlice.scores)
 				{
-					assert(reusableState.previousBand[node]);
-					reusableState.previousBand[node] = false;
+					assert(reusableState.previousBand[node.first]);
+					reusableState.previousBand[node.first] = false;
 				}
+				lastSlice.scores.removeVectorArray();
+				newSlice.scores.removeVectorArray();
 				rampUntil = slice;
 				std::swap(slice, rampRedoIndex);
 				std::swap(lastSlice, rampSlice);
-				for (auto node : lastSlice.nodes)
+				for (auto node : lastSlice.scores)
 				{
-					assert(!reusableState.previousBand[node]);
-					reusableState.previousBand[node] = true;
+					assert(!reusableState.previousBand[node.first]);
+					reusableState.previousBand[node.first] = true;
 				}
 				if (slice == -1)
 				{
-					result.bandwidthPerSlice.clear();
-					result.correctness.clear();
 					result.slices.clear();
 				}
-				while (result.bandwidthPerSlice.size() > slice+2) result.bandwidthPerSlice.pop_back();
-				while (result.correctness.size() > slice+2) result.correctness.pop_back();
 				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
-				assert(result.slices.size() == result.bandwidthPerSlice.size());
-				assert(result.correctness.size() == result.slices.size());
 				assert(result.slices.back().j == lastSlice.j);
 #ifdef SLICEVERBOSE
 				std::cerr << " ramp to " << slice;
 				std::cerr << std::endl;
-				std::cerr << "bandwidthPerSlice.size() " << result.bandwidthPerSlice.size();
 				if (result.slices.size() > 0) std::cerr << " slices.back().j " << result.slices.back().j; else std::cerr << " slices.size() 0";
 				std::cerr << std::endl;
 #endif
@@ -1100,31 +1082,30 @@ private:
 			std::cerr << std::endl;
 #endif
 
-			assert(result.bandwidthPerSlice.size() == slice+1);
-			result.bandwidthPerSlice.push_back(bandwidth);
-			result.correctness.push_back(newSlice.correctness);
-			result.slices.push_back(newSlice);
-			for (auto node : lastSlice.nodes)
+			result.slices.push_back(newSlice.getMapSlice());
+			for (auto node : lastSlice.scores)
 			{
-				assert(reusableState.previousBand[node]);
-				reusableState.previousBand[node] = false;
+				assert(reusableState.previousBand[node.first]);
+				reusableState.previousBand[node.first] = false;
 			}
 			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
 			if (slice == numSlices - 1)
 			{
-				for (auto node : newSlice.nodes)
+				for (auto node : newSlice.scores)
 				{
-					assert(reusableState.currentBand[node]);
-					reusableState.currentBand[node] = false;
+					assert(reusableState.currentBand[node.first]);
+					reusableState.currentBand[node.first] = false;
 				}
 			}
 			else
 			{
 				std::swap(reusableState.previousBand, reusableState.currentBand);
 			}
-			lastSlice = newSlice;
+			lastSlice.scores.removeVectorArray();
+			lastSlice = std::move(newSlice);
 		}
+		lastSlice.scores.removeVectorArray();
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(reusableState.calculableQueue.size() == 0);
@@ -1132,17 +1113,13 @@ private:
 		{
 			assert(!reusableState.currentBand[i]);
 			assert(!reusableState.previousBand[i]);
-			assert(!reusableState.nodesliceMap[i].exists);
 		}
 #endif
 
 #ifndef NDEBUG
-		assert(result.slices.size() == result.bandwidthPerSlice.size());
-		assert(result.correctness.size() == result.slices.size());
 		if (result.slices.size() > 0)
 		{
 			volatile size_t lastExisting = 0;
-			assert(result.bandwidthPerSlice.size() == debugLastProcessedSlice + 2);
 			for (size_t i = 1; i < result.slices.size(); i++)
 			{
 				assert(result.slices[i].j == result.slices[i-1].j + WordConfiguration<Word>::WordSize);
@@ -1172,7 +1149,6 @@ private:
 			node.endSlice = {0, 0, 0};
 			node.minScore = 0;
 			node.exists = true;
-			result.nodes.push_back(nodeIndex);
 		}
 		return result;
 	}
@@ -1190,7 +1166,6 @@ private:
 			startSlice.scores.addNodeToMap(i);
 			startSlice.scores.setMinScore(i, 0);
 			startSlice.j = -WordConfiguration<Word>::WordSize;
-			startSlice.nodes.push_back(i);
 		}
 		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, reusableState);
 		removeWronglyAlignedEnd(slice);

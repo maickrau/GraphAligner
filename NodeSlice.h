@@ -165,7 +165,15 @@ public:
 	nodes(new MapType)
 	{
 	}
-	void convertVectorArrayToMap()
+	NodeSlice getMapSlice() const
+	{
+		if (vectorMap == nullptr) return *this;
+		assert(nodes->size() == activeVectorMapIndices.size());
+		NodeSlice result;
+		result.nodes = nodes;
+		return result;
+	}
+	void createNodeMap()
 	{
 		assert(nodes->size() == 0);
 		assert(vectorMap != nullptr);
@@ -174,6 +182,12 @@ public:
 		{
 			if ((*vectorMap)[index].exists) (*nodes)[index] = (*vectorMap)[index];
 		}
+	}
+	void removeVectorArray()
+	{
+		if (vectorMap == nullptr) return;
+		assert(vectorMap != nullptr);
+		assert(nodes->size() == activeVectorMapIndices.size());
 		clearVectorMap();
 		vectorMap = nullptr;
 	}
@@ -234,6 +248,17 @@ public:
 			assert(found->second.exists);
 			return true;
 		}
+	}
+	void removeNonExistant()
+	{
+		assert(vectorMap != nullptr);
+		std::vector<size_t> newActiveVectorMapIndices;
+		newActiveVectorMapIndices.reserve(activeVectorMapIndices.size());
+		for (auto index : activeVectorMapIndices)
+		{
+			if ((*vectorMap)[index].exists) newActiveVectorMapIndices.push_back(index);
+		}
+		activeVectorMapIndices = newActiveVectorMapIndices;
 	}
 	int minScore(size_t nodeIndex) const
 	{

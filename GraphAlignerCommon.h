@@ -50,23 +50,27 @@ public:
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth) :
 		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1),
-		nodesliceMap(),
+		evenNodesliceMap(),
+		oddNodesliceMap(),
 		currentBand(),
 		previousBand()
 		{
-			nodesliceMap.resize(graph.NodeSize(), {});
+			evenNodesliceMap.resize(graph.NodeSize(), {});
+			oddNodesliceMap.resize(graph.NodeSize(), {});
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
 			calculableQueue.clear();
-			nodesliceMap.assign(nodesliceMap.size(), {});
+			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
+			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
-		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> nodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> evenNodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 	};
@@ -74,11 +78,6 @@ public:
 	class Params
 	{
 	public:
-		//cutoff for doing the backtrace in the sqrt-slice pass
-		//"bulges" in the band are responsible for almost all of the time spent aligning,
-		//and this way they don't need to be recalculated, saving about half of the time.
-		//semi-arbitrarily twenty five thousand, empirically a good enough cutoff
-		static constexpr size_t BacktraceOverrideCutoff = 25000;
 		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
