@@ -773,11 +773,18 @@ private:
 			for (auto node : previousSlice)
 			{
 				assert(node.second.exists);
-				// if (node.second.minScore <= previousQuitScore)
-				// {
-					WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-					calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
-				// }
+				if (params.graph.inNeighbors[node.first].size() == 1)
+				{
+					auto neighbor = params.graph.inNeighbors[node.first][0];
+				 	if (previousBand[params.graph.inNeighbors[node.first][0]] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore)
+				 	{
+				 		//linear area, no need to add the later node into the queue 
+				 		//because calculating the earlier node will guarantee that the later node will get added
+				 		continue;
+				 	}
+				}
+				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
+				calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 			}
 		}
 		assert(calculableQueue.size() > 0);
