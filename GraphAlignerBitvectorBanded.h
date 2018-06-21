@@ -468,7 +468,7 @@ private:
 		return result;
 	}
 
-	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst) const
+	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst, const std::vector<bool>& previousBand) const
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
@@ -531,9 +531,69 @@ private:
 
 		if (slice.exists)
 		{
-			//todo fix
-			if (true)
-			// if (params.graph.inNeighbors[i].size() > 1)
+			if (!skipFirst && params.graph.inNeighbors[i].size() == 1 && previousBand[params.graph.inNeighbors[i][0]])
+			{
+				if (ws.scoreEnd > slice.startSlice.scoreEnd)
+				{
+#ifdef EXTRACORRECTNESSASSERTIONS
+					auto debugTest = ws.mergeWith(slice.startSlice);
+					assert(debugTest.VP == slice.startSlice.VP);
+					assert(debugTest.VN == slice.startSlice.VN);
+					assert(debugTest.scoreEnd == slice.startSlice.scoreEnd);
+#endif
+					return result;
+				}
+				else if (ws.scoreEnd < slice.startSlice.scoreEnd)
+				{
+#ifdef EXTRACORRECTNESSASSERTIONS
+					auto debugTest = ws.mergeWith(slice.startSlice);
+					assert(debugTest.VP == ws.VP);
+					assert(debugTest.VN == ws.VN);
+					assert(debugTest.scoreEnd == ws.scoreEnd);
+#endif
+				}
+				else
+				{
+					Word newBigger = (ws.VP & ~slice.startSlice.VP) | (slice.startSlice.VN & ~ws.VN);
+					Word oldBigger = (slice.startSlice.VP & ~ws.VP) | (ws.VN & ~slice.startSlice.VN);
+					if (newBigger > oldBigger)
+					{
+#ifdef EXTRACORRECTNESSASSERTIONS
+						auto debugTest = ws.mergeWith(slice.startSlice);
+						assert(debugTest.VP == ws.VP);
+						assert(debugTest.VN == ws.VN);
+						assert(debugTest.scoreEnd == ws.scoreEnd);
+#endif
+					}
+					else if (oldBigger > newBigger)
+					{
+#ifdef EXTRACORRECTNESSASSERTIONS
+						auto debugTest = ws.mergeWith(slice.startSlice);
+						assert(debugTest.VP == slice.startSlice.VP);
+						assert(debugTest.VN == slice.startSlice.VN);
+						assert(debugTest.scoreEnd == slice.startSlice.scoreEnd);
+#endif
+						return result;
+					}
+					else if (newBigger == 0 && oldBigger == 0)
+					{
+						assert(ws.VP == slice.startSlice.VP);
+						assert(ws.VN == slice.startSlice.VN);
+						assert(ws.scoreEnd == slice.startSlice.scoreEnd);
+						return result;
+					}
+					else
+					{
+						WordSlice test = ws.mergeWith(slice.startSlice);
+						if (test.scoreEnd == slice.startSlice.scoreEnd && test.VP == slice.startSlice.VP && test.VN == slice.startSlice.VN)
+						{
+							return result;
+						}
+						ws = test;
+					}
+				}
+			}
+			else
 			{
 				WordSlice test = ws.mergeWith(slice.startSlice);
 				if (test.scoreEnd == slice.startSlice.scoreEnd && test.VP == slice.startSlice.VP && test.VP == slice.startSlice.VN)
@@ -541,25 +601,6 @@ private:
 					return result;
 				}
 				ws = test;
-			}
-			else
-			{
-#ifndef NDEBUG
-				WordSlice test = ws.mergeWith(slice.startSlice);
-#endif
-				if (slice.startSlice.scoreEnd < ws.scoreEnd)
-				{
-					assert(test.VP == slice.startSlice.VP);
-					assert(test.VN == slice.startSlice.VN);
-					assert(test.scoreEnd == slice.startSlice.scoreEnd);
-					return result;
-				}
-				else
-				{
-					assert(test.VP == ws.VP);
-					assert(test.VN == ws.VN);
-					assert(test.scoreEnd == ws.scoreEnd);
-				}
 			}
 		}
 		else if (!skipFirst && previousSlice.exists)
@@ -819,8 +860,8 @@ private:
 				}
 				previousThisNode.exists = false;
 			}
-			auto nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, incoming, skipFirst);
-			// assert(nodeCalc.minScore <= previousQuitScore + WordConfiguration<Word>::WordSize);
+			auto nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, incoming, skipFirst, previousBand);
+			assert(nodeCalc.minScore <= previousQuitScore + 2 * WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 			auto newEnd = thisNode.endSlice;

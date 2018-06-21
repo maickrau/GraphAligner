@@ -257,20 +257,19 @@ private:
 		possibleLocalMinima >>= 1;
 		//leftmost bit might be a minimum if there is no VP to its right
 		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
-		Word smaller = WordConfiguration<Word>::AllOnes;
 		if (scoreEnd + WordConfiguration<Word>::popcount(VN) >= oldSlice.scoreEnd - WordConfiguration<Word>::popcount(oldSlice.VP))
 		{
 			auto masks = differenceMasks(VP, VN, oldSlice.VP, oldSlice.VN, otherScoreBeforeStart - scoreBeforeStart);
-			smaller = masks.first;
-		}
-		//corner cases
-		if (smaller != WordConfiguration<Word>::AllOnes)
-		{
-			possibleLocalMinima |= (~smaller) >> 1;
-			possibleLocalMinima |= (~smaller) << 1;
-			possibleLocalMinima |= 1;
-			possibleLocalMinima |= WordConfiguration<Word>::LastBit;
-			possibleLocalMinima &= smaller;
+			auto smaller = masks.first;
+			//corner cases
+			if (smaller != WordConfiguration<Word>::AllOnes)
+			{
+				possibleLocalMinima |= (~smaller) >> 1;
+				possibleLocalMinima |= (~smaller) << 1;
+				possibleLocalMinima |= 1;
+				possibleLocalMinima |= WordConfiguration<Word>::LastBit;
+				possibleLocalMinima &= smaller;
+			}
 		}
 		ScoreType result = (scoreBeforeStart < otherScoreBeforeStart) ? scoreBeforeStart : std::numeric_limits<ScoreType>::max();
 		while (possibleLocalMinima != 0)
