@@ -348,7 +348,7 @@ private:
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		auto result = differenceMasksBytePrecalc(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		auto result = differenceMasksBitTwiddle(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		auto debugCompare = differenceMasksWord(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(result.first == debugCompare.first);
@@ -360,6 +360,99 @@ private:
 	static ScoreType clamp(ScoreType low, ScoreType val, ScoreType high)
 	{
 		return std::min(high, std::max(low, val));
+	}
+
+	__attribute__((optimize("unroll-loops")))
+	static std::pair<Word, Word> differenceMasksBitTwiddle(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
+	{
+		Word leftSmaller = 0;
+		Word rightSmaller = 0;
+		Word VPcommon = ~(leftVP & rightVP);
+		Word VNcommon = ~(leftVN & rightVN);
+		leftVP &= VPcommon;
+		leftVN &= VNcommon;
+		rightVP &= VPcommon;
+		rightVN &= VNcommon;
+		Word twosmaller = leftVN & rightVP; //left is two smaller
+		Word onesmaller = (rightVP & ~leftVN) | (leftVN & ~rightVP);
+		Word onebigger = (leftVP & ~rightVN) | (rightVN & ~leftVP);
+		Word twobigger = rightVN & leftVP; //left is two bigger
+		onebigger |= twobigger;
+		onesmaller |= twosmaller;
+		//scoredifference is right - left
+		if (scoreDifference > 0)
+		{
+			//right is higher
+			for (int i = 1; i < scoreDifference; i++)
+			{
+				Word leastSignificant = onebigger & ~(onebigger - 1);
+				onebigger ^= (~twobigger & leastSignificant);
+				twobigger &= ~leastSignificant;
+			}
+			Word leastSignificant = onebigger & ~(onebigger - 1);
+			leftSmaller |= leastSignificant - 1;
+			onebigger ^= (~twobigger & leastSignificant);
+			twobigger &= ~leastSignificant;
+		}
+		else if (scoreDifference < 0)
+		{
+			//left is higher
+			for (int i = 1; i < -scoreDifference; i++)
+			{
+				Word leastSignificant = onesmaller & ~(onesmaller - 1);
+				onesmaller ^= (~twosmaller & leastSignificant);
+				twosmaller &= ~leastSignificant;
+			}
+			Word leastSignificant = onesmaller & ~(onesmaller - 1);
+			rightSmaller |= leastSignificant - 1;
+			onesmaller ^= (~twosmaller & leastSignificant);
+			twosmaller &= ~leastSignificant;
+		}
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			if (onesmaller == 0)
+			{
+				if (onebigger == 0) break;
+				Word leastSignificant = onebigger & ~(onebigger - 1);
+				rightSmaller |= -leastSignificant;
+				break;
+			}
+			if (onebigger == 0)
+			{
+#ifdef EXTRACORRECTNESSASSERTIONS
+				assert(onesmaller != 0);
+#endif
+				Word leastSignificant = onesmaller & ~(onesmaller - 1);
+				leftSmaller |= -leastSignificant;
+				break;
+			}
+			Word leastSignificantBigger = onebigger & ~(onebigger - 1);
+			Word leastSignificantSmaller = onesmaller & ~(onesmaller - 1);
+#ifdef EXTRACORRECTNESSASSERTIONS
+			assert((onebigger & leastSignificantBigger) != 0);
+			assert((onesmaller & leastSignificantSmaller) != 0);
+			assert(leastSignificantSmaller != leastSignificantBigger);
+			assert(leastSignificantSmaller != 0);
+			assert(leastSignificantBigger != 0);
+#endif
+			if (leastSignificantBigger > leastSignificantSmaller)
+			{
+				leftSmaller |= leastSignificantBigger - leastSignificantSmaller;
+			}
+			else
+			{
+				rightSmaller |= leastSignificantSmaller - leastSignificantBigger;
+			}
+			onebigger ^= (~twobigger & leastSignificantBigger);
+			twobigger &= ~leastSignificantBigger;
+			onesmaller ^= (~twosmaller & leastSignificantSmaller);
+			twosmaller &= ~leastSignificantSmaller;
+		}
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert((leftSmaller & rightSmaller) == 0);
+		assert(onesmaller == 0 || onebigger == 0);
+#endif
+		return std::make_pair(leftSmaller, rightSmaller);
 	}
 
 	__attribute__((optimize("unroll-loops")))
