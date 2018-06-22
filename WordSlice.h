@@ -458,6 +458,7 @@ private:
 	__attribute__((optimize("unroll-loops")))
 	static std::pair<Word, Word> differenceMasksBytePrecalc(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
 	{
+		assert(ByteStuff::byteStuffPrecalculated());
 		assert(scoreDifference >= 0);
 		Word VPcommon = ~(leftVP & rightVP);
 		Word VNcommon = ~(leftVN & rightVN);

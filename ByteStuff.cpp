@@ -3,6 +3,8 @@
 #include "ThreadReadAssertion.h"
 #include "ByteStuff.h"
 
+bool hasBeenPrecalculated = false;
+
 size_t index(size_t scorediff, size_t sign, size_t low, size_t high)
 {
 	assert(scorediff <= 17);
@@ -62,10 +64,15 @@ std::vector<std::tuple<uint8_t, uint8_t, int8_t>> getPrecalcedChanges()
 
 namespace ByteStuff
 {
+	bool byteStuffPrecalculated()
+	{
+		return hasBeenPrecalculated;
+	}
 	std::vector<std::tuple<uint8_t, uint8_t, int8_t>> precalcedVPVNChanges;
 	void precalculateByteStuff()
 	{
 		precalcedVPVNChanges = getPrecalcedChanges();
+		hasBeenPrecalculated = true;
 	}
 	std::tuple<uint8_t, uint8_t, int8_t> VPVNChange(size_t scorediff, size_t sign, size_t low, size_t high)
 	{
