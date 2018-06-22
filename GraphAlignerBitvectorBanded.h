@@ -1026,6 +1026,7 @@ private:
 		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		DPTable result;
+		result.slices.reserve(numSlices + 1);
 		size_t cellsProcessed = 0;
 		std::vector<size_t> partOfComponent;
 		{
@@ -1174,6 +1175,8 @@ private:
 			lastSlice = std::move(newSlice);
 		}
 		lastSlice.scores.removeVectorArray();
+
+		assert(result.slices.size() < numSlices + 1);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(reusableState.calculableQueue.size() == 0);
