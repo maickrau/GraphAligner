@@ -1137,6 +1137,7 @@ private:
 					result.slices.clear();
 				}
 				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
+				assert(slice == -1 || result.slices.size() == slice+2);
 				assert(result.slices.back().j == lastSlice.j);
 #ifdef SLICEVERBOSE
 				std::cerr << " ramp to " << slice;
@@ -1176,7 +1177,7 @@ private:
 		}
 		lastSlice.scores.removeVectorArray();
 
-		assert(result.slices.size() < numSlices + 1);
+		assert(result.slices.size() <= numSlices + 1);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(reusableState.calculableQueue.size() == 0);
