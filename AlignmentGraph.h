@@ -12,10 +12,10 @@
 class AlignmentGraph
 {
 public:
-	//arbitrarily 32
 	//determines extra band size, shouldn't be too high because of extra slices
-	//should be 0 mod (wordsize/2), otherwise storage has overhead
-	static constexpr int SPLIT_NODE_SIZE = 32;
+	//should be 0 mod (wordsize/2 == 32), otherwise storage has overhead
+	//64 is the fastest out of 32, 64, 96
+	static constexpr int SPLIT_NODE_SIZE = 64;
 	static constexpr size_t BP_IN_CHUNK = sizeof(size_t) * 8 / 2;
 	static constexpr size_t CHUNKS_IN_NODE = (SPLIT_NODE_SIZE + BP_IN_CHUNK - 1) / BP_IN_CHUNK;
 
