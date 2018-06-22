@@ -5,6 +5,7 @@
 #include <limits>
 #include <unordered_map>
 #include <vector>
+#include <sparsehash/dense_hash_map>
 #include "AlignmentGraph.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
@@ -32,7 +33,7 @@ public:
 		Word HN[NUM_CHUNKS];
 		ScoreType minScore;
 	};
-	using MapType = std::unordered_map<size_t, NodeSliceMapItem>;
+	using MapType = google::dense_hash_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, MapItem>>
 	{
@@ -157,17 +158,25 @@ public:
 	};
 	NodeSlice() :
 	vectorMap(nullptr),
-	nodes(new MapType)
+	nodes(nullptr)
 	{
 	}
 	NodeSlice(std::vector<NodeSliceMapItem>* vectorMap) :
 	vectorMap(vectorMap),
-	nodes(new MapType)
+	nodes(nullptr)
 	{
+	}
+	void addEmptyNodeMap(size_t size)
+	{
+		assert(nodes == nullptr);
+		nodes = std::make_shared<MapType>();
+		nodes->set_empty_key(-1);
+		nodes->resize(size);
 	}
 	NodeSlice getMapSlice() const
 	{
 		if (vectorMap == nullptr) return *this;
+		assert(nodes != nullptr);
 		assert(nodes->size() == activeVectorMapIndices.size());
 		NodeSlice result;
 		result.nodes = nodes;
@@ -175,17 +184,18 @@ public:
 	}
 	void createNodeMap()
 	{
-		assert(nodes->size() == 0);
 		assert(vectorMap != nullptr);
-		nodes->reserve(activeVectorMapIndices.size());
+		addEmptyNodeMap(activeVectorMapIndices.size());
 		for (auto index : activeVectorMapIndices)
 		{
-			if ((*vectorMap)[index].exists) (*nodes)[index] = (*vectorMap)[index];
+			assert((*vectorMap)[index].exists);
+			(*nodes)[index] = (*vectorMap)[index];
 		}
 	}
 	void removeVectorArray()
 	{
 		if (vectorMap == nullptr) return;
+		assert(nodes != nullptr);
 		assert(vectorMap != nullptr);
 		assert(nodes->size() == activeVectorMapIndices.size());
 		clearVectorMap();
@@ -203,6 +213,7 @@ public:
 	}
 	void addNodeToMap(size_t nodeIndex)
 	{
+		assert(nodes != nullptr);
 		assert(vectorMap == nullptr);
 		(*nodes)[nodeIndex] = {};
 	}
@@ -215,6 +226,7 @@ public:
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			auto found = nodes->find(nodeIndex);
 			assert(found != nodes->end());
 			return found->second;
@@ -229,6 +241,7 @@ public:
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			auto found = nodes->find(nodeIndex);
 			assert(found != nodes->end());
 			return found->second;
@@ -243,6 +256,7 @@ public:
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			auto found = nodes->find(nodeIndex);
 			if (found == nodes->end()) return false;
 			assert(found->second.exists);
@@ -288,10 +302,11 @@ public:
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceIterator { this, nodes->end(), 0 };
+			return NodeSliceIterator { this, emptyIterator, 0 };
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			return NodeSliceIterator { this, nodes->begin() };
 		}
 	}
@@ -299,10 +314,11 @@ public:
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceIterator { this, nodes->end(), activeVectorMapIndices.size() };
+			return NodeSliceIterator { this, emptyIterator, activeVectorMapIndices.size() };
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			return NodeSliceIterator { this, nodes->end() };
 		}
 	}
@@ -310,10 +326,11 @@ public:
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceConstIterator { this, nodes->end(), 0 };
+			return NodeSliceConstIterator { this, emptyIterator, 0 };
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			return NodeSliceConstIterator { this, nodes->begin() };
 		}
 	}
@@ -321,16 +338,19 @@ public:
 	{
 		if (vectorMap != nullptr)
 		{
-			return NodeSliceConstIterator { this, nodes->end(), activeVectorMapIndices.size() };
+			return NodeSliceConstIterator { this, emptyIterator, activeVectorMapIndices.size() };
 		}
 		else
 		{
+			assert(nodes != nullptr);
 			return NodeSliceConstIterator { this, nodes->end() };
 		}
 	}
 private:
+	static typename MapType::iterator emptyIterator;
 	void clearVectorMap()
 	{
+		assert(nodes != nullptr);
 		assert(vectorMap != nullptr);
 		for (auto index : activeVectorMapIndices)
 		{
@@ -344,5 +364,8 @@ private:
 	friend class NodeSliceIterator;
 	friend class NodeSliceConstIterator;
 };
+
+template <typename LengthType, typename ScoreType, typename Word>
+typename NodeSlice<LengthType, ScoreType, Word>::MapType::iterator NodeSlice<LengthType, ScoreType, Word>::emptyIterator = NodeSlice<LengthType, ScoreType, Word>::MapType{}.end();
 
 #endif

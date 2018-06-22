@@ -1207,6 +1207,7 @@ private:
 		result.j = -WordConfiguration<Word>::WordSize;
 		result.bandwidth = 1;
 		result.minScore = 0;
+		result.scores.addEmptyNodeMap(nodeIndices.size());
 		for (auto nodeIndex : nodeIndices)
 		{
 			result.scores.addNodeToMap(nodeIndex);
