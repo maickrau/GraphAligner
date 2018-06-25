@@ -48,29 +48,32 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth) :
+		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
 		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
 		previousBand()
 		{
-			evenNodesliceMap.resize(graph.NodeSize(), {});
-			oddNodesliceMap.resize(graph.NodeSize(), {});
+			if (!lowMemory)
+			{
+				evenNodesliceMap.resize(graph.NodeSize(), {});
+				oddNodesliceMap.resize(graph.NodeSize(), {});
+			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
-			calculableQueue.clear();
 			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
+			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
-		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> evenNodesliceMap;
-		std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem> oddNodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 	};
@@ -78,13 +81,14 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
-		sloppyOptimizations(sloppyOptimizations)
+		sloppyOptimizations(sloppyOptimizations),
+		lowMemory(lowMemory)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -93,6 +97,7 @@ public:
 		const size_t maxCellsPerSlice;
 		const bool quietMode;
 		const bool sloppyOptimizations;
+		const bool lowMemory;
 	};
 	class SeedHit
 	{

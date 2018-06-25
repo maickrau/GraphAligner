@@ -5,93 +5,104 @@
 #include <limits>
 #include <unordered_map>
 #include <vector>
+#include <type_traits>
 #include <sparsehash/dense_hash_map>
 #include "AlignmentGraph.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
 
+
 template <typename LengthType, typename ScoreType, typename Word>
+struct NodeSliceMapItemStruct
+{
+	static constexpr size_t NUM_CHUNKS = (AlignmentGraph::SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+	NodeSliceMapItemStruct() :
+	startSlice(),
+	endSlice(),
+	exists(false),
+	HP(),
+	HN(),
+	minScore(0)
+	{
+	}
+	WordSlice<LengthType, ScoreType, Word> startSlice;
+	WordSlice<LengthType, ScoreType, Word> endSlice;
+	bool exists;
+	Word HP[NUM_CHUNKS];
+	Word HN[NUM_CHUNKS];
+	ScoreType minScore;
+};
+
+template <typename LengthType, typename ScoreType, typename Word, bool UseVectorMap>
 class NodeSlice
 {
 public:
-	struct NodeSliceMapItem
-	{
-		static constexpr size_t NUM_CHUNKS = (AlignmentGraph::SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		NodeSliceMapItem() :
-		startSlice(),
-		endSlice(),
-		exists(false),
-		HP(),
-		HN(),
-		minScore(0)
-		{
-		}
-		WordSlice<LengthType, ScoreType, Word> startSlice;
-		WordSlice<LengthType, ScoreType, Word> endSlice;
-		bool exists;
-		Word HP[NUM_CHUNKS];
-		Word HN[NUM_CHUNKS];
-		ScoreType minScore;
-	};
+	using NodeSliceMapItem = NodeSliceMapItemStruct<LengthType, ScoreType, Word>;
 	using MapType = google::dense_hash_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, MapItem>>
 	{
 		using map_iterator = typename MapType::iterator;
 	public:
-		NodeSliceIterator(NodeSlice* slice, map_iterator pos) :
+		template <bool HasVectorMap = UseVectorMap>
+		NodeSliceIterator(NodeSlice* slice, typename std::enable_if<!HasVectorMap, map_iterator>::type pos) :
 		slice(slice),
-		mappos(pos),
-		indexPos(-1)
+		mappos(pos)
 		{
 		}
-		NodeSliceIterator(NodeSlice* slice, map_iterator pos, size_t indexPos) :
+		template <bool HasVectorMap = UseVectorMap>
+		NodeSliceIterator(NodeSlice* slice, typename std::enable_if<HasVectorMap, size_t>::type indexPos) :
 		slice(slice),
-		mappos(pos),
 		indexPos(indexPos)
 		{
 		}
-		std::pair<size_t, MapItem> operator*()
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, std::pair<size_t, MapItem>>::type operator*()
 		{
-			if (indexPos != -1)
-			{
-				auto nodeindex = slice->activeVectorMapIndices[indexPos];
-				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, info);
-			}
-			else
-			{
-				return std::make_pair(mappos->first, mappos->second);
-			}
+			auto nodeindex = slice->activeVectorMapIndices[indexPos];
+			auto info = (*(slice->vectorMap))[nodeindex];
+			return std::make_pair(nodeindex, info);
 		}
-		const std::pair<size_t, const MapItem> operator*() const
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, std::pair<size_t, MapItem>>::type operator*()
 		{
-			if (indexPos != -1)
-			{
-				auto nodeindex = slice->activeVectorMapIndices[indexPos];
-				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, info);
-			}
-			else
-			{
-				return std::make_pair(mappos->first, mappos->second);
-			}
+			return std::make_pair(mappos->first, mappos->second);
 		}
-		NodeSliceIterator& operator++()
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, std::pair<size_t, const MapItem>>::type operator*() const
 		{
-			if (indexPos != -1)
-			{
-				indexPos++;
-			}
-			else
-			{
-				++mappos;
-			}
+			auto nodeindex = slice->activeVectorMapIndices[indexPos];
+			auto info = (*(slice->vectorMap))[nodeindex];
+			return std::make_pair(nodeindex, info);
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, std::pair<size_t, const MapItem>>::type operator*() const
+		{
+			return std::make_pair(mappos->first, mappos->second);
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, NodeSliceIterator&>::type operator++()
+		{
+			indexPos++;
 			return *this;
 		}
-		bool operator==(const NodeSliceIterator& other) const
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, NodeSliceIterator&>::type operator++()
 		{
-			return slice == other.slice && mappos == other.mappos && indexPos == other.indexPos;
+			++mappos;
+			return *this;
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, bool>::type operator==(const NodeSliceIterator& other) const
+		{
+			assert(slice == other.slice);
+			return indexPos == other.indexPos;
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, bool>::type operator==(const NodeSliceIterator& other) const
+		{
+			assert(slice == other.slice);
+			return mappos == other.mappos;
 		}
 		bool operator!=(const NodeSliceIterator& other) const
 		{
@@ -106,46 +117,53 @@ public:
 	{
 		using map_iterator = typename MapType::const_iterator;
 	public:
-		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos) :
+		template <bool HasVectorMap = UseVectorMap>
+		NodeSliceConstIterator(const NodeSlice* slice, typename std::enable_if<!HasVectorMap, map_iterator>::type pos) :
 		slice(slice),
-		mappos(pos),
-		indexPos(-1)
+		mappos(pos)
 		{
 		}
-		NodeSliceConstIterator(const NodeSlice* slice, map_iterator pos, size_t indexPos) :
+		template <bool HasVectorMap = UseVectorMap>
+		NodeSliceConstIterator(const NodeSlice* slice, typename std::enable_if<HasVectorMap, size_t>::type indexPos) :
 		slice(slice),
-		mappos(pos),
 		indexPos(indexPos)
 		{
 		}
-		const std::pair<size_t, const MapItem> operator*() const
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, const std::pair<size_t, const MapItem>>::type operator*() const
 		{
-			if (indexPos != -1)
-			{
-				auto nodeindex = slice->activeVectorMapIndices[indexPos];
-				auto info = (*(slice->vectorMap))[nodeindex];
-				return std::make_pair(nodeindex, info);
-			}
-			else
-			{
-				return std::make_pair(mappos->first, mappos->second);
-			}
+			auto nodeindex = slice->activeVectorMapIndices[indexPos];
+			auto info = (*(slice->vectorMap))[nodeindex];
+			return std::make_pair(nodeindex, info);
 		}
-		NodeSliceConstIterator& operator++()
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, const std::pair<size_t, const MapItem>>::type operator*() const
 		{
-			if (indexPos != -1)
-			{
-				indexPos++;
-			}
-			else
-			{
-				++mappos;
-			}
+			return std::make_pair(mappos->first, mappos->second);
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, NodeSliceConstIterator&>::type operator++()
+		{
+			indexPos++;
 			return *this;
 		}
-		bool operator==(const NodeSliceConstIterator& other) const
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, NodeSliceConstIterator&>::type operator++()
 		{
-			return slice == other.slice && mappos == other.mappos && indexPos == other.indexPos;
+			++mappos;
+			return *this;
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<HasVectorMap, bool>::type operator==(const NodeSliceConstIterator& other) const
+		{
+			assert(slice == other.slice);
+			return indexPos == other.indexPos;
+		}
+		template <bool HasVectorMap = UseVectorMap>
+		typename std::enable_if<!HasVectorMap, bool>::type operator==(const NodeSliceConstIterator& other) const
+		{
+			assert(slice == other.slice);
+			return mappos == other.mappos;
 		}
 		bool operator!=(const NodeSliceConstIterator& other) const
 		{
@@ -161,7 +179,8 @@ public:
 	nodes(nullptr)
 	{
 	}
-	NodeSlice(std::vector<NodeSliceMapItem>* vectorMap) :
+	template <bool HasVectorMap = UseVectorMap>
+	NodeSlice(typename std::enable_if<HasVectorMap, std::vector<NodeSliceMapItem>*>::type vectorMap) :
 	vectorMap(vectorMap),
 	nodes(nullptr)
 	{
@@ -173,35 +192,29 @@ public:
 		nodes->set_empty_key(-1);
 		nodes->resize(size);
 	}
-	NodeSlice getMapSlice() const
-	{
-		if (vectorMap == nullptr) return *this;
-		assert(nodes != nullptr);
-		assert(nodes->size() == activeVectorMapIndices.size());
-		NodeSlice result;
-		result.nodes = nodes;
-		return result;
-	}
-	void createNodeMap()
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSlice<LengthType, ScoreType, Word, false>>::type getMapSlice() const
 	{
 		assert(vectorMap != nullptr);
-		addEmptyNodeMap(activeVectorMapIndices.size());
+		NodeSlice<LengthType, ScoreType, Word, false> result;
+		result.addEmptyNodeMap(activeVectorMapIndices.size());
 		for (auto index : activeVectorMapIndices)
 		{
 			assert((*vectorMap)[index].exists);
-			(*nodes)[index] = (*vectorMap)[index];
+			(*result.nodes)[index] = (*vectorMap)[index];
 		}
+		return result;
 	}
-	void removeVectorArray()
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap>::type removeVectorArray()
 	{
 		if (vectorMap == nullptr) return;
-		assert(nodes != nullptr);
 		assert(vectorMap != nullptr);
-		assert(nodes->size() == activeVectorMapIndices.size());
 		clearVectorMap();
 		vectorMap = nullptr;
 	}
-	void addNode(size_t nodeIndex)
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap>::type addNode(size_t nodeIndex)
 	{
 		assert(vectorMap != nullptr);
 		assert(nodeIndex < vectorMap->size());
@@ -211,59 +224,68 @@ public:
 		(*vectorMap)[nodeIndex].startSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
 		(*vectorMap)[nodeIndex].endSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
 	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap>::type addNode(size_t nodeIndex)
+	{
+		addNodeToMap(nodeIndex);
+	}
 	void addNodeToMap(size_t nodeIndex)
 	{
 		assert(nodes != nullptr);
 		assert(vectorMap == nullptr);
-		(*nodes)[nodeIndex] = {};
+		auto& node = (*nodes)[nodeIndex];
+		node.minScore = std::numeric_limits<ScoreType>::max();
+		node.startSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
+		node.endSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
 	}
-	NodeSliceMapItem& node(size_t nodeIndex)
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSliceMapItem&>::type node(size_t nodeIndex)
 	{
-		if (vectorMap != nullptr)
-		{
-			assert(nodeIndex < vectorMap->size());
-			return (*vectorMap)[nodeIndex];
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			auto found = nodes->find(nodeIndex);
-			assert(found != nodes->end());
-			return found->second;
-		}
+		assert(vectorMap != nullptr);
+		assert(nodeIndex < vectorMap->size());
+		return (*vectorMap)[nodeIndex];
 	}
-	const NodeSliceMapItem& node(size_t nodeIndex) const
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, NodeSliceMapItem&>::type node(size_t nodeIndex)
 	{
-		if (vectorMap != nullptr)
-		{
-			assert(nodeIndex < vectorMap->size());
-			return (*vectorMap)[nodeIndex];
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			auto found = nodes->find(nodeIndex);
-			assert(found != nodes->end());
-			return found->second;
-		}
+		assert(nodes != nullptr);
+		auto found = nodes->find(nodeIndex);
+		assert(found != nodes->end());
+		return found->second;
 	}
-	bool hasNode(size_t nodeIndex) const
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, const NodeSliceMapItem&>::type node(size_t nodeIndex) const
 	{
-		if (vectorMap != nullptr)
-		{
-			assert(nodeIndex < vectorMap->size());
-			return (*vectorMap)[nodeIndex].exists;
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			auto found = nodes->find(nodeIndex);
-			if (found == nodes->end()) return false;
-			assert(found->second.exists);
-			return true;
-		}
+		assert(vectorMap != nullptr);
+		assert(nodeIndex < vectorMap->size());
+		return (*vectorMap)[nodeIndex];
 	}
-	void removeNonExistant()
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, const NodeSliceMapItem&>::type node(size_t nodeIndex) const
+	{
+		assert(nodes != nullptr);
+		auto found = nodes->find(nodeIndex);
+		assert(found != nodes->end());
+		return found->second;
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, bool>::type hasNode(size_t nodeIndex) const
+	{
+		assert(vectorMap != nullptr);
+		assert(nodeIndex < vectorMap->size());
+		return (*vectorMap)[nodeIndex].exists;
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, bool>::type hasNode(size_t nodeIndex) const
+	{
+		assert(nodes != nullptr);
+		auto found = nodes->find(nodeIndex);
+		if (found == nodes->end()) return false;
+		assert(found->second.exists);
+		return true;
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap>::type removeNonExistant()
 	{
 		assert(vectorMap != nullptr);
 		std::vector<size_t> newActiveVectorMapIndices;
@@ -273,6 +295,24 @@ public:
 			if ((*vectorMap)[index].exists) newActiveVectorMapIndices.push_back(index);
 		}
 		activeVectorMapIndices = newActiveVectorMapIndices;
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap>::type removeNonExistant()
+	{
+		assert(nodes != nullptr);
+		std::vector<std::pair<size_t, MapItem>> newActiveMapItems;
+		newActiveMapItems.reserve(activeVectorMapIndices.size());
+		for (auto item : (*nodes))
+		{
+			if (item.second.exists) newActiveMapItems.push_back(item);
+		}
+		nodes = std::make_shared<MapType>();
+		nodes->set_empty_key(-1);
+		nodes->resize(newActiveMapItems.size());
+		for (auto item : newActiveMapItems)
+		{
+			(*nodes)[item.first] = item.second;
+		}
 	}
 	int minScore(size_t nodeIndex) const
 	{
@@ -287,70 +327,74 @@ public:
 	{
 		node(nodeIndex).minScore = score;
 	}
-	size_t size() const
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, size_t>::type size() const
 	{
-		if (vectorMap != nullptr)
-		{
-			return activeVectorMapIndices.size();
-		}
-		else
-		{
-			return nodes->size();
-		}
+		assert(vectorMap != nullptr);
+		return activeVectorMapIndices.size();
 	}
-	NodeSliceIterator begin()
-	{
-		if (vectorMap != nullptr)
-		{
-			return NodeSliceIterator { this, emptyIterator, 0 };
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			return NodeSliceIterator { this, nodes->begin() };
-		}
-	}
-	NodeSliceIterator end()
-	{
-		if (vectorMap != nullptr)
-		{
-			return NodeSliceIterator { this, emptyIterator, activeVectorMapIndices.size() };
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			return NodeSliceIterator { this, nodes->end() };
-		}
-	}
-	NodeSliceConstIterator begin() const
-	{
-		if (vectorMap != nullptr)
-		{
-			return NodeSliceConstIterator { this, emptyIterator, 0 };
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			return NodeSliceConstIterator { this, nodes->begin() };
-		}
-	}
-	NodeSliceConstIterator end() const
-	{
-		if (vectorMap != nullptr)
-		{
-			return NodeSliceConstIterator { this, emptyIterator, activeVectorMapIndices.size() };
-		}
-		else
-		{
-			assert(nodes != nullptr);
-			return NodeSliceConstIterator { this, nodes->end() };
-		}
-	}
-private:
-	static typename MapType::iterator emptyIterator;
-	void clearVectorMap()
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, size_t>::type size() const
 	{
 		assert(nodes != nullptr);
+		return nodes->size();
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSliceIterator>::type begin()
+	{
+		assert(vectorMap != nullptr);
+		return NodeSliceIterator { this, 0 };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, NodeSliceIterator>::type begin()
+	{
+		assert(nodes != nullptr);
+		return NodeSliceIterator { this, nodes->begin() };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSliceIterator>::type end()
+	{
+		assert(vectorMap != nullptr);
+		return NodeSliceIterator { this, activeVectorMapIndices.size() };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, NodeSliceIterator>::type end()
+	{
+		assert(nodes != nullptr);
+		return NodeSliceIterator { this, nodes->end() };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSliceConstIterator>::type begin() const
+	{
+		assert(vectorMap != nullptr);
+		return NodeSliceConstIterator { this, 0 };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, NodeSliceConstIterator>::type begin() const
+	{
+		assert(nodes != nullptr);
+		return NodeSliceConstIterator { this, nodes->begin() };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap, NodeSliceConstIterator>::type end() const
+	{
+		assert(vectorMap != nullptr);
+		return NodeSliceConstIterator { this, activeVectorMapIndices.size() };
+	}
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<!HasVectorMap, NodeSliceConstIterator>::type end() const
+	{
+		assert(nodes != nullptr);
+		return NodeSliceConstIterator { this, nodes->end() };
+	}
+	bool hasVectorMapCurrently() const
+	{
+		return vectorMap != nullptr;
+	}
+private:
+	template <bool HasVectorMap = UseVectorMap>
+	typename std::enable_if<HasVectorMap>::type clearVectorMap()
+	{
 		assert(vectorMap != nullptr);
 		for (auto index : activeVectorMapIndices)
 		{
@@ -363,9 +407,7 @@ private:
 	std::shared_ptr<MapType> nodes;
 	friend class NodeSliceIterator;
 	friend class NodeSliceConstIterator;
+	friend class NodeSlice<LengthType, ScoreType, Word, true>;
 };
-
-template <typename LengthType, typename ScoreType, typename Word>
-typename NodeSlice<LengthType, ScoreType, Word>::MapType::iterator NodeSlice<LengthType, ScoreType, Word>::emptyIterator = NodeSlice<LengthType, ScoreType, Word>::MapType{}.end();
 
 #endif

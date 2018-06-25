@@ -38,9 +38,10 @@ int main(int argc, char** argv)
 	bool initialFullBand = false;
 	params.quietMode = false;
 	params.sloppyOptimizations = false;
+	params.lowMemory = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:qu")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:qul")) != -1)
 	{
 		switch(c)
 		{
@@ -79,6 +80,9 @@ int main(int argc, char** argv)
 				break;
 			case 'u':
 				params.sloppyOptimizations = true;
+				break;
+			case 'l':
+				params.lowMemory = true;
 				break;
 		}
 	}

@@ -44,6 +44,7 @@ private:
 		minScore(std::numeric_limits<ScoreType>::min()),
 		minScoreNode(-1),
 		minScoreNodeOffset(-1),
+		scoresVectorMap(),
 		scores(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
@@ -54,11 +55,12 @@ private:
 		,numCells(0)
 #endif
 		{}
-		DPSlice(std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem>* vectorMap) :
+		DPSlice(std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>* vectorMap) :
 		minScore(std::numeric_limits<ScoreType>::min()),
 		minScoreNode(-1),
 		minScoreNodeOffset(-1),
-		scores(vectorMap),
+		scoresVectorMap(vectorMap),
+		scores(),
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
@@ -71,7 +73,8 @@ private:
 		ScoreType minScore;
 		LengthType minScoreNode;
 		LengthType minScoreNodeOffset;
-		NodeSlice<LengthType, ScoreType, Word> scores;
+		NodeSlice<LengthType, ScoreType, Word, true> scoresVectorMap;
+		NodeSlice<LengthType, ScoreType, Word, false> scores;
 		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
 		size_t cellsProcessed;
@@ -86,7 +89,8 @@ private:
 			result.minScore = minScore;
 			result.minScoreNode = minScoreNode;
 			result.minScoreNodeOffset = minScoreNodeOffset;
-			result.scores = scores.getMapSlice();
+			assert(scores.size() != 0);
+			result.scores = scores;
 			result.correctness = correctness;
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
@@ -166,7 +170,7 @@ private:
 				currentNode = newNode;
 				assert(slice.slices[currentSlice].scores.hasNode(currentNode));
 				assert(currentSlice > 0);
-				typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem previous;
+				typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem previous;
 				if (slice.slices[currentSlice-1].scores.hasNode(currentNode))
 				{
 					previous = slice.slices[currentSlice-1].scores.node(currentNode);
@@ -280,7 +284,7 @@ private:
 		return MatrixPosition { pos.node, hori, vert + verticalOffset };
 	}
 
-	std::pair<MatrixPosition, MatrixPosition> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word>& current, const NodeSlice<LengthType, ScoreType, Word>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
+	std::pair<MatrixPosition, MatrixPosition> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
 	{
 		assert(current.hasNode(node));
 		auto startSlice = current.node(node).startSlice;
@@ -316,7 +320,7 @@ private:
 		return std::make_pair(MatrixPosition {0, 0, 0}, MatrixPosition {0, 0, 0});
 	}
 
-	std::pair<MatrixPosition, MatrixPosition> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word>& current, const NodeSlice<LengthType, ScoreType, Word>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
+	std::pair<MatrixPosition, MatrixPosition> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
 	{
 		assert(pos.nodeOffset > 0);
 		assert(pos.nodeOffset < nodeScores.size());
@@ -348,7 +352,7 @@ private:
 		return std::make_pair(pos, MatrixPosition{pos.node, pos.nodeOffset, pos.seqPos-1});
 	}
 
-	MatrixPosition pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word>& current, const NodeSlice<LengthType, ScoreType, Word>& previous, LengthType node, size_t j, const std::string& sequence) const
+	MatrixPosition pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
@@ -421,7 +425,7 @@ private:
 		}
 	}
 
-	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem& previousSlice, LengthType j, const std::string& sequence) const
+	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string& sequence) const
 	{
 		EqVector EqV = BV::getEqVector(sequence, j);
 		std::vector<WordSlice> result;
@@ -510,7 +514,7 @@ private:
 		return result;
 	}
 
-	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst, const std::vector<bool>& previousBand) const
+	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst, const std::vector<bool>& previousBand) const
 	{
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
@@ -772,7 +776,8 @@ private:
 		}
 	}
 
-	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word>& currentSlice, const NodeSlice<LengthType, ScoreType, Word>& previousSlice, const std::string& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore) const
+	template <bool HasVectorMap>
+	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& previousSlice, const std::string& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore) const
 	{
 		for (auto pair : currentSlice)
 		{
@@ -870,7 +875,8 @@ private:
 	}
 #endif
 
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word>& currentSlice, const NodeSlice<LengthType, ScoreType, Word>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
+	template <bool HasVectorMap, bool PreviousHasVectorMap>
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		LengthType currentMinimumNode = -1;
@@ -931,7 +937,8 @@ private:
 			calculableQueue.pop();
 			auto& thisNode = currentSlice.node(i);
 			auto oldEnd = thisNode.endSlice;
-			typename NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem previousThisNode;
+			if (!thisNode.exists) oldEnd = { 0, 0, std::numeric_limits<ScoreType>::max() };
+			typename NodeSlice<LengthType, ScoreType, Word, HasVectorMap>::NodeSliceMapItem previousThisNode;
 
 			if (previousBand[i])
 			{
@@ -981,7 +988,7 @@ private:
 		}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-		checkNodeBoundaryCorrectness(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore);
+		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore);
 #endif
 
 		assert(currentMinimumNode != -1);
@@ -996,7 +1003,7 @@ private:
 
 		if (j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
-			flattenLastSliceEnd(currentSlice, result, j, sequence.size());
+			flattenLastSliceEnd<HasVectorMap>(currentSlice, result, j, sequence.size());
 		}
 
 		finalizeSlice(currentSlice, currentBand, currentMinScoreAtEndRow + bandwidth);
@@ -1006,7 +1013,8 @@ private:
 		return result;
 	}
 
-	void finalizeSlice(NodeSlice<LengthType, ScoreType, Word>& slice, std::vector<bool>& currentBand, ScoreType maxScore) const
+	template <bool HasVectorMap>
+	void finalizeSlice(NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, std::vector<bool>& currentBand, ScoreType maxScore) const
 	{
 		for (auto node : slice)
 		{
@@ -1019,7 +1027,8 @@ private:
 		slice.removeNonExistant();
 	}
 
-	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word>& slice, NodeCalculationResult& sliceCalc, LengthType j, size_t sequenceSize) const
+	template <bool HasVectorMap>
+	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, NodeCalculationResult& sliceCalc, LengthType j, size_t sequenceSize) const
 	{
 		//todo fix
 		// assert(j < sequenceSize);
@@ -1043,7 +1052,24 @@ private:
 
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
-		auto sliceResult = calculateSlice(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+		NodeCalculationResult sliceResult;
+		if (slice.scoresVectorMap.hasVectorMapCurrently())
+		{
+			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
+			{
+				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+			}
+			else
+			{
+				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+			}
+			slice.scores = slice.scoresVectorMap.getMapSlice();
+		}
+		else
+		{
+			assert(!previousSlice.scoresVectorMap.hasVectorMapCurrently());
+			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+		}
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
 		slice.minScoreNodeOffset = sliceResult.minScoreNodeOffset;
@@ -1063,17 +1089,25 @@ private:
 #endif
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
-		DPSlice bandTest { &nodesliceMap };
-		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
-		bandTest.correctness = previous.correctness;
-
-		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
-
-		bandTest.scores.createNodeMap();
-
-		return bandTest;
+		if (!params.lowMemory)
+		{
+			DPSlice bandTest { &nodesliceMap };
+			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
+			bandTest.correctness = previous.correctness;
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
+			return bandTest;
+		}
+		else
+		{
+			DPSlice bandTest;
+			bandTest.scores.addEmptyNodeMap(previous.scores.size());
+			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
+			bandTest.correctness = previous.correctness;
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
+			return bandTest;
+		}
 	}
 
 	void removeWronglyAlignedEnd(DPTable& table) const
@@ -1158,8 +1192,8 @@ private:
 					assert(reusableState.currentBand[node.first]);
 					reusableState.currentBand[node.first] = false;
 				}
-				lastSlice.scores.removeVectorArray();
-				newSlice.scores.removeVectorArray();
+				lastSlice.scoresVectorMap.removeVectorArray();
+				newSlice.scoresVectorMap.removeVectorArray();
 				break;
 			}
 
@@ -1178,8 +1212,8 @@ private:
 					assert(reusableState.currentBand[node.first]);
 					reusableState.currentBand[node.first] = false;
 				}
-				lastSlice.scores.removeVectorArray();
-				newSlice.scores.removeVectorArray();
+				lastSlice.scoresVectorMap.removeVectorArray();
+				newSlice.scoresVectorMap.removeVectorArray();
 				break;
 			}
 			if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && params.rampBandwidth > params.initialBandwidth)
@@ -1194,8 +1228,8 @@ private:
 					assert(reusableState.previousBand[node.first]);
 					reusableState.previousBand[node.first] = false;
 				}
-				lastSlice.scores.removeVectorArray();
-				newSlice.scores.removeVectorArray();
+				lastSlice.scoresVectorMap.removeVectorArray();
+				newSlice.scoresVectorMap.removeVectorArray();
 				rampUntil = slice;
 				std::swap(slice, rampRedoIndex);
 				std::swap(lastSlice, rampSlice);
@@ -1244,10 +1278,10 @@ private:
 			{
 				std::swap(reusableState.previousBand, reusableState.currentBand);
 			}
-			lastSlice.scores.removeVectorArray();
+			lastSlice.scoresVectorMap.removeVectorArray();
 			lastSlice = std::move(newSlice);
 		}
-		lastSlice.scores.removeVectorArray();
+		lastSlice.scoresVectorMap.removeVectorArray();
 
 		assert(result.slices.size() <= numSlices + 1);
 

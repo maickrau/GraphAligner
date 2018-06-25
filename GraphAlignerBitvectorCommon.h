@@ -23,7 +23,7 @@ private:
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
 public:
-	using WordSlice = decltype(NodeSlice<LengthType, ScoreType, Word>::NodeSliceMapItem::startSlice);
+	using WordSlice = decltype(NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem::startSlice);
 
 	class EqVector
 	{
