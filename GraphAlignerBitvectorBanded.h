@@ -205,6 +205,28 @@ private:
 			if (result.trace.back().nodeOffset == 0)
 			{
 				assert(result.trace.back().seqPos % WordConfiguration<Word>::WordSize != 0);
+				if (slice.slices[currentSlice].j == 0)
+				{
+					assert(currentSlice == 1);
+					bool hasNeighbor = false;
+					for (auto neighbor : params.graph.inNeighbors[currentNode])
+					{
+						if (slice.slices[currentSlice].scores.hasNode(neighbor))
+						{
+							hasNeighbor = true;
+							break;
+						}
+						assert(!slice.slices[currentSlice-1].scores.hasNode(neighbor));
+					}
+					if (!hasNeighbor)
+					{
+						for (size_t i = result.trace.back().seqPos-1; i > 0; i--)
+						{
+							result.trace.emplace_back(result.trace.back().node, 0, i);
+						}
+						continue;
+					}
+				}
 				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back(), sequence);
 				if (crossing.first != result.trace.back()) result.trace.push_back(crossing.first);
 				assert(crossing.second != result.trace.back());
@@ -330,6 +352,10 @@ private:
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
+		if (j == 0)
+		{
+			return MatrixPosition {node, 0, j-1};
+		}
 		if (previous.hasNode(node))
 		{
 			assert(previous.node(node).startSlice.scoreEnd >= scoreHere-1);
