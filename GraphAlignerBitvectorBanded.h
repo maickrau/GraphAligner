@@ -122,7 +122,7 @@ public:
 		auto initialBandwidth = getInitialSliceOneNodeGroup(nodes);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, reusableState);
 		removeWronglyAlignedEnd(slice);
-		if (slice.slices.size() == 0)
+		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
@@ -146,6 +146,7 @@ private:
 	{
 		assert(slice.slices.size() > 0);
 		assert(slice.slices.back().minScoreNode != -1);
+		assert(slice.slices.back().minScoreNodeOffset != -1);
 		OnewayTrace result;
 		result.score = slice.slices.back().minScore;
 		result.trace.emplace_back(slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1));
@@ -711,17 +712,17 @@ private:
 #endif
 				assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore);
 				ws = newWs;
+				if (ws.scoreEnd < result.minScore)
+				{
+					result.minScore = ws.scoreEnd;
+					result.minScoreNodeOffset = pos;
+				}
 				charChunk >>= 2;
 				HP >>= 1;
 				HN >>= 1;
 				pos++;
 				slice.HP[bigChunk] |= hinP << (offset + bigChunkOffset);
 				slice.HN[bigChunk] |= hinN << (offset + bigChunkOffset);
-				if (ws.scoreEnd < result.minScore)
-				{
-					result.minScore = ws.scoreEnd;
-					result.minScoreNodeOffset = pos;
-				}
 			}
 			offset = 0;
 		}
@@ -1061,6 +1062,11 @@ private:
 #ifdef SLICEVERBOSE
 			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " nodes " << newSlice.scores.size() << " slices " << newSlice.numCells << " nodesprocessed " << newSlice.nodesProcessed << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
 #endif
+			assert(newSlice.minScore != -1);
+			assert(newSlice.minScoreNode != -1);
+			assert(newSlice.minScoreNodeOffset != -1);
+			assert(newSlice.scores.hasNode(newSlice.minScoreNode));
+			assert(newSlice.minScoreNodeOffset < params.graph.NodeLength(newSlice.minScoreNode));
 
 			if ((rampUntil == slice-1 || (rampUntil < slice && newSlice.correctness.CurrentlyCorrect() && newSlice.correctness.FalseFromCorrect())))
 			{

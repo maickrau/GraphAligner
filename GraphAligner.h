@@ -117,7 +117,6 @@ private:
 			assert(sequence.size() >= seedHit.seqPos + params.graph.DBGOverlap);
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + params.graph.DBGOverlap));
 			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reusableState);
-			result.backward.trace = reverseTrace(result.backward.trace, seedHit.seqPos - 1);
 		}
 		if (seedHit.seqPos < sequence.size() - 1)
 		{
@@ -131,18 +130,13 @@ private:
 		return result;
 	}
 
-	std::vector<MatrixPosition> reverseTrace(std::vector<MatrixPosition> trace, LengthType end) const
+	void fixReverseTraceSeqPosAndOrder(std::vector<MatrixPosition>& trace, LengthType end) const
 	{
-		if (trace.size() == 0) return trace;
 		std::reverse(trace.begin(), trace.end());
 		for (size_t i = 0; i < trace.size(); i++)
 		{
-			trace[i].node = params.graph.GetReverseNode(trace[i].node);
-			trace[i].nodeOffset = AlignmentGraph::SPLIT_NODE_SIZE - trace[i].nodeOffset - 1;
-			assert(trace[i].seqPos <= end);
 			trace[i].seqPos = end - trace[i].seqPos;
 		}
-		return trace;
 	}
 
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -156,6 +150,8 @@ private:
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);
 		if (trace.backward.trace.size() > 0) verifyTrace(trace.backward.trace, sequence, trace.backward.score);
 #endif
+		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos - 1);
+
 
 		//failed alignment, don't output
 		if (trace.forward.failed() && trace.backward.failed())
@@ -165,8 +161,8 @@ private:
 
 		// auto traceVector = getTraceInfo(sequence, trace.backward.trace, trace.forward.trace);
 
-		auto fwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.forward.score, trace.forward.trace, 0);
-		auto bwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.backward.score, trace.backward.trace, 0);
+		auto fwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.forward.score, trace.forward.trace, 0, false);
+		auto bwresult = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.backward.score, trace.backward.trace, 0, true);
 		//failed alignment, don't output
 		if (fwresult.alignmentFailed() && bwresult.alignmentFailed())
 		{
@@ -229,21 +225,19 @@ private:
 		{
 			auto newpos = trace[i];
 			auto oldpos = trace[i-1];
-			auto oldSlice = oldpos.seqPos / WordConfiguration<Word>::WordSize;
-			auto newSlice = newpos.seqPos / WordConfiguration<Word>::WordSize;
 			auto oldNodeIndex = oldpos.node;
 			auto newNodeIndex = newpos.node;
-			if (oldSlice == newSlice && oldNodeIndex == newNodeIndex) continue;
-			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
 			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);
-			if (oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1)
+			if (oldNodeIndex == newNodeIndex)
 			{
-				assert((newpos.node == oldpos.node && newpos.nodeOffset == oldpos.nodeOffset) || newpos.nodeOffset == 0);
+				assert((newpos.nodeOffset >= oldpos.nodeOffset && newpos.seqPos >= oldpos.seqPos) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
+				continue;
 			}
-			else
-			{
-				assert((newpos.node == oldpos.node && newpos.nodeOffset == oldpos.nodeOffset) || (newpos.node == oldpos.node && newpos.nodeOffset == oldpos.nodeOffset + 1));
-			}
+			assert(oldNodeIndex != newNodeIndex);
+			assert(std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end());
+			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
+			assert(oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1);
+			assert(newpos.nodeOffset == 0);
 		}
 	}
 #endif
