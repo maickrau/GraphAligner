@@ -784,20 +784,60 @@ private:
 					assert(pair.second.startSlice.getValue(0) == foundMinScore);
 				}
 			}
-			for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
+			bool checkNormal = true;
+			if (j == 0)
 			{
-				eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
-				ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
-				for (auto neighbor : params.graph.inNeighbors[node])
+				if (previousSlice.hasNode(node))
 				{
-					if (!currentSlice.hasNode(neighbor)) continue;
-					if (!currentSlice.node(neighbor).exists) continue;
-					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i)+1);
-					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i-1) + (eq ? 0 : 1));
+					bool hasNeighbor = false;
+					for (auto neighbor : params.graph.inNeighbors[node])
+					{
+						if (currentSlice.hasNode(neighbor))
+						{
+							hasNeighbor = true;
+							break;
+						}
+						if (previousSlice.hasNode(neighbor))
+						{
+							assert(currentSlice.hasNode(neighbor));
+						}
+					}
+					if (!hasNeighbor)
+					{
+						checkNormal = false;
+					}
 				}
-				if (pair.second.startSlice.getValue(i) <= maxScore || foundMinScore <= maxScore)
+			}
+			if (!checkNormal)
+			{
+				assert(j == 0);
+				bool hasMatch = Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0));
+				for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
 				{
-					assert(pair.second.startSlice.getValue(i) == foundMinScore);
+					if (Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0)))
+					{
+						hasMatch = true;
+					}
+					assert(pair.second.startSlice.getValue(i) == i + (hasMatch ? 0 : 1));
+				}
+			}
+			else
+			{
+				for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
+				{
+					eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
+					ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
+					for (auto neighbor : params.graph.inNeighbors[node])
+					{
+						if (!currentSlice.hasNode(neighbor)) continue;
+						if (!currentSlice.node(neighbor).exists) continue;
+						foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i)+1);
+						foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i-1) + (eq ? 0 : 1));
+					}
+					if (pair.second.startSlice.getValue(i) <= maxScore || foundMinScore <= maxScore)
+					{
+						assert(pair.second.startSlice.getValue(i) == foundMinScore);
+					}
 				}
 			}
 		}
