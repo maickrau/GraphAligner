@@ -46,10 +46,9 @@ vg::Alignment createAlignment(const std::string& readname, const MummerSeed& see
 int getNodeId(size_t pos, const std::vector<size_t>& nodeMappingPositions)
 {
 	auto iter = std::upper_bound(nodeMappingPositions.begin(), nodeMappingPositions.end(), pos);
-	assert(iter != nodeMappingPositions.end());
 	int index = iter - nodeMappingPositions.begin();
-	assert(index >= 0);
-	assert(index < nodeMappingPositions.size());
+	assert(index > 0);
+	assert(index <= nodeMappingPositions.size());
 	return index;
 }
 
