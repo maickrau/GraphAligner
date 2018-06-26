@@ -388,6 +388,10 @@ private:
 				Word leastSignificant = onebigger & ~(onebigger - 1);
 				onebigger ^= (~twobigger & leastSignificant);
 				twobigger &= ~leastSignificant;
+				if (onebigger == 0)
+				{
+					return std::make_pair(WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros);
+				}
 			}
 			Word leastSignificant = onebigger & ~(onebigger - 1);
 			leftSmaller |= leastSignificant - 1;
@@ -402,6 +406,10 @@ private:
 				Word leastSignificant = onesmaller & ~(onesmaller - 1);
 				onesmaller ^= (~twosmaller & leastSignificant);
 				twosmaller &= ~leastSignificant;
+				if (onesmaller == 0)
+				{
+					return std::make_pair(WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllOnes);
+				}
 			}
 			Word leastSignificant = onesmaller & ~(onesmaller - 1);
 			rightSmaller |= leastSignificant - 1;
