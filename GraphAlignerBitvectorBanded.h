@@ -224,7 +224,7 @@ private:
 					}
 					if (!hasNeighbor)
 					{
-						for (size_t i = result.trace.back().seqPos-1; i > 0; i--)
+						for (int i = result.trace.back().seqPos-1; i >= 0; i--)
 						{
 							result.trace.emplace_back(result.trace.back().node, 0, i);
 						}
