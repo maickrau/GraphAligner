@@ -163,6 +163,9 @@ public:
 	Word VN;
 	ScoreType scoreEnd;
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	WordSlice mergeWith(const WordSlice& other) const
 	{
 		auto result = mergeTwoSlices(*this, other);
@@ -191,6 +194,9 @@ public:
 		return scoreEnd - WordConfiguration<Word>::popcount(VP) + WordConfiguration<Word>::popcount(VN);
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	ScoreType changedMinScore(WordSlice other) const
 	{
 		auto result = changedMinScoreLocalMinima(other);
@@ -247,6 +253,9 @@ private:
 		return result;
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	ScoreType changedMinScoreLocalMinima(WordSlice oldSlice) const
 	{
 		ScoreType scoreBeforeStart = getScoreBeforeStart();
@@ -308,6 +317,9 @@ private:
 		return result;
 	}
 
+#ifndef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right)
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
@@ -319,6 +331,9 @@ private:
 		return mergeTwoSlices(left, right, masks.first, masks.second);
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right, Word leftSmaller, Word rightSmaller)
 	{
 		assert(left.getScoreBeforeStart() <= right.getScoreBeforeStart());
@@ -346,6 +361,9 @@ private:
 		return result;
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
 		auto result = differenceMasksBitTwiddle(leftVP, leftVN, rightVP, rightVN, scoreDifference);
@@ -362,6 +380,9 @@ private:
 		return std::min(high, std::max(low, val));
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	__attribute__((optimize("unroll-loops")))
 	static std::pair<Word, Word> differenceMasksBitTwiddle(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
 	{

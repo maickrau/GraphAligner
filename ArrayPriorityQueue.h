@@ -15,6 +15,9 @@ public:
 	{
 		queues.resize(maxPriority);
 	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	T& top()
 	{
 		assert(activeQueues.size() > 0);
@@ -22,6 +25,9 @@ public:
 		assert(queues[queue].size() > 0);
 		return queues[queue].back();
 	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	void pop()
 	{
 		size_t queue = activeQueues.top();
@@ -30,10 +36,16 @@ public:
 		if (queues[queue].size() == 0) activeQueues.pop();
 		numItems--;
 	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	size_t size() const
 	{
 		return numItems;
 	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	void insert(size_t priority, const T& item)
 	{
 		assert(priority < queues.size());

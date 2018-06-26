@@ -192,6 +192,9 @@ void AlignmentGraph::Finalize(int wordSize)
 // 	return positions.back();
 // }
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 size_t AlignmentGraph::NodeLength(size_t index) const
 {
 	return nodeLength[index];
@@ -206,6 +209,9 @@ char AlignmentGraph::NodeSequences(size_t node, size_t pos) const
 	return "ACGT"[(nodeSequences[node][chunk] >> offset) & 3];
 }
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 AlignmentGraph::NodeChunkSequence AlignmentGraph::NodeChunks(size_t index) const
 {
 	assert(index < nodeSequences.size());

@@ -514,6 +514,9 @@ private:
 		return result;
 	}
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst, const std::vector<bool>& previousBand) const
 	{
 		NodeCalculationResult result;

@@ -67,6 +67,9 @@ public:
 
 	GraphAlignerBitvectorCommon() = delete;
 
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static std::tuple<WordSlice, Word, Word> getNextSlice(Word Eq, WordSlice slice, Word hinP, Word hinN)
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf

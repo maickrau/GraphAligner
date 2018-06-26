@@ -139,6 +139,9 @@ public:
 		OnewayTrace forward;
 		OnewayTrace backward;
 	};
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
 		assert(graphCharacter == 'A' || graphCharacter == 'T' || graphCharacter == 'C' || graphCharacter == 'G');
