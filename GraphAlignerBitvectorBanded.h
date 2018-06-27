@@ -1009,6 +1009,10 @@ private:
 			flattenLastSliceEnd<HasVectorMap>(currentSlice, result, j, sequence.size());
 		}
 
+#ifdef SLICEVERBOSE
+		std::cerr << "prefilternodes " << currentSlice.size() << " ";
+#endif
+
 		finalizeSlice(currentSlice, currentBand, currentMinScoreAtEndRow + bandwidth);
 
 		calculableQueue.clear();
