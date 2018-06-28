@@ -190,7 +190,6 @@ private:
 			assert(nodeSlices.size() == params.graph.NodeLength(currentNode));
 			assert(result.trace.back().seqPos >= slice.slices[currentSlice].j);
 			assert(result.trace.back().seqPos < slice.slices[currentSlice].j + WordConfiguration<Word>::WordSize);
-			assert(nodeSlices[result.trace.back().nodeOffset].getValue(result.trace.back().seqPos - slice.slices[currentSlice].j) <= slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth);
 			if (result.trace.back().seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().nodeOffset == 0)
 			{
 				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence));

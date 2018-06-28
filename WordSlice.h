@@ -145,6 +145,10 @@ public:
 	}
 };
 
+
+constexpr uint64_t WordConfiguration<uint64_t>::AllZeros;
+constexpr uint64_t WordConfiguration<uint64_t>::AllOnes;
+
 template <typename LengthType, typename ScoreType, typename Word>
 class WordSlice
 {
