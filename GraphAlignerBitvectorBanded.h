@@ -522,8 +522,12 @@ private:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, WordSlice ws, bool skipFirst, const std::vector<bool>& previousBand) const
+	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand) const
 	{
+		assert(incoming.size() > 0);
+		WordSlice newWs;
+		WordSlice ws;
+		bool hasWs = false;
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreNode = -1;
@@ -533,19 +537,30 @@ private:
 		AlignmentGraph::NodeChunkSequence nodeChunks = params.graph.NodeChunks(i);
 
 		Word Eq = EqV.getEqI(nodeChunks[0] & 3);
+		bool hasSkipless = false;
 
-		Word hinP;
-		Word hinN;
-		if (skipFirst)
+		for (auto inc : incoming)
 		{
-			hinP = 0;
-			hinN = 0;
-		}
-		else
-		{
+			result.cellsProcessed++;
+			if (inc.skipFirst)
+			{
+				if (!hasWs)
+				{
+					ws = inc.incoming;
+					hasWs = true;
+				}
+				else
+				{
+					ws = ws.mergeWith(inc.incoming);
+				}
+				continue;
+			}
+			hasSkipless = true;
+			Word hinP;
+			Word hinN;
 			if (previousSlice.exists)
 			{
-				ScoreType incomingScoreBeforeStart = ws.getScoreBeforeStart();
+				ScoreType incomingScoreBeforeStart = inc.incoming.getScoreBeforeStart();
 				if (previousSlice.startSlice.scoreEnd < incomingScoreBeforeStart)
 				{
 					hinP = 0;
@@ -569,23 +584,33 @@ private:
 			}
 
 			WordSlice newWs;
-			std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, hinP, hinN);
+			std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, inc.incoming, hinP, hinN);
 			if (!previousSlice.exists || newWs.getScoreBeforeStart() < previousSlice.startSlice.scoreEnd)
 			{
 				newWs.VP &= WordConfiguration<Word>::AllOnes ^ 1;
 				newWs.VN |= 1;
 			}
 			assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore);
-			ws = newWs;
+			if (!hasWs)
+			{
+				ws = newWs;
+				hasWs = true;
+			}
+			else
+			{
+				ws = ws.mergeWith(newWs);
+			}
 		}
-		result.cellsProcessed++;
+
+		assert(hasWs);
+
 		result.minScore = ws.scoreEnd;
 		result.minScoreNode = i;
 		result.minScoreNodeOffset = 0;
 
 		if (slice.exists)
 		{
-			if (!skipFirst && params.graph.inNeighbors[i].size() == 1 && previousBand[params.graph.inNeighbors[i][0]])
+			if (hasSkipless && params.graph.inNeighbors[i].size() == 1 && previousBand[params.graph.inNeighbors[i][0]])
 			{
 				if (ws.scoreEnd > slice.startSlice.scoreEnd)
 				{
@@ -657,7 +682,7 @@ private:
 				ws = test;
 			}
 		}
-		else if (!skipFirst && previousSlice.exists)
+		else if (hasSkipless && previousSlice.exists)
 		{
 			if (ws.getValue(0) > previousSlice.startSlice.scoreEnd + 1)
 			{
@@ -717,8 +742,8 @@ private:
 		}
 		slice.startSlice = ws;
 		slice.exists = true;
-		WordSlice newWs;
 		Word forceEq = WordConfiguration<Word>::AllOnes;
+		Word hinP, hinN;
 		if (!previousSlice.exists) forceEq ^= 1;
 		size_t smallChunk = 0;
 		size_t offset = 1;
@@ -932,9 +957,12 @@ private:
 		{
 			auto pair = calculableQueue.top();
 			if (pair.priority > currentMinScoreAtEndRow + bandwidth) break;
+			if (calculableQueue.extraSize(pair.target) == 0)
+			{
+				calculableQueue.pop();
+				continue;
+			}
 			auto i = pair.target;
-			WordSlice incoming = pair.incoming;
-			bool skipFirst = pair.skipFirst;
 			if (!currentBand[i])
 			{
 				assert(!currentSlice.hasNode(i));
@@ -962,7 +990,8 @@ private:
 				}
 				previousThisNode.exists = false;
 			}
-			auto nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, incoming, skipFirst, previousBand);
+			auto nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, calculableQueue.getExtras(i), previousBand);
+			calculableQueue.removeExtras(i);
 			assert(nodeCalc.minScore <= previousQuitScore + 2 * WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);

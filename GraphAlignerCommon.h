@@ -49,7 +49,7 @@ public:
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
-		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1),
+		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
