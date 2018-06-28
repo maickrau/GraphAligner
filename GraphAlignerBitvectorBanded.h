@@ -528,9 +528,7 @@ private:
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreNode = -1;
 		result.minScoreNodeOffset = -1;
-#ifdef SLICEVERBOSE
 		result.cellsProcessed = 0;
-#endif
 		auto nodeLength = params.graph.NodeLength(i);
 		AlignmentGraph::NodeChunkSequence nodeChunks = params.graph.NodeChunks(i);
 
