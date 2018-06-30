@@ -297,6 +297,25 @@ private:
 		{
 			pos.seqPos--;
 		}
+		if (j == 0)
+		{
+			bool hasMatch = false;
+			bool canBeFirst = true;
+			for (int i = 0; i <= pos.seqPos; i++)
+			{
+				if (Common::characterMatch(sequence[i], params.graph.NodeSequences(pos.node, 0))) hasMatch = true;
+				if (startSlice.getValue(i) != i + (hasMatch ? 0 : 1))
+				{
+					canBeFirst = false;
+					break;
+				}
+			}
+			if (canBeFirst)
+			{
+				pos.seqPos = 0;
+				return std::make_pair(pos, pickBacktraceCorner(current, previous, node, j, sequence));
+			}
+		}
 		size_t offset = pos.seqPos % WordConfiguration<Word>::WordSize;
 		if (offset == 0)
 		{
@@ -682,9 +701,10 @@ private:
 				ws = test;
 			}
 		}
-		else if (hasSkipless && previousSlice.exists)
+
+		if (hasSkipless && previousSlice.exists)
 		{
-			if (ws.getValue(0) > previousSlice.startSlice.scoreEnd + 1)
+			if (ws.getScoreBeforeStart() > previousSlice.startSlice.scoreEnd)
 			{
 				//todo vertical merge
 				ws = ws.mergeWith(getSourceSliceFromScore(previousSlice.startSlice.scoreEnd));
@@ -846,62 +866,27 @@ private:
 					assert(pair.second.startSlice.getValue(0) == foundMinScore);
 				}
 			}
-			bool checkNormal = true;
-			if (j == 0)
+			bool hasMatch = Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0));
+			for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
 			{
-				if (previousSlice.hasNode(node))
+				if (j+i >= sequence.size()) break;
+				eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
+				if (eq) hasMatch = true;
+				ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
+				if (j == 0 && previousSlice.hasNode(node))
 				{
-					bool hasNeighbor = false;
-					for (auto neighbor : params.graph.inNeighbors[node])
-					{
-						if (currentSlice.hasNode(neighbor))
-						{
-							hasNeighbor = true;
-							break;
-						}
-						if (previousSlice.hasNode(neighbor))
-						{
-							assert(currentSlice.hasNode(neighbor));
-						}
-					}
-					if (!hasNeighbor)
-					{
-						checkNormal = false;
-					}
+					foundMinScore = std::min(foundMinScore, (ScoreType)(j + i + (hasMatch ? 0 : 1)));
 				}
-			}
-			if (!checkNormal)
-			{
-				assert(j == 0);
-				bool hasMatch = Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0));
-				for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
+				for (auto neighbor : params.graph.inNeighbors[node])
 				{
-					if (i >= sequence.size()) break;
-					if (Common::characterMatch(sequence[i], params.graph.NodeSequences(node, 0)))
-					{
-						hasMatch = true;
-					}
-					assert(pair.second.startSlice.getValue(i) == i + (hasMatch ? 0 : 1));
+					if (!currentSlice.hasNode(neighbor)) continue;
+					if (!currentSlice.node(neighbor).exists) continue;
+					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i)+1);
+					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i-1) + (eq ? 0 : 1));
 				}
-			}
-			else
-			{
-				for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
+				if (pair.second.startSlice.getValue(i) <= maxScore || foundMinScore <= maxScore)
 				{
-					if (j+i >= sequence.size()) break;
-					eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
-					ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
-					for (auto neighbor : params.graph.inNeighbors[node])
-					{
-						if (!currentSlice.hasNode(neighbor)) continue;
-						if (!currentSlice.node(neighbor).exists) continue;
-						foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i)+1);
-						foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(i-1) + (eq ? 0 : 1));
-					}
-					if (pair.second.startSlice.getValue(i) <= maxScore || foundMinScore <= maxScore)
-					{
-						assert(pair.second.startSlice.getValue(i) == foundMinScore);
-					}
+					assert(pair.second.startSlice.getValue(i) == foundMinScore);
 				}
 			}
 		}
