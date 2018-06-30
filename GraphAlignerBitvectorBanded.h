@@ -157,7 +157,7 @@ private:
 		LengthType currentNode = -1;
 		size_t currentSlice = slice.slices.size();
 		std::vector<WordSlice> nodeSlices;
-		while (result.trace.back().seqPos != 0)
+		while (result.trace.back().seqPos != 0 && result.trace.back().seqPos != -1)
 		{
 			size_t newSlice = result.trace.back().seqPos / WordConfiguration<Word>::WordSize + 1;
 			assert(newSlice < slice.slices.size());
@@ -245,6 +245,7 @@ private:
 			assert(result.trace.back().seqPos % WordConfiguration<Word>::WordSize != 0);
 			result.trace.push_back(pickBacktraceInside(slice.slices[currentSlice].j, nodeSlices, result.trace.back(), sequence));
 		}
+		while (result.trace.back().seqPos == -1) result.trace.pop_back();
 		std::reverse(result.trace.begin(), result.trace.end());
 		return result;
 	}
