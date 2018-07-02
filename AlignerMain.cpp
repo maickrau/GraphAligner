@@ -30,6 +30,7 @@ int main(int argc, char** argv)
 	params.graphFile = "";
 	params.fastqFile = "";
 	params.seedFile = "";
+	params.outputAlignmentFile = "";
 	params.numThreads = 0;
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
@@ -85,6 +86,12 @@ int main(int argc, char** argv)
 				params.lowMemory = true;
 				break;
 		}
+	}
+
+	if (params.outputAlignmentFile == "")
+	{
+		std::cerr << "output file must be given" << std::endl;
+		std::exit(0);
 	}
 
 	if (params.dynamicRowStart % 64 != 0)
