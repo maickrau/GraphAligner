@@ -93,20 +93,12 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<vg::Alignment>& queue, std::atomic<bool>& allThreadsDone, bool quietMode)
+void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string>& queue, std::atomic<bool>& allThreadsDone, bool quietMode)
 {
 	assertSetRead("Writer", "No seed");
 	std::ofstream outfile { filename, std::ios::binary | std::ios::out };
 
-	::google::protobuf::io::ZeroCopyOutputStream *raw_out =
-	      new ::google::protobuf::io::OstreamOutputStream(&outfile);
-	::google::protobuf::io::GzipOutputStream *gzip_out =
-	      new ::google::protobuf::io::GzipOutputStream(raw_out);
-	::google::protobuf::io::CodedOutputStream *coded_out =
-	      new ::google::protobuf::io::CodedOutputStream(gzip_out);
-
-	vg::Alignment alns[100] {};
-	std::string s;
+	std::string alns[100] {};
 
 	BufferedWriter coutoutput;
 	if (!quietMode)
@@ -124,20 +116,14 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 			continue;
 		}
 		coutoutput << "write " << gotAlns << ", " << queue.size_approx() << " left" << BufferedWriter::Flush;
-		coded_out->WriteVarint64(gotAlns);
 		for (size_t i = 0; i < gotAlns; i++)
 		{
-			alns[i].SerializeToString(&s);
-			coded_out->WriteVarint32(s.size());
-			coded_out->WriteRaw(s.data(), s.size());
+			outfile.write(alns[i].data(), alns[i].size());
 		}
 	}
-	delete coded_out;
-	delete gzip_out;
-	delete raw_out;
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<vg::Alignment>& alignmentsOut, moodycamel::ProducerToken& token)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory };
@@ -204,6 +190,14 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		std::string alignmentpositions;
 		size_t timems = 0;
 		size_t totalcells = 0;
+		std::stringstream strstr;
+		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
+		      new ::google::protobuf::io::OstreamOutputStream(&strstr);
+		::google::protobuf::io::GzipOutputStream *gzip_out =
+		      new ::google::protobuf::io::GzipOutputStream(raw_out);
+		::google::protobuf::io::CodedOutputStream *coded_out =
+		      new ::google::protobuf::io::CodedOutputStream(gzip_out);
+		coded_out->WriteVarint64(alignments.alignments.size());
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
 			try
@@ -220,8 +214,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 			timems += alignments.alignments[i].elapsedMilliseconds;
 			totalcells += alignments.alignments[i].cellsProcessed;
-			alignmentsOut.enqueue(token, std::move(alignments.alignments[i].alignment));
+			std::string s;
+			alignments.alignments[i].alignment.SerializeToString(&s);
+			coded_out->WriteVarint32(s.size());
+			coded_out->WriteRaw(s.data(), s.size());
 		}
+		delete coded_out;
+		delete gzip_out;
+		delete raw_out;
+		alignmentsOut.enqueue(token, strstr.str());
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
 
@@ -323,7 +324,7 @@ void alignReads(AlignerParams params)
 	std::vector<size_t> numAlnsPerThread;
 	numAlnsPerThread.resize(params.numThreads, 0);
 
-	moodycamel::ConcurrentQueue<vg::Alignment> outputAlns;
+	moodycamel::ConcurrentQueue<std::string> outputAlns;
 	std::atomic<bool> allThreadsDone { false };
 	std::vector<moodycamel::ProducerToken> tokens;
 	tokens.reserve(params.numThreads);
