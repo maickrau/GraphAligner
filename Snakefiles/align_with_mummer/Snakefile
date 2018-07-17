@@ -1,0 +1,127 @@
+# Edit config.yaml to add the paths before running
+configfile: "config.yaml"
+VGPATH = config["vgpath"]
+MUMMERPATH = config["mummerpath"]
+READFILE = config["reads"]
+GRAPHFILE = config["graph"]
+SEEDSIZE = config["seedsize"]
+MAXSEEDHITS = config["maxseeds"]
+ALIGNERPARAMS = config["aligner_params"]
+ALIGNERBINPATH = config["graphalignerfolder"] + "bin"
+SCRIPTPATH = config["graphalignerfolder"] + "scripts"
+
+rule all:
+	input:
+		expand("output/aln_{reads}_{graph}_all.gam", reads=READFILE, graph=GRAPHFILE),
+		expand("output/aln_{reads}_{graph}_selected.gam", reads=READFILE, graph=GRAPHFILE),
+		expand("output/aln_{reads}_{graph}_full_length.gam", reads=READFILE, graph=GRAPHFILE),
+		expand("output/stats_{reads}_{graph}.txt", reads=READFILE, graph=GRAPHFILE)
+
+rule fix_graph_nodeids:
+	input:
+		"input/{graph}.gfa"
+	output:
+		"tmp/{graph}_idfix.gfa",
+		"tmp/{graph}_nodemapping.txt"
+	shell:
+		"python {SCRIPTPATH}/gfa_string_to_int.py {input} tmp/{wildcards.graph}_idfix.gfa tmp/{wildcards.graph}_nodemapping.txt"
+
+rule make_graphreference:
+	input:
+		"tmp/{graph}_idfix.gfa"
+	output:
+		"tmp/{graph}_gfareference.fa",
+		"tmp/{graph}_refnodes.txt"
+	shell:
+		"python {SCRIPTPATH}/makegfareference.py {input} tmp/{wildcards.graph}_refnodes.txt tmp/{wildcards.graph}_gfareference.fa"
+
+rule mummer_pipe:
+	input:
+		"input/{reads}.fasta",
+		"tmp/{graph}_gfareference.fa",
+		"tmp/{graph}_refnodes.txt"
+	output:
+		"tmp/seeds_{reads}_{graph}_picked.gam"
+	threads: 40
+	shell:
+		"{MUMMERPATH} -b -c -qthreads {threads} -l {SEEDSIZE} tmp/{wildcards.graph}_gfareference.fa input/{wildcards.reads}.fasta | {ALIGNERBINPATH}/PickMummerSeeds {output} tmp/{wildcards.graph}_gfareference.fa tmp/{wildcards.graph}_refnodes.txt {SEEDSIZE} {MAXSEEDHITS}"
+
+rule align:
+	input:
+		"tmp/{graph}_idfix.gfa",
+		"input/{reads}.fasta",
+		"tmp/seeds_{reads}_{graph}_picked.gam"
+	output:
+		"tmp/aln_{reads}_{graph}_raw.gam",
+		"tmp/aligner_stdout_{reads}_{graph}.txt",
+		"tmp/aligner_stderr_{reads}_{graph}.txt"
+	threads: 40
+	shell:
+		"/usr/bin/time -v {ALIGNERBINPATH}/Aligner -g tmp/{wildcards.graph}_idfix.gfa -f input/{wildcards.reads}.fasta -s tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam -a tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam -t {threads} {ALIGNERPARAMS} 1> tmp/aligner_stdout_{wildcards.reads}_{wildcards.graph}.txt 2> tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt"
+
+rule fix_alignment_nodeids:
+	input:
+		"tmp/aln_{reads}_{graph}_raw.gam",
+		"tmp/{graph}_nodemapping.txt"
+	output:
+		"output/aln_{reads}_{graph}_all.gam"
+	shell:
+		"{ALIGNERBINPATH}/AddNodeNames tmp/{wildcards.graph}_nodemapping.txt tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam {output}"
+
+rule pick_partials:
+	input:
+		"output/aln_{runid}_all.gam"
+	output:
+		"output/aln_{runid}_selected.gam"
+	shell:
+		"{ALIGNERBINPATH}/SelectPartials {input} {output}"
+
+rule pick_full:
+	input:
+		"output/aln_{reads}_{graph}_selected.gam",
+		"input/{reads}.fasta"
+	output:
+		"output/aln_{reads}_{graph}_full_length.gam"
+	shell:
+		"{ALIGNERBINPATH}/SelectFullAlignments output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam input/{wildcards.reads}.fasta {output}"
+
+rule output_statistics:
+	input:
+		"input/{reads}.fasta",
+		"tmp/seeds_{reads}_{graph}_picked.gam",
+		"output/aln_{reads}_{graph}_all.gam",
+		"output/aln_{reads}_{graph}_selected.gam",
+		"output/aln_{reads}_{graph}_full_length.gam",
+		"tmp/aligner_stderr_{reads}_{graph}.txt"
+	output:
+		"output/stats_{reads}_{graph}.txt"
+	run:
+		shell("touch {output}"),
+		shell("grep 'Command being timed:' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'User time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'System time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'Maximum resident set size (kbytes):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'Percent of CPU this job got:' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'Elapsed (wall clock) time (h:mm:ss or m:ss):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("echo 'Number of reads:' >> {output}"),
+		shell("wc -l < input/{wildcards.reads}.fasta | awk '{{print $0/2;}}' >> {output}"),
+		shell("echo 'Number of picked seeds:' >> {output}"),
+		shell("{VGPATH} view -a tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam | wc -l >> {output}"),
+		shell("echo 'Number of reads with a seed:' >> {output}"),
+		shell("{VGPATH} view -a tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam | jq '.name' | sort | uniq | wc -l >> {output}"),
+		shell("echo 'Number of raw alignments:' >> {output}"),
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_all.gam | wc -l >> {output}"),
+		shell("echo 'Number of selected alignments:' >> {output}"),
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | wc -l >> {output}"),
+		shell("echo 'Number of full length alignments:' >> {output}"),
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_full_length.gam | wc -l >> {output}"),
+		shell("echo 'Number of reads with an alignment:' >> {output}"),
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | jq '.name' | sort | uniq | wc -l >> {output}"),
+		shell("echo 'Number of reads broken due to an assertion:' >> {output}"),
+		shell("(grep Assert < tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt || true) | wc -l >> {output}"),
+		shell("echo 'Number of read BP in reads:' >> {output}")
+		shell("awk 'NR % 2 == 0 {{sum += length($0);}} END {{print sum;}}' < input/{wildcards.reads}.fasta >> {output}")
+		shell("echo 'Number of read BP in selected alignments:' >> {output}")
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | jq '.sequence' | awk '{{sum += length($0)-2;}} END {{print sum;}}' >> {output}")
+		shell("echo 'Number of read BP in full length alignments:' >> {output}")
+		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_full_length.gam | jq '.sequence' | awk '{{sum += length($0)-2;}} END {{print sum;}}' >> {output}")
