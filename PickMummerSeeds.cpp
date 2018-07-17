@@ -43,23 +43,36 @@ vg::Alignment createAlignment(const std::string& readname, const MummerSeed& see
 	return result;
 }
 
-int getNodeId(size_t pos, const std::vector<size_t>& nodeMappingPositions)
+int getNodeId(size_t pos, const std::vector<size_t>& nodeMappingPositions, const std::vector<size_t>& refNodes)
 {
 	auto iter = std::upper_bound(nodeMappingPositions.begin(), nodeMappingPositions.end(), pos);
 	int index = iter - nodeMappingPositions.begin();
 	assert(index > 0);
 	assert(index <= nodeMappingPositions.size());
-	return index;
+	assert(index-1 < refNodes.size());
+	return refNodes[index-1];
 }
 
 int main(int argc, char** argv)
 {
 	std::string outputFileName { argv[1] };
 	std::string gfaReferenceFilename { argv[2] };
-	int k = std::stoi(argv[3]);
-	int maxSeeds = std::stoi(argv[4]);
+	std::string refNodesFileName { argv[3] };
+	int k = std::stoi(argv[4]);
+	int maxSeeds = std::stoi(argv[5]);
 	std::unordered_map<std::string, std::priority_queue<MummerSeed, std::vector<MummerSeed>, AlignmentLengthCompare>> alignments;
 	size_t numElems = 0;
+	std::vector<size_t> refNodes;
+	{
+		std::ifstream refNodesFile { refNodesFileName };
+		while (refNodesFile.good())
+		{
+			size_t found;
+			refNodesFile >> found;
+			if (!refNodesFile.good()) break;
+			refNodes.push_back(found);
+		}
+	}
 	std::vector<size_t> nodeMappingPositions;
 	{
 		std::ifstream mappingfile { gfaReferenceFilename };
@@ -102,7 +115,7 @@ int main(int argc, char** argv)
 			size_t seqpos;
 			str >> seqpos >> newSeed.readpos >> newSeed.len;
 			newSeed.reverse = currentReverse;
-			newSeed.nodeId = getNodeId(seqpos, nodeMappingPositions);
+			newSeed.nodeId = getNodeId(seqpos, nodeMappingPositions, refNodes);
 			newSeed.readpos -= 1;
 			if (currentReverse) newSeed.readpos -= k;
 			assert(newSeed.readpos >= 0);
