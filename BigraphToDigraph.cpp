@@ -1,6 +1,5 @@
 #include <fstream>
 #include <sstream>
-#include <iostream>
 #include <cassert>
 #include <unordered_map>
 #include "CommonUtils.h"
@@ -63,6 +62,11 @@ std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANod
 	int id;
 	str >> dummy >> id >> sequence;
 	assert(dummy == "S");
+	return ConvertGFANodeToNodes(id, sequence, edgeOverlap);
+}
+
+std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence, int edgeOverlap)
+{
 	assert(sequence.size() > edgeOverlap);
 	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence.substr(0, sequence.size() - edgeOverlap) }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence).substr(0, sequence.size() - edgeOverlap) });
 }
@@ -77,6 +81,11 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdg
 	std::string toend;
 	str >> dummy >> from >> fromstart >> to >> toend;
 	assert(dummy == "L");
+	return ConvertGFAEdgeToEdges(from, fromstart, to, toend);
+}
+
+std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdgeToEdges(int from, const std::string& fromstart, int to, const std::string& toend)
+{
 	assert(fromstart == "+" || fromstart == "-");
 	assert(toend == "+" || toend == "-");
 	size_t fromLeft, fromRight, toLeft, toRight;
@@ -138,6 +147,8 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 {
 	AlignmentGraph result;
 	result.DBGOverlap = 0;
+	std::vector<Edge> edges;
+	std::vector<std::pair<int, std::string>> nodes;
 	{
 		std::ifstream graphfile { filename, std::ios::in };
 		while (graphfile.good())
@@ -146,43 +157,40 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 			std::getline(graphfile, line);
 			if (line[0] == 'L')
 			{
-				std::string dummy1, dummy2, dummy3, dummy4, dummy5;
+				int from, to;
+				std::string dummy, fromstart, toend;
 				std::string overlapstr;
 				std::stringstream str { line };
-				str >> dummy1 >> dummy2 >> dummy3 >> dummy4 >> dummy5 >> overlapstr;
+				str >> dummy >> from >> fromstart >> to >> toend >> overlapstr;
+				assert(dummy == "L");
+				auto pair = ConvertGFAEdgeToEdges(from, fromstart, to, toend);
+				edges.push_back(pair.first);
+				edges.push_back(pair.second);
 				int overlap = std::stoi(overlapstr.substr(0, overlapstr.size()-1));
 				assert(result.DBGOverlap == 0 || result.DBGOverlap == overlap);
 				result.DBGOverlap = overlap;
 			}
-		}
-	}
-	{
-		std::ifstream graphfile { filename, std::ios::in };
-		while (graphfile.good())
-		{
-			std::string line;
-			std::getline(graphfile, line);
-			if (line[0] == 'S')
+			else if (line[0] == 'S')
 			{
-				auto nodes = ConvertGFANodeToNodes(line, result.DBGOverlap);
-				result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
-				result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+				int id;
+				std::string dummy;
+				std::string sequence;
+				std::stringstream str { line };
+				str >> dummy >> id >> sequence;
+				assert(dummy == "S");
+				nodes.emplace_back(id, sequence);
 			}
 		}
 	}
+	for (auto node : nodes)
 	{
-		std::ifstream graphfile { filename, std::ios::in };
-		while (graphfile.good())
-		{
-			std::string line;
-			std::getline(graphfile, line);
-			if (line[0] == 'L')
-			{
-				auto edges = ConvertGFAEdgeToEdges(line);
-				result.AddEdgeNodeId(edges.first.fromId, edges.first.toId);
-				result.AddEdgeNodeId(edges.second.fromId, edges.second.toId);
-			}
-		}
+		auto nodes = ConvertGFANodeToNodes(node.first, node.second, result.DBGOverlap);
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+	}
+	for (auto edge : edges)
+	{
+		result.AddEdgeNodeId(edge.fromId, edge.toId);
 	}
 	result.Finalize(64);
 	return result;

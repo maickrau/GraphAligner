@@ -31,7 +31,7 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, size_t offset, size_t endOffset, int priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingUp, bool incomingUpExists) : target(target), offset(offset), endOffset(endOffset), priority(priority), incoming(incoming), incomingUp(incomingUp), incomingUpExists(incomingUpExists) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -41,62 +41,63 @@ public:
 			return priority < other.priority;
 		}
 		LengthType target;
-		size_t offset;
-		size_t endOffset;
 		int priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
-		WordSlice<LengthType, ScoreType, Word> incomingUp;
-		bool incomingUpExists;
+		bool skipFirst;
 	};
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth) :
-		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1),
-		nodesliceMap(),
+		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
+		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1, graph.NodeSize()),
+		evenNodesliceMap(),
+		oddNodesliceMap(),
 		currentBand(),
 		previousBand()
 		{
-			nodesliceMap.resize(graph.NodeSize(), {0, 0, 0, 0, 0});
+			if (!lowMemory)
+			{
+				evenNodesliceMap.resize(graph.NodeSize(), {});
+				oddNodesliceMap.resize(graph.NodeSize(), {});
+			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
+			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
+			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
 			calculableQueue.clear();
-			nodesliceMap.assign(nodesliceMap.size(), {0, 0, 0, 0, 0});
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
-		std::vector<typename NodeSlice<typename WordContainer<LengthType, ScoreType, Word>::Slice>::MapItem> nodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
+		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 	};
-	typedef std::pair<LengthType, LengthType> MatrixPosition;
+	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params
 	{
 	public:
-		//cutoff for doing the backtrace in the sqrt-slice pass
-		//"bulges" in the band are responsible for almost all of the time spent aligning,
-		//and this way they don't need to be recalculated, saving about half of the time.
-		//semi-arbitrarily twenty five thousand, empirically a good enough cutoff
-		static constexpr size_t BacktraceOverrideCutoff = 25000;
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
-		sloppyOptimizations(sloppyOptimizations)
+		sloppyOptimizations(sloppyOptimizations),
+		lowMemory(lowMemory)
 		{
 		}
-		const size_t maxCellsPerSlice;
 		const LengthType initialBandwidth;
 		const LengthType rampBandwidth;
 		const AlignmentGraph& graph;
+		const size_t maxCellsPerSlice;
 		const bool quietMode;
 		const bool sloppyOptimizations;
+		const bool lowMemory;
 	};
 	class SeedHit
 	{
@@ -138,6 +139,9 @@ public:
 		OnewayTrace forward;
 		OnewayTrace backward;
 	};
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
 		assert(graphCharacter == 'A' || graphCharacter == 'T' || graphCharacter == 'C' || graphCharacter == 'G');

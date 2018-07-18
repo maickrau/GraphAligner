@@ -22,18 +22,18 @@ class GraphAlignerBitvectorCommon
 private:
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
-	using WordSlice = typename WordContainer<LengthType, ScoreType, Word>::Slice;
 public:
+	using WordSlice = decltype(NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem::startSlice);
 
 	class EqVector
 	{
 	public:
-		EqVector(Word BA, Word BT, Word BC, Word BG) :
-		BA(BA),
-		BT(BT),
-		BC(BC),
-		BG(BG)
+		EqVector(Word BA, Word BT, Word BC, Word BG)
 		{
+			masks[0] = BA;
+			masks[1] = BC;
+			masks[2] = BG;
+			masks[3] = BT;
 		}
 		Word getEq(char c) const
 		{
@@ -41,16 +41,16 @@ public:
 			{
 				case 'A':
 				case 'a':
-					return BA;
-				case 'T':
-				case 't':
-					return BT;
+					return masks[0];
 				case 'C':
 				case 'c':
-					return BC;
+					return masks[1];
 				case 'G':
 				case 'g':
-					return BG;
+					return masks[2];
+				case 'T':
+				case 't':
+					return masks[3];
 				case '-':
 				default:
 					assert(false);
@@ -58,94 +58,79 @@ public:
 			assert(false);
 			return 0;
 		}
-		Word BA;
-		Word BT;
-		Word BC;
-		Word BG;
+		Word getEqI(size_t i) const
+		{
+			return masks[i];
+		}
+		Word masks[4];
 	};
-
-	static void assertSliceCorrectness(const WordSlice& current, const WordSlice& up, bool previousBand)
-	{
-	#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(current.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(current.VN);
-		assert(current.scoreEnd == current.scoreBeforeStart + wcvp - wcvn);
-
-		assert(current.scoreBeforeStart >= 0);
-		assert(current.scoreEnd >= 0);
-		assert(current.scoreBeforeStart <= current.scoreEnd + WordConfiguration<Word>::WordSize);
-		assert(current.scoreEnd <= current.scoreBeforeStart + WordConfiguration<Word>::WordSize);
-		assert((current.VP & current.VN) == WordConfiguration<Word>::AllZeros);
-
-		assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
-		assert(current.scoreBeforeStart >= 0);
-	#endif
-	}
 
 	GraphAlignerBitvectorCommon() = delete;
 
-	static WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous, WordSlice up)
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static std::tuple<WordSlice, Word, Word> getNextSlice(Word Eq, WordSlice slice, Word hinP, Word hinN)
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
 
-		auto oldValue = slice.scoreBeforeStart;
-		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
-		slice.scoreBeforeExists = upInsideBand;
-		if (!diagonalInsideBand) Eq &= ~((Word)1);
-		if (!upleftInsideBand)
-		{
-			slice.scoreBeforeStart += 1;
-		}
-		else
-		{
-			const auto lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize - 1);
-			assert(slice.scoreBeforeStart <= previous.scoreEnd);
-			slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
-		}
-		auto hin = slice.scoreBeforeStart - oldValue;
+		Word Xv = Eq | slice.VN; //line 7
+		Eq |= hinN; //between lines 7-8
+		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq; //line 8
+		Word Ph = slice.VN | ~(Xh | slice.VP); //line 9
+		Word Mh = slice.VP & Xh; //line 10
+		Word tempMh = (Mh << 1) | hinN; //line 16 + between lines 16-17
+		hinN = Mh >> (WordConfiguration<Word>::WordSize-1); //line 11
+		Word tempPh = (Ph << 1) | hinP; //line 15 + between lines 16-17
+		slice.VP = tempMh | ~(Xv | tempPh); //line 17
+		hinP = Ph >> (WordConfiguration<Word>::WordSize-1); //line 13
+		slice.VN = tempPh & Xv; //line 18
+		slice.scoreEnd -= hinN; //line 12
+		slice.scoreEnd += hinP; //line 14
 
-		Word Xv = Eq | slice.VN;
-		//between 7 and 8
-		if (hin < 0) Eq |= 1;
-		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
-		Word Ph = slice.VN | ~(Xh | slice.VP);
-		Word Mh = slice.VP & Xh;
-		// if (~Ph & confirmedMask) confirmTentative = true;
-		const Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
-		if (Ph & lastBitMask)
-		{
-			slice.scoreEnd += 1;
-		}
-		else if (Mh & lastBitMask)
-		{
-			slice.scoreEnd -= 1;
-		}
-		Ph <<= 1;
-		Mh <<= 1;
-		//between 16 and 17
-		if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
-		slice.VP = Mh | ~(Xv | Ph);
-		slice.VN = Ph & Xv;
-
-		slice.sliceExists = true;
-
-#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
-		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
-#endif
-
-		return slice;
+		return std::make_tuple(slice, hinP, hinN);
 	}
 
 	static WordSlice flattenWordSlice(WordSlice slice, size_t row)
 	{
 		Word mask = ~(WordConfiguration<Word>::AllOnes << row);
+		slice.scoreEnd -= WordConfiguration<Word>::popcount(slice.VP & ~mask);
+		slice.scoreEnd += WordConfiguration<Word>::popcount(slice.VN & ~mask);
 		slice.VP &= mask;
 		slice.VN &= mask;
-		slice.scoreEnd = slice.scoreBeforeStart + WordConfiguration<Word>::popcount(slice.VP) - WordConfiguration<Word>::popcount(slice.VN);
 		return slice;
+	}
+
+	static EqVector getEqVector(const std::string& sequence, size_t j)
+	{
+		Word BA = WordConfiguration<Word>::AllZeros;
+		Word BT = WordConfiguration<Word>::AllZeros;
+		Word BC = WordConfiguration<Word>::AllZeros;
+		Word BG = WordConfiguration<Word>::AllZeros;
+		for (int i = 0; i < WordConfiguration<Word>::WordSize && j+i < sequence.size(); i++)
+		{
+			Word mask = ((Word)1) << i;
+			if (Common::characterMatch(sequence[j+i], 'A')) BA |= mask;
+			if (Common::characterMatch(sequence[j+i], 'C')) BC |= mask;
+			if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
+			if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
+		}
+		if (j + WordConfiguration<Word>::WordSize > sequence.size())
+		{
+			Word mask = WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size());
+			assert((BA & mask) == 0);
+			assert((BT & mask) == 0);
+			assert((BC & mask) == 0);
+			assert((BG & mask) == 0);
+			BA |= mask;
+			BT |= mask;
+			BC |= mask;
+			BG |= mask;
+		}
+		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		EqVector EqV {BA, BT, BC, BG};
+		return EqV;
 	}
 
 };

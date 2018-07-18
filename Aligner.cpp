@@ -5,6 +5,7 @@
 #include <functional>
 #include <algorithm>
 #include <thread>
+#include <concurrentqueue.h> //https://github.com/cameron314/concurrentqueue
 #include "Aligner.h"
 #include "CommonUtils.h"
 #include "vg.pb.h"
@@ -92,10 +93,40 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, std::vector<vg::Alignment>& alignmentsOut, bool hasMergedAlignmentOut)
+void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string>& queue, std::atomic<bool>& allThreadsDone, bool quietMode)
+{
+	assertSetRead("Writer", "No seed");
+	std::ofstream outfile { filename, std::ios::binary | std::ios::out };
+
+	std::string alns[100] {};
+
+	BufferedWriter coutoutput;
+	if (!quietMode)
+	{
+		coutoutput = {std::cout};
+	}
+
+	while (true)
+	{
+		size_t gotAlns = queue.try_dequeue_bulk(alns, 100);
+		if (gotAlns == 0)
+		{
+			if (allThreadsDone) break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		coutoutput << "write " << gotAlns << ", " << queue.size_approx() << " left" << BufferedWriter::Flush;
+		for (size_t i = 0; i < gotAlns; i++)
+		{
+			outfile.write(alns[i].data(), alns[i].size());
+		}
+	}
+}
+
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
 {
 	assertSetRead("Before any read", "No seed");
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth) };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (!params.quietMode)
@@ -137,7 +168,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq), reusableState);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq), reusableState, params.lowMemory);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -157,14 +188,21 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		}
 
 		std::string alignmentpositions;
-		std::vector<vg::Alignment> alignmentvec;
 		size_t timems = 0;
 		size_t totalcells = 0;
-		for (auto& alignment : alignments.alignments)
+		std::stringstream strstr;
+		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
+		      new ::google::protobuf::io::OstreamOutputStream(&strstr);
+		::google::protobuf::io::GzipOutputStream *gzip_out =
+		      new ::google::protobuf::io::GzipOutputStream(raw_out);
+		::google::protobuf::io::CodedOutputStream *coded_out =
+		      new ::google::protobuf::io::CodedOutputStream(gzip_out);
+		coded_out->WriteVarint64(alignments.alignments.size());
+		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
 			try
 			{
-				assert(!alignment.alignmentFailed());
+				assert(!alignments.alignments[i].alignmentFailed());
 			}
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
@@ -172,12 +210,19 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				continue;
 			}
 			numAlignments += 1;
-			replaceDigraphNodeIdsWithOriginalNodeIds(alignment.alignment);
-			alignmentvec.emplace_back(alignment.alignment);
-			alignmentpositions += std::to_string(alignment.alignmentStart) + "-" + std::to_string(alignment.alignmentEnd) + ", ";
-			timems += alignment.elapsedMilliseconds;
-			totalcells += alignment.cellsProcessed;
+			replaceDigraphNodeIdsWithOriginalNodeIds(alignments.alignments[i].alignment);
+			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
+			timems += alignments.alignments[i].elapsedMilliseconds;
+			totalcells += alignments.alignments[i].cellsProcessed;
+			std::string s;
+			alignments.alignments[i].alignment.SerializeToString(&s);
+			coded_out->WriteVarint32(s.size());
+			coded_out->WriteRaw(s.data(), s.size());
 		}
+		delete coded_out;
+		delete gzip_out;
+		delete raw_out;
+		alignmentsOut.enqueue(token, strstr.str());
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
 
@@ -185,25 +230,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		coutoutput << "Read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
 		coutoutput << "Thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
-		if (hasMergedAlignmentOut)
-		{
-			alignmentsOut.insert(alignmentsOut.end(), alignmentvec.begin(), alignmentvec.end());
-		}
-		else
-		{
-			std::string filename;
-			filename = "alignment_";
-			filename += std::to_string(threadnum);
-			filename += "_";
-			filename += fastq->seq_id;
-			filename += ".gam";
-			std::replace(filename.begin(), filename.end(), '/', '_');
-			std::replace(filename.begin(), filename.end(), ':', '_');
-			coutoutput << "Write alignment to " << filename << BufferedWriter::Flush;
-			std::ofstream alignmentOut { filename, std::ios::out | std::ios::binary };
-			stream::write_buffered(alignmentOut, alignmentvec, 0);
-			coutoutput << "Alignment written" << BufferedWriter::Flush;
-		}
 	}
 	assertSetRead("After all reads", "No seed");
 	coutoutput << "Thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
@@ -298,21 +324,31 @@ void alignReads(AlignerParams params)
 	std::vector<size_t> numAlnsPerThread;
 	numAlnsPerThread.resize(params.numThreads, 0);
 
-	std::vector<std::vector<vg::Alignment>> resultsPerThread;
-	bool hasMergedAlignmentOut = params.outputAlignmentFile != "";
-	resultsPerThread.resize(params.numThreads);
+	moodycamel::ConcurrentQueue<std::string> outputAlns;
+	std::atomic<bool> allThreadsDone { false };
+	std::vector<moodycamel::ProducerToken> tokens;
+	tokens.reserve(params.numThreads);
+	for (int i = 0; i < params.numThreads; i++)
+	{
+		tokens.emplace_back(outputAlns);
+	}
 
 	std::cout << "Align" << std::endl;
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &resultsPerThread, hasMergedAlignmentOut]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], resultsPerThread[i], hasMergedAlignmentOut); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], outputAlns, tokens[i]); });
 	}
+	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &allThreadsDone, quietMode=params.quietMode]() { consumeVGsAndWrite(file, outputAlns, allThreadsDone, quietMode); } };
 
 	for (int i = 0; i < params.numThreads; i++)
 	{
 		threads[i].join();
 	}
 	assertSetRead("Postprocessing", "No seed");
+
+	allThreadsDone = true;
+
+	writerThread.join();
 
 	size_t numAlignments = 0;
 	for (size_t i = 0; i < params.numThreads; i++)
@@ -321,19 +357,4 @@ void alignReads(AlignerParams params)
 	}
 
 	std::cout << "Final result has " << numAlignments << " alignments" << std::endl;
-	if (hasMergedAlignmentOut)
-	{
-		assert(params.outputAlignmentFile != "");
-		std::cout << "Merge alignments for writing" << std::endl;
-		std::vector<vg::Alignment> finalResult;
-		finalResult.reserve(numAlignments);
-		for (size_t i = 0; i < resultsPerThread.size(); i++)
-		{
-			finalResult.insert(finalResult.end(), resultsPerThread[i].begin(), resultsPerThread[i].end());
-		}
-		std::cout << "Write merged alignments to " << params.outputAlignmentFile << std::endl;
-		std::ofstream resultFile { params.outputAlignmentFile, std::ios::out | std::ios::binary };
-		stream::write_buffered(resultFile, finalResult, 0);
-		std::cout << "Write finished" << std::endl;
-	}
 }

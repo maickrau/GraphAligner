@@ -17,7 +17,8 @@ class GraphAlignerVGAlignment
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
 public:
-	static AlignmentResult::AlignmentItem traceToAlignment(const Params& params, const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed)
+
+	static AlignmentResult::AlignmentItem traceToAlignment(const Params& params, const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<MatrixPosition>& trace, size_t cellsProcessed, bool reverse)
 	{
 		vg::Alignment result;
 		result.set_name(seq_id);
@@ -27,7 +28,7 @@ public:
 		result.set_allocated_path(path);
 		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		size_t pos = 0;
-		size_t oldNode = params.graph.IndexToNode(trace[0].first);
+		size_t oldNode = trace[0].node;
 		int rank = 0;
 		int oldNodeId = params.graph.nodeIDs[oldNode];
 		auto vgmapping = path->add_mapping();
@@ -36,27 +37,42 @@ public:
 		vgmapping->set_rank(rank);
 		auto edit = vgmapping->add_edit();
 		position->set_node_id(params.graph.nodeIDs[oldNode]);
-		position->set_is_reverse(params.graph.reverse[oldNode]);
-		position->set_offset(trace[pos].first - params.graph.NodeStart(oldNode));
+		if (reverse)
+		{
+			position->set_is_reverse(!params.graph.reverse[oldNode]);
+		}
+		else
+		{
+			position->set_is_reverse(params.graph.reverse[oldNode]);
+		}
+		position->set_offset(trace[pos].nodeOffset);
 		MatrixPosition btNodeStart = trace[pos];
 		MatrixPosition btNodeEnd = trace[pos];
 		MatrixPosition btBeforeNode = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
-			if (params.graph.IndexToNode(trace[pos].first) == oldNode)
+			if (trace[pos].node == oldNode)
 			{
 				btNodeEnd = trace[pos];
 				continue;
 			}
-			assert(trace[pos].second >= trace[pos-1].second);
-			assert(params.graph.IndexToNode(btNodeEnd.first) == params.graph.IndexToNode(btNodeStart.first));
-			assert(btNodeEnd.second >= btNodeStart.second);
-			assert(btNodeEnd.first >= btNodeStart.first);
+			assert(trace[pos].seqPos >= trace[pos-1].seqPos);
+			assert(btNodeEnd.node == btNodeStart.node);
+			assert(btNodeEnd.seqPos >= btNodeStart.seqPos);
+			assert(reverse || btNodeEnd.nodeOffset >= btNodeStart.nodeOffset);
+			assert(!reverse || btNodeEnd.nodeOffset <= btNodeStart.nodeOffset);
 			auto previousNode = oldNode;
-			oldNode = params.graph.IndexToNode(trace[pos].first);
-			edit->set_from_length(edit->from_length() + btNodeEnd.first - btNodeStart.first + 1);
-			edit->set_to_length(edit->to_length() + btNodeEnd.second - btBeforeNode.second);
-			edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.second, btNodeEnd.second - btBeforeNode.second));
+			oldNode = trace[pos].node;
+			edit->set_from_length(edit->from_length() + btNodeEnd.nodeOffset - btNodeStart.nodeOffset + 1);
+			edit->set_to_length(edit->to_length() + btNodeEnd.seqPos - btBeforeNode.seqPos);
+			if (reverse)
+			{
+				edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.seqPos, btBeforeNode.seqPos - btNodeEnd.seqPos));
+			}
+			else
+			{
+				edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.seqPos, btNodeEnd.seqPos - btBeforeNode.seqPos));
+			}
 			btBeforeNode = btNodeEnd;
 			btNodeStart = trace[pos];
 			btNodeEnd = trace[pos];
@@ -70,16 +86,30 @@ public:
 				vgmapping->set_rank(rank);
 				position->set_offset(params.graph.nodeOffset[oldNode]);
 				position->set_node_id(params.graph.nodeIDs[oldNode]);
-				position->set_is_reverse(params.graph.reverse[oldNode]);
+				if (reverse)
+				{
+					position->set_is_reverse(!params.graph.reverse[oldNode]);
+				}
+				else
+				{
+					position->set_is_reverse(params.graph.reverse[oldNode]);
+				}
 				edit = vgmapping->add_edit();
 			}
 		}
-		edit->set_from_length(edit->from_length() + btNodeEnd.first - btNodeStart.first);
-		edit->set_to_length(edit->to_length() + btNodeEnd.second - btBeforeNode.second);
-		edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.second, btNodeEnd.second - btBeforeNode.second));
+		edit->set_from_length(edit->from_length() + btNodeEnd.nodeOffset - btNodeStart.nodeOffset);
+		edit->set_to_length(edit->to_length() + btNodeEnd.seqPos - btBeforeNode.seqPos);
+		if (reverse)
+		{
+			edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.seqPos, btBeforeNode.seqPos - btNodeEnd.seqPos));
+		}
+		else
+		{
+			edit->set_sequence(edit->sequence() + sequence.substr(btNodeStart.seqPos, btNodeEnd.seqPos - btBeforeNode.seqPos));
+		}
 		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
-		item.alignmentStart = trace[0].second;
-		item.alignmentEnd = trace.back().second;
+		item.alignmentStart = trace[0].seqPos;
+		item.alignmentEnd = trace.back().seqPos;
 		return item;
 	}
 

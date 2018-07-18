@@ -7,15 +7,41 @@
 #include <unordered_map>
 #include <tuple>
 #include "ThreadReadAssertion.h"
-#include "DNAString.h"
+
 
 class AlignmentGraph
 {
 public:
-	//arbitrarily 100, shouldn't be too small because of per-node overhead, and not too high because of in-band-but-not-calculated overhead
-	static constexpr int SPLIT_NODE_SIZE = 100;
+	//determines extra band size, shouldn't be too high because of extra slices
+	//should be 0 mod (wordsize/2 == 32), otherwise storage has overhead
+	//64 is the fastest out of 32, 64, 96
+	static constexpr int SPLIT_NODE_SIZE = 64;
+	static constexpr size_t BP_IN_CHUNK = sizeof(size_t) * 8 / 2;
+	static constexpr size_t CHUNKS_IN_NODE = (SPLIT_NODE_SIZE + BP_IN_CHUNK - 1) / BP_IN_CHUNK;
 
-	typedef std::pair<size_t, size_t> MatrixPosition;
+	struct NodeChunkSequence
+	{
+		size_t& operator[](size_t pos)
+		{
+			return s[pos];
+		}
+		size_t operator[](size_t pos) const
+		{
+			return s[pos];
+		}
+		size_t s[CHUNKS_IN_NODE];
+	};
+
+	struct MatrixPosition
+	{
+		MatrixPosition(size_t node, size_t nodeOffset, size_t seqPos);
+		bool operator==(const MatrixPosition& other) const;
+		bool operator!=(const MatrixPosition& other) const;
+		size_t node;
+		size_t nodeOffset;
+		size_t seqPos;
+	};
+
 	class SeedHit
 	{
 	public:
@@ -25,34 +51,29 @@ public:
 		size_t nodePos;
 	};
 	AlignmentGraph();
-	void ReserveNodes(size_t numNodes, size_t numSplitNodes, size_t totalSequenceLength);
+	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
-	size_t GetReversePosition(size_t position) const;
-	size_t SizeInBp() const;
-	size_t IndexToNode(size_t index) const;
+	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
-	size_t NodeStart(size_t nodeIndex) const;
-	size_t NodeEnd(size_t nodeIndex) const;
 	size_t NodeLength(size_t nodeIndex) const;
-	char NodeSequences(size_t index) const;
-	size_t NodeSequencesSize() const;
-	size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
-	std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
-	std::vector<MatrixPosition> GetSeedHitPositionsInMatrix(const std::string& sequence, const std::vector<SeedHit>& seedHits) const;
+	char NodeSequences(size_t node, size_t offset) const;
+	NodeChunkSequence NodeChunks(size_t node) const;
+	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
+	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	int DBGOverlap;
 
 private:
-	void AddNode(int nodeId, int offset, std::string sequence, bool reverseNode);
-	std::vector<size_t> nodeStart;
+	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
+	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
-	DNAString<size_t> nodeSequences;
+	std::vector<NodeChunkSequence> nodeSequences;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
