@@ -6,12 +6,14 @@ ODIR=obj
 BINDIR=bin
 
 LIBS=-lm -lprotobuf -lz
-LINKFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
+JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
 
 DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h ByteStuff.h DNAString.h
 
 _OBJ = Aligner.o AlignerMain.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o GfaGraph.o AlignmentCorrectnessEstimation.o ByteStuff.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
+
+LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS)
 
 $(shell mkdir -p bin)
 $(shell mkdir -p obj)
@@ -22,78 +24,78 @@ $(ODIR)/%.o: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
 
 $(BINDIR)/Aligner: $(OBJ)
-	$(GPP) -o $@ $^ $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(LINKFLAGS)
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ReadIndexToId: $(OBJ)
-	$(GPP) -o $@ ReadIndexToId.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/ReadIndexToId: ReadIndexToId.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/CompareAlignments: $(OBJ)
-	$(GPP) -o $@ CompareAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/CompareAlignments: CompareAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/MergeGraphs: $(OBJ)
-	$(GPP) -o $@ MergeGraphs.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/MergeGraphs: MergeGraphs.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SimulateReads: $(OBJ)
-	$(GPP) -o $@ SimulateReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/SimulateReads: SimulateReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ReverseReads: $(OBJ)
-	$(GPP) -o $@ ReverseReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/ReverseReads: ReverseReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/PickSeedHits: $(OBJ)
-	$(GPP) -o $@ PickSeedHits.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(LINKFLAGS)
+$(BINDIR)/PickSeedHits: PickSeedHits.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/AlignmentSequenceInserter: $(OBJ)
-	$(GPP) -o $@ AlignmentSequenceInserter.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/AlignmentSequenceInserter: AlignmentSequenceInserter.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SupportedSubgraph: $(OBJ)
-	$(GPP) -o $@ SupportedSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/SupportedSubgraph: SupportedSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/MafToAlignment: $(OBJ)
-	$(GPP) -o $@ MafToAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/MafToAlignment: MafToAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ExtractPathSequence: $(OBJ)
-	$(GPP) -o $@ ExtractPathSequence.cpp $(ODIR)/CommonUtils.o $(ODIR)/GfaGraph.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/ExtractPathSequence: ExtractPathSequence.cpp $(ODIR)/CommonUtils.o $(ODIR)/GfaGraph.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/AlignmentOverlap: $(OBJ)
-	$(GPP) -o $@ AlignmentOverlap.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed
+$(BINDIR)/AlignmentOverlap: AlignmentOverlap.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/Bluntify: $(OBJ)
-	$(GPP) -o $@ Bluntify.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/Bluntify: Bluntify.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ExtractPathSubgraphNeighbourhood: $(OBJ)
-	$(GPP) -o $@ ExtractPathSubgraphNeighbourhood.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/ExtractPathSubgraphNeighbourhood: ExtractPathSubgraphNeighbourhood.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/MergeGfas: $(OBJ)
-	$(GPP) -o $@ MergeGfas.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/MergeGfas: MergeGfas.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/VisualizeAlignment: $(OBJ)
-	$(GPP) -o $@ VisualizeAlignment.cpp $(ODIR)/AlignmentCorrectnessEstimation.o $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/VisualizeAlignment: VisualizeAlignment.cpp $(ODIR)/AlignmentCorrectnessEstimation.o $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SelectPartials: $(OBJ)
-	$(GPP) -o $@ SelectPartials.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/SelectPartials: SelectPartials.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/NodePosCsv: $(OBJ)
-	$(GPP) -o $@ NodePosCsv.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/NodePosCsv: NodePosCsv.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ExtractExactPathSubgraph: $(OBJ)
-	$(GPP) -o $@ ExtractExactPathSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/ExtractExactPathSubgraph: ExtractExactPathSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/EstimateRepeatCount: $(OBJ)
-	$(GPP) -o $@ EstimateRepeatCount.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/EstimateRepeatCount: EstimateRepeatCount.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SelectFullAlignments: $(OBJ)
-	$(GPP) -o $@ SelectFullAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/SelectFullAlignments: SelectFullAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/AddNodeNames: $(OBJ)
-	$(GPP) -o $@ AddNodeNames.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -static-libstdc++
+$(BINDIR)/AddNodeNames: AddNodeNames.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/PickMummerSeeds: $(OBJ)
-	$(GPP) -o $@ PickMummerSeeds.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(LINKFLAGS)
+$(BINDIR)/PickMummerSeeds: PickMummerSeeds.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SelectLongestAlignment: $(OBJ)
-	$(GPP) -o $@ SelectLongestAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(LINKFLAGS)
+$(BINDIR)/SelectLongestAlignment: SelectLongestAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
+	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-all: $(BINDIR)/Aligner $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/MergeGfas $(BINDIR)/VisualizeAlignment $(BINDIR)/SelectPartials $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount $(BINDIR)/SelectFullAlignments $(BINDIR)/AddNodeNames $(BINDIR)/PickMummerSeeds
+all: $(BINDIR)/Aligner $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/MergeGfas $(BINDIR)/VisualizeAlignment $(BINDIR)/SelectPartials $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount $(BINDIR)/SelectFullAlignments $(BINDIR)/AddNodeNames $(BINDIR)/PickMummerSeeds $(BINDIR)/SelectLongestAlignment
 
 clean:
 	rm -f $(ODIR)/*
