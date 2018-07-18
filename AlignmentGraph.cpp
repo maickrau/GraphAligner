@@ -154,44 +154,6 @@ void AlignmentGraph::Finalize(int wordSize)
 	nodeSequences.shrink_to_fit();
 }
 
-// std::set<size_t> AlignmentGraph::ProjectForward(const std::set<size_t>& startpositions, size_t amount) const
-// {
-// 	std::vector<std::set<size_t>> positions;
-// 	positions.resize(amount+1);
-// 	positions[0].insert(startpositions.begin(), startpositions.end());
-// 	for (size_t i = 0; i < amount; i++)
-// 	{
-// 		auto left = amount - i;
-// 		for (auto pos : positions[i])
-// 		{
-// 			auto nodeIndex = IndexToNode(pos);
-// 			auto end = NodeEnd(nodeIndex);
-// 			if (pos + left < end)
-// 			{
-// 				assert(i + end - pos > amount);
-// 				positions.back().insert(pos + left);
-// 			}
-// 			else if (pos + left == end)
-// 			{
-// 				assert(i + end - pos == amount);
-// 				for (auto neighbor : outNeighbors[nodeIndex])
-// 				{
-// 					positions.back().insert(nodeStart[neighbor]);
-// 				}
-// 			}
-// 			else
-// 			{
-// 				assert(i + end - pos < amount);
-// 				for (auto neighbor : outNeighbors[nodeIndex])
-// 				{
-// 					positions[i + end - pos].insert(nodeStart[neighbor]);
-// 				}
-// 			}
-// 		}
-// 	}
-// 	return positions.back();
-// }
-
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
@@ -235,87 +197,6 @@ public:
 	bool start;
 	size_t distance;
 };
-
-// size_t AlignmentGraph::MinDistance(size_t pos, const std::vector<size_t>& targets) const
-// {
-// 	assert(targets.size() > 0);
-// 	std::set<size_t> validNodes;
-// 	for (auto target : targets)
-// 	{
-// 		validNodes.insert(IndexToNode(target));
-// 	}
-// 	std::unordered_map<size_t, size_t> distanceAtNodeEnd;
-// 	std::unordered_map<size_t, size_t> distanceAtNodeStart;
-// 	std::priority_queue<NodeWithDistance, std::vector<NodeWithDistance>, std::greater<NodeWithDistance>> queue;
-// 	size_t mindist = std::numeric_limits<size_t>::max();
-// 	{
-// 		auto node = IndexToNode(pos);
-// 		queue.emplace(node, true, pos - NodeStart(node));
-// 		queue.emplace(node, false, NodeEnd(node) - 1 - pos);
-// 		if (validNodes.count(node) == 1)
-// 		{
-// 			for (auto target : targets)
-// 			{
-// 				if (IndexToNode(target) != node) continue;
-// 				if (pos <= target) mindist = std::min(mindist, target - pos);
-// 				if (target <= pos) mindist = std::min(mindist, pos - target);
-// 			}
-// 		}
-// 	}
-// 	size_t lastdist = 0;
-// 	while (queue.size() > 0)
-// 	{
-// 		NodeWithDistance top = queue.top();
-// 		assert(top.distance >= lastdist);
-// 		lastdist = top.distance;
-// 		if (top.distance >= mindist) break;
-// 		queue.pop();
-// 		if (top.start)
-// 		{
-// 			if (distanceAtNodeStart.count(top.node) > 0 && distanceAtNodeStart[top.node] <= top.distance) continue;
-// 			distanceAtNodeStart[top.node] = top.distance;
-// 		}
-// 		else
-// 		{
-// 			if (distanceAtNodeEnd.count(top.node) > 0 && distanceAtNodeEnd[top.node] <= top.distance) continue;
-// 			distanceAtNodeEnd[top.node] = top.distance;
-// 		}
-// 		if (validNodes.count(top.node) > 0)
-// 		{
-// 			for (auto target : targets)
-// 			{
-// 				if (IndexToNode(target) == top.node)
-// 				{
-// 					if (top.start)
-// 					{
-// 						mindist = std::min(mindist, top.distance + target - NodeStart(top.node));
-// 					}
-// 					else
-// 					{
-// 						mindist = std::min(mindist, top.distance + NodeEnd(top.node) - 1 - target);
-// 					}
-// 				}
-// 			}
-// 		}
-// 		if (top.start)
-// 		{
-// 			queue.emplace(top.node, false, top.distance + NodeLength(top.node) - 1);
-// 			for (auto neighbor : inNeighbors[top.node])
-// 			{
-// 				queue.emplace(neighbor, false, top.distance + 1);
-// 			}
-// 		}
-// 		else
-// 		{
-// 			queue.emplace(top.node, true, top.distance + NodeLength(top.node) - 1);
-// 			for (auto neighbor : outNeighbors[top.node])
-// 			{
-// 				queue.emplace(neighbor, true, top.distance + 1);
-// 			}
-// 		}
-// 	}
-// 	return mindist;
-// }
 
 size_t AlignmentGraph::GetReverseNode(size_t node) const
 {
