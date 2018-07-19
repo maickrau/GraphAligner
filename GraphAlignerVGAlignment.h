@@ -65,10 +65,13 @@ public:
 			assert(btNodeEnd.seqPos >= btNodeStart.seqPos);
 			assert(reverse || btNodeEnd.nodeOffset >= btNodeStart.nodeOffset);
 			assert(!reverse || btNodeEnd.nodeOffset <= btNodeStart.nodeOffset);
-			assert(btNodeEnd.seqPos > btBeforeNode.seqPos);
-			assert(btBeforeNode.seqPos < sequence.size() - 1);
+			assert(btNodeEnd.seqPos >= btBeforeNode.seqPos);
 			edit->set_to_length(edit->to_length() + btNodeEnd.seqPos - btBeforeNode.seqPos);
-			edit->set_sequence(edit->sequence() + sequence.substr(btBeforeNode.seqPos+1, btNodeEnd.seqPos - btBeforeNode.seqPos));
+			if (btNodeEnd.seqPos > btBeforeNode.seqPos)
+			{
+				assert(btBeforeNode.seqPos < sequence.size() - 1);
+				edit->set_sequence(edit->sequence() + sequence.substr(btBeforeNode.seqPos+1, btNodeEnd.seqPos - btBeforeNode.seqPos));
+			}
 			if (reverse)
 			{
 				assert(btNodeStart.nodeOffset + 1 >= btNodeEnd.nodeOffset);
