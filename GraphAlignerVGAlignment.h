@@ -40,6 +40,8 @@ public:
 		if (reverse)
 		{
 			position->set_is_reverse(!params.graph.reverse[currentNode]);
+			assert(params.graph.nodeIDs[currentNode] % 2 == (params.graph.reverse[currentNode] ? 1 : 0));
+			position->set_node_id((params.graph.nodeIDs[currentNode] / 2) * 2 + (position->is_reverse() ? 1 : 0));
 		}
 		else
 		{
@@ -100,6 +102,8 @@ public:
 				if (reverse)
 				{
 					position->set_is_reverse(!params.graph.reverse[currentNode]);
+					assert(params.graph.nodeIDs[currentNode] % 2 == (params.graph.reverse[currentNode] ? 1 : 0));
+					position->set_node_id((params.graph.nodeIDs[currentNode] / 2) * 2 + (position->is_reverse() ? 1 : 0));
 				}
 				else
 				{
@@ -152,11 +156,19 @@ public:
 		auto secondStartPosNodeId = params.graph.nodeLookup.at(secondStartPos.node_id())[0];
 		if (posEqual(firstEndPos, secondStartPos))
 		{
+			auto edit = finalResult.alignment.mutable_path()->mutable_mapping(first.alignment.path().mapping_size()-1)->mutable_edit(0);
+			edit->set_sequence(edit->sequence() + second.alignment.path().mapping(0).edit(0).sequence());
+			edit->set_from_length(edit->from_length() + second.alignment.path().mapping(0).edit(0).from_length());
+			edit->set_to_length(edit->to_length() + second.alignment.path().mapping(0).edit(0).to_length());
 			start = 1;
 		}
 		else if (std::find(params.graph.outNeighbors[firstEndPosNodeId].begin(), params.graph.outNeighbors[firstEndPosNodeId].end(), secondStartPosNodeId) != params.graph.outNeighbors[firstEndPosNodeId].end())
 		{
 			start = 0;
+		}
+		else
+		{
+			assert(false);
 		}
 		for (int i = start; i < second.alignment.path().mapping_size(); i++)
 		{
