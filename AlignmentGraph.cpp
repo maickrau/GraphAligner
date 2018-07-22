@@ -1,10 +1,6 @@
 #include <iostream>
 #include <limits>
 #include <algorithm>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/set.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
 #include <queue>
 #include "AlignmentGraph.h"
 #include "CommonUtils.h"
