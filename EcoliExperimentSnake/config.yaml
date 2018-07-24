@@ -1,0 +1,9 @@
+# https://github.com/GATB/bcalm
+bcalm_bin_path: bcalm/build/bcalm
+bcalm_convert_path: bcalm/scripts/convertToGFA.py
+
+aligner_bin_path: ../bin/Aligner
+
+# parameters for the de Bruijn graph construction
+kmer_min_abundance: 3
+kmer_size: 31

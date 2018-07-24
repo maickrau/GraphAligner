@@ -1,0 +1,73 @@
+configfile: "config.yaml"
+BCALMBINPATH = config["bcalm_bin_path"]
+BCALMCONVERTPATH = config["bcalm_convert_path"]
+ALIGNERBINPATH = config["aligner_bin_path"]
+K = config["kmer_size"]
+MIN_COV = config["kmer_min_abundance"]
+
+rule all:
+	input:
+		expand("results/k{k}_cov{cov}_summary.txt", k=K, cov=MIN_COV)
+
+rule clean:
+	shell:
+		"(rm -r tmp || true) && (rm -r results || true)"
+
+rule get_ecoli_illuminas:
+	output:
+		"input/illumina_1.fastq",
+		"input/illumina_2.fastq"
+	shadow: "shallow"
+	run:
+		shell("wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR022/ERR022075/ERR022075_1.fastq.gz"),
+		shell("wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR022/ERR022075/ERR022075_2.fastq.gz"),
+		shell("gunzip ERR022075_1.fastq.gz"),
+		shell("gunzip ERR022075_2.fastq.gz"),
+		shell("mv ERR022075_1.fastq input/illumina_1.fastq"),
+		shell("mv ERR022075_2.fastq input/illumina_2.fastq")
+
+rule build_DBG:
+	input:
+		"input/illumina_1.fastq",
+		"input/illumina_2.fastq"
+	output:
+		"tmp/graph_k{k}_cov{cov}.gfa"
+	shadow: "shallow"
+	run:
+		shell("ls -1 input/illumina_*.fastq > filelist")
+		shell("{BCALMBINPATH} -in filelist -out graph_k{wildcards.k}_cov{wildcards.cov} -kmer-size {wildcards.k} -abundance-min {wildcards.cov} && {BCALMCONVERTPATH} graph_k{wildcards.k}_cov{wildcards.cov}.unitigs.fa {output} {wildcards.k}")
+
+rule get_ecoli_longreads:
+	output:
+		"input/pacbios.fa"
+	shadow: "shallow"
+	run:
+		shell("fastq-dump --fasta SRR1284073"),
+		shell("mv SRR1284073.fasta {output}")
+
+rule pick_long_and_downsample:
+	input:
+		"input/pacbios.fa"
+	output:
+		"tmp/pacbios_downsampled.fa"
+	shell:
+		"scripts/pick_long_reads.py {input} | scripts/sample_fasta.py > {output}"
+
+rule one_run:
+	input:
+		reads = "tmp/pacbios_downsampled.fa",
+		graph = "tmp/graph_k{k}_cov{cov}.gfa"
+	output:
+		"results/run_k{k}_cov{cov}.txt",
+	run:
+		shell("{ALIGNERBINPATH} -f {reads} -g {graph} > {output}"),
+
+rule summarize:
+	input:
+		"results/run_k{k}_cov{cov}.txt"
+	output:
+		"results/k{k}_cov{cov}_summary.txt"
+	run:
+		shell("grep \"cellbycell took\" < {input} >> {output}")
+		shell("grep \"bitvector took\" < {input} >> {output}")
+		shell("grep ratio < {input} >> {output}")
