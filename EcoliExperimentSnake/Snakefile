@@ -60,7 +60,7 @@ rule one_run:
 	output:
 		"results/run_k{k}_cov{cov}.txt",
 	run:
-		shell("{ALIGNERBINPATH} -f {reads} -g {graph} > {output}"),
+		shell("{ALIGNERBINPATH} -f {input.reads} -g {input.graph} > {output}"),
 
 rule summarize:
 	input:
