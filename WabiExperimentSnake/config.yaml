@@ -1,5 +1,3 @@
-# input reference sequence
-input_seq: ecoli_10000.fasta
 # https://github.com/GATB/bcalm
 bcalm_bin_path: bcalm/build/bcalm
 bcalm_convert_path: bcalm/scripts/convertToGFA.py

@@ -1,5 +1,4 @@
 configfile: "config.yaml"
-INPUTFILE = config["input_seq"].split('.')[0]
 BCALMBINPATH = config["bcalm_bin_path"]
 BCALMCONVERTPATH = config["bcalm_convert_path"]
 PBSIMBINPATH = config["pbsim_bin_path"]
@@ -8,23 +7,33 @@ ALIGNERBINPATH = config["aligner_bin_path"]
 
 rule all:
 	input:
-		expand("results/{file}_summary.txt", file=INPUTFILE)
+		expand("results/{file}_summary.txt", file="ref10000")
 
 rule clean:
 	shell:
 		"(rm -r tmp || true) && (rm -r results || true)"
 
-rule remove_linebreaks_from_input_file:
-	input:
-		"{file}.fasta"
+rule get_reference:
 	output:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/ref.fa",
+		temp("Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.dna.chromosome.Chromosome.fa")
+	shadow: "shallow"
+	run:
+		shell("wget ftp://ftp.ensemblgenomes.org/pub/bacteria/release-40/fasta/bacteria_0_collection/escherichia_coli_str_k_12_substr_mg1655/dna/Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.dna.chromosome.Chromosome.fa.gz"),
+		shell("gunzip Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.dna.chromosome.Chromosome.fa.gz")
+		shell("cut -d ' ' -f 1 < Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.dna.chromosome.Chromosome.fa > {output}")
+
+rule get_ref_first_10000:
+	input:
+		"input/ref.fa",
+	output:
+		"input/ref10000.fa"
 	shell:
-		"head -n 1 < {input} > {output} && sed -n 2~1p < {input} | tr -d '\n' >> {output}"
+		"head -n 1 < {input} > {output} && (sed -n 2~1p < {input} | tr -d '\\n' || true) | head -c 10000 >> {output}"
 
 rule create_linear_graph:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_linear.gfa"
 	shell:
@@ -32,7 +41,7 @@ rule create_linear_graph:
 
 rule create_onechar_graph:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_onechar.gfa"
 	shell:
@@ -40,7 +49,7 @@ rule create_onechar_graph:
 
 rule create_snp_graph:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_snp.gfa"
 	shell:
@@ -48,7 +57,7 @@ rule create_snp_graph:
 
 rule create_twopath_graph:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_twopath.gfa"
 	shell:
@@ -56,16 +65,16 @@ rule create_twopath_graph:
 
 rule create_tangle_graph:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_tangle.gfa"
 	shadow: "shallow"
 	shell:
-		"{BCALMBINPATH} -in {input} -kmer-size 11 -abundance-min 1 && {BCALMCONVERTPATH} {wildcards.file}_nolinebreaks.unitigs.fa {output} 11"
+		"{BCALMBINPATH} -in {input} -kmer-size 11 -abundance-min 1 && {BCALMCONVERTPATH} {wildcards.file}.unitigs.fa {output} 11"
 
 rule create_pbsim_reads:
 	input:
-		"tmp/{file}_nolinebreaks.fasta"
+		"input/{file}.fa"
 	output:
 		"tmp/{file}_simulatedreads.fastq"
 	shadow: "shallow"
