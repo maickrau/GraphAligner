@@ -53,8 +53,6 @@ int main(int argc, char** argv)
 		}
 	}
 
-	std::cout << "preprocess bitvectors" << std::endl;
-	ByteStuff::precalculateByteStuff();
 	wabiExperiments(params);
 	// alignReads(params);
 
