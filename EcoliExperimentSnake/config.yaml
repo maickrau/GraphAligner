@@ -5,5 +5,5 @@ bcalm_convert_path: bcalm/scripts/convertToGFA.py
 aligner_bin_path: ../bin/Aligner
 
 # parameters for the de Bruijn graph construction
-kmer_min_abundance: 3
+kmer_min_abundance: 7
 kmer_size: 31
