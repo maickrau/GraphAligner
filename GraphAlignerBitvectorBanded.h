@@ -1056,53 +1056,52 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
 	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, NodeCalculationResult& sliceCalc, LengthType j, const std::string& sequence) const
 	{
-		//todo fix
-		// assert(j < sequence.size());
-		// assert(sequence.size() - j < WordConfiguration<Word>::WordSize);
-		// sliceCalc.minScore = std::numeric_limits<ScoreType>::max();
-		// sliceCalc.minScoreNode = -1;
-		// sliceCalc.minScoreNodeOffset = -1;
-		// auto offset = sequence.size() - j;
-		// assert(offset >= 0);
-		// assert(offset < WordConfiguration<Word>::WordSize);
-		// for (auto node : slice)
-		// {
-		// 	auto current = node.second;
-		// 	decltype(current) old;
-		// 	if (previousSlice.hasNode(node.first))
-		// 	{
-		// 		old = previousSlice.node(node.first);
-		// 	}
-		// 	else
-		// 	{
-		// 		old.exists = false;
-		// 		for (size_t i = 0; i < old.NUM_CHUNKS; i++)
-		// 		{
-		// 			old.HP[i] = WordConfiguration<Word>::AllOnes;
-		// 			old.HN[i] = WordConfiguration<Word>::AllZeros;
-		// 		}
-		// 	}
-		// 	auto nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence);
-		// 	assert(nodeSlices[0].VP == node.second.startSlice.VP);
-		// 	assert(nodeSlices[0].VN == node.second.startSlice.VN);
-		// 	assert(nodeSlices[0].scoreEnd == node.second.startSlice.scoreEnd);
-		// 	assert(nodeSlices.back().VP == node.second.endSlice.VP);
-		// 	assert(nodeSlices.back().VN == node.second.endSlice.VN);
-		// 	assert(nodeSlices.back().scoreEnd == node.second.endSlice.scoreEnd);
-		// 	for (size_t i = 0; i < nodeSlices.size(); i++)
-		// 	{
-		// 		auto wordSliceResult = BV::flattenWordSlice(nodeSlices[i], offset);
-		// 		if (wordSliceResult.scoreEnd < sliceCalc.minScore)
-		// 		{
-		// 			sliceCalc.minScore = wordSliceResult.scoreEnd;
-		// 			sliceCalc.minScoreNode = node.first;
-		// 			sliceCalc.minScoreNodeOffset = i;
-		// 		}
-		// 	}
-		// }
-		// assert(sliceCalc.minScore != std::numeric_limits<ScoreType>::max());
-		// assert(sliceCalc.minScoreNode < params.graph.NodeSize());
-		// assert(sliceCalc.minScoreNodeOffset < params.graph.NodeLength(sliceCalc.minScoreNode));
+		assert(j < sequence.size());
+		assert(sequence.size() - j < WordConfiguration<Word>::WordSize);
+		sliceCalc.minScore = std::numeric_limits<ScoreType>::max();
+		sliceCalc.minScoreNode = -1;
+		sliceCalc.minScoreNodeOffset = -1;
+		auto offset = sequence.size() - j;
+		assert(offset >= 0);
+		assert(offset < WordConfiguration<Word>::WordSize);
+		for (auto node : slice)
+		{
+			auto current = node.second;
+			decltype(current) old;
+			if (previousSlice.hasNode(node.first))
+			{
+				old = previousSlice.node(node.first);
+			}
+			else
+			{
+				old.exists = false;
+				for (size_t i = 0; i < old.NUM_CHUNKS; i++)
+				{
+					old.HP[i] = WordConfiguration<Word>::AllOnes;
+					old.HN[i] = WordConfiguration<Word>::AllZeros;
+				}
+			}
+			auto nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence);
+			assert(nodeSlices[0].VP == node.second.startSlice.VP);
+			assert(nodeSlices[0].VN == node.second.startSlice.VN);
+			assert(nodeSlices[0].scoreEnd == node.second.startSlice.scoreEnd);
+			assert(nodeSlices.back().VP == node.second.endSlice.VP);
+			assert(nodeSlices.back().VN == node.second.endSlice.VN);
+			assert(nodeSlices.back().scoreEnd == node.second.endSlice.scoreEnd);
+			for (size_t i = 0; i < nodeSlices.size(); i++)
+			{
+				auto wordSliceResult = BV::flattenWordSlice(nodeSlices[i], offset);
+				if (wordSliceResult.scoreEnd < sliceCalc.minScore)
+				{
+					sliceCalc.minScore = wordSliceResult.scoreEnd;
+					sliceCalc.minScoreNode = node.first;
+					sliceCalc.minScoreNodeOffset = i;
+				}
+			}
+		}
+		assert(sliceCalc.minScore != std::numeric_limits<ScoreType>::max());
+		assert(sliceCalc.minScoreNode < params.graph.NodeSize());
+		assert(sliceCalc.minScoreNodeOffset < params.graph.NodeLength(sliceCalc.minScoreNode));
 	}
 
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
