@@ -1,12 +1,12 @@
 This experiment downloads the E.Coli reference genome and builds four types of graphs from the first 10000 bp. Reads are simulated and aligned to all graphs with the bitvector and cell-by-cell algorithms, and the runtimes are reported.
 
-1. Snakemake (for running the experiment pipeline), BCALM (for building the tangle graph) and PBSIM (for simulating the reads) must first be installed
-https://snakemake.readthedocs.io/en/stable/
-https://github.com/GATB/bcalm
-https://github.com/pfaucon/PBSIM-PacBio-Simulator
+1. The binaries for Snakemake (for running the experiment pipeline), BCALM (for building the tangle graph) and PBSIM (for simulating the reads) must first be installed
+   - https://snakemake.readthedocs.io/en/stable/
+   - https://github.com/GATB/bcalm
+   - https://github.com/pfaucon/PBSIM-PacBio-Simulator
 2. `git clone git@github.com:maickrau/GraphAligner.git && cd GraphAligner && git checkout WabiExperiments` 
 3. `mkdir obj && mkdir bin && make bin/Aligner`
-4. Edit WabiExperimentSnake/config.yaml: add the paths to bcalm and pbsim binaries and the pbsim simulation parameter file
+4. Edit WabiExperimentSnake/config.yaml: add the paths to bcalm and pbsim binaries, bcalm graph conversion script and the pbsim simulation parameter file
 5. `cd WabiExperimentSnake && snakemake all`
 6. The results will be in WabiExperimentSnake/results/ref10000\_summary.txt
 7. For multiple runs: copy ref10000\_summary.txt somewhere, rm WabiExperimentSnake/results/ref10000\_*.txt and repeat steps 5-7
