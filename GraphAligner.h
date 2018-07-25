@@ -116,12 +116,14 @@ private:
 		{
 			assert(sequence.size() >= seedHit.seqPos + params.graph.DBGOverlap);
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + params.graph.DBGOverlap));
-			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reusableState);
+			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
+			assert(reversePos.first == backwardNodeId);
+			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
 		}
 		if (seedHit.seqPos < sequence.size() - 1)
 		{
 			auto forwardPart = sequence.substr(seedHit.seqPos);
-			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, reusableState);
+			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, seedHit.nodeOffset, reusableState);
 			for (auto& item : result.forward.trace)
 			{
 				item.seqPos += seedHit.seqPos;

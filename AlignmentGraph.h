@@ -55,6 +55,7 @@ public:
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
+	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
 	size_t NodeLength(size_t nodeIndex) const;

@@ -117,13 +117,11 @@ public:
 	{
 	}
 
-	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId, size_t nodeOffset, AlignerGraphsizedState& reusableState) const
 	{
-		std::vector<size_t> nodes;
-		nodes = params.graph.nodeLookup.at(bigraphNodeId);
 		assert(sequence.size() >= params.graph.DBGOverlap);
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto initialBandwidth = getInitialSliceOneNodeGroup(nodes);
+		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, reusableState);
 		removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
@@ -1362,6 +1360,28 @@ private:
 			}
 		}
 #endif
+		return result;
+	}
+
+	DPSlice getInitialSliceExactPosition(LengthType bigraphNodeId, size_t offset) const
+	{
+		DPSlice result;
+		result.j = -WordConfiguration<Word>::WordSize;
+		result.bandwidth = 1;
+		result.minScore = 0;
+		result.scores.addEmptyNodeMap(1);
+		auto nodes = params.graph.nodeLookup.at(bigraphNodeId);
+		size_t index = offset / params.graph.SPLIT_NODE_SIZE;
+		assert(index < nodes.size());
+		auto nodeIndex = nodes[index];
+		result.scores.addNodeToMap(nodeIndex);
+		result.minScoreNode = nodeIndex;
+		result.minScoreNodeOffset = params.graph.NodeLength(nodeIndex)-1;
+		auto& node = result.scores.node(nodeIndex);
+		node.startSlice = {0, 0, 0};
+		node.endSlice = {0, 0, 0};
+		node.minScore = 0;
+		node.exists = true;
 		return result;
 	}
 

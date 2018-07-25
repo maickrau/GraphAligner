@@ -123,7 +123,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory };
@@ -274,8 +274,8 @@ void alignReads(AlignerParams params)
 		std::exit(0);
 	}
 
-	const std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>>* seedHitsToThreads = nullptr;
-	std::map<const FastQ*, std::vector<std::tuple<int, size_t, bool>>> seedHits;
+	const std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>>* seedHitsToThreads = nullptr;
+	std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>> seedHits;
 
 	if (params.seedFile != "")
 	{
@@ -302,7 +302,7 @@ void alignReads(AlignerParams params)
 			for (size_t j = 0; j < seeds[fastqs[i].seq_id].size(); j++)
 			{
 				auto& seedhit = seeds[fastqs[i].seq_id][j];
-				seedHits[&(fastqs[i])].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.query_position(), seedhit.path().mapping(0).position().is_reverse());
+				seedHits[&(fastqs[i])].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
 			}
 		}
 		seedHitsToThreads = &seedHits;

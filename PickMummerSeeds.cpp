@@ -13,6 +13,7 @@ struct MummerSeed
 	size_t readpos;
 	size_t len;
 	int nodeId;
+	size_t nodepos;
 	bool reverse;
 };
 
@@ -37,20 +38,20 @@ vg::Alignment createAlignment(const std::string& readname, const MummerSeed& see
 	vgmapping->set_allocated_position(position);
 	position->set_node_id(seed.nodeId);
 	position->set_is_reverse(seed.reverse);
+	position->set_offset(seed.nodepos);
 	auto edit = vgmapping->add_edit();
 	edit->set_from_length(seed.len);
 	edit->set_to_length(seed.len);
 	return result;
 }
 
-int getNodeId(size_t pos, const std::vector<size_t>& nodeMappingPositions, const std::vector<size_t>& refNodes)
+int getNodeIndex(size_t pos, const std::vector<size_t>& nodeMappingPositions)
 {
 	auto iter = std::upper_bound(nodeMappingPositions.begin(), nodeMappingPositions.end(), pos);
 	int index = iter - nodeMappingPositions.begin();
 	assert(index > 0);
 	assert(index <= nodeMappingPositions.size());
-	assert(index-1 < refNodes.size());
-	return refNodes[index-1];
+	return index-1;
 }
 
 int main(int argc, char** argv)
@@ -115,7 +116,12 @@ int main(int argc, char** argv)
 			size_t seqpos;
 			str >> seqpos >> newSeed.readpos >> newSeed.len;
 			newSeed.reverse = currentReverse;
-			newSeed.nodeId = getNodeId(seqpos, nodeMappingPositions, refNodes);
+			size_t index = getNodeIndex(seqpos, nodeMappingPositions);
+			assert(index < refNodes.size());
+			newSeed.nodeId = refNodes[index];
+			assert(seqpos >= nodeMappingPositions[index]);
+			assert(index == nodeMappingPositions.size()-1 || seqpos < nodeMappingPositions[index+1]);
+			newSeed.nodepos = seqpos - nodeMappingPositions[index];
 			newSeed.readpos -= 1;
 			if (currentReverse) newSeed.readpos -= k;
 			assert(newSeed.readpos >= 0);
