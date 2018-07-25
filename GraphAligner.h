@@ -112,21 +112,22 @@ private:
 			backwardNodeId = seedHit.nodeID * 2 + 1;
 		}
 		Trace result;
+		assert(seedHit.matchLen > 2);
 		if (seedHit.seqPos > 0)
 		{
-			assert(sequence.size() >= seedHit.seqPos + params.graph.DBGOverlap);
-			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + params.graph.DBGOverlap));
-			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
+			assert(sequence.size() >= seedHit.seqPos + seedHit.matchLen);
+			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + 1));
+			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset + 1);
 			assert(reversePos.first == backwardNodeId);
 			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
 		}
-		if (seedHit.seqPos < sequence.size() - 1)
+		if (seedHit.seqPos + seedHit.matchLen < sequence.size())
 		{
-			auto forwardPart = sequence.substr(seedHit.seqPos);
-			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, seedHit.nodeOffset, reusableState);
+			auto forwardPart = sequence.substr(seedHit.seqPos + seedHit.matchLen - 1);
+			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, seedHit.nodeOffset + seedHit.matchLen - 1, reusableState);
 			for (auto& item : result.forward.trace)
 			{
-				item.seqPos += seedHit.seqPos;
+				item.seqPos += seedHit.seqPos + seedHit.matchLen - 1;
 			}
 		}
 		return result;
@@ -144,6 +145,7 @@ private:
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
+		assert(seedHit.matchLen > 2);
 		auto timeStart = std::chrono::system_clock::now();
 
 		auto trace = getTwoDirectionalTrace(sequence, seedHit, reusableState);
@@ -152,7 +154,7 @@ private:
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);
 		if (trace.backward.trace.size() > 0) verifyTrace(trace.backward.trace, sequence, trace.backward.score);
 #endif
-		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos - 1);
+		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos);
 
 
 		//failed alignment, don't output
@@ -170,7 +172,7 @@ private:
 		{
 			return VGAlignment::emptyAlignment(0, 0);
 		}
-		auto result = VGAlignment::mergeAlignments(params, bwresult, fwresult);
+		auto result = VGAlignment::mergeAlignments(params, bwresult, seedHit, fwresult, sequence);
 		LengthType seqstart = 0;
 		LengthType seqend = 0;
 		assert(trace.forward.trace.size() > 0 || trace.backward.trace.size() > 0);

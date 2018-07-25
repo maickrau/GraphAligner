@@ -14,6 +14,7 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerVGAlignment
 {
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
+	using SeedHit = typename Common::SeedHit;
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
 public:
@@ -135,13 +136,30 @@ public:
 		return item;
 	}
 
-	static AlignmentResult::AlignmentItem mergeAlignments(const Params& params, const AlignmentResult::AlignmentItem& first, const AlignmentResult::AlignmentItem& second)
+	static AlignmentResult::AlignmentItem mergeAlignments(const Params& params, const AlignmentResult::AlignmentItem& first, const SeedHit& seedHit, const AlignmentResult::AlignmentItem& second, const std::string& sequence)
 	{
 		assert(!first.alignmentFailed() || !second.alignmentFailed());
-		if (first.alignmentFailed()) return second;
-		if (second.alignmentFailed()) return first;
-		if (first.alignment.path().mapping_size() == 0) return second;
-		if (second.alignment.path().mapping_size() == 0) return first;
+		int seedHitNodeId;
+		std::string seedHitSequence = sequence.substr(seedHit.seqPos + 1, seedHit.matchLen - 2);
+		if (seedHit.reverse)
+		{
+			seedHitNodeId = seedHit.nodeID * 2 + 1;
+			seedHitSequence = CommonUtils::ReverseComplement(seedHitSequence);
+		}
+		else
+		{
+			seedHitNodeId = seedHit.nodeID * 2;
+		}
+		if (first.alignmentFailed() || first.alignment.path().mapping_size() == 0)
+		{
+			//todo add middle
+			return second;
+		}
+		if (second.alignmentFailed() || second.alignment.path().mapping_size() == 0)
+		{
+			//todo add middle
+			return first;
+		}
 		assert(!first.alignmentFailed());
 		assert(!second.alignmentFailed());
 		AlignmentResult::AlignmentItem finalResult;
@@ -152,25 +170,23 @@ public:
 		int start = 0;
 		auto firstEndPos = first.alignment.path().mapping(first.alignment.path().mapping_size()-1).position();
 		auto secondStartPos = second.alignment.path().mapping(0).position();
-		auto firstEndPosNodeId = params.graph.nodeLookup.at(firstEndPos.node_id()).back();
-		auto secondStartPosNodeId = params.graph.nodeLookup.at(secondStartPos.node_id())[0];
-		if (posEqual(firstEndPos, secondStartPos))
-		{
-			auto edit = finalResult.alignment.mutable_path()->mutable_mapping(first.alignment.path().mapping_size()-1)->mutable_edit(0);
-			edit->set_sequence(edit->sequence() + second.alignment.path().mapping(0).edit(0).sequence());
-			edit->set_from_length(edit->from_length() + second.alignment.path().mapping(0).edit(0).from_length());
-			edit->set_to_length(edit->to_length() + second.alignment.path().mapping(0).edit(0).to_length());
-			start = 1;
-		}
-		else if (std::find(params.graph.outNeighbors[firstEndPosNodeId].begin(), params.graph.outNeighbors[firstEndPosNodeId].end(), secondStartPosNodeId) != params.graph.outNeighbors[firstEndPosNodeId].end())
-		{
-			start = 0;
-		}
-		else
-		{
-			assert(false);
-		}
-		for (int i = start; i < second.alignment.path().mapping_size(); i++)
+		assert(firstEndPos.node_id() == seedHitNodeId);
+		assert(firstEndPos.is_reverse() == seedHit.reverse);
+		assert(secondStartPos.node_id() == seedHitNodeId);
+		assert(secondStartPos.is_reverse() == seedHit.reverse);
+		auto mapping = finalResult.alignment.mutable_path()->mutable_mapping(finalResult.alignment.path().mapping_size()-1);
+
+		auto seedHitExactMatch = mapping->add_edit();
+		seedHitExactMatch->set_from_length(seedHit.matchLen - 2);
+		seedHitExactMatch->set_to_length(seedHit.matchLen - 2);
+		seedHitExactMatch->set_sequence(seedHitSequence);
+
+		auto secondStartEdit = mapping->add_edit();
+		secondStartEdit->set_sequence(second.alignment.path().mapping(0).edit(0).sequence());
+		secondStartEdit->set_from_length(second.alignment.path().mapping(0).edit(0).from_length());
+		secondStartEdit->set_to_length(second.alignment.path().mapping(0).edit(0).to_length());
+
+		for (int i = 1; i < second.alignment.path().mapping_size(); i++)
 		{
 			auto mapping = finalResult.alignment.mutable_path()->add_mapping();
 			*mapping = second.alignment.path().mapping(i);

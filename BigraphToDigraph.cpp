@@ -68,7 +68,7 @@ std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANod
 std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence, int edgeOverlap)
 {
 	assert(sequence.size() > edgeOverlap);
-	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence.substr(0, sequence.size() - edgeOverlap) }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence).substr(0, sequence.size() - edgeOverlap) });
+	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence.substr(edgeOverlap) }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence).substr(edgeOverlap) });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdgeToEdges(const std::string& edge)

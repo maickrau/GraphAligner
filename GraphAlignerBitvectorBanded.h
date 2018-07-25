@@ -119,7 +119,6 @@ public:
 
 	OnewayTrace getTraceFromSeed(const std::string& sequence, int bigraphNodeId, size_t nodeOffset, AlignerGraphsizedState& reusableState) const
 	{
-		assert(sequence.size() >= params.graph.DBGOverlap);
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, reusableState);
@@ -133,11 +132,6 @@ public:
 		OnewayTrace result;
 
 		result = getTraceFromTable(sequence, slice, reusableState);
-		size_t backtraceableSize = sequence.size() - params.graph.DBGOverlap;
-		while (result.trace.size() > 0 && result.trace.back().seqPos >= backtraceableSize)
-		{
-			result.trace.pop_back();
-		}
 
 		return result;
 	}
@@ -1371,9 +1365,11 @@ private:
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
 		auto nodes = params.graph.nodeLookup.at(bigraphNodeId);
-		size_t index = offset / params.graph.SPLIT_NODE_SIZE;
+		size_t index = (offset - params.graph.DBGOverlap) / params.graph.SPLIT_NODE_SIZE;
 		assert(index < nodes.size());
 		auto nodeIndex = nodes[index];
+		assert(params.graph.nodeOffset[nodeIndex] <= offset);
+		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);
 		result.scores.addNodeToMap(nodeIndex);
 		result.minScoreNode = nodeIndex;
 		result.minScoreNodeOffset = params.graph.NodeLength(nodeIndex)-1;

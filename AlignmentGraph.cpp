@@ -37,7 +37,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	if (nodeLookup.count(nodeId) != 0) return;
 	for (size_t i = 0; i < sequence.size(); i += SPLIT_NODE_SIZE)
 	{
-		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
+		AddNode(nodeId, i + DBGOverlap, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
 		if (i > 0)
 		{
 			assert(outNeighbors.size() >= 2);
@@ -200,7 +200,7 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 	auto nodes = nodeLookup.at(nodeId);
 	size_t originalSize = (nodes.size()-1) * SPLIT_NODE_SIZE + NodeLength(nodes.back()) + DBGOverlap;
 	assert(offset < originalSize);
-	size_t newOffset = originalSize - offset - 1 - DBGOverlap;
+	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);
 	int reverseNodeId;
 	if (nodeId % 2 == 0)
