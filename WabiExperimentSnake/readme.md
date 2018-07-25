@@ -4,12 +4,12 @@ This experiment downloads the E.Coli reference genome and builds four types of g
 https://snakemake.readthedocs.io/en/stable/
 https://github.com/GATB/bcalm
 https://github.com/pfaucon/PBSIM-PacBio-Simulator
-2. `git clone git@github.com:maickrau/GraphAligner.git && cd GraphAligner && git checkout WabiExperiments`
-3.` mkdir obj && mkdir bin && make bin/Aligner`
+2. `git clone git@github.com:maickrau/GraphAligner.git && cd GraphAligner && git checkout WabiExperiments` 
+3. `mkdir obj && mkdir bin && make bin/Aligner`
 4. Edit WabiExperimentSnake/config.yaml: add the paths to bcalm and pbsim binaries and the pbsim simulation parameter file
 5. `cd WabiExperimentSnake && snakemake all`
 6. The results will be in WabiExperimentSnake/results/ref10000\_summary.txt
-7. For multiple runs: copy ref10000\_summary.txt somewhere, rm WabiExperimentSnake/results/ref10000\_*.txt and repeat steps 5-8
+7. For multiple runs: copy ref10000\_summary.txt somewhere, rm WabiExperimentSnake/results/ref10000\_*.txt and repeat steps 5-7
 
 The files ref10000\_(graphname).txt will have:
 - Graph type (linear/tree/forest or DAG or cyclic)
