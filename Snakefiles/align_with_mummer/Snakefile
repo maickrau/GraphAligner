@@ -44,7 +44,7 @@ rule mummer_pipe:
 		"tmp/seeds_{reads}_{graph}_picked.gam"
 	threads: 40
 	shell:
-		"{MUMMERPATH} -b -qthreads {threads} -l {SEEDSIZE} tmp/{wildcards.graph}_gfareference.fa input/{wildcards.reads}.fasta | {ALIGNERBINPATH}/PickMummerSeeds {output} tmp/{wildcards.graph}_gfareference.fa tmp/{wildcards.graph}_refnodes.txt {SEEDSIZE} {MAXSEEDHITS} input/{wildcards.reads}.fasta"
+		"{MUMMERPATH} -b -qthreads {threads} -l {SEEDSIZE} tmp/{wildcards.graph}_gfareference.fa input/{wildcards.reads}.fasta | {ALIGNERBINPATH}/PickMummerSeeds {output} tmp/{wildcards.graph}_gfareference.fa tmp/{wildcards.graph}_refnodes.txt {MAXSEEDHITS} input/{wildcards.reads}.fasta"
 
 rule align:
 	input:

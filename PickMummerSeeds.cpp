@@ -60,9 +60,8 @@ int main(int argc, char** argv)
 	std::string outputFileName { argv[1] };
 	std::string gfaReferenceFilename { argv[2] };
 	std::string refNodesFileName { argv[3] };
-	int k = std::stoi(argv[4]);
-	int maxSeeds = std::stoi(argv[5]);
-	std::string readFile { argv[6] };
+	int maxSeeds = std::stoi(argv[4]);
+	std::string readFile { argv[5] };
 	std::unordered_map<std::string, size_t> readLengths;
 
 	{
