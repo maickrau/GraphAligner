@@ -42,4 +42,9 @@ int main(int argc, char** argv)
 		}
 	};
 	stream::for_each(alnfile, lambda);
+	if (writeAlns.size() > 0)
+	{
+		stream::write_buffered(outfile, writeAlns, 0);
+		writeAlns.clear();
+	}
 }
