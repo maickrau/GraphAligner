@@ -97,15 +97,13 @@ private:
 
 	std::string getSeq(int nodeId, size_t offset, size_t len) const
 	{
-		auto nodes = params.graph.nodeLookup.at(nodeId);
 		std::string result;
 		for (size_t i = 0; i < len; i++)
 		{
 			size_t offsetHere = offset + i;
-			size_t index = (offsetHere - params.graph.DBGOverlap) / params.graph.SPLIT_NODE_SIZE;
-			size_t nodeOffset = offsetHere - params.graph.nodeOffset[nodes[index]];
-			assert(nodeOffset < params.graph.NodeLength(nodes[index]));
-			result += params.graph.NodeSequences(nodes[index], nodeOffset);
+			size_t nodeIndex = params.graph.GetUnitigNode(nodeId, offsetHere);
+			size_t nodeOffset = offsetHere - params.graph.nodeOffset[nodeIndex];
+			result += params.graph.NodeSequences(nodeIndex, nodeOffset);
 		}
 		return result;
 	}
@@ -134,7 +132,6 @@ private:
 			assert(sequence.size() >= seedHit.seqPos + seedHit.matchLen);
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + 2));
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset + 2);
-			assert(reversePos.second >= params.graph.DBGOverlap);
 			assert(reversePos.first == backwardNodeId);
 			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
 		}
@@ -142,7 +139,6 @@ private:
 		{
 			auto forwardPart = sequence.substr(seedHit.seqPos + seedHit.matchLen - 2);
 			size_t offset = seedHit.nodeOffset + seedHit.matchLen - 2;
-			assert(offset >= params.graph.DBGOverlap);
 			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, offset, reusableState);
 			for (auto& item : result.forward.trace)
 			{

@@ -10,6 +10,7 @@ AlignmentGraph::AlignmentGraph() :
 DBGOverlap(0),
 nodeLength(),
 nodeLookup(),
+unitigStartNode(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
@@ -21,6 +22,7 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 {
 	nodeSequences.reserve(numSplitNodes);
 	nodeLookup.reserve(numNodes);
+	unitigStartNode.reserve(numNodes);
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
 	inNeighbors.reserve(numSplitNodes);
@@ -35,9 +37,12 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
-	for (size_t i = 0; i < sequence.size(); i += SPLIT_NODE_SIZE)
+	for (size_t i = 0; i < DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
-		AddNode(nodeId, i + DBGOverlap, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
+		size_t size = SPLIT_NODE_SIZE;
+		if (DBGOverlap - i < size) size = DBGOverlap - i;
+		if (size == 0) continue;
+		AddNode(nodeId, i, sequence.substr(i, size), reverseNode);
 		if (i > 0)
 		{
 			assert(outNeighbors.size() >= 2);
@@ -49,6 +54,19 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 			outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
 			inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
 		}
+	}
+	unitigStartNode[nodeId] = outNeighbors.size();
+	for (size_t i = DBGOverlap; i < sequence.size(); i += SPLIT_NODE_SIZE)
+	{
+		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
+		assert(outNeighbors.size() >= 2);
+		assert(outNeighbors.size() == inNeighbors.size());
+		assert(nodeIDs.size() == outNeighbors.size());
+		assert(nodeOffset.size() == outNeighbors.size());
+		assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
+		assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
+		outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
+		inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
 	}
 }
 
@@ -104,7 +122,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
 	auto from = nodeLookup[node_id_from].back();
-	auto to = nodeLookup[node_id_to][0];
+	auto to = unitigStartNode[node_id_to];
 	assert(to >= 0);
 	assert(from >= 0);
 	assert(to < inNeighbors.size());
@@ -194,12 +212,30 @@ public:
 	size_t distance;
 };
 
+size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
+{
+	auto nodes = nodeLookup.at(nodeId);
+	size_t index = 0;
+	while (index < nodes.size()-1 && nodeOffset[nodes[index+1]] <= offset) index++;
+	size_t result = nodes[index];
+	assert(nodeOffset[result] <= offset);
+	assert(nodeOffset[result] + NodeLength(result) > offset);
+	return result;
+}
+
 std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t offset) const
 {
 	assert(nodeLookup.count(nodeId) == 1);
 	auto nodes = nodeLookup.at(nodeId);
-	size_t originalSize = (nodes.size()-1) * SPLIT_NODE_SIZE + NodeLength(nodes.back()) + DBGOverlap;
-	assert(nodeOffset[nodes.back()] + NodeLength(nodes.back()) == originalSize);
+	size_t originalSize = nodeOffset[nodes.back()] + NodeLength(nodes.back());
+#ifndef NDEBUG
+	size_t checkSize = 0;
+	for (auto node : nodes)
+	{
+		checkSize += NodeLength(node);
+	}
+	assert(originalSize == checkSize);
+#endif
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);

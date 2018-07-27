@@ -54,7 +54,7 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdge
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight }, DirectedGraph::Edge { toLeft, fromLeft });
 }
 
-std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(const std::string& node, int edgeOverlap)
+std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(const std::string& node)
 {
 	std::stringstream str { node };
 	std::string dummy;
@@ -62,13 +62,12 @@ std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANod
 	int id;
 	str >> dummy >> id >> sequence;
 	assert(dummy == "S");
-	return ConvertGFANodeToNodes(id, sequence, edgeOverlap);
+	return ConvertGFANodeToNodes(id, sequence);
 }
 
-std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence, int edgeOverlap)
+std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence)
 {
-	assert(sequence.size() > edgeOverlap);
-	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence.substr(edgeOverlap) }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence).substr(edgeOverlap) });
+	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence) });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdgeToEdges(const std::string& edge)
@@ -184,7 +183,7 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 	}
 	for (auto node : nodes)
 	{
-		auto nodes = ConvertGFANodeToNodes(node.first, node.second, result.DBGOverlap);
+		auto nodes = ConvertGFANodeToNodes(node.first, node.second);
 		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
 		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
 	}

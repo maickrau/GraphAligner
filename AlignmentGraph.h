@@ -61,6 +61,7 @@ public:
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
+	size_t GetUnitigNode(int nodeId, size_t offset) const;
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	int DBGOverlap;
@@ -69,6 +70,7 @@ private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
+	std::unordered_map<int, size_t> unitigStartNode;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;

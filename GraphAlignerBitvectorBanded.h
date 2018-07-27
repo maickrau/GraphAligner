@@ -1365,11 +1365,8 @@ private:
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
 		auto nodes = params.graph.nodeLookup.at(bigraphNodeId);
-		assert(offset >= params.graph.DBGOverlap);
 		assert(offset < params.graph.nodeOffset[nodes.back()] + params.graph.NodeLength(nodes.back()));
-		size_t index = (offset - params.graph.DBGOverlap) / params.graph.SPLIT_NODE_SIZE;
-		assert(index < nodes.size());
-		auto nodeIndex = nodes[index];
+		size_t nodeIndex = params.graph.GetUnitigNode(bigraphNodeId, offset);
 		assert(params.graph.nodeOffset[nodeIndex] <= offset);
 		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);
 		size_t offsetInNode = offset - params.graph.nodeOffset[nodeIndex];
