@@ -59,14 +59,17 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	for (size_t i = DBGOverlap; i < sequence.size(); i += SPLIT_NODE_SIZE)
 	{
 		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
-		assert(outNeighbors.size() >= 2);
-		assert(outNeighbors.size() == inNeighbors.size());
-		assert(nodeIDs.size() == outNeighbors.size());
-		assert(nodeOffset.size() == outNeighbors.size());
-		assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-		assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
-		outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-		inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+		if (i > 0)
+		{
+			assert(outNeighbors.size() >= 2);
+			assert(outNeighbors.size() == inNeighbors.size());
+			assert(nodeIDs.size() == outNeighbors.size());
+			assert(nodeOffset.size() == outNeighbors.size());
+			assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
+			assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
+			outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
+			inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+		}
 	}
 }
 
