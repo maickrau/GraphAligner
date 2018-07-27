@@ -97,6 +97,7 @@ rule output_statistics:
 		"output/stats_{reads}_{graph}.txt"
 	run:
 		shell("touch {output}"),
+		shell("grep 'commit' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}")
 		shell("grep 'Command being timed:' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
 		shell("grep 'User time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
 		shell("grep 'System time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),

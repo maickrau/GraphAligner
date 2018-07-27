@@ -11,8 +11,8 @@ int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	std::cout << "Branch " << GITBRANCH << " commit " << GITCOMMIT << std::endl;
-	std::cerr << "Branch " << GITBRANCH << " commit " << GITCOMMIT << std::endl;
+	std::cout << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
+	std::cerr << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
 
 #ifndef NOBUILTINPOPCOUNT
 	if (__builtin_cpu_supports("popcnt") == 0)

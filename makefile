@@ -17,6 +17,7 @@ LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpth
 
 GITCOMMIT := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+GITDATE := $(shell git show -s --format=%ci)
 
 $(shell mkdir -p bin)
 $(shell mkdir -p obj)
@@ -24,7 +25,7 @@ $(shell mkdir -p obj)
 $(ODIR)/GraphAlignerWrapper.o: GraphAlignerWrapper.cpp GraphAligner.h NodeSlice.h WordSlice.h ArrayPriorityQueue.h GraphAlignerVGAlignment.h GraphAlignerBitvectorBanded.h GraphAlignerBitvectorCommon.h GraphAlignerCommon.h $(DEPS)
 
 $(ODIR)/AlignerMain.o: AlignerMain.cpp $(DEPS)
-	$(GPP) -c -o $@ $< $(CPPFLAGS) -DGITBRANCH=\"$(GITBRANCH)\" -DGITCOMMIT=\"$(GITCOMMIT)\"
+	$(GPP) -c -o $@ $< $(CPPFLAGS) -DGITBRANCH=\"$(GITBRANCH)\" -DGITCOMMIT=\"$(GITCOMMIT)\" -DGITDATE="\"$(GITDATE)\""
 
 $(ODIR)/%.o: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
