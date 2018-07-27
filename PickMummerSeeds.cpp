@@ -101,7 +101,7 @@ int main(int argc, char** argv)
 			lastChar = mappingfile.get();
 			currentPos++;
 		}
-		nodeMappingPositions.push_back(currentPos+1);
+		nodeMappingPositions.push_back(currentPos);
 	}
 	std::string currentRead;
 	std::string line;
