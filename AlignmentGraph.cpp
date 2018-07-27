@@ -199,6 +199,7 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 	assert(nodeLookup.count(nodeId) == 1);
 	auto nodes = nodeLookup.at(nodeId);
 	size_t originalSize = (nodes.size()-1) * SPLIT_NODE_SIZE + NodeLength(nodes.back()) + DBGOverlap;
+	assert(nodeOffset[nodes.back()] + NodeLength(nodes.back()) == originalSize);
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);

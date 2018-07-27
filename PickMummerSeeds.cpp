@@ -122,6 +122,8 @@ int main(int argc, char** argv)
 			assert(seqpos >= nodeMappingPositions[index]);
 			assert(index == nodeMappingPositions.size()-1 || seqpos < nodeMappingPositions[index+1]);
 			newSeed.nodepos = seqpos - nodeMappingPositions[index];
+			assert(newSeed.nodepos >= 2);
+			newSeed.nodepos -= 2;
 			newSeed.readpos -= 1;
 			if (currentReverse) newSeed.readpos -= k;
 			assert(newSeed.readpos >= 0);
