@@ -1372,14 +1372,28 @@ private:
 		auto nodeIndex = nodes[index];
 		assert(params.graph.nodeOffset[nodeIndex] <= offset);
 		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);
+		size_t offsetInNode = offset - params.graph.nodeOffset[nodeIndex];
+		assert(offsetInNode < params.graph.NodeLength(nodeIndex));
 		result.scores.addNodeToMap(nodeIndex);
 		result.minScoreNode = nodeIndex;
-		result.minScoreNodeOffset = params.graph.NodeLength(nodeIndex)-1;
+		result.minScoreNodeOffset = offsetInNode;
 		auto& node = result.scores.node(nodeIndex);
-		node.startSlice = {0, 0, 0};
-		node.endSlice = {0, 0, 0};
+		node.startSlice = {0, 0, offsetInNode};
+		node.endSlice = {0, 0, params.graph.NodeLength(nodeIndex) - 1 - offsetInNode};
 		node.minScore = 0;
 		node.exists = true;
+		for (size_t i = 1; i <= offsetInNode; i++)
+		{
+			size_t chunkIndex = i / (sizeof(Word) * 8);
+			size_t chunkOffset = i % (sizeof(Word) * 8);
+			node.HN[chunkIndex] |= ((Word)1) << chunkOffset;
+		}
+		for (size_t i = offsetInNode+1; i < params.graph.NodeLength(nodeIndex); i++)
+		{
+			size_t chunkIndex = i / (sizeof(Word) * 8);
+			size_t chunkOffset = i % (sizeof(Word) * 8);
+			node.HP[chunkIndex] |= ((Word)1) << chunkOffset;
+		}
 		return result;
 	}
 

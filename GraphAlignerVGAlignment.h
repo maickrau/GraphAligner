@@ -140,7 +140,7 @@ public:
 	{
 		assert(!first.alignmentFailed() || !second.alignmentFailed());
 		int seedHitNodeId;
-		std::string seedHitSequence = sequence.substr(seedHit.seqPos + 1, seedHit.matchLen - 2);
+		std::string seedHitSequence = sequence.substr(seedHit.seqPos + 2, seedHit.matchLen - 4);
 		if (seedHit.reverse)
 		{
 			seedHitNodeId = seedHit.nodeID * 2 + 1;
@@ -177,8 +177,8 @@ public:
 		auto mapping = finalResult.alignment.mutable_path()->mutable_mapping(finalResult.alignment.path().mapping_size()-1);
 
 		auto seedHitExactMatch = mapping->add_edit();
-		seedHitExactMatch->set_from_length(seedHit.matchLen - 2);
-		seedHitExactMatch->set_to_length(seedHit.matchLen - 2);
+		seedHitExactMatch->set_from_length(seedHit.matchLen - 4);
+		seedHitExactMatch->set_to_length(seedHit.matchLen - 4);
 		seedHitExactMatch->set_sequence(seedHitSequence);
 
 		auto secondStartEdit = mapping->add_edit();

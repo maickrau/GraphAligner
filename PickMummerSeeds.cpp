@@ -7,6 +7,7 @@
 #include "vg.pb.h"
 #include "stream.hpp"
 #include "CommonUtils.h"
+#include "fastqloader.h"
 
 struct MummerSeed
 {
@@ -61,6 +62,17 @@ int main(int argc, char** argv)
 	std::string refNodesFileName { argv[3] };
 	int k = std::stoi(argv[4]);
 	int maxSeeds = std::stoi(argv[5]);
+	std::string readFile { argv[6] };
+	std::unordered_map<std::string, size_t> readLengths;
+
+	{
+		auto reads = loadFastqFromFile(readFile);
+		for (auto read : reads)
+		{
+			readLengths[read.seq_id] = read.sequence.size();
+		}
+	}
+
 	std::unordered_map<std::string, std::priority_queue<MummerSeed, std::vector<MummerSeed>, AlignmentLengthCompare>> alignments;
 	size_t numElems = 0;
 	std::vector<size_t> refNodes;
@@ -90,6 +102,7 @@ int main(int argc, char** argv)
 			lastChar = mappingfile.get();
 			currentPos++;
 		}
+		nodeMappingPositions.push_back(currentPos+1);
 	}
 	std::string currentRead;
 	std::string line;
@@ -120,12 +133,20 @@ int main(int argc, char** argv)
 			assert(index < refNodes.size());
 			newSeed.nodeId = refNodes[index];
 			assert(seqpos >= nodeMappingPositions[index]);
-			assert(index == nodeMappingPositions.size()-1 || seqpos < nodeMappingPositions[index+1]);
+			assert(seqpos < nodeMappingPositions[index+1]);
 			newSeed.nodepos = seqpos - nodeMappingPositions[index];
 			assert(newSeed.nodepos >= 2);
 			newSeed.nodepos -= 2;
+			if (currentReverse)
+			{
+				assert(newSeed.readpos <= readLengths[currentRead] + 2 - newSeed.len);
+				newSeed.readpos = readLengths[currentRead] + 2 - newSeed.readpos - newSeed.len;
+				size_t nodeLen = nodeMappingPositions[index+1] - nodeMappingPositions[index];
+				assert(newSeed.nodepos <= nodeLen - 2 - newSeed.len);
+				newSeed.nodepos = nodeLen - 2 - newSeed.nodepos - newSeed.len;
+			}
+			assert(newSeed.readpos > 0);
 			newSeed.readpos -= 1;
-			if (currentReverse) newSeed.readpos -= k;
 			assert(newSeed.readpos >= 0);
 			if (alignments[currentRead].size() < maxSeeds)
 			{

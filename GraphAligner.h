@@ -95,6 +95,21 @@ public:
 
 private:
 
+	std::string getSeq(int nodeId, size_t offset, size_t len) const
+	{
+		auto nodes = params.graph.nodeLookup.at(nodeId);
+		std::string result;
+		for (size_t i = 0; i < len; i++)
+		{
+			size_t offsetHere = offset + i;
+			size_t index = (offsetHere - params.graph.DBGOverlap) / params.graph.SPLIT_NODE_SIZE;
+			size_t nodeOffset = offsetHere - params.graph.nodeOffset[nodes[index]];
+			assert(nodeOffset < params.graph.NodeLength(nodes[index]));
+			result += params.graph.NodeSequences(nodes[index], nodeOffset);
+		}
+		return result;
+	}
+
 	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(seedHit.seqPos >= 0);
@@ -112,25 +127,26 @@ private:
 			backwardNodeId = seedHit.nodeID * 2 + 1;
 		}
 		Trace result;
-		assert(seedHit.matchLen > 2);
+		assert(seedHit.matchLen > 4);
+		assert(getSeq(forwardNodeId, seedHit.nodeOffset, seedHit.matchLen) == sequence.substr(seedHit.seqPos, seedHit.matchLen));
 		if (seedHit.seqPos > 0)
 		{
 			assert(sequence.size() >= seedHit.seqPos + seedHit.matchLen);
-			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + 1));
-			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset + 1);
+			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos + 2));
+			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset + 2);
 			assert(reversePos.second >= params.graph.DBGOverlap);
 			assert(reversePos.first == backwardNodeId);
 			result.backward = bvAligner.getTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
 		}
 		if (seedHit.seqPos + seedHit.matchLen < sequence.size())
 		{
-			auto forwardPart = sequence.substr(seedHit.seqPos + seedHit.matchLen - 1);
-			size_t offset = seedHit.nodeOffset + seedHit.matchLen - 1;
+			auto forwardPart = sequence.substr(seedHit.seqPos + seedHit.matchLen - 2);
+			size_t offset = seedHit.nodeOffset + seedHit.matchLen - 2;
 			assert(offset >= params.graph.DBGOverlap);
 			result.forward = bvAligner.getTraceFromSeed(forwardPart, forwardNodeId, offset, reusableState);
 			for (auto& item : result.forward.trace)
 			{
-				item.seqPos += seedHit.seqPos + seedHit.matchLen - 1;
+				item.seqPos += seedHit.seqPos + seedHit.matchLen - 2;
 			}
 		}
 		return result;
@@ -148,7 +164,7 @@ private:
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
-		assert(seedHit.matchLen > 2);
+		assert(seedHit.matchLen >= 4);
 		auto timeStart = std::chrono::system_clock::now();
 
 		auto trace = getTwoDirectionalTrace(sequence, seedHit, reusableState);
@@ -157,7 +173,7 @@ private:
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);
 		if (trace.backward.trace.size() > 0) verifyTrace(trace.backward.trace, sequence, trace.backward.score);
 #endif
-		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos);
+		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos + 1);
 
 
 		//failed alignment, don't output
