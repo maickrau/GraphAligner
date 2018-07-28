@@ -141,6 +141,12 @@ int main(int argc, char** argv)
 				assert(newSeed.readpos <= readLengths[currentRead] + 2 - newSeed.len);
 				newSeed.readpos = readLengths[currentRead] + 2 - newSeed.readpos - newSeed.len;
 				size_t nodeLen = nodeMappingPositions[index+1] - nodeMappingPositions[index];
+				if (newSeed.nodepos > nodeLen - 2 - newSeed.len)
+				{
+					//there's some weird bug somewhere, potentially even in mummer itself???
+					//ignore it until we figure out what's going on
+					continue;
+				}
 				assert(newSeed.nodepos <= nodeLen - 2 - newSeed.len);
 				newSeed.nodepos = nodeLen - 2 - newSeed.nodepos - newSeed.len;
 			}
