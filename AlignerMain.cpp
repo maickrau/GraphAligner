@@ -53,6 +53,8 @@ int main(int argc, char** argv)
 		}
 	}
 
+	ByteStuff::precalculateByteStuff();
+
 	wabiExperiments(params);
 	// alignReads(params);
 
