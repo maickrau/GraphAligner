@@ -8,9 +8,7 @@ int main(int argc, char** argv)
 	for (size_t i = 0; i < reads.size(); i++)
 	{
 		auto reverse = reads[i].reverseComplement();
-		output << "@" << reverse.seq_id << "\n";
+		output << ">" << reverse.seq_id << "_Reverse" << "\n";
 		output << reverse.sequence << "\n";
-		output << "+\n";
-		output << reverse.quality << "\n";
 	}
 }

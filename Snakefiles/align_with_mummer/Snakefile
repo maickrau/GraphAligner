@@ -35,16 +35,25 @@ rule make_graphreference:
 	shell:
 		"python {SCRIPTPATH}/makegfareference.py {input} tmp/{wildcards.graph}_refnodes.txt tmp/{wildcards.graph}_gfareference.fa"
 
+rule reverse_reads:
+	input:
+		"input/{reads}.fasta"
+	output:
+		"tmp/{reads}_reverse.fasta"
+	shell:
+		"{ALIGNERBINPATH}/ReverseReads {input} {output}"
+
 rule mummer_pipe:
 	input:
 		"input/{reads}.fasta",
+		"tmp/{reads}_reverse.fasta",
 		"tmp/{graph}_gfareference.fa",
 		"tmp/{graph}_refnodes.txt"
 	output:
 		"tmp/seeds_{reads}_{graph}_picked.gam"
 	threads: 40
 	shell:
-		"{MUMMERPATH} -b -qthreads {threads} -l {SEEDSIZE} tmp/{wildcards.graph}_gfareference.fa input/{wildcards.reads}.fasta | {ALIGNERBINPATH}/PickMummerSeeds {output} tmp/{wildcards.graph}_gfareference.fa tmp/{wildcards.graph}_refnodes.txt {MAXSEEDHITS} input/{wildcards.reads}.fasta"
+		"{MUMMERPATH} -F -qthreads {threads} -l {SEEDSIZE} tmp/{wildcards.graph}_gfareference.fa input/{wildcards.reads}.fasta tmp/{wildcards.reads}_reverse.fasta | {ALIGNERBINPATH}/PickMummerSeeds {output} tmp/{wildcards.graph}_gfareference.fa {MAXSEEDHITS} input/{wildcards.reads}.fasta"
 
 rule align:
 	input:

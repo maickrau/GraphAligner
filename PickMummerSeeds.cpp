@@ -59,10 +59,10 @@ int main(int argc, char** argv)
 {
 	std::string outputFileName { argv[1] };
 	std::string gfaReferenceFilename { argv[2] };
-	std::string refNodesFileName { argv[3] };
-	int maxSeeds = std::stoi(argv[4]);
-	std::string readFile { argv[5] };
+	int maxSeeds = std::stoi(argv[3]);
+	std::string readFile { argv[4] };
 	std::unordered_map<std::string, size_t> readLengths;
+	std::unordered_map<int, size_t> nodeLengths;
 
 	{
 		auto reads = loadFastqFromFile(readFile);
@@ -71,38 +71,16 @@ int main(int argc, char** argv)
 			readLengths[read.seq_id] = read.sequence.size();
 		}
 	}
+	{
+		auto reads = loadFastqFromFile(gfaReferenceFilename);
+		for (size_t i = 0; i < reads.size(); i++)
+		{
+			nodeLengths[std::stoi(reads[i].seq_id)] = reads[i].sequence.size();
+		}
+	}
 
 	std::unordered_map<std::string, std::priority_queue<MummerSeed, std::vector<MummerSeed>, AlignmentLengthCompare>> alignments;
 	size_t numElems = 0;
-	std::vector<size_t> refNodes;
-	{
-		std::ifstream refNodesFile { refNodesFileName };
-		while (refNodesFile.good())
-		{
-			size_t found;
-			refNodesFile >> found;
-			if (!refNodesFile.good()) break;
-			refNodes.push_back(found);
-		}
-	}
-	std::vector<size_t> nodeMappingPositions;
-	{
-		std::ifstream mappingfile { gfaReferenceFilename };
-		std::string line;
-		std::getline(mappingfile, line);
-		char lastChar = '-';
-		size_t currentPos = 0;
-		while (mappingfile.good())
-		{
-			if (lastChar == 'N' && mappingfile.peek() == 'N')
-			{
-				nodeMappingPositions.push_back(currentPos);
-			}
-			lastChar = mappingfile.get();
-			currentPos++;
-		}
-		nodeMappingPositions.push_back(currentPos);
-	}
 	std::string currentRead;
 	std::string line;
 	bool currentReverse = false;
@@ -110,7 +88,7 @@ int main(int argc, char** argv)
 	{
 		if (line[0] == '>')
 		{
-			if (line.size() > 8 && std::string{line.end()-8, line.end()} == " Reverse")
+			if (line.size() > 8 && (std::string{line.end()-8, line.end()} == " Reverse" || std::string{line.end()-8, line.end()} == "_Reverse"))
 			{
 				currentReverse = true;
 				currentRead = std::string { line.begin()+2, line.end()-8 };
@@ -125,34 +103,31 @@ int main(int argc, char** argv)
 		{
 			std::stringstream str { line };
 			MummerSeed newSeed;
-			size_t seqpos;
-			str >> seqpos >> newSeed.readpos >> newSeed.len;
+			str >> newSeed.nodeId >> newSeed.nodepos >> newSeed.readpos >> newSeed.len;
 			newSeed.reverse = currentReverse;
-			size_t index = getNodeIndex(seqpos, nodeMappingPositions);
-			assert(index < refNodes.size());
-			newSeed.nodeId = refNodes[index];
-			assert(seqpos >= nodeMappingPositions[index]);
-			assert(seqpos < nodeMappingPositions[index+1]);
-			newSeed.nodepos = seqpos - nodeMappingPositions[index];
-			assert(newSeed.nodepos >= 2);
-			newSeed.nodepos -= 2;
+			assert(newSeed.nodepos >= 1);
+			assert(newSeed.readpos >= 1);
+			newSeed.nodepos -= 1;
+			newSeed.readpos -= 1;
 			if (currentReverse)
 			{
-				assert(newSeed.readpos <= readLengths[currentRead] + 2 - newSeed.len);
-				newSeed.readpos = readLengths[currentRead] + 2 - newSeed.readpos - newSeed.len;
-				size_t nodeLen = nodeMappingPositions[index+1] - nodeMappingPositions[index];
-				if (newSeed.nodepos > nodeLen - 2 - newSeed.len)
-				{
-					//there's some weird bug somewhere, potentially even in mummer itself???
-					//ignore it until we figure out what's going on
-					continue;
-				}
-				assert(newSeed.nodepos <= nodeLen - 2 - newSeed.len);
-				newSeed.nodepos = nodeLen - 2 - newSeed.nodepos - newSeed.len;
+				//there's some weird bug, possibly even in mummer
+				//ignore it until we figure out what's going on
+				if (newSeed.readpos > readLengths[currentRead] - 1 - (newSeed.len - 1)) continue;
+				if (newSeed.nodepos > nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1)) continue;
+				assert(newSeed.readpos <= readLengths[currentRead] - 1 - (newSeed.len - 1));
+				assert(newSeed.nodepos <= nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1));
+				newSeed.readpos = readLengths[currentRead] - 1 - newSeed.readpos - (newSeed.len - 1);
+				newSeed.nodepos = nodeLengths[newSeed.nodeId] - 1 - newSeed.nodepos - (newSeed.len - 1);
 			}
-			assert(newSeed.readpos > 0);
-			newSeed.readpos -= 1;
+			//there's some weird bug, possibly even in mummer
+			//ignore it until we figure out what's going on
+			if (newSeed.readpos >= readLengths[currentRead]) continue;
+			if (newSeed.nodepos >= nodeLengths[newSeed.nodeId]) continue;
+			assert(newSeed.readpos < readLengths[currentRead]);
+			assert(newSeed.nodepos < nodeLengths[newSeed.nodeId]);
 			assert(newSeed.readpos >= 0);
+			assert(newSeed.nodepos >= 0);
 			if (alignments[currentRead].size() < maxSeeds)
 			{
 				alignments[currentRead].emplace(newSeed);
