@@ -25,6 +25,7 @@ private:
 	using SeedHit = typename Common::SeedHit;
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
+	using OnewayTrace = typename Common::OnewayTrace;
 	BitvectorAligner bvAligner;
 	mutable BufferedWriter logger;
 	using AlignerGraphsizedState = typename Common::AlignerGraphsizedState;
@@ -39,26 +40,26 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
-	// AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence) const
-	// {
-	// 	std::vector<typename NodeSlice<WordSlice>::MapItem> nodesliceMap;
-	// 	nodesliceMap.resize(params.graph.NodeSize(), {0, 0, 0});
-	// 	auto timeStart = std::chrono::system_clock::now();
-	// 	assert(params.graph.finalized);
-	// 	auto trace = getBacktraceFullStart(sequence, nodesliceMap);
-	// 	auto timeEnd = std::chrono::system_clock::now();
-	// 	size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-	// 	//failed alignment, don't output
-	// 	if (std::get<0>(trace) == std::numeric_limits<ScoreType>::max()) return emptyAlignment(time, std::get<2>(trace));
-	// 	if (std::get<1>(trace).size() == 0) return emptyAlignment(time, std::get<2>(trace));
-	// 	auto result = traceToAlignment(seq_id, sequence, std::get<0>(trace), std::get<1>(trace), std::get<2>(trace));
-	// 	result.alignmentStart = std::get<1>(trace)[0].second;
-	// 	result.alignmentEnd = std::get<1>(trace).back().second;
-	// 	timeEnd = std::chrono::system_clock::now();
-	// 	time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-	// 	result.elapsedMilliseconds = time;
-	// 	return result;
-	// }
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	{
+		AlignmentResult result;
+		auto timeStart = std::chrono::system_clock::now();
+		assert(params.graph.finalized);
+		auto trace = getBacktraceFullStart(sequence, reusableState);
+		auto timeEnd = std::chrono::system_clock::now();
+		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		//failed alignment, don't output
+		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
+		if (trace.trace.size() == 0) return result;
+		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
+		alnItem.alignmentStart = trace.trace[0].seqPos;
+		alnItem.alignmentEnd = trace.trace.back().seqPos;
+		timeEnd = std::chrono::system_clock::now();
+		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		alnItem.elapsedMilliseconds = time;
+		result.alignments.push_back(alnItem);
+		return result;
+	}
 
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
@@ -106,6 +107,11 @@ private:
 			result += params.graph.NodeSequences(nodeIndex, nodeOffset);
 		}
 		return result;
+	}
+
+	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	{
+		return bvAligner.getBacktraceFullStart(sequence, reusableState);
 	}
 
 	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const

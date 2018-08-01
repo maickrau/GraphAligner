@@ -136,6 +136,38 @@ public:
 		return result;
 	}
 
+	OnewayTrace getBacktraceFullStart(std::string sequence, AlignerGraphsizedState& reusableState) const
+	{
+		DPSlice startSlice;
+		startSlice.j = -WordConfiguration<Word>::WordSize;
+		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
+		startSlice.bandwidth = 1;
+		startSlice.minScore = 0;
+		startSlice.minScoreNode = 0;
+		startSlice.minScoreNodeOffset = 0;
+		for (size_t i = 0; i < params.graph.NodeSize(); i++)
+		{
+			startSlice.scores.addNodeToMap(i);
+			startSlice.scores.setMinScore(i, 0);
+			auto& node = startSlice.scores.node(i);
+			node.startSlice = {0, 0, 0};
+			node.endSlice = {0, 0, 0};
+			node.minScore = 0;
+			node.exists = true;
+		}
+		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto slice = getSqrtSlices(sequence, startSlice, numSlices, reusableState);
+		removeWronglyAlignedEnd(slice);
+		if (slice.slices.size() <= 1)
+		{
+			return OnewayTrace::TraceFailed();
+		}
+
+		auto result = getTraceFromTable(sequence, slice, reusableState);
+		assert(result.trace[0].seqPos == 0);
+		return result;
+	}
+
 private:
 
 	OnewayTrace getTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
@@ -1412,37 +1444,6 @@ private:
 			node.minScore = 0;
 			node.exists = true;
 		}
-		return result;
-	}
-
-	OnewayTrace getBacktraceFullStart(std::string sequence, AlignerGraphsizedState& reusableState) const
-	{
-		int padding = (WordConfiguration<Word>::WordSize - (sequence.size() % WordConfiguration<Word>::WordSize)) % WordConfiguration<Word>::WordSize;
-		for (int i = 0; i < padding; i++)
-		{
-			sequence += 'N';
-		}
-		DPSlice startSlice;
-		for (size_t i = 0; i < params.graph.nodeStart.size(); i++)
-		{
-			startSlice.scores.addNodeToMap(i);
-			startSlice.scores.setMinScore(i, 0);
-			startSlice.j = -WordConfiguration<Word>::WordSize;
-		}
-		auto slice = getSqrtSlices(sequence, startSlice, sequence.size() / WordConfiguration<Word>::WordSize, reusableState);
-		removeWronglyAlignedEnd(slice);
-		if (slice.slices.size() == 0)
-		{
-			return OnewayTrace::TraceFailed();
-		}
-		// std::cerr << "score: " << slice.slices.back().minScore << std::endl;
-
-		auto result = getTraceFromTable(sequence, slice, reusableState);
-		while (result.trace.back().seqPos >= sequence.size() - padding)
-		{
-			result.trace.pop_back();
-		}
-		assert(result.trace[0].seqPos == 0);
 		return result;
 	}
 
