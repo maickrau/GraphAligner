@@ -144,7 +144,6 @@ public:
 		if (seedHit.reverse)
 		{
 			seedHitNodeId = seedHit.nodeID * 2 + 1;
-			seedHitSequence = CommonUtils::ReverseComplement(seedHitSequence);
 		}
 		else
 		{
