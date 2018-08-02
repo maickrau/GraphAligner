@@ -33,25 +33,10 @@ $(ODIR)/%.o: %.cpp $(DEPS)
 $(BINDIR)/Aligner: $(OBJ)
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ReadIndexToId: ReadIndexToId.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/CompareAlignments: CompareAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/MergeGraphs: MergeGraphs.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
 $(BINDIR)/SimulateReads: SimulateReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
 $(BINDIR)/ReverseReads: ReverseReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/PickSeedHits: PickSeedHits.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/AlignmentSequenceInserter: AlignmentSequenceInserter.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
 $(BINDIR)/SupportedSubgraph: SupportedSubgraph.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
@@ -63,22 +48,10 @@ $(BINDIR)/MafToAlignment: MafToAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/Threa
 $(BINDIR)/ExtractPathSequence: ExtractPathSequence.cpp $(ODIR)/CommonUtils.o $(ODIR)/GfaGraph.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/AlignmentOverlap: AlignmentOverlap.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/Bluntify: Bluntify.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
 $(BINDIR)/ExtractPathSubgraphNeighbourhood: ExtractPathSubgraphNeighbourhood.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/MergeGfas: MergeGfas.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
 $(BINDIR)/VisualizeAlignment: VisualizeAlignment.cpp $(ODIR)/AlignmentCorrectnessEstimation.o $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/SelectPartials: SelectPartials.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
 $(BINDIR)/NodePosCsv: NodePosCsv.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/vg.pb.o
@@ -90,12 +63,6 @@ $(BINDIR)/ExtractExactPathSubgraph: ExtractExactPathSubgraph.cpp $(ODIR)/CommonU
 $(BINDIR)/EstimateRepeatCount: EstimateRepeatCount.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/SelectFullAlignments: SelectFullAlignments.cpp $(ODIR)/CommonUtils.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/AddNodeNames: AddNodeNames.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
 $(BINDIR)/PickMummerSeeds: PickMummerSeeds.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
@@ -105,7 +72,7 @@ $(BINDIR)/SelectLongestAlignment: SelectLongestAlignment.cpp $(ODIR)/CommonUtils
 $(BINDIR)/Postprocess: Postprocess.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-all: $(BINDIR)/Aligner $(BINDIR)/ReadIndexToId $(BINDIR)/CompareAlignments $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/PickSeedHits $(BINDIR)/AlignmentSequenceInserter $(BINDIR)/MergeGraphs $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/AlignmentOverlap $(BINDIR)/Bluntify $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/MergeGfas $(BINDIR)/VisualizeAlignment $(BINDIR)/SelectPartials $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount $(BINDIR)/SelectFullAlignments $(BINDIR)/AddNodeNames $(BINDIR)/PickMummerSeeds $(BINDIR)/SelectLongestAlignment $(BINDIR)/Postprocess
+all: $(BINDIR)/Aligner $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/SupportedSubgraph $(BINDIR)/MafToAlignment $(BINDIR)/ExtractPathSequence $(BINDIR)/ExtractPathSubgraphNeighbourhood $(BINDIR)/VisualizeAlignment $(BINDIR)/NodePosCsv $(BINDIR)/ExtractExactPathSubgraph $(BINDIR)/EstimateRepeatCount $(BINDIR)/PickMummerSeeds $(BINDIR)/SelectLongestAlignment $(BINDIR)/Postprocess
 
 clean:
 	rm -f $(ODIR)/*
