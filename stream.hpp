@@ -62,6 +62,18 @@ bool write_buffered(std::ostream& out, std::vector<T>& buffer, uint64_t buffer_l
     return wrote;
 }
 
+template <typename T>
+bool write_buffered_ptr(std::ostream& out, std::vector<T*>& buffer, uint64_t buffer_limit) {
+    bool wrote = false;
+    if (buffer.size() >= buffer_limit) {
+        std::function<T(uint64_t)> lambda = [&buffer](uint64_t n) { return *buffer.at(n); };
+#pragma omp critical (stream_out)
+        wrote = write(out, buffer.size(), lambda);
+        buffer.clear();
+    }
+    return wrote;
+}
+
 // deserialize the input stream into the objects
 // count containts the count read
 // takes a callback function to be called on the objects

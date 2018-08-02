@@ -1,6 +1,5 @@
 # Edit config.yaml to add the paths before running
 configfile: "config.yaml"
-VGPATH = config["vgpath"]
 MUMMERPATH = config["mummerpath"]
 READFILE = config["reads"]
 GRAPHFILE = config["graph"]
@@ -68,70 +67,54 @@ rule align:
 	shell:
 		"/usr/bin/time -v {ALIGNERBINPATH}/Aligner -g tmp/{wildcards.graph}_idfix.gfa -f input/{wildcards.reads}.fasta -s tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam -a tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam -t {threads} {ALIGNERPARAMS} 1> tmp/aligner_stdout_{wildcards.reads}_{wildcards.graph}.txt 2> tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt"
 
-rule fix_alignment_nodeids:
+rule postprocess:
 	input:
-		"tmp/aln_{reads}_{graph}_raw.gam",
-		"tmp/{graph}_nodemapping.txt"
+		nodenames = "tmp/{graph}_nodemapping.txt",
+		seeds = "tmp/seeds_{reads}_{graph}_picked.gam",
+		raw_alns = "tmp/aln_{reads}_{graph}_raw.gam",
+		reads = "input/{reads}.fasta"
 	output:
-		"output/aln_{reads}_{graph}_all.gam"
+		all_alns = "output/aln_{reads}_{graph}_all.gam",
+		selected_alns = "output/aln_{reads}_{graph}_selected.gam",
+		full_len_alns = "output/aln_{reads}_{graph}_full_length.gam",
+		summary = "tmp/run_{reads}_{graph}_summary.txt",
 	shell:
-		"{ALIGNERBINPATH}/AddNodeNames tmp/{wildcards.graph}_nodemapping.txt tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam {output}"
-
-rule pick_partials:
-	input:
-		"output/aln_{runid}_all.gam"
-	output:
-		"output/aln_{runid}_selected.gam"
-	shell:
-		"{ALIGNERBINPATH}/SelectPartials {input} {output}"
-
-rule pick_full:
-	input:
-		"output/aln_{reads}_{graph}_selected.gam",
-		"input/{reads}.fasta"
-	output:
-		"output/aln_{reads}_{graph}_full_length.gam"
-	shell:
-		"{ALIGNERBINPATH}/SelectFullAlignments output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam input/{wildcards.reads}.fasta {output}"
+		"{ALIGNERBINPATH}/Postprocess {input.raw_alns} {input.reads} {input.nodenames} {input.seeds} {output.all_alns} {output.selected_alns} {output.full_len_alns} {output.summary}"
 
 rule output_statistics:
 	input:
-		"input/{reads}.fasta",
-		"tmp/seeds_{reads}_{graph}_picked.gam",
-		"output/aln_{reads}_{graph}_all.gam",
-		"output/aln_{reads}_{graph}_selected.gam",
-		"output/aln_{reads}_{graph}_full_length.gam",
-		"tmp/aligner_stderr_{reads}_{graph}.txt"
+		summary = "tmp/run_{reads}_{graph}_summary.txt",
+		stderr = "tmp/aligner_stderr_{reads}_{graph}.txt"
 	output:
 		"output/stats_{reads}_{graph}.txt"
 	run:
 		shell("touch {output}"),
-		shell("grep 'commit' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}")
-		shell("grep 'Command being timed:' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
-		shell("grep 'User time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
-		shell("grep 'System time (seconds):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
-		shell("grep 'Maximum resident set size (kbytes):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
-		shell("grep 'Percent of CPU this job got:' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
-		shell("grep 'Elapsed (wall clock) time (h:mm:ss or m:ss):' tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt >> {output}"),
+		shell("grep 'commit' {input.stderr} >> {output}")
+		shell("grep 'Command being timed:' {input.stderr} >> {output}"),
+		shell("grep 'User time (seconds):' {input.stderr} >> {output}"),
+		shell("grep 'System time (seconds):' {input.stderr} >> {output}"),
+		shell("grep 'Maximum resident set size (kbytes):' {input.stderr} >> {output}"),
+		shell("grep 'Percent of CPU this job got:' {input.stderr} >> {output}"),
+		shell("grep 'Elapsed (wall clock) time (h:mm:ss or m:ss):' {input.stderr} >> {output}"),
 		shell("echo 'Number of reads:' >> {output}"),
-		shell("wc -l < input/{wildcards.reads}.fasta | awk '{{print $0/2;}}' >> {output}"),
+		shell("grep 'number of reads' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of picked seeds:' >> {output}"),
-		shell("{VGPATH} view -a tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam | wc -l >> {output}"),
+		shell("grep 'number of seeds' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of reads with a seed:' >> {output}"),
-		shell("{VGPATH} view -a tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam | jq '.name' | sort | uniq | wc -l >> {output}"),
+		shell("grep 'reads with a seed' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of raw alignments:' >> {output}"),
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_all.gam | wc -l >> {output}"),
+		shell("grep 'number of all alignments' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of selected alignments:' >> {output}"),
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | wc -l >> {output}"),
+		shell("grep 'number of selected alignments' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of full length alignments:' >> {output}"),
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_full_length.gam | wc -l >> {output}"),
+		shell("grep 'number of full length alignments' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of reads with an alignment:' >> {output}"),
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | jq '.name' | sort | uniq | wc -l >> {output}"),
+		shell("grep 'reads with an alignment' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of reads broken due to an assertion:' >> {output}"),
 		shell("(grep Assert < tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt || true) | wc -l >> {output}"),
 		shell("echo 'Number of read BP in reads:' >> {output}")
-		shell("awk 'NR % 2 == 0 {{sum += length($0);}} END {{print sum;}}' < input/{wildcards.reads}.fasta >> {output}")
+		shell("grep 'bp in reads' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of read BP in selected alignments:' >> {output}")
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_selected.gam | jq '.sequence' | awk '{{sum += length($0)-2;}} END {{print sum;}}' >> {output}")
+		shell("grep 'bp in selected alignments' < {input.summary} | cut -f 1 >> {output}"),
 		shell("echo 'Number of read BP in full length alignments:' >> {output}")
-		shell("{VGPATH} view -a output/aln_{wildcards.reads}_{wildcards.graph}_full_length.gam | jq '.sequence' | awk '{{sum += length($0)-2;}} END {{print sum;}}' >> {output}")
+		shell("grep 'bp in full length alignments' < {input.summary} | cut -f 1 >> {output}"),

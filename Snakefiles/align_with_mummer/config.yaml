@@ -3,9 +3,6 @@
 # https://github.com/maickrau/GraphAligner
 # root directory of the repo
 graphalignerfolder: path_to_graph_aligner/
-# https://github.com/vgteam/vg/
-# required for outputting alignment statistics
-vgpath: path_to_vg/vg
 # https://github.com/mummer4/mummer
 # required for seed finding
 mummerpath: path_to_mummer/mummer
