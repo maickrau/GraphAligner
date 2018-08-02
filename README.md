@@ -20,7 +20,7 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
 - Acquire a graph and save it in run_folder/input/
 - Acquire reads and save them in run_folder/input/
 - Edit run_folder/config.yaml
-  - Point the paths at the repository folder, vg and mummerv4
+  - Point the paths at the repository folder and mummerv4
   - Add the input file names
   - Optionally edit the aligner parameters
 - Run `snakemake --cores [number of threads] all` in run_folder
