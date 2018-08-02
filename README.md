@@ -11,7 +11,6 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
   - Install sparsehash development libraries https://github.com/sparsehash/sparsehash
   - `make all`
 - Install programs used by the snakemake pipeline
-  - Install vg binaries https://github.com/vgteam/vg/
   - Install MUMmerv4 binaries https://github.com/mummer4/mummer
   - Install snakemake binaries https://snakemake.readthedocs.io/en/stable/
 
@@ -26,6 +25,12 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
   - Optionally edit the aligner parameters
 - Run `snakemake --cores [number of threads] all` in run_folder
 - The output will be in run_folder/output/
+
+### Output
+
+A summary of the alignment is in `output/stats_[readfile]_[graphfile].txt`. Individual alignments are in the files `output/aln_[readfile]_[graphfile]_all.gam`, `output/aln_[readfile]_[graphfile]_selected.gam` and `output/aln_[readfile]_[graphfile]_full_length.gam`. To view the `.gam` files, use [vg](https://github.com/vgteam/vg/). 
+
+The file `_all.gam` contains all found alignments, usually including multiple incompatible alignments per read, eg. one base pair is aligned to multiple parts of the graph. The file `_selected.gam` is a set of non-overlapping alignments, so each read base pair is aligned to at most one location in the graph. The file `_full_length.gam` contains alignments where the entire read was aligned to one location.
 
 ### Parameters
 
