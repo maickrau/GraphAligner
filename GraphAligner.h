@@ -225,6 +225,7 @@ private:
 		// auto traceVector = getTraceInfo(sequence, trace.backward.trace, trace.forward.trace);
 
 		auto mergedTrace = trace.backward;
+		if (trace.backward.failed()) mergedTrace.score = 0;
 
 		int seedHitNodeId;
 		if (seedHit.reverse)
@@ -238,7 +239,8 @@ private:
 		auto middleNode = params.graph.GetUnitigNode(seedHitNodeId, seedHit.nodeOffset);
 		mergedTrace.trace.emplace_back(middleNode, seedHit.nodeOffset - params.graph.nodeOffset[middleNode], seedHit.seqPos);
 		mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
-		mergedTrace.score += trace.forward.score;
+		if (!trace.forward.failed()) mergedTrace.score += trace.forward.score;
+
 		auto result = VGAlignment::traceToAlignment(params, seq_id, sequence, mergedTrace.score, mergedTrace.trace, 0, false);
 
 		assert(!result.alignmentFailed());
