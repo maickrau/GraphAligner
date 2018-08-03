@@ -54,13 +54,14 @@ public:
 		MatrixPosition btBeforeNode = trace[pos];
 		for (; pos < trace.size(); pos++)
 		{
+			assert(trace[pos].seqPos < sequence.size());
 			if (trace[pos].node == currentNode)
 			{
 				btNodeEnd = trace[pos];
 				continue;
 			}
-			assert(reverse || btNodeStart.seqPos == trace[0].seqPos || btNodeStart.nodeOffset == 0);
-			assert(reverse || btNodeEnd.nodeOffset == params.graph.NodeLength(btNodeEnd.node)-1);
+			// assert(reverse || btNodeStart.seqPos == trace[0].seqPos || btNodeStart.nodeOffset == 0);
+			// assert(reverse || btNodeEnd.nodeOffset == params.graph.NodeLength(btNodeEnd.node)-1);
 			assert(!reverse || btNodeEnd.nodeOffset == 0);
 			assert(!reverse || btNodeStart.seqPos == trace[0].seqPos || btNodeStart.nodeOffset == params.graph.NodeLength(btNodeEnd.node)-1);
 			assert(trace[pos].seqPos >= trace[pos-1].seqPos);
@@ -136,62 +137,95 @@ public:
 		return item;
 	}
 
-	static AlignmentResult::AlignmentItem mergeAlignments(const Params& params, const AlignmentResult::AlignmentItem& first, const SeedHit& seedHit, const AlignmentResult::AlignmentItem& second, const std::string& sequence)
-	{
-		assert(!first.alignmentFailed() || !second.alignmentFailed());
-		int seedHitNodeId;
-		std::string seedHitSequence = sequence.substr(seedHit.seqPos + 2, seedHit.matchLen - 4);
-		if (seedHit.reverse)
-		{
-			seedHitNodeId = seedHit.nodeID * 2 + 1;
-		}
-		else
-		{
-			seedHitNodeId = seedHit.nodeID * 2;
-		}
-		if (first.alignmentFailed() || first.alignment.path().mapping_size() == 0)
-		{
-			//todo add middle
-			return second;
-		}
-		if (second.alignmentFailed() || second.alignment.path().mapping_size() == 0)
-		{
-			//todo add middle
-			return first;
-		}
-		assert(!first.alignmentFailed());
-		assert(!second.alignmentFailed());
-		AlignmentResult::AlignmentItem finalResult;
-		finalResult.cellsProcessed = first.cellsProcessed + second.cellsProcessed;
-		finalResult.elapsedMilliseconds = first.elapsedMilliseconds + second.elapsedMilliseconds;
-		finalResult.alignment = first.alignment;
-		finalResult.alignment.set_score(first.alignment.score() + second.alignment.score());
-		int start = 0;
-		auto firstEndPos = first.alignment.path().mapping(first.alignment.path().mapping_size()-1).position();
-		auto secondStartPos = second.alignment.path().mapping(0).position();
-		assert(firstEndPos.node_id() == seedHitNodeId);
-		assert(firstEndPos.is_reverse() == seedHit.reverse);
-		assert(secondStartPos.node_id() == seedHitNodeId);
-		assert(secondStartPos.is_reverse() == seedHit.reverse);
-		auto mapping = finalResult.alignment.mutable_path()->mutable_mapping(finalResult.alignment.path().mapping_size()-1);
+	// static AlignmentResult::AlignmentItem mergeAlignments(const Params& params, const AlignmentResult::AlignmentItem& first, const SeedHit& seedHit, const AlignmentResult::AlignmentItem& second, const std::string& sequence)
+	// {
+	// 	assert(!first.alignmentFailed() || !second.alignmentFailed());
+	// 	int seedHitNodeId;
+	// 	char seedHitChar = sequence[seedHit.seqPos];
+	// 	if (seedHit.reverse)
+	// 	{
+	// 		seedHitNodeId = seedHit.nodeID * 2 + 1;
+	// 	}
+	// 	else
+	// 	{
+	// 		seedHitNodeId = seedHit.nodeID * 2;
+	// 	}
+	// 	if (first.alignmentFailed() || first.alignment.path().mapping_size() == 0)
+	// 	{
+	// 		//todo add middle
+	// 		return second;
+	// 	}
+	// 	if (second.alignmentFailed() || second.alignment.path().mapping_size() == 0)
+	// 	{
+	// 		//todo add middle
+	// 		return first;
+	// 	}
+	// 	assert(!first.alignmentFailed());
+	// 	assert(!second.alignmentFailed());
+	// 	AlignmentResult::AlignmentItem finalResult;
+	// 	finalResult.cellsProcessed = first.cellsProcessed + second.cellsProcessed;
+	// 	finalResult.elapsedMilliseconds = first.elapsedMilliseconds + second.elapsedMilliseconds;
+	// 	finalResult.alignment = first.alignment;
+	// 	finalResult.alignment.set_score(first.alignment.score() + second.alignment.score());
+	// 	int start = 0;
+	// 	auto firstEndPos = first.alignment.path().mapping(first.alignment.path().mapping_size()-1).position();
+	// 	auto secondStartPos = second.alignment.path().mapping(0).position();
+	// 	assert(secondStartPos.node_id() == seedHitNodeId);
+	// 	assert(secondStartPos.is_reverse() == seedHit.reverse);
+	// 	vg::Mapping* mapping;
 
-		auto seedHitExactMatch = mapping->add_edit();
-		seedHitExactMatch->set_from_length(seedHit.matchLen - 4);
-		seedHitExactMatch->set_to_length(seedHit.matchLen - 4);
-		seedHitExactMatch->set_sequence(seedHitSequence);
+	// 	if (seedHit.nodeOffset != params.graph.DBGOverlap)
+	// 	{
+	// 		assert(firstEndPos.node_id() == seedHitNodeId);
+	// 		assert(firstEndPos.is_reverse() == seedHit.reverse);
+	// 		mapping = finalResult.alignment.mutable_path()->mutable_mapping(finalResult.alignment.path().mapping_size()-1);
+	// 	}
+	// 	else if (firstEndPos.node_id() == seedHitNodeId && firstEndPos.is_reverse() == seedHit.reverse)
+	// 	{
+	// 		mapping = finalResult.alignment.mutable_path()->mutable_mapping(finalResult.alignment.path().mapping_size()-1);
+	// 	}
+	// 	else
+	// 	{
+	// 		mapping = finalResult.alignment.mutable_path()->add_mapping();
+	// 		mapping->set_node_id(seedHitNodeId);
+	// 		mapping->set_is_reverse(seedHit.reverse);
+	// 		mapping->set_offset(seedHit.nodeOffset);
+	// 	}
 
-		auto secondStartEdit = mapping->add_edit();
-		secondStartEdit->set_sequence(second.alignment.path().mapping(0).edit(0).sequence());
-		secondStartEdit->set_from_length(second.alignment.path().mapping(0).edit(0).from_length());
-		secondStartEdit->set_to_length(second.alignment.path().mapping(0).edit(0).to_length());
+	// 	auto middlePart = mapping->add_edit();
+	// 	middlePart->set_sequence(seedHitChar);
+	// 	middlePart->set_from_length(1);
+	// 	middlePart->set_to_length(1);
 
-		for (int i = 1; i < second.alignment.path().mapping_size(); i++)
-		{
-			auto mapping = finalResult.alignment.mutable_path()->add_mapping();
-			*mapping = second.alignment.path().mapping(i);
-		}
-		return finalResult;
-	}
+	// 	assert(seedHit.nodeOffset <= params.graph.nodeOffset[params.graph.nodeLookup[seedHitNodeId].back()] + params.graph.NodeLength(params.graph.nodeLookup[seedHitNodeId].back()) - 1)
+	// 	if (seedHit.nodeOffset < params.graph.nodeOffset[params.graph.nodeLookup[seedHitNodeId].back()] + params.graph.NodeLength(params.graph.nodeLookup[seedHitNodeId].back()) - 1)
+	// 	{
+	// 		assert(second.alignment.path().mapping(0).node_id() == mapping->node_id());
+	// 		assert(second.alignment.path().mapping(0).is_reverse() == mapping->is_reverse());
+	// 	}
+	// 	else if ()
+	// 	{
+	// 	}
+	// 	else
+	// 	{
+	// 		mapping = finalResult.alignment.mutable_path()->add_mapping();
+	// 		mapping->set_node_id(second.alignment.path().mapping(0).node_id());
+	// 		mapping->set_is_reverse(second.alignment.path().mapping(0).is_reverse());
+	// 		mapping->set_offset(second.alignment.path().mapping(0).offset());
+	// 	}
+
+	// 	auto secondStartEdit = mapping->add_edit();
+	// 	secondStartEdit->set_sequence(second.alignment.path().mapping(0).edit(0).sequence());
+	// 	secondStartEdit->set_from_length(second.alignment.path().mapping(0).edit(0).from_length());
+	// 	secondStartEdit->set_to_length(second.alignment.path().mapping(0).edit(0).to_length());
+
+	// 	for (int i = 1; i < second.alignment.path().mapping_size(); i++)
+	// 	{
+	// 		auto mapping = finalResult.alignment.mutable_path()->add_mapping();
+	// 		*mapping = second.alignment.path().mapping(i);
+	// 	}
+	// 	return finalResult;
+	// }
 
 	static AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed)
 	{
