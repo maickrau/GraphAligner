@@ -96,19 +96,6 @@ public:
 
 private:
 
-	std::string getSeq(int nodeId, size_t offset, size_t len) const
-	{
-		std::string result;
-		for (size_t i = 0; i < len; i++)
-		{
-			size_t offsetHere = offset + i;
-			size_t nodeIndex = params.graph.GetUnitigNode(nodeId, offsetHere);
-			size_t nodeOffset = offsetHere - params.graph.nodeOffset[nodeIndex];
-			result += params.graph.NodeSequences(nodeIndex, nodeOffset);
-		}
-		return result;
-	}
-
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
 		return bvAligner.getBacktraceFullStart(sequence, reusableState);
@@ -133,7 +120,6 @@ private:
 		Trace result;
 		result.backward.score = std::numeric_limits<ScoreType>::max();
 		result.forward.score = std::numeric_limits<ScoreType>::max();
-		assert(getSeq(forwardNodeId, seedHit.nodeOffset, seedHit.matchLen) == sequence.substr(seedHit.seqPos, seedHit.matchLen));
 		if (seedHit.seqPos > 0)
 		{
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos));
