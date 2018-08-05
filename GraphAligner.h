@@ -170,11 +170,11 @@ private:
 			trace[i].first.nodeOffset = reversePos.second - params.graph.nodeOffset[trace[i].first.node];
 			assert(trace[i].first.nodeOffset < params.graph.NodeLength(trace[i].first.node));
 		}
-		for (size_t i = trace.size()-1; i > 0; i--)
+		for (size_t i = 0; i < trace.size() - 1; i++)
 		{
-			trace[i].second = trace[i-1].second;
+			trace[i].second = trace[i+1].second;
 		}
-		trace[0].second = false;
+		trace.back().second = false;
 	}
 
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
