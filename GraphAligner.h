@@ -52,8 +52,8 @@ public:
 		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
 		if (trace.trace.size() == 0) return result;
 		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
-		alnItem.alignmentStart = trace.trace[0].seqPos;
-		alnItem.alignmentEnd = trace.trace.back().seqPos;
+		alnItem.alignmentStart = trace.trace[0].first.seqPos;
+		alnItem.alignmentEnd = trace.trace.back().first.seqPos;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
@@ -137,40 +137,43 @@ private:
 		if (!result.backward.failed())
 		{
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
-			assert(result.backward.trace.back().seqPos == -1 && params.graph.nodeIDs[result.backward.trace.back().node] == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().node] + result.backward.trace.back().nodeOffset == reversePos.second);
-			result.backward.trace.pop_back();
+			assert(result.backward.trace.back().first.seqPos == -1 && params.graph.nodeIDs[result.backward.trace.back().first.node] == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().first.node] + result.backward.trace.back().first.nodeOffset == reversePos.second);
 			std::reverse(result.backward.trace.begin(), result.backward.trace.end());
 		}
 		if (!result.forward.failed())
 		{
-			assert(result.forward.trace.back().seqPos == -1 && params.graph.nodeIDs[result.forward.trace.back().node] == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().node] + result.forward.trace.back().nodeOffset == seedHit.nodeOffset);
-			result.forward.trace.pop_back();
+			assert(result.forward.trace.back().first.seqPos == -1 && params.graph.nodeIDs[result.forward.trace.back().first.node] == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().first.node] + result.forward.trace.back().first.nodeOffset == seedHit.nodeOffset);
 			std::reverse(result.forward.trace.begin(), result.forward.trace.end());
 		}
 		return result;
 	}
 
-	void fixForwardTraceSeqPos(std::vector<MatrixPosition>& trace, LengthType start) const
+	void fixForwardTraceSeqPos(std::vector<std::pair<MatrixPosition, bool>>& trace, LengthType start) const
 	{
 		for (size_t i = 0; i < trace.size(); i++)
 		{
-			trace[i].seqPos += start;
+			trace[i].first.seqPos += start;
 		}
 	}
 
-	void fixReverseTraceSeqPosAndOrder(std::vector<MatrixPosition>& trace, LengthType end) const
+	void fixReverseTraceSeqPosAndOrder(std::vector<std::pair<MatrixPosition, bool>>& trace, LengthType end) const
 	{
 		std::reverse(trace.begin(), trace.end());
 		for (size_t i = 0; i < trace.size(); i++)
 		{
-			assert(trace[i].seqPos <= end || trace[i].seqPos == -1);
-			trace[i].seqPos = end - trace[i].seqPos;
-			size_t offset = params.graph.nodeOffset[trace[i].node] + trace[i].nodeOffset;
-			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].node], offset);
-			trace[i].node = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
-			trace[i].nodeOffset = reversePos.second - params.graph.nodeOffset[trace[i].node];
-			assert(trace[i].nodeOffset < params.graph.NodeLength(trace[i].node));
+			assert(trace[i].first.seqPos <= end || trace[i].first.seqPos == -1);
+			trace[i].first.seqPos = end - trace[i].first.seqPos;
+			size_t offset = params.graph.nodeOffset[trace[i].first.node] + trace[i].first.nodeOffset;
+			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].first.node], offset);
+			trace[i].first.node = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
+			trace[i].first.nodeOffset = reversePos.second - params.graph.nodeOffset[trace[i].first.node];
+			assert(trace[i].first.nodeOffset < params.graph.NodeLength(trace[i].first.node));
 		}
+		for (size_t i = trace.size()-1; i > 0; i--)
+		{
+			trace[i].second = trace[i-1].second;
+		}
+		trace[0].second = false;
 	}
 
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -237,9 +240,18 @@ private:
 			seedHitNodeId = seedHit.nodeID * 2;
 		}
 		auto middleNode = params.graph.GetUnitigNode(seedHitNodeId, seedHit.nodeOffset);
-		mergedTrace.trace.emplace_back(middleNode, seedHit.nodeOffset - params.graph.nodeOffset[middleNode], seedHit.seqPos);
-		mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
-		if (!trace.forward.failed()) mergedTrace.score += trace.forward.score;
+		if (!trace.backward.failed() && !trace.forward.failed())
+		{
+			assert(mergedTrace.trace.back().first == trace.forward.trace[0].first);
+			mergedTrace.trace.pop_back();
+			mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
+			mergedTrace.score += trace.forward.score;
+		}
+		else if (!trace.forward.failed())
+		{
+			mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
+			mergedTrace.score += trace.forward.score;
+		}
 
 		auto result = VGAlignment::traceToAlignment(params, seq_id, sequence, mergedTrace.score, mergedTrace.trace, 0, false);
 
@@ -247,8 +259,8 @@ private:
 		LengthType seqstart = 0;
 		LengthType seqend = 0;
 		assert(mergedTrace.trace.size() > 0);
-		seqstart = mergedTrace.trace[0].seqPos;
-		seqend = mergedTrace.trace.back().seqPos;
+		seqstart = mergedTrace.trace[0].first.seqPos;
+		seqend = mergedTrace.trace.back().first.seqPos;
 		assert(seqend < sequence.size());
 		result.alignment.set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
 		// result.trace = traceVector;
@@ -278,10 +290,10 @@ private:
 	// }
 
 #ifndef NDEBUG
-	void verifyTrace(const std::vector<MatrixPosition>& trace, const std::string& sequence, volatile ScoreType score) const
+	void verifyTrace(const std::vector<std::pair<MatrixPosition, bool>>& trace, const std::string& sequence, volatile ScoreType score) const
 	{
 		size_t start = 0;
-		while (trace[start].seqPos == -1)
+		while (trace[start].first.seqPos == -1)
 		{
 			start++;
 			assert(start < trace.size());
@@ -289,9 +301,9 @@ private:
 		start++;
 		for (size_t i = start; i < trace.size(); i++)
 		{
-			assert(trace[i].seqPos < sequence.size());
-			auto newpos = trace[i];
-			auto oldpos = trace[i-1];
+			assert(trace[i].first.seqPos < sequence.size());
+			auto newpos = trace[i].first;
+			auto oldpos = trace[i-1].first;
 			auto oldNodeIndex = oldpos.node;
 			auto newNodeIndex = newpos.node;
 			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);

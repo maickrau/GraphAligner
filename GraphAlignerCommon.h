@@ -134,7 +134,7 @@ public:
 		{
 			return score == std::numeric_limits<ScoreType>::max();
 		}
-		std::vector<MatrixPosition> trace;
+		std::vector<std::pair<MatrixPosition, bool>> trace;
 		ScoreType score;
 	};
 	class Trace
