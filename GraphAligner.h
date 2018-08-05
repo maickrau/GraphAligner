@@ -158,6 +158,7 @@ private:
 
 	void fixReverseTraceSeqPosAndOrder(std::vector<std::pair<MatrixPosition, bool>>& trace, LengthType end) const
 	{
+		if (trace.size() == 0) return;
 		std::reverse(trace.begin(), trace.end());
 		for (size_t i = 0; i < trace.size(); i++)
 		{
