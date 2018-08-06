@@ -13,7 +13,6 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
   - `make all`
 - Install programs used by the snakemake pipeline
   - Install MUMmerv4 binaries https://github.com/mummer4/mummer
-  - Install snakemake binaries https://snakemake.readthedocs.io/en/stable/
 
 ### Running the alignment pipeline
 
