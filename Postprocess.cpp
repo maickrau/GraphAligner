@@ -182,7 +182,7 @@ void splitAlignmentsIntoSelectedAndFullLength(const std::unordered_map<std::stri
 		{
 			bpInSelected += ptr->sequence().size();
 		}
-		if (selected[0]->sequence().size() == readLengths.at(pair.first) - 1)
+		if (selected[0]->sequence().size() >= readLengths.at(pair.first) - 1)
 		{
 			outputFullLength.enqueue(selected[0]);
 			bpInFull += selected[0]->sequence().size();
