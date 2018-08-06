@@ -5,10 +5,9 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
 ### Installation
 
 - Compile the aligner
-  - Install zstr development libraries https://github.com/mateidavid/zstr
-  - Install concurrentqueue development libraries https://github.com/cameron314/concurrentqueue
-  - Install protobuf v3.0.0 development libraries https://github.com/google/protobuf/releases/tag/v3.0.0
-  - Install sparsehash development libraries https://github.com/sparsehash/sparsehash
+  - `git clone https://github.com/maickrau/GraphAligner.git`
+  - `git submodule --init --recursive`
+  - `conda env create -f CondaCompileEnvironment.yml`
   - `make all`
 - Install programs used by the snakemake pipeline
   - Install MUMmerv4 binaries https://github.com/mummer4/mummer
