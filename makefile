@@ -1,19 +1,20 @@
 CC=gcc
 GPP=g++
-CPPFLAGS=-Wall -std=c++14 -O3 -g
+CPPFLAGS=-Wall -std=c++14 -O3 -g -Iconcurrentqueue -Izstr/src `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash`
 
 ODIR=obj
 BINDIR=bin
 
-LIBS=-lm -lprotobuf -lz
+LIBS=-lm -lz
 JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
+PROTOBUFFLAGS = `pkg-config --libs protobuf`
 
 DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h ByteStuff.h
 
 _OBJ = Aligner.o AlignerMain.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o GfaGraph.o AlignmentCorrectnessEstimation.o ByteStuff.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
-LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS)
+LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS) $(PROTOBUFFLAGS)
 
 GITCOMMIT := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -30,8 +31,14 @@ $(ODIR)/AlignerMain.o: AlignerMain.cpp $(DEPS)
 $(ODIR)/%.o: %.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS)
 
+$(ODIR)/vg.pb.o: vg.pb.cc
+	$(GPP) -c -o $@ $< $(CPPFLAGS)
+
 $(BINDIR)/Aligner: $(OBJ)
 	$(GPP) -o $@ $^ $(LINKFLAGS)
+
+%.pb.cc %.pb.h: %.proto
+	protoc -I=. --cpp_out=. $<
 
 $(BINDIR)/SimulateReads: SimulateReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/GfaGraph.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
@@ -83,3 +90,5 @@ all: $(BINDIR)/Aligner $(BINDIR)/SimulateReads $(BINDIR)/ReverseReads $(BINDIR)/
 clean:
 	rm -f $(ODIR)/*
 	rm -f $(BINDIR)/*
+	rm -f vg.pb.cc
+	rm -f vg.pb.h
