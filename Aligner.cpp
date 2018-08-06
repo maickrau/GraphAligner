@@ -98,6 +98,8 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	assertSetRead("Writer", "No seed");
 	std::ofstream outfile { filename, std::ios::binary | std::ios::out };
 
+	bool wroteAny = false;
+
 	std::string alns[100] {};
 
 	BufferedWriter coutoutput;
@@ -120,6 +122,21 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 		{
 			outfile.write(alns[i].data(), alns[i].size());
 		}
+		wroteAny = true;
+	}
+
+	if (!wroteAny)
+	{
+		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
+		      new ::google::protobuf::io::OstreamOutputStream(&outfile);
+		::google::protobuf::io::GzipOutputStream *gzip_out =
+		      new ::google::protobuf::io::GzipOutputStream(raw_out);
+		::google::protobuf::io::CodedOutputStream *coded_out =
+		      new ::google::protobuf::io::CodedOutputStream(gzip_out);
+		coded_out->WriteVarint64(0);
+		delete coded_out;
+		delete gzip_out;
+		delete raw_out;
 	}
 }
 
