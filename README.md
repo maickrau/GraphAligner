@@ -9,7 +9,7 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
   - `git clone https://github.com/maickrau/GraphAligner.git`
   - `git submodule update --init --recursive`
   - `conda env create -f CondaCompileEnvironment.yml`
-  - `conda activate GraphAligner`
+  - `source activate GraphAligner`
   - `make all`
 - Install programs used by the snakemake pipeline
   - Install MUMmerv4 binaries https://github.com/mummer4/mummer
