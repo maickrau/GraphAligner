@@ -2,7 +2,7 @@
 
 # https://github.com/maickrau/GraphAligner
 # root directory of the repo
-graphalignerfolder: path_to_graph_aligner/
+graphalignerfolder: ~/GraphAligner/
 
 # The graph must be in input/ folder and in gfa format, eg ./input/graph.gfa
 # If the graph is not a de Bruijn graph (DBG) then some seeds might be missed and some reads might not get aligned
