@@ -4,7 +4,7 @@ Program for aligning long error-prone reads to genome graphs. For simple usage, 
 
 ### Installation
 
-- Install conda https://conda.io/docs/user-guide/install/index.html
+- Install miniconda https://conda.io/docs/user-guide/install/index.html
 - `git clone https://github.com/maickrau/GraphAligner.git`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment.yml`
