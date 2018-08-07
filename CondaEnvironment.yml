@@ -1,30 +1,38 @@
 name: GraphAligner
 channels:
+  - bioconda
   - omgarcia
   - conda-forge
-  - bioconda
   - defaults
 dependencies:
   - filechunkio=1.6=py36_0
   - ftputil=3.2=py36_0
-  - pysftp=0.2.9=py36_0
+  - mummer4=4.0.0beta2=pl526hfc679d8_2
   - snakemake=3.13.3=py36_0
+  - asn1crypto=0.24.0=py36_0
   - binutils=2.31=0
   - ca-certificates=2018.4.16=0
-  - certifi=2018.4.16=py36_0
+  - docutils=0.14=py36_0
+  - idna=2.7=py36_0
   - openssl=1.0.2o=h470a237_1
+  - paramiko=2.4.1=py36_0
+  - pip=10.0.1=py36_0
+  - pyopenssl=18.0.0=py36_0
+  - pysftp=0.2.9=py36_0
+  - requests=2.19.1=py36_0
+  - setuptools=39.2.0=py36_0
+  - six=1.11.0=py36_1
   - sparsehash=2.0.3=0
-  - asn1crypto=0.24.0=py36_0
+  - urllib3=1.23=py36_0
+  - wheel=0.31.1=py36_0
   - bcrypt=3.1.4=py36h14c3975_0
   - blas=1.0=mkl
+  - certifi=2018.4.16=py36_0
   - cffi=1.11.5=py36h9745a5d_0
   - chardet=3.0.4=py36_1
-  - cloog=0.18.0=0
   - cryptography=2.2.2=py36h14c3975_0
-  - docutils=0.14=py36_0
   - dropbox=8.9.0=py36_0
   - gmp=6.1.2=h6c8ec71_1
-  - idna=2.7=py36_0
   - intel-openmp=2018.0.3=0
   - jemalloc=5.0.1=hf484d3e_1
   - libedit=3.1.20170329=h6b74fdf_2
@@ -43,32 +51,26 @@ dependencies:
   - numpy=1.15.0=py36h1b885b7_0
   - numpy-base=1.15.0=py36h3dfced4_0
   - pandas=0.23.3=py36h04863e7_0
-  - paramiko=2.4.1=py36_0
-  - pip=10.0.1=py36_0
+  - perl=5.26.2=h14c3975_0
   - pkg-config=0.29.2=h1bed415_8
   - protobuf=3.5.2=py36hf484d3e_1
   - psutil=5.4.6=py36h14c3975_0
   - pyasn1=0.4.4=py36_0
   - pycparser=2.18=py36_1
   - pynacl=1.2.1=py36h14c3975_0
-  - pyopenssl=18.0.0=py36_0
   - pysocks=1.6.8=py36_0
   - python=3.6.6=hc3d631a_0
   - python-dateutil=2.7.3=py36_0
   - pytz=2018.5=py36_0
   - pyyaml=3.13=py36h14c3975_0
   - readline=7.0=ha6073c6_4
-  - requests=2.19.1=py36_0
-  - setuptools=39.2.0=py36_0
-  - six=1.11.0=py36_1
   - sqlite=3.24.0=h84994c4_0
   - tk=8.6.7=hc745277_3
-  - urllib3=1.23=py36_0
-  - wheel=0.31.1=py36_0
   - wrapt=1.10.11=py36h14c3975_2
   - xz=5.2.4=h14c3975_4
   - yaml=0.1.7=had09818_2
   - zlib=1.2.11=ha838bed_2
+  - cloog=0.18.0=0
   - gcc-6=6.1.0=2
   - isl=0.17.1=0
 

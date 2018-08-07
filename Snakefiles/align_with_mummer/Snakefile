@@ -1,6 +1,6 @@
 # Edit config.yaml to add the paths before running
 configfile: "config.yaml"
-MUMMERPATH = config["mummerpath"]
+MUMMERPATH = "mummer"
 READFILE = config["reads"]
 GRAPHFILE = config["graph"]
 SEEDSIZE = config["seedsize"]
