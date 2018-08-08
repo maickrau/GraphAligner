@@ -271,26 +271,41 @@ private:
 			assert(result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize != 0);
 			result.trace.emplace_back(pickBacktraceInside(slice.slices[currentSlice].j, nodeSlices, result.trace.back().first, sequence), false);
 		}
-		assert(result.trace.back().first.seqPos == -1);
-		assert(slice.slices[0].scores.hasNode(result.trace.back().first.node));
-		auto node = slice.slices[0].scores.node(result.trace.back().first.node);
-		std::vector<ScoreType> beforeSliceScores;
-		beforeSliceScores.resize(params.graph.NodeLength(result.trace.back().first.node));
-		beforeSliceScores[0] = node.startSlice.scoreEnd;
-		for (size_t i = 1; i < beforeSliceScores.size(); i++)
+		do
 		{
-			size_t chunk = i / params.graph.SPLIT_NODE_SIZE;
-			size_t offset = i % params.graph.SPLIT_NODE_SIZE;
-			Word mask = ((Word)1) << offset;
-			beforeSliceScores[i] = beforeSliceScores[i-1] + ((node.HP[chunk] & mask) >> offset) - ((node.HN[chunk] & mask) >> offset);
-		}
-		assert(beforeSliceScores.back() == node.endSlice.scoreEnd);
-		while (beforeSliceScores[result.trace.back().first.nodeOffset] != 0)
-		{
-			assert(result.trace.back().first.nodeOffset > 0);
-			assert(beforeSliceScores[result.trace.back().first.nodeOffset-1] == beforeSliceScores[result.trace.back().first.nodeOffset] - 1);
-			result.trace.emplace_back(MatrixPosition {result.trace.back().first.node, result.trace.back().first.nodeOffset-1, result.trace.back().first.seqPos}, false);
-		}
+			assert(result.trace.back().first.seqPos == -1);
+			assert(slice.slices[0].scores.hasNode(result.trace.back().first.node));
+			auto node = slice.slices[0].scores.node(result.trace.back().first.node);
+			std::vector<ScoreType> beforeSliceScores;
+			beforeSliceScores.resize(params.graph.NodeLength(result.trace.back().first.node));
+			beforeSliceScores[0] = node.startSlice.scoreEnd;
+			for (size_t i = 1; i < beforeSliceScores.size(); i++)
+			{
+				size_t chunk = i / params.graph.SPLIT_NODE_SIZE;
+				size_t offset = i % params.graph.SPLIT_NODE_SIZE;
+				Word mask = ((Word)1) << offset;
+				beforeSliceScores[i] = beforeSliceScores[i-1] + ((node.HP[chunk] & mask) >> offset) - ((node.HN[chunk] & mask) >> offset);
+			}
+			assert(beforeSliceScores.back() == node.endSlice.scoreEnd);
+			while (beforeSliceScores[result.trace.back().first.nodeOffset] != 0 && result.trace.back().first.nodeOffset > 0 && beforeSliceScores[result.trace.back().first.nodeOffset-1] == beforeSliceScores[result.trace.back().first.nodeOffset] - 1)
+			{
+				result.trace.emplace_back(MatrixPosition {result.trace.back().first.node, result.trace.back().first.nodeOffset-1, result.trace.back().first.seqPos}, false);
+			}
+			if (result.trace.back().first.nodeOffset == 0 && beforeSliceScores[result.trace.back().first.nodeOffset] != 0)
+			{
+				bool found = false;
+				for (auto neighbor : params.graph.inNeighbors[result.trace.back().first.node])
+				{
+					if (slice.slices[0].scores.hasNode(neighbor) && slice.slices[0].scores.node(neighbor).endSlice.getScoreBeforeStart() == beforeSliceScores[result.trace.back().first.nodeOffset] - 1)
+					{
+						result.trace.emplace_back(MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, result.trace.back().first.seqPos}, true);
+						found = true;
+						break;
+					}
+				}
+				if (found) continue;
+			}
+		} while (false);
 		return result;
 	}
 
