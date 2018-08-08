@@ -136,8 +136,9 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktraceFullStart(std::string sequence, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getBacktraceFullStart(std::string originalSequence, AlignerGraphsizedState& reusableState) const
 	{
+		assert(originalSequence.size() > 1);
 		DPSlice startSlice;
 		startSlice.j = -WordConfiguration<Word>::WordSize;
 		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
@@ -145,26 +146,47 @@ public:
 		startSlice.minScore = 0;
 		startSlice.minScoreNode = 0;
 		startSlice.minScoreNodeOffset = 0;
+		char firstChar = originalSequence[0];
 		for (size_t i = 0; i < params.graph.NodeSize(); i++)
 		{
 			startSlice.scores.addNodeToMap(i);
 			startSlice.scores.setMinScore(i, 0);
 			auto& node = startSlice.scores.node(i);
-			node.startSlice = {0, 0, 0};
-			node.endSlice = {0, 0, 0};
-			node.minScore = 0;
+			bool match = Common::characterMatch(firstChar, params.graph.NodeSequences(i, 0));
+			node.startSlice = {0, 0, match ? 0 : 1};
+			node.minScore = match ? 0 : 1;
+			for (size_t j = 1; j < params.graph.NodeLength(i); j++)
+			{
+				bool oldMatch = match;
+				match = Common::characterMatch(firstChar, params.graph.NodeSequences(i, j));
+				if (oldMatch && !match)
+				{
+					node.HP[j / params.graph.SPLIT_NODE_SIZE] |= ((Word)1) << (j % params.graph.SPLIT_NODE_SIZE);
+				}
+				else if (match && !oldMatch)
+				{
+					node.HN[j / params.graph.SPLIT_NODE_SIZE] |= ((Word)1) << (j % params.graph.SPLIT_NODE_SIZE);
+				}
+				if (match) node.minScore = 0;
+			}
+			node.endSlice = {0, 0, match ? 0 : 1};
 			node.exists = true;
 		}
-		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto slice = getSqrtSlices(sequence, startSlice, numSlices, reusableState);
+		std::string alignableSequence = originalSequence.substr(1);
+		assert(alignableSequence.size() > 0);
+		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, reusableState);
 		removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
-		auto result = getReverseTraceFromTable(sequence, slice, reusableState);
-		while (result.trace.back().first.seqPos == -1) result.trace.pop_back();
+		auto result = getReverseTraceFromTable(alignableSequence, slice, reusableState);
+		for (size_t i = 0; i < result.trace.size(); i++)
+		{
+			result.trace[i].first.seqPos += 1;
+		}
 		std::reverse(result.trace.begin(), result.trace.end());
 		assert(result.trace[0].first.seqPos == 0);
 		return result;

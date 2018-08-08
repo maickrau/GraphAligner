@@ -191,35 +191,6 @@ private:
 		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos-1);
 		fixForwardTraceSeqPos(trace.forward.trace, seedHit.seqPos+1);
 
-// #ifndef NDEBUG
-// 		if (!trace.forward.failed() && !trace.backward.failed())
-// 		{
-// 			assert(trace.backward.trace.back().seqPos == trace.forward.trace[0].seqPos - 1);
-// 			auto debugBwPos = trace.backward.trace.back();
-// 			auto debugBwNodeId = params.graph.nodeIDs[debugBwPos.node];
-// 			auto debugBwOffset = params.graph.nodeOffset[debugBwPos.node] + debugBwPos.nodeOffset;
-// 			auto debugOldNodeidPos = params.graph.GetReversePosition(debugBwNodeId, debugBwOffset);
-// 			auto debugOldNode = params.graph.GetUnitigNode(debugOldNodeidPos.first, debugOldNodeidPos.second);
-// 			auto debugOldOffset = debugOldNodeidPos.second - params.graph.nodeOffset[debugOldNode];
-// 			assert(debugOldOffset >= 0);
-// 			assert(debugOldOffset < params.graph.NodeLength(debugOldNode));
-// 			if (trace.forward.trace[0].nodeOffset > 0)
-// 			{
-// 				assert(debugOldNode == trace.forward.trace[0].node);
-// 				assert(debugOldOffset <= trace.forward.trace[0].nodeOffset);
-// 			}
-// 			else
-// 			{
-// 				bool foundNeighbor = false;
-// 				for (auto neighbor : params.graph.inNeighbors[trace.forward.trace[0].node])
-// 				{
-// 					if (debugOldNode == neighbor && debugOldOffset == params.graph.NodeLength(neighbor)-1) foundNeighbor = true;
-// 				}
-// 				assert(foundNeighbor || (debugOldNode == trace.forward.trace[0].node && debugOldOffset == 0));
-// 			}
-// 		}
-// #endif
-
 		//failed alignment, don't output
 		if (trace.forward.failed() && trace.backward.failed())
 		{
