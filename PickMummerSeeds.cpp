@@ -114,11 +114,11 @@ int main(int argc, char** argv)
 				//there's some weird bug, possibly even in mummer
 				//ignore it until we figure out what's going on
 				if (newSeed.readpos > readLengths[currentRead] - 1 - (newSeed.len - 1)) continue;
-				if (newSeed.nodepos > nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1)) continue;
+				if (newSeed.nodepos > nodeLengths[newSeed.nodeId] - 1 - (newSeed.len)) continue;
 				assert(newSeed.readpos <= readLengths[currentRead] - 1 - (newSeed.len - 1));
 				assert(newSeed.nodepos <= nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1));
 				newSeed.readpos = readLengths[currentRead] - 1 - newSeed.readpos - (newSeed.len - 1);
-				newSeed.nodepos = nodeLengths[newSeed.nodeId] - 1 - newSeed.nodepos - (newSeed.len - 1);
+				newSeed.nodepos = nodeLengths[newSeed.nodeId] - 1 - newSeed.nodepos - (newSeed.len);
 			}
 			//there's some weird bug, possibly even in mummer
 			//ignore it until we figure out what's going on
