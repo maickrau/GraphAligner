@@ -223,13 +223,12 @@ std::unordered_set<int> filterNodes(const GfaGraph& graph, const int maxRemovabl
 
 int main(int argc, char** argv)
 {
-	std::string inputGraph { argv[1] };
-	int maxRemovableLen = std::stoi(argv[2]);
-	int minSafeLen = std::stoi(argv[3]);
-	std::string outputGraph { argv[4] };
+	int maxRemovableLen = std::stoi(argv[1]);
+	int minSafeLen = std::stoi(argv[2]);
+	auto graph = GfaGraph::LoadFromStream(std::cin);
+	//write to cout
 
-	auto graph = GfaGraph::LoadFromFile(inputGraph);
 	auto keptNodes = filterNodes(graph, maxRemovableLen, minSafeLen);
 	auto filteredGraph = graph.GetSubgraph(keptNodes);
-	filteredGraph.SaveToFile(outputGraph);
+	filteredGraph.SaveToStream(std::cout);
 }

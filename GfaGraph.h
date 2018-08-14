@@ -1,6 +1,8 @@
 #ifndef GfaGraph_h
 #define GfaGraph_h
 
+#include <istream>
+#include <ostream>
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -42,7 +44,9 @@ class GfaGraph
 {
 public:
 	static GfaGraph LoadFromFile(std::string filename);
+	static GfaGraph LoadFromStream(std::istream& stream);
 	void SaveToFile(std::string filename) const;
+	void SaveToStream(std::ostream& stream) const;
 	void AddSubgraph(const GfaGraph& subgraph);
 	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
 	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;

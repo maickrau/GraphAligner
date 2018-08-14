@@ -100,6 +100,11 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& nodeids, const std
 void GfaGraph::SaveToFile(std::string filename) const
 {
 	std::ofstream file {filename};
+	SaveToStream(file);
+}
+
+void GfaGraph::SaveToStream(std::ostream& file) const
+{
 	for (auto node : nodes)
 	{
 		file << "S\t" << node.first << "\t" << node.second << std::endl;
@@ -131,8 +136,13 @@ void GfaGraph::AddSubgraph(const GfaGraph& other)
 
 GfaGraph GfaGraph::LoadFromFile(std::string filename)
 {
-	GfaGraph result;
 	std::ifstream file {filename};
+	return LoadFromStream(file);
+}
+
+GfaGraph GfaGraph::LoadFromStream(std::istream& file)
+{
+	GfaGraph result;
 	while (file.good())
 	{
 		std::string line;
