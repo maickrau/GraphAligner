@@ -84,6 +84,8 @@ int main(int argc, char** argv)
 	std::string currentRead;
 	std::string line;
 	bool currentReverse = false;
+	size_t currentReadLength;
+	std::priority_queue<MummerSeed, std::vector<MummerSeed>, AlignmentLengthCompare>* currentQueue;
 	while (std::getline(std::cin, line))
 	{
 		if (line[0] == '>')
@@ -98,6 +100,8 @@ int main(int argc, char** argv)
 				currentReverse = false;
 				currentRead = std::string { line.begin()+2, line.end() };
 			}
+			currentReadLength = readLengths[currentRead];
+			currentQueue = &alignments[currentRead];
 		}
 		else
 		{
@@ -111,32 +115,25 @@ int main(int argc, char** argv)
 			newSeed.readpos -= 1;
 			if (currentReverse)
 			{
-				//there's some weird bug, possibly even in mummer
-				//ignore it until we figure out what's going on
-				if (newSeed.readpos > readLengths[currentRead] - 1 - (newSeed.len - 1)) continue;
-				if (newSeed.nodepos > nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1)) continue;
-				assert(newSeed.readpos <= readLengths[currentRead] - 1 - (newSeed.len - 1));
-				assert(newSeed.nodepos <= nodeLengths[newSeed.nodeId] - 1 - (newSeed.len - 1));
-				newSeed.readpos = readLengths[currentRead] - 1 - newSeed.readpos - (newSeed.len - 1);
-				newSeed.nodepos = nodeLengths[newSeed.nodeId] - 1 - newSeed.nodepos - (newSeed.len - 1);
+				newSeed.readpos = currentReadLength - (newSeed.readpos + newSeed.len);
 			}
 			//there's some weird bug, possibly even in mummer
 			//ignore it until we figure out what's going on
-			if (newSeed.readpos >= readLengths[currentRead]) continue;
+			if (newSeed.readpos >= currentReadLength) continue;
 			if (newSeed.nodepos >= nodeLengths[newSeed.nodeId]) continue;
-			assert(newSeed.readpos < readLengths[currentRead]);
+			assert(newSeed.readpos < currentReadLength);
 			assert(newSeed.nodepos < nodeLengths[newSeed.nodeId]);
 			assert(newSeed.readpos >= 0);
 			assert(newSeed.nodepos >= 0);
-			if (alignments[currentRead].size() < maxSeeds)
+			if (currentQueue->size() < maxSeeds)
 			{
-				alignments[currentRead].emplace(newSeed);
+				currentQueue->emplace(newSeed);
 				numElems++;
 			}
-			else if (AlignmentLengthCompare{}(newSeed, alignments[currentRead].top()))
+			else if (AlignmentLengthCompare{}(newSeed, currentQueue->top()))
 			{
-				alignments[currentRead].pop();
-				alignments[currentRead].emplace(newSeed);
+				currentQueue->pop();
+				currentQueue->emplace(newSeed);
 			}
 		}
 	}
