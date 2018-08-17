@@ -370,6 +370,7 @@ private:
 			assert(offset > 0);
 			ScoreType smallestFound = startSlice.getValue(offset-1);
 			MatrixPosition smallestPos { node, 0, pos.seqPos-1 };
+			bool nodeChange = false;
 			for (auto neighbor : params.graph.inNeighbors[node])
 			{
 				if (current.hasNode(neighbor))
@@ -379,17 +380,19 @@ private:
 					{
 						smallestFound = neighborSlice.getValue(offset-1);
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos-1 };
+						nodeChange = true;
 					}
 					if (neighborSlice.getValue(offset) < smallestFound)
 					{
 						smallestFound = neighborSlice.getValue(offset);
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos };
+						nodeChange = true;
 					}
 				}
 			}
 			assert(smallestFound < scoreHere+1);
 			assert(smallestPos != pos);
-			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, true));
+			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, nodeChange));
 		}
 		for (auto neighbor : params.graph.inNeighbors[node])
 		{
