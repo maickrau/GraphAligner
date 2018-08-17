@@ -460,6 +460,50 @@ private:
 	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
+		if (scoreHere > quitScore)
+		{
+			//this location is out of the band so the usual horizontal and vertical score limits don't apply
+			//just pick the smallest scoring in-neighbor
+			ScoreType smallestFound = scoreHere+1;
+			MatrixPosition smallestPos { 0, 0, 0 };
+			bool nodeChange = false;
+			if (previous.hasNode(node))
+			{
+				auto slice = previous.node(node).startSlice;
+				if (slice.scoreEnd < smallestFound)
+				{
+					smallestFound = slice.scoreEnd;
+					smallestPos = MatrixPosition { node, 0, j-1 };
+					nodeChange = false;
+				}
+			}
+			for (auto neighbor : params.graph.inNeighbors[node])
+			{
+				if (current.hasNode(neighbor))
+				{
+					auto neighborSlice = current.node(neighbor).endSlice;
+					if (neighborSlice.getValue(0) < smallestFound)
+					{
+						smallestFound = neighborSlice.getValue(0);
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j };
+						nodeChange = true;
+					}
+				}
+				if (previous.hasNode(neighbor))
+				{
+					auto neighborSlice = previous.node(neighbor).endSlice;
+					if (neighborSlice.scoreEnd < smallestFound)
+					{
+						smallestFound = neighborSlice.scoreEnd;
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j-1 };
+						nodeChange = true;
+					}
+				}
+			}
+			assert(smallestFound < scoreHere+1);
+			return std::make_pair(smallestPos, nodeChange);
+
+		}
 		assert(scoreHere <= quitScore);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
 		if (previous.hasNode(node))
