@@ -54,6 +54,7 @@ public:
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
 	int edgeOverlap;
 private:
+	std::unordered_map<int, std::string> tags;
 	GfaGraph();
 };
 
