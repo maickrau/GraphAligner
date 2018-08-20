@@ -93,26 +93,24 @@ void removeRec(std::vector<bool>& keepers, size_t pos, const std::vector<std::ve
 	}
 }
 
-std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vector<std::vector<size_t>>& edges, const int maxRemovableLen, const int minSafeLen)
+std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vector<std::vector<size_t>>& edges, const size_t maxRemovableLen, const size_t minSafeLen, const double fraction)
 {
 	std::vector<bool> result;
 	result.resize(depths.size(), true);
 	for (size_t i = 0; i < depths.size(); i++)
 	{
 		if (!result[i]) continue;
-		bool hasBigOne = false;
+		size_t bigLength = 0;
 		for (auto neighbor : edges[i])
 		{
-			if (depths[neighbor] >= minSafeLen)
-			{
-				hasBigOne = true;
-				break;
-			}
+			bigLength = std::max(bigLength, depths[neighbor]);
 		}
-		if (!hasBigOne) continue;
+		if (bigLength < minSafeLen) continue;
+		size_t removableLen = bigLength * fraction;
+		removableLen = std::min(removableLen, maxRemovableLen);
 		for (auto neighbor : edges[i])
 		{
-			if (depths[neighbor] <= maxRemovableLen)
+			if (depths[neighbor] <= removableLen)
 			{
 				removeRec(result, neighbor, edges);
 			}
@@ -202,14 +200,14 @@ std::vector<std::vector<size_t>> topologicalSort(const std::vector<std::vector<s
 	return result;
 }
 
-std::unordered_set<int> filterNodes(const GfaGraph& graph, const int maxRemovableLen, const int minSafeLen)
+std::unordered_set<int> filterNodes(const GfaGraph& graph, const int maxRemovableLen, const int minSafeLen, const double fraction)
 {
 	auto nodeMapping = getNodeMapping(graph);
 	auto lengths = getLengths(nodeMapping, graph);
 	auto edges = getOutEdges(nodeMapping, graph);
 	auto order = topologicalSort(edges);
 	auto depths = getNodeDepths(order, lengths, edges);
-	auto keepers = getKeepers(depths, edges, maxRemovableLen, minSafeLen);
+	auto keepers = getKeepers(depths, edges, maxRemovableLen, minSafeLen, fraction);
 	std::unordered_set<int> result;
 	for (auto node : graph.nodes)
 	{
@@ -225,10 +223,11 @@ int main(int argc, char** argv)
 {
 	int maxRemovableLen = std::stoi(argv[1]);
 	int minSafeLen = std::stoi(argv[2]);
+	double fraction = std::stod(argv[3]);
 	auto graph = GfaGraph::LoadFromStream(std::cin);
 	//write to cout
 
-	auto keptNodes = filterNodes(graph, maxRemovableLen, minSafeLen);
+	auto keptNodes = filterNodes(graph, maxRemovableLen, minSafeLen, fraction);
 	auto filteredGraph = graph.GetSubgraph(keptNodes);
 	filteredGraph.SaveToStream(std::cout);
 }
