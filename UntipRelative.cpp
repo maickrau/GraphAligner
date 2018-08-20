@@ -119,45 +119,74 @@ std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vecto
 	return result;
 }
 
-void strongConnect(size_t node, size_t& i, std::vector<size_t>& index, std::vector<size_t>& lowlink, std::vector<bool>& onStack, std::vector<size_t>& S, std::vector<std::vector<size_t>>& result, const std::vector<std::vector<size_t>>& edges)
+void strongConnectIterative(size_t node, size_t& i, std::vector<size_t>& index, std::vector<size_t>& lowlink, std::vector<bool>& onStack, std::vector<size_t>& S, std::vector<std::vector<size_t>>& result, const std::vector<std::vector<size_t>>& edges)
 {
-	assert(!onStack[node]);
-	assert(index[node] == -1);
-	assert(lowlink[node] == -1);
-	index[node] = i;
-	lowlink[node] = i;
-	i++;
-	S.push_back(node);
-	onStack[node] = true;
-	for (auto neighbor : edges[node])
+	std::vector<std::tuple<int, size_t, size_t>> stack;
+	stack.emplace_back(0, node, 0);
+	while (stack.size() > 0)
 	{
-		if (index[neighbor] == -1)
+		auto top = stack.back();
+		size_t node = std::get<1>(top);
+		size_t neighborI = std::get<2>(top);
+		stack.pop_back();
+		switch(std::get<0>(top))
 		{
-			strongConnect(neighbor, i, index, lowlink, onStack, S, result, edges);
-			assert(lowlink[neighbor] != -1);
-			lowlink[node] = std::min(lowlink[node], lowlink[neighbor]);
+			case 0:
+				assert(!onStack[node]);
+				assert(index[node] == -1);
+				assert(lowlink[node] == -1);
+				index[node] = i;
+				lowlink[node] = i;
+				i++;
+				S.push_back(node);
+				onStack[node] = true;
+			START_LOOP:
+			case 1:
+				if (neighborI < edges[node].size())
+				{
+					auto neighbor = edges[node][neighborI];
+					if (index[neighbor] == -1)
+					{
+						stack.emplace_back(2, node, neighborI);
+						stack.emplace_back(0, edges[node][neighborI], 0);
+						continue;
+					}
+					else if (onStack[neighbor])
+					{
+						assert(index[neighbor] != -1);
+						lowlink[node] = std::min(lowlink[node], index[neighbor]);
+					}
+					neighborI++;
+				}
+				if (neighborI < edges[node].size()) goto START_LOOP;
+				goto END_LOOP;
+			case 2:
+				{
+					auto neighbor = edges[node][neighborI];
+					assert(lowlink[neighbor] != -1);
+					lowlink[node] = std::min(lowlink[node], lowlink[neighbor]);
+					neighborI++;
+					goto START_LOOP;
+				}
+			END_LOOP:
+			case 3:
+				assert(lowlink[node] != -1);
+				assert(index[node] != -1);
+				if (lowlink[node] == index[node])
+				{
+					result.emplace_back();
+					size_t stacknode;
+					do
+					{
+						assert(S.size() > 0);
+						stacknode = S.back();
+						S.pop_back();
+						assert(onStack[stacknode]);
+						onStack[stacknode] = false;
+						result.back().push_back(stacknode);
+					} while (stacknode != node);
+				}
 		}
-		else if (onStack[neighbor])
-		{
-			assert(index[neighbor] != -1);
-			lowlink[node] = std::min(lowlink[node], index[neighbor]);
-		}
-	}
-	assert(lowlink[node] != -1);
-	assert(index[node] != -1);
-	if (lowlink[node] == index[node])
-	{
-		result.emplace_back();
-		size_t stacknode;
-		do
-		{
-			assert(S.size() > 0);
-			stacknode = S.back();
-			S.pop_back();
-			assert(onStack[stacknode]);
-			onStack[stacknode] = false;
-			result.back().push_back(stacknode);
-		} while (stacknode != node);
 	}
 }
 
@@ -174,7 +203,7 @@ std::vector<std::vector<size_t>> topologicalSort(const std::vector<std::vector<s
 	size_t i = 0;
 	for (size_t node = 0; node < edges.size(); node++)
 	{
-		if (index[node] == -1) strongConnect(node, i, index, lowlink, onStack, S, result, edges);
+		if (index[node] == -1) strongConnectIterative(node, i, index, lowlink, onStack, S, result, edges);
 		assert(S.size() == 0);
 	}
 	assert(i == edges.size());
