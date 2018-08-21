@@ -201,6 +201,24 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			result.edges[frompos].push_back(topos);
 		}
 	}
+	std::vector<NodePos> nonexistantEdges;
+	for (auto& edge : result.edges)
+	{
+		if (result.nodes.count(edge.first.id) == 0)
+		{
+			nonexistantEdges.push_back(edge.first);
+			continue;
+		}
+		for (size_t i = edge.second.size()-1; i < edge.second.size()+1; i--)
+		{
+			if (result.nodes.count(edge.second[i].id) == 0) edge.second.erase(edge.second.begin()+i);
+		}
+	}
+	for (auto nonexistant : nonexistantEdges)
+	{
+		assert(result.edges.find(nonexistant) != result.edges.end());
+		result.edges.erase(result.edges.find(nonexistant));
+	}
 	return result;
 }
 
