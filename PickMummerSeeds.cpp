@@ -115,7 +115,14 @@ int main(int argc, char** argv)
 			newSeed.readpos -= 1;
 			if (currentReverse)
 			{
-				newSeed.readpos = currentReadLength - (newSeed.readpos + newSeed.len);
+				//there's some weird bug, possibly even in mummer
+				//ignore it until we figure out what's going on
+				if (newSeed.nodepos > nodeLengths[newSeed.nodeId] - 1) continue;
+				if (newSeed.readpos > currentReadLength - 1) continue;
+				assert(newSeed.nodepos <= nodeLengths[newSeed.nodeId] - 1);
+				assert(newSeed.readpos <= currentReadLength - 1);
+				newSeed.nodepos = nodeLengths[newSeed.nodeId] - 1 - newSeed.nodepos;
+				newSeed.readpos = currentReadLength - 1 - newSeed.readpos;
 			}
 			//there's some weird bug, possibly even in mummer
 			//ignore it until we figure out what's going on
