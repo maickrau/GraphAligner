@@ -203,6 +203,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			continue;
 		}
 
+		if (params.maxAlns != 0)
+		{
+			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, params.maxAlns, [](const AlignmentResult::AlignmentItem& aln) { return &(aln.alignment); });
+		}
+
 		std::string alignmentpositions;
 		size_t timems = 0;
 		size_t totalcells = 0;

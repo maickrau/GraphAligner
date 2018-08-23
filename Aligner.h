@@ -19,6 +19,7 @@ struct AlignerParams
 	bool quietMode;
 	bool sloppyOptimizations;
 	bool lowMemory;
+	size_t maxAlns;
 };
 
 void alignReads(AlignerParams params);
