@@ -4,11 +4,9 @@
 #include <cassert>
 #include <unordered_map>
 #include "CommonUtils.h"
-#include "vg.pb.h"
 #include "fastqloader.h"
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
-#include "stream.hpp"
 
 DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence) :
 nodeId(nodeId),
@@ -22,37 +20,6 @@ DirectedGraph::Edge::Edge(size_t from, size_t to) :
 fromId(from),
 toId(to)
 {
-}
-
-std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertVGNodeToNodes(const vg::Node& node)
-{
-	return std::make_pair(DirectedGraph::Node { node.id() * 2, node.id(), true, node.sequence() }, DirectedGraph::Node { node.id() * 2 + 1, node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
-}
-
-std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdgeToEdges(const vg::Edge& edge)
-{
-	size_t fromLeft, fromRight, toLeft, toRight;
-	if (edge.from_start())
-	{
-		fromLeft = edge.from() * 2;
-		fromRight = edge.from() * 2 + 1;
-	}
-	else
-	{
-		fromLeft = edge.from() * 2 + 1;
-		fromRight = edge.from() * 2;
-	}
-	if (edge.to_end())
-	{
-		toLeft = edge.to() * 2;
-		toRight = edge.to() * 2 + 1;
-	}
-	else
-	{
-		toLeft = edge.to() * 2 + 1;
-		toRight = edge.to() * 2;
-	}
-	return std::make_pair(DirectedGraph::Edge { fromRight, toRight }, DirectedGraph::Edge { toLeft, fromLeft });
 }
 
 std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(const std::string& node, int edgeOverlap)
@@ -101,37 +68,6 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdg
 		toRight = to * 2;
 	}
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight }, DirectedGraph::Edge { toLeft, fromLeft });
-}
-
-AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
-{
-	AlignmentGraph result;
-	{
-		std::ifstream graphfile { filename, std::ios::in | std::ios::binary };
-		std::function<void(vg::Graph&)> lambda = [&result](vg::Graph& g) {
-			for (int i = 0; i < g.node_size(); i++)
-			{
-				auto nodes = ConvertVGNodeToNodes(g.node(i));
-				result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
-				result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
-			}
-		};
-		stream::for_each(graphfile, lambda);
-	}
-	{
-		std::ifstream graphfile { filename, std::ios::in | std::ios::binary };
-		std::function<void(vg::Graph&)> lambda = [&result](vg::Graph& g) {
-			for (int i = 0; i < g.edge_size(); i++)
-			{
-				auto edges = ConvertVGEdgeToEdges(g.edge(i));
-				result.AddEdgeNodeId(edges.first.fromId, edges.first.toId);
-				result.AddEdgeNodeId(edges.second.fromId, edges.second.toId);
-			}
-		};
-		stream::for_each(graphfile, lambda);
-	}
-	result.Finalize(64);
-	return result;
 }
 
 AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)

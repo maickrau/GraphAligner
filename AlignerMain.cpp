@@ -9,8 +9,6 @@
 
 int main(int argc, char** argv)
 {
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
-
 #ifndef NOBUILTINPOPCOUNT
 	if (__builtin_cpu_supports("popcnt") == 0)
 	{
