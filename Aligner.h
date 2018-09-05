@@ -3,7 +3,6 @@
 
 #include <string>
 #include <vector>
-#include "vg.pb.h"
 
 struct AlignerParams
 {

@@ -3,7 +3,6 @@
 #include <fstream>
 #include <limits>
 #include "Aligner.h"
-#include "stream.hpp"
 #include "ThreadReadAssertion.h"
 #include "ByteStuff.h"
 
@@ -17,12 +16,6 @@ int main(int argc, char** argv)
 		std::abort();
 	}
 #endif
-
-    struct sigaction act;
-    act.sa_handler = ThreadReadAssertion::signal;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    sigaction(SIGSEGV, &act, 0);
 
     AlignerParams params;
 	params.graphFile = "";

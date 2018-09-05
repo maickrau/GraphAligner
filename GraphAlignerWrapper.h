@@ -5,7 +5,6 @@
 
 #include <tuple>
 #include "AlignmentGraph.h"
-#include "vg.pb.h"
 
 class AlignmentResult
 {

@@ -427,7 +427,7 @@ private:
 	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right)
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
-		static_assert(std::is_same<Word, uint64_t>::value);
+		static_assert(std::is_same<Word, uint64_t>::value, "non-64 bit words are currently not supported");
 		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);

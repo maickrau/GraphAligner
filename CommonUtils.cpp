@@ -1,5 +1,5 @@
+#include "ThreadReadAssertion.h"
 #include "CommonUtils.h"
-#include "stream.hpp"
 
 namespace CommonUtils
 {

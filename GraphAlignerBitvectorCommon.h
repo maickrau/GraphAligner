@@ -9,7 +9,6 @@
 #include "AlignmentGraph.h"
 #include "NodeSlice.h"
 #include "CommonUtils.h"
-#include "GraphAlignerWrapper.h"
 #include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
