@@ -5,7 +5,7 @@ CPPFLAGS=-Wall -std=c++14 -O3 -g
 ODIR=obj
 BINDIR=bin
 
-LIBS=-lm -lz
+LIBS=
 
 DEPS = fastqloader.h BigraphToDigraph.h Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h ByteStuff.h
 
