@@ -44,6 +44,17 @@ int main(int argc, char** argv)
 		}
 	}
 
+	if (params.graphFile == "")
+	{
+		std::cerr << "graph file must be set" << std::endl;
+		std::exit(0);
+	}
+	if (params.fastqFile == "")
+	{
+		std::cerr << "read file must be set" << std::endl;
+		std::exit(0);
+	}
+
 	ByteStuff::precalculateByteStuff();
 
 	wabiExperiments(params);
