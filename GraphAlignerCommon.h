@@ -62,6 +62,8 @@ public:
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
+			forwardNodeDist.resize(graph.NodeSize(), std::numeric_limits<size_t>::max());
+			backwardNodeDist.resize(graph.NodeSize(), std::numeric_limits<size_t>::max());
 		}
 		void clear()
 		{
@@ -70,12 +72,16 @@ public:
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
+			forwardNodeDist.assign(forwardNodeDist.size(), std::numeric_limits<size_t>::max());
+			backwardNodeDist.assign(backwardNodeDist.size(), std::numeric_limits<size_t>::max());
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
+		std::vector<size_t> forwardNodeDist;
+		std::vector<size_t> backwardNodeDist;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params

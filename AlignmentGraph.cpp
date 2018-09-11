@@ -37,6 +37,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
+	originalNodeSize[nodeId] = sequence.size();
 	for (size_t i = 0; i < DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
 		size_t size = SPLIT_NODE_SIZE;
@@ -219,7 +220,8 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 {
 	auto nodes = nodeLookup.at(nodeId);
 	size_t index = 0;
-	while (index < nodes.size()-1 && nodeOffset[nodes[index+1]] <= offset) index++;
+	while (index < nodes.size() && (nodeOffset[nodes[index]] > offset || nodeOffset[nodes[index]] + NodeLength(nodes[index]) <= offset)) index++;
+	assert(index != nodes.size());
 	size_t result = nodes[index];
 	assert(nodeOffset[result] <= offset);
 	assert(nodeOffset[result] + NodeLength(result) > offset);
@@ -230,15 +232,7 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 {
 	assert(nodeLookup.count(nodeId) == 1);
 	auto nodes = nodeLookup.at(nodeId);
-	size_t originalSize = nodeOffset[nodes.back()] + NodeLength(nodes.back());
-#ifndef NDEBUG
-	size_t checkSize = 0;
-	for (auto node : nodes)
-	{
-		checkSize += NodeLength(node);
-	}
-	assert(originalSize == checkSize);
-#endif
+	size_t originalSize = originalNodeSize.at(nodeId);
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);
@@ -255,30 +249,30 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 }
 
 
-size_t AlignmentGraph::GetReverseNode(size_t node) const
-{
-	assert(node < nodeLength.size());
+// size_t AlignmentGraph::GetReverseNode(size_t node) const
+// {
+// 	assert(node < nodeLength.size());
 
-	size_t originalNodeSize = (nodeLookup.at(nodeIDs[node]).size() - 1) * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[node]).back());
-	size_t currentOffset = nodeOffset[node];
-	assert(currentOffset < originalNodeSize);
-	size_t reverseOffset = originalNodeSize - currentOffset - 1;
-	assert(reverseOffset < originalNodeSize);
-	size_t reverseNodeOriginalId;
-	if (nodeIDs[node] % 2 == 0)
-	{
-		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2 + 1;
-	}
-	else
-	{
-		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2;
-	}
-	assert(nodeLookup.count(reverseNodeOriginalId) == 1);
-	assert(nodeLookup.at(reverseNodeOriginalId).size() > reverseOffset / SPLIT_NODE_SIZE);
-	size_t reverseNode = nodeLookup.at(reverseNodeOriginalId)[reverseOffset / SPLIT_NODE_SIZE];
+// 	size_t originalNodeSize = (nodeLookup.at(nodeIDs[node]).size() - 1) * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[node]).back());
+// 	size_t currentOffset = nodeOffset[node];
+// 	assert(currentOffset < originalNodeSize);
+// 	size_t reverseOffset = originalNodeSize - currentOffset - 1;
+// 	assert(reverseOffset < originalNodeSize);
+// 	size_t reverseNodeOriginalId;
+// 	if (nodeIDs[node] % 2 == 0)
+// 	{
+// 		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2 + 1;
+// 	}
+// 	else
+// 	{
+// 		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2;
+// 	}
+// 	assert(nodeLookup.count(reverseNodeOriginalId) == 1);
+// 	assert(nodeLookup.at(reverseNodeOriginalId).size() > reverseOffset / SPLIT_NODE_SIZE);
+// 	size_t reverseNode = nodeLookup.at(reverseNodeOriginalId)[reverseOffset / SPLIT_NODE_SIZE];
 
-	return reverseNode;
-}
+// 	return reverseNode;
+// }
 
 AlignmentGraph::MatrixPosition::MatrixPosition(size_t node, size_t nodeOffset, size_t seqPos) :
 	node(node),
@@ -295,4 +289,44 @@ bool AlignmentGraph::MatrixPosition::operator==(const AlignmentGraph::MatrixPosi
 bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosition& other) const
 {
 	return !(*this == other);
+}
+
+AlignmentGraph AlignmentGraph::GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const
+{
+	AlignmentGraph result;
+	result.nodeLength.resize(nodeMapping.size());
+	result.nodeOffset.resize(nodeMapping.size());
+	result.nodeIDs.resize(nodeMapping.size());
+	result.inNeighbors.resize(nodeMapping.size());
+	result.outNeighbors.resize(nodeMapping.size());
+	result.reverse.resize(nodeMapping.size());
+	result.nodeSequences.resize(nodeMapping.size());
+
+	for (auto pair : nodeMapping)
+	{
+		for (auto inNeighbor : inNeighbors[pair.first])
+		{
+			if (nodeMapping.count(inNeighbor) == 1)
+			{
+				result.inNeighbors[pair.second].push_back(nodeMapping.at(inNeighbor));
+			}
+		}
+		for (auto outNeighbor : outNeighbors[pair.first])
+		{
+			if (nodeMapping.count(outNeighbor) == 1)
+			{
+				result.outNeighbors[pair.second].push_back(nodeMapping.at(outNeighbor));
+			}
+		}
+		result.nodeLength[pair.second] = nodeLength[pair.first];
+		result.nodeOffset[pair.second] = nodeOffset[pair.first];
+		result.nodeIDs[pair.second] = nodeIDs[pair.first];
+		result.reverse[pair.second] = reverse[pair.first];
+		result.nodeSequences[pair.second] = nodeSequences[pair.first];
+		result.nodeLookup[result.nodeIDs[pair.second]].push_back(pair.second);
+		result.originalNodeSize[result.nodeIDs[pair.second]] = originalNodeSize.at(nodeIDs[pair.first]);
+	}
+
+	result.finalized = true;
+	return result;
 }

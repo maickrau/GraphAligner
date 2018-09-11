@@ -13,6 +13,7 @@
 #include "GraphAlignerCommon.h"
 #include "GraphAlignerVGAlignment.h"
 #include "GraphAlignerBitvectorBanded.h"
+#include "GraphAlignerSubgraphExtraction.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
@@ -58,6 +59,44 @@ public:
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
 		result.alignments.push_back(alnItem);
+		return result;
+	}
+
+	AlignmentResult AlignOneWaySubgraph(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	{
+		assertSetRead(seq_id, "graph extraction");
+		logger << seq_id << " graph extraction ";
+		logger << BufferedWriter::Flush;
+		auto subgraph = SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, 2000);
+		Params newParams {params.initialBandwidth, params.rampBandwidth, subgraph, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, params.lowMemory};
+		GraphAligner newAligner { newParams };
+		AlignmentResult result;
+		for (size_t i = 0; i < seedHits.size(); i++)
+		{
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
+			assertSetRead(seq_id, seedInfo);
+			if (params.sloppyOptimizations)
+			{
+				bool found = false;
+				for (auto aln : result.alignments)
+				{
+					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
+					{
+						logger << " already aligned";
+						logger << BufferedWriter::Flush;
+						found = true;
+						break;
+					}
+				}
+				if (found) continue;
+			}
+			logger << BufferedWriter::Flush;
+			auto item = newAligner.getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
+			if (item.alignmentFailed()) continue;
+			result.alignments.push_back(item);
+		}
+		assertSetRead(seq_id, "No seed");
 		return result;
 	}
 
@@ -153,6 +192,9 @@ private:
 		for (size_t i = 0; i < trace.size(); i++)
 		{
 			trace[i].first.seqPos += start;
+			auto nodeIndex = trace[i].first.node;
+			trace[i].first.node = params.graph.nodeIDs[nodeIndex];
+			trace[i].first.nodeOffset += params.graph.nodeOffset[nodeIndex];
 		}
 	}
 
@@ -166,9 +208,9 @@ private:
 			trace[i].first.seqPos = end - trace[i].first.seqPos;
 			size_t offset = params.graph.nodeOffset[trace[i].first.node] + trace[i].first.nodeOffset;
 			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].first.node], offset);
-			trace[i].first.node = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
-			trace[i].first.nodeOffset = reversePos.second - params.graph.nodeOffset[trace[i].first.node];
-			assert(trace[i].first.nodeOffset < params.graph.NodeLength(trace[i].first.node));
+			trace[i].first.node = reversePos.first;
+			trace[i].first.nodeOffset = reversePos.second;
+			assert(trace[i].first.nodeOffset < params.graph.originalNodeSize.at(trace[i].first.node));
 		}
 		for (size_t i = 0; i < trace.size() - 1; i++)
 		{

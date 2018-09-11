@@ -24,6 +24,11 @@ struct NodeSliceMapItemStruct
 	HN(),
 	minScore(0)
 	{
+		for (size_t i = 0; i < NUM_CHUNKS; i++)
+		{
+			HP[i] = 0;
+			HN[i] = 0;
+		}
 	}
 	WordSlice<LengthType, ScoreType, Word> startSlice;
 	WordSlice<LengthType, ScoreType, Word> endSlice;

@@ -1492,7 +1492,7 @@ private:
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
 		auto nodes = params.graph.nodeLookup.at(bigraphNodeId);
-		assert(offset < params.graph.nodeOffset[nodes.back()] + params.graph.NodeLength(nodes.back()));
+		assert(offset < params.graph.originalNodeSize.at(bigraphNodeId));
 		size_t nodeIndex = params.graph.GetUnitigNode(bigraphNodeId, offset);
 		assert(params.graph.nodeOffset[nodeIndex] <= offset);
 		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);

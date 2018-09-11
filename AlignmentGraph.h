@@ -55,6 +55,7 @@ public:
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
+	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
@@ -71,6 +72,7 @@ private:
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> unitigStartNode;
+	std::unordered_map<int, size_t> originalNodeSize;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;
@@ -85,6 +87,8 @@ private:
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
+	template <typename LengthType, typename ScoreType, typename Word>
+	friend class SubgraphExtractor;
 };
 
 

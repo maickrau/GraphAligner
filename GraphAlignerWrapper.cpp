@@ -22,5 +22,6 @@ AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_
 	{
 		seeds.emplace_back(std::get<0>(seed), std::get<1>(seed), std::get<2>(seed), std::get<3>(seed), std::get<4>(seed));
 	}
+	return aligner.AlignOneWaySubgraph(seq_id, sequence, seeds, reusableState);
 	return aligner.AlignOneWay(seq_id, sequence, seeds, reusableState);
 }

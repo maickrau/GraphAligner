@@ -37,9 +37,9 @@ public:
 		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		size_t currentPosIndex = 0;
 		MergedNodePos currentPos;
-		currentPos.nodeId = params.graph.nodeIDs[trace[0].first.node];
-		currentPos.reverse = params.graph.reverse[trace[0].first.node];
-		currentPos.nodeOffset = trace[0].first.nodeOffset + params.graph.nodeOffset[trace[0].first.node];
+		currentPos.nodeId = trace[0].first.node;
+		currentPos.reverse = (trace[0].first.node % 2) == 1;
+		currentPos.nodeOffset = trace[0].first.nodeOffset;
 		currentPos.seqPos = trace[0].first.seqPos;
 		int rank = 0;
 		auto vgmapping = path->add_mapping();
@@ -58,9 +58,9 @@ public:
 		{
 			assert(trace[pos].first.seqPos < sequence.size());
 			MergedNodePos newPos;
-			newPos.nodeId = params.graph.nodeIDs[trace[pos].first.node];
-			newPos.reverse = params.graph.reverse[trace[pos].first.node];
-			newPos.nodeOffset = trace[pos].first.nodeOffset + params.graph.nodeOffset[trace[pos].first.node];
+			newPos.nodeId = trace[pos].first.node;
+			newPos.reverse = (trace[pos].first.node % 2) == 1;
+			newPos.nodeOffset = trace[pos].first.nodeOffset;
 			newPos.seqPos = trace[pos].first.seqPos;
 			if (!trace[pos-1].second)
 			{
@@ -75,8 +75,6 @@ public:
 				continue;
 			}
 
-			assert(btNodeEnd.nodeOffset == params.graph.DBGOverlap || btNodeEnd.nodeOffset == params.graph.nodeOffset[params.graph.nodeLookup.at(btNodeEnd.nodeId).back()] + params.graph.NodeLength(params.graph.nodeLookup.at(btNodeEnd.nodeId).back()) - params.graph.DBGOverlap - 1 || btNodeEnd.nodeOffset == params.graph.nodeOffset[params.graph.nodeLookup.at(btNodeEnd.nodeId).back()] + params.graph.NodeLength(params.graph.nodeLookup.at(btNodeEnd.nodeId).back()) - 1);
-			assert(currentPosIndex == 0 || btNodeStart.nodeOffset == 0 || btNodeStart.nodeOffset == params.graph.DBGOverlap || btNodeStart.nodeOffset == params.graph.nodeOffset[params.graph.nodeLookup.at(btNodeStart.nodeId).back()] + params.graph.NodeLength(params.graph.nodeLookup.at(btNodeStart.nodeId).back()) - params.graph.DBGOverlap - 1);
 			assert(newPos.seqPos >= currentPos.seqPos);
 			assert(btNodeEnd.nodeId == btNodeStart.nodeId);
 			assert(btNodeEnd.seqPos >= btNodeStart.seqPos);
