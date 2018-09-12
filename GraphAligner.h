@@ -208,9 +208,9 @@ private:
 			trace[i].first.seqPos = end - trace[i].first.seqPos;
 			size_t offset = params.graph.nodeOffset[trace[i].first.node] + trace[i].first.nodeOffset;
 			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].first.node], offset);
+			assert(reversePos.second < params.graph.originalNodeSize.at(params.graph.nodeIDs[trace[i].first.node]));
 			trace[i].first.node = reversePos.first;
 			trace[i].first.nodeOffset = reversePos.second;
-			assert(trace[i].first.nodeOffset < params.graph.originalNodeSize.at(trace[i].first.node));
 		}
 		for (size_t i = 0; i < trace.size() - 1; i++)
 		{
