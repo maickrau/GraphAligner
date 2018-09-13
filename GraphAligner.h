@@ -64,12 +64,21 @@ public:
 
 	AlignmentResult AlignOneWaySubgraph(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
+		if (seedHits.size() == 1)
+		{
+			reusableState.subgraph.assign(reusableState.subgraph.size(), true);
+			auto result = AlignOneWay(seq_id, sequence, seedHits, reusableState);
+			reusableState.subgraph.assign(reusableState.subgraph.size(), false);
+			return result;
+		}
 		assertSetRead(seq_id, "graph extraction");
 		logger << seq_id << " graph extraction ";
 		logger << BufferedWriter::Flush;
-		auto subgraph = SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, 2000);
-		Params newParams {params.initialBandwidth, params.rampBandwidth, subgraph, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, params.lowMemory};
-		GraphAligner newAligner { newParams };
+		CALLGRIND_START_INSTRUMENTATION;
+		auto timeStart = std::chrono::system_clock::now();
+		SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, sequence.size());
+		auto timeEnd = std::chrono::system_clock::now();
+		std::cout << "extraction " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << "ms" << std::endl;
 		AlignmentResult result;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
@@ -92,10 +101,11 @@ public:
 				if (found) continue;
 			}
 			logger << BufferedWriter::Flush;
-			auto item = newAligner.getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
+			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
-			result.alignments.push_back(item);
+			result.alignments.emplace_back(std::move(item));
 		}
+		CALLGRIND_STOP_INSTRUMENTATION;
 		assertSetRead(seq_id, "No seed");
 		return result;
 	}
@@ -276,9 +286,9 @@ private:
 		seqstart = mergedTrace.trace[0].first.seqPos;
 		seqend = mergedTrace.trace.back().first.seqPos;
 		assert(seqend < sequence.size());
-		result.alignment.set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
+		result.alignment->set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
 		// result.trace = traceVector;
-		result.alignment.set_query_position(seqstart);
+		result.alignment->set_query_position(seqstart);
 		result.alignmentStart = seqstart;
 		result.alignmentEnd = seqend + 1;
 		auto timeEnd = std::chrono::system_clock::now();

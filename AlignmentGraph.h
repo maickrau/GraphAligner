@@ -60,6 +60,8 @@ public:
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
 	size_t NodeLength(size_t nodeIndex) const;
+	size_t UnitigReidSize() const;
+	size_t ReidLength(size_t reid) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
@@ -68,7 +70,7 @@ public:
 	int DBGOverlap;
 
 private:
-	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
+	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode, size_t reid);
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> unitigStartNode;
@@ -79,6 +81,11 @@ private:
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<NodeChunkSequence> nodeSequences;
+	std::vector<size_t> nodeUnitigReid;
+	std::unordered_map<int, size_t> unitigReidLookup;
+	std::vector<size_t> unitigReidLength;
+	std::vector<std::vector<size_t>> unitigReidInNeighbors;
+	std::vector<std::vector<size_t>> unitigReidOutNeighbors;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>

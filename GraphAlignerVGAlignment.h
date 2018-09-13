@@ -28,12 +28,13 @@ public:
 
 	static AlignmentResult::AlignmentItem traceToAlignment(const Params& params, const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<std::pair<MatrixPosition, bool>>& trace, size_t cellsProcessed, bool reverse)
 	{
-		vg::Alignment result;
-		result.set_name(seq_id);
-		result.set_score(score);
-		result.set_sequence(sequence);
+		vg::Alignment* aln = new vg::Alignment;
+		std::shared_ptr<vg::Alignment> result { aln };
+		result->set_name(seq_id);
+		result->set_score(score);
+		result->set_sequence(sequence);
 		auto path = new vg::Path;
-		result.set_allocated_path(path);
+		result->set_allocated_path(path);
 		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		size_t currentPosIndex = 0;
 		MergedNodePos currentPos;
@@ -123,8 +124,9 @@ public:
 
 	static AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed)
 	{
-		vg::Alignment result;
-		result.set_score(std::numeric_limits<decltype(result.score())>::max());
+		vg::Alignment* aln = new vg::Alignment;
+		std::shared_ptr<vg::Alignment> result { aln };
+		result->set_score(std::numeric_limits<decltype(result->score())>::max());
 		return AlignmentResult::AlignmentItem { result, cellsProcessed, elapsedMilliseconds };
 	}
 

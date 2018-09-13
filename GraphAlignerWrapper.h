@@ -39,7 +39,7 @@ public:
 		alignmentStart(0),
 		alignmentEnd(0)
 		{}
-		AlignmentItem(vg::Alignment alignment, size_t cellsProcessed, size_t ms) :
+		AlignmentItem(std::shared_ptr<vg::Alignment> alignment, size_t cellsProcessed, size_t ms) :
 		alignment(alignment),
 		cellsProcessed(cellsProcessed),
 		elapsedMilliseconds(ms),
@@ -50,7 +50,7 @@ public:
 		{
 			return alignmentEnd == alignmentStart;
 		}
-		vg::Alignment alignment;
+		std::shared_ptr<vg::Alignment> alignment;
 		std::vector<TraceItem> trace;
 		size_t cellsProcessed;
 		size_t elapsedMilliseconds;

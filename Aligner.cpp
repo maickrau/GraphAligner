@@ -205,7 +205,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		if (params.maxAlns != 0)
 		{
-			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, params.maxAlns, [](const AlignmentResult::AlignmentItem& aln) { return &(aln.alignment); });
+			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, params.maxAlns, [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
 		}
 
 		std::string alignmentpositions;
@@ -231,12 +231,12 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				continue;
 			}
 			numAlignments += 1;
-			replaceDigraphNodeIdsWithOriginalNodeIds(alignments.alignments[i].alignment);
+			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment);
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 			timems += alignments.alignments[i].elapsedMilliseconds;
 			totalcells += alignments.alignments[i].cellsProcessed;
 			std::string s;
-			alignments.alignments[i].alignment.SerializeToString(&s);
+			alignments.alignments[i].alignment->SerializeToString(&s);
 			coded_out->WriteVarint32(s.size());
 			coded_out->WriteRaw(s.data(), s.size());
 		}

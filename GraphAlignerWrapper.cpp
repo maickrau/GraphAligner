@@ -1,5 +1,6 @@
 //split this here so modifying GraphAligner.h doesn't require recompiling every cpp file
 
+#include <valgrind/callgrind.h>
 #include <limits>
 #include "GraphAlignerWrapper.h"
 #include "GraphAligner.h"

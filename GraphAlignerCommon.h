@@ -49,7 +49,7 @@ public:
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
-		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1, graph.NodeSize()),
+		calculableQueue(WordConfiguration<Word>::WordSize + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
@@ -62,8 +62,9 @@ public:
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
-			forwardNodeDist.resize(graph.NodeSize(), std::numeric_limits<size_t>::max());
-			backwardNodeDist.resize(graph.NodeSize(), std::numeric_limits<size_t>::max());
+			forwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+			backwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+			subgraph.resize(graph.UnitigReidSize(), false);
 		}
 		void clear()
 		{
@@ -72,16 +73,20 @@ public:
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
-			forwardNodeDist.assign(forwardNodeDist.size(), std::numeric_limits<size_t>::max());
-			backwardNodeDist.assign(backwardNodeDist.size(), std::numeric_limits<size_t>::max());
+			forwardReidDist.assign(forwardReidDist.size(), std::numeric_limits<size_t>::max());
+			backwardReidDist.assign(backwardReidDist.size(), std::numeric_limits<size_t>::max());
+			subgraph.assign(subgraph.size(), false);
+			subgraphReids.clear();
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
-		std::vector<size_t> forwardNodeDist;
-		std::vector<size_t> backwardNodeDist;
+		std::vector<size_t> forwardReidDist;
+		std::vector<size_t> backwardReidDist;
+		std::vector<bool> subgraph;
+		std::vector<size_t> subgraphReids;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params
