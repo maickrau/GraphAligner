@@ -110,23 +110,6 @@ public:
 		const bool sloppyOptimizations;
 		const bool lowMemory;
 	};
-	class SeedHit
-	{
-	public:
-		SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, bool reverse) :
-		nodeID(nodeID),
-		nodeOffset(nodeOffset),
-		seqPos(seqPos),
-		matchLen(matchLen),
-		reverse(reverse)
-		{
-		}
-		int nodeID;
-		size_t nodeOffset;
-		size_t seqPos;
-		size_t matchLen;
-		bool reverse;
-	};
 	class OnewayTrace
 	{
 	public:

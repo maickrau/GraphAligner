@@ -23,7 +23,6 @@ private:
 	using BitvectorAligner = GraphAlignerBitvectorBanded<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
-	using SeedHit = typename Common::SeedHit;
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
 	using OnewayTrace = typename Common::OnewayTrace;

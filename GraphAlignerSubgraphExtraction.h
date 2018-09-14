@@ -2,6 +2,7 @@
 #define GraphAlignerSubgraphExtraction_h
 
 #include <unordered_map>
+#include "GraphAlignerWrapper.h"
 #include "AlignmentGraph.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
@@ -9,7 +10,6 @@ class SubgraphExtractor
 {
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using AlignerGraphsizedState = typename Common::AlignerGraphsizedState;
-	using SeedHit = typename Common::SeedHit;
 public:
 	static void ExtractSubgraph(AlignerGraphsizedState& state, const AlignmentGraph& original, const std::vector<SeedHit>& seedHits, size_t readSize)
 	{

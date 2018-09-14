@@ -14,7 +14,6 @@ template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerVGAlignment
 {
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
-	using SeedHit = typename Common::SeedHit;
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
 	struct MergedNodePos

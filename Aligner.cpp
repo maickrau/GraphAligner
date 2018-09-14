@@ -140,7 +140,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory };
@@ -176,7 +176,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 			}
 			else
 			{
-				if (graphAlignerSeedHits->find(fastq) == graphAlignerSeedHits->end())
+				if (graphAlignerSeedHits->find(fastq->seq_id) == graphAlignerSeedHits->end() || graphAlignerSeedHits->at(fastq->seq_id).size() == 0)
 				{
 					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
@@ -184,7 +184,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq), reusableState, params.lowMemory);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq->seq_id), reusableState, params.lowMemory);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -287,7 +287,7 @@ void alignReads(AlignerParams params)
 	std::vector<FastQ> fastqs;
 	if (is_file_exist(params.fastqFile)){
 		std::cout << "Load reads from " << params.fastqFile << std::endl;
-		fastqs = loadFastqFromFile(params.fastqFile);
+		fastqs = loadFastqFromFile(params.fastqFile, false);
 		std::cout << fastqs.size() << " reads" << std::endl;
 	}
 	else{
@@ -295,19 +295,24 @@ void alignReads(AlignerParams params)
 		std::exit(0);
 	}
 
-	const std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>>* seedHitsToThreads = nullptr;
-	std::map<const FastQ*, std::vector<std::tuple<int, size_t, size_t, size_t, bool>>> seedHits;
+	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
+	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 
 	if (params.seedFile != "")
 	{
-		std::map<std::string, std::vector<vg::Alignment>> seeds;
+		for (auto read : fastqs)
+		{
+			seedHits[read.seq_id] = {};
+		}
 		{
 			if (is_file_exist(params.seedFile)){
 				std::cout << "Load seeds from " << params.seedFile << std::endl;
 				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
 				size_t numSeeds = 0;
-				std::function<void(vg::Alignment&)> alignmentLambda = [&seeds, &numSeeds](vg::Alignment& a) {
-					seeds[a.name()].push_back(a);
+				std::function<void(vg::Alignment&)> alignmentLambda = [&seedHits, &numSeeds](vg::Alignment& seedhit) {
+					auto pos = seedHits.find(seedhit.name());
+					if (pos == seedHits.end()) return;
+					pos->second.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
 					numSeeds += 1;
 				};
 				stream::for_each(seedfile, alignmentLambda);
@@ -316,14 +321,6 @@ void alignReads(AlignerParams params)
 			else {
 				std::cerr << "No seeds file exists" << std::endl;
 				std::exit(0);
-			}
-		}
-		for (size_t i = 0; i < fastqs.size(); i++)
-		{
-			for (size_t j = 0; j < seeds[fastqs[i].seq_id].size(); j++)
-			{
-				auto& seedhit = seeds[fastqs[i].seq_id][j];
-				seedHits[&(fastqs[i])].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
 			}
 		}
 		seedHitsToThreads = &seedHits;

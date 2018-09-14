@@ -4,7 +4,7 @@
 #include "fastqloader.h"
 #include "CommonUtils.h"
 
-std::vector<FastQ> loadFastqFastqFromStream(std::istream& file)
+std::vector<FastQ> loadFastqFastqFromStream(std::istream& file, bool includeQuality)
 {
 	std::vector<FastQ> result;
 	do
@@ -21,13 +21,13 @@ std::vector<FastQ> loadFastqFastqFromStream(std::istream& file)
 		std::getline(file, line);
 		std::getline(file, line);
 		if (line.back() == '\r') line.pop_back();
-		newread.quality = line;
+		if (includeQuality) newread.quality = line;
 		result.push_back(newread);
 	} while (file.good());
 	return result;
 }
 
-std::vector<FastQ> loadFastqFastaFromStream(std::istream& file)
+std::vector<FastQ> loadFastqFastaFromStream(std::istream& file, bool includeQuality)
 {
 	std::vector<FastQ> result;
 	std::string line;
@@ -50,40 +50,43 @@ std::vector<FastQ> loadFastqFastaFromStream(std::istream& file)
 			if (line.back() == '\r') line.pop_back();
 			newread.sequence += line;
 		} while (file.good());
-		for (size_t i = 0; i < newread.sequence.size(); i++)
+		if (includeQuality)
 		{
-			newread.quality += '!';
+			for (size_t i = 0; i < newread.sequence.size(); i++)
+			{
+				newread.quality += '!';
+			}
 		}
 		result.push_back(newread);
 	} while (file.good());
 	return result;
 }
 
-std::vector<FastQ> loadFastqFastqFromFile(std::string filename)
+std::vector<FastQ> loadFastqFastqFromFile(std::string filename, bool includeQuality)
 {
 	std::ifstream file {filename};
-	return loadFastqFastqFromStream(file);
+	return loadFastqFastqFromStream(file, includeQuality);
 }
 
-std::vector<FastQ> loadFastqFastaFromFile(std::string filename)
+std::vector<FastQ> loadFastqFastaFromFile(std::string filename, bool includeQuality)
 {
 	std::ifstream file {filename};
-	return loadFastqFastaFromStream(file);
+	return loadFastqFastaFromStream(file, includeQuality);
 }
 
-std::vector<FastQ> loadFastqFastqFromGzippedFile(std::string filename)
+std::vector<FastQ> loadFastqFastqFromGzippedFile(std::string filename, bool includeQuality)
 {
 	zstr::ifstream file { filename };
-	return loadFastqFastqFromStream(file);
+	return loadFastqFastqFromStream(file, includeQuality);
 }
 
-std::vector<FastQ> loadFastqFastaFromGzippedFile(std::string filename)
+std::vector<FastQ> loadFastqFastaFromGzippedFile(std::string filename, bool includeQuality)
 {
 	zstr::ifstream file { filename };
-	return loadFastqFastaFromStream(file);
+	return loadFastqFastaFromStream(file, includeQuality);
 }
 
-std::vector<FastQ> loadFastqFromFile(std::string filename)
+std::vector<FastQ> loadFastqFromFile(std::string filename, bool includeQuality)
 {
 	bool gzipped = false;
 	std::string originalFilename = filename;
@@ -102,22 +105,22 @@ std::vector<FastQ> loadFastqFromFile(std::string filename)
 	{
 		if (gzipped)
 		{
-			return loadFastqFastaFromGzippedFile(originalFilename);
+			return loadFastqFastaFromGzippedFile(originalFilename, includeQuality);
 		}
 		else
 		{
-			return loadFastqFastaFromFile(originalFilename);
+			return loadFastqFastaFromFile(originalFilename, includeQuality);
 		}
 	}
 	if (fastq)
 	{
 		if (gzipped)
 		{
-			return loadFastqFastqFromGzippedFile(originalFilename);
+			return loadFastqFastqFromGzippedFile(originalFilename, includeQuality);
 		}
 		else
 		{
-			return loadFastqFastqFromFile(originalFilename);
+			return loadFastqFastqFromFile(originalFilename, includeQuality);
 		}
 	}
 	return std::vector<FastQ>{};

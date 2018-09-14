@@ -32,7 +32,6 @@ private:
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
 	using OnewayTrace = typename Common::OnewayTrace;
-	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename BV::WordSlice;
 	using EqVector = typename BV::EqVector;
 	using EdgeWithPriority = typename Common::EdgeWithPriority;
