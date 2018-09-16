@@ -181,8 +181,8 @@ private:
 				forwardNodeId = seed.nodeID * 2;
 				backwardNodeId = seed.nodeID * 2 + 1;
 			}
-			assert(state.subgraph[forwardNodeId]);
-			assert(state.subgraph[backwardNodeId]);
+			assert(state.subgraph[original.unitigReidLookup.at(forwardNodeId)]);
+			assert(state.subgraph[original.unitigReidLookup.at(backwardNodeId)]);
 		}
 #endif
 
