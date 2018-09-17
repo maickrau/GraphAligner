@@ -73,11 +73,10 @@ public:
 		assertSetRead(seq_id, "graph extraction");
 		logger << seq_id << " graph extraction ";
 		logger << BufferedWriter::Flush;
-		CALLGRIND_START_INSTRUMENTATION;
 		auto timeStart = std::chrono::system_clock::now();
 		SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, sequence.size());
 		auto timeEnd = std::chrono::system_clock::now();
-		std::cout << "extraction " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << "ms" << std::endl;
+		logger << seq_id << " extraction " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << "ms" << BufferedWriter::Flush;
 		AlignmentResult result;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
@@ -104,7 +103,6 @@ public:
 			if (item.alignmentFailed()) continue;
 			result.alignments.emplace_back(std::move(item));
 		}
-		CALLGRIND_STOP_INSTRUMENTATION;
 		assertSetRead(seq_id, "No seed");
 		return result;
 	}

@@ -44,9 +44,10 @@ int main(int argc, char** argv)
 	params.sloppyOptimizations = false;
 	params.lowMemory = false;
 	params.maxAlns = 0;
+	params.useSubgraph = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:A:qul")) != -1)
+	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:A:qulS")) != -1)
 	{
 		switch(c)
 		{
@@ -91,6 +92,9 @@ int main(int argc, char** argv)
 				break;
 			case 'l':
 				params.lowMemory = true;
+				break;
+			case 'S':
+				params.useSubgraph = true;
 				break;
 		}
 	}

@@ -19,6 +19,7 @@ struct AlignerParams
 	bool quietMode;
 	bool sloppyOptimizations;
 	bool lowMemory;
+	bool useSubgraph;
 	size_t maxAlns;
 };
 
