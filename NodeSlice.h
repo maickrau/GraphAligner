@@ -236,6 +236,10 @@ public:
 		(*vectorMap)[nodeIndex].minScore = std::numeric_limits<ScoreType>::max();
 		(*vectorMap)[nodeIndex].startSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
 		(*vectorMap)[nodeIndex].endSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
+#ifdef SLICEVERBOSE
+		(*vectorMap)[nodeIndex].slicesCalcedWhenCalced = std::numeric_limits<size_t>::max();
+		(*vectorMap)[nodeIndex].firstSlicesCalcedWhenCalced = std::numeric_limits<size_t>::max();
+#endif
 	}
 	template <bool HasVectorMap = UseVectorMap>
 	typename std::enable_if<!HasVectorMap>::type addNode(size_t nodeIndex)

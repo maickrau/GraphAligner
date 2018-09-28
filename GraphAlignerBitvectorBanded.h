@@ -1100,8 +1100,12 @@ private:
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 #ifdef SLICEVERBOSE
+			volatile size_t firstslices = currentSlice.node(i).firstSlicesCalcedWhenCalced;
+			volatile size_t calcedslices = currentSlice.node(i).slicesCalcedWhenCalced;
 			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = cellsProcessed;
+			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < cellsProcessed);
 			currentSlice.node(i).slicesCalcedWhenCalced = cellsProcessed;
+			assert(currentSlice.node(i).firstSlicesCalcedWhenCalced <= currentSlice.node(i).slicesCalcedWhenCalced);
 #endif
 			auto newEnd = thisNode.endSlice;
 
@@ -1127,7 +1131,9 @@ private:
 				currentMinimumNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
 			assert(currentMinimumScore == currentMinScoreAtEndRow);
+			size_t oldCellsProcessed = cellsProcessed;
 			cellsProcessed += nodeCalc.cellsProcessed;
+			assert(cellsProcessed > oldCellsProcessed);
 #ifdef SLICEVERBOSE
 			nodesProcessed++;
 #endif
