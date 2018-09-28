@@ -24,6 +24,7 @@ struct NodeSliceMapItemStruct
 	HN(),
 	minScore(0)
 #ifdef SLICEVERBOSE
+	,firstSlicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
 	,slicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
 #endif
 	{
@@ -40,6 +41,7 @@ struct NodeSliceMapItemStruct
 	Word HN[NUM_CHUNKS];
 	ScoreType minScore;
 #ifdef SLICEVERBOSE
+	size_t firstSlicesCalcedWhenCalced;
 	size_t slicesCalcedWhenCalced;
 #endif
 };
