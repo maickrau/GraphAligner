@@ -184,6 +184,15 @@ public:
 		return value;
 	}
 
+	ScoreType getPriorityScore(size_t j) const
+	{
+		ScoreType result = priorityScoreLocalMinima(j);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(result == priorityScoreCellByCell(j));
+#endif
+		return result;
+	}
+
 	ScoreType getMinScore() const
 	{
 		ScoreType result = minScoreLocalMinima();
@@ -213,6 +222,15 @@ public:
 private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
+	ScoreType priorityScoreCellByCell(size_t j) const
+	{
+		ScoreType result = getScoreBeforeStart() - j / 2;
+		for (size_t i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			result = std::min(result, (ScoreType)(getValue(i) - (j+i+1)/2));
+		}
+		return result;
+	}
 	ScoreType changedMinScoreCellByCell(WordSlice other) const
 	{
 		ScoreType result = std::numeric_limits<ScoreType>::max();
@@ -233,6 +251,30 @@ private:
 		return minScore;
 	}
 #endif
+
+	ScoreType priorityScoreLocalMinima(size_t j) const
+	{
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word priorityCausedMinima = 0xAAAAAAAAAAAAAAAA & ~VP & ~VN;
+		priorityCausedMinima |= VN;
+		Word possibleLocalMinima = (VP & (priorityCausedMinima - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (priorityCausedMinima | ~(priorityCausedMinima - VP)) & ~VP;
+		ScoreType result = scoreBeforeStart - j/2;
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			scoreHere -= (ScoreType)((j + WordConfiguration<Word>::popcount(currentMinimumMask)) / 2);
+			result = std::min(result, scoreHere);
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return result;
+	}
 
 	ScoreType minScoreLocalMinima() const
 	{

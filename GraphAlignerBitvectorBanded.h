@@ -1025,13 +1025,14 @@ private:
 		EqVector EqV = BV::getEqVector(sequence, j);
 
 		assert(previousSlice.size() > 0);
+		ScoreType zeroScore = previousMinScore - j / 2 - 32;
 		if (j == 0)
 		{
 			for (auto node : previousSlice)
 			{
 				assert(node.second.minScore <= previousQuitScore);
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+				calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 			}
 		}
 		else
@@ -1051,7 +1052,7 @@ private:
 				 	}
 				}
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+				calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 			}
 		}
 		assert(calculableQueue.size() > 0);
@@ -1111,7 +1112,9 @@ private:
 
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
-				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
+				ScoreType newEndPriorityScore = newEnd.getPriorityScore(j);
+				ScoreType newEndMinScore = newEnd.getMinScore();
+				assert(newEndPriorityScore >= zeroScore);
 				assert(newEndMinScore >= previousMinScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
@@ -1120,7 +1123,7 @@ private:
 					{
 						// if (!subgraph[params.graph.nodeUnitigReid[neighbor]]) continue;
 						// calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
-						calculableQueue.insert(newEndMinScore - previousMinScore + (subgraph[params.graph.nodeUnitigReid[neighbor]] ? 0 : bandwidth), EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 					}
 				}
 			}
