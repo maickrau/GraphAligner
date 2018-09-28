@@ -23,6 +23,9 @@ struct NodeSliceMapItemStruct
 	HP(),
 	HN(),
 	minScore(0)
+#ifdef SLICEVERBOSE
+	,slicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
+#endif
 	{
 		for (size_t i = 0; i < NUM_CHUNKS; i++)
 		{
@@ -36,6 +39,9 @@ struct NodeSliceMapItemStruct
 	Word HP[NUM_CHUNKS];
 	Word HN[NUM_CHUNKS];
 	ScoreType minScore;
+#ifdef SLICEVERBOSE
+	size_t slicesCalcedWhenCalced;
+#endif
 };
 
 template <typename LengthType, typename ScoreType, typename Word, bool UseVectorMap>

@@ -231,6 +231,9 @@ private:
 					}
 				}
 				nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence);
+#ifdef SLICEVERBOSE
+				std::cerr << "j " << slice.slices[currentSlice].j << " bt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
+#endif
 			}
 			assert(result.trace.back().first.node == currentNode);
 			assert(result.trace.back().first.nodeOffset < params.graph.NodeLength(currentNode));
@@ -1096,6 +1099,9 @@ private:
 			assert(nodeCalc.minScore <= previousQuitScore + 2 * WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
+#ifdef SLICEVERBOSE
+			currentSlice.node(i).slicesCalcedWhenCalced = cellsProcessed;
+#endif
 			auto newEnd = thisNode.endSlice;
 
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
@@ -1351,25 +1357,25 @@ private:
 
 			cellsProcessed += newSlice.cellsProcessed;
 
-			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
-			{
-#ifndef NDEBUG
-				debugLastProcessedSlice = slice-1;
-#endif
-				for (auto node : lastSlice.scores)
-				{
-					assert(reusableState.previousBand[node.first]);
-					reusableState.previousBand[node.first] = false;
-				}
-				for (auto node : newSlice.scores)
-				{
-					assert(reusableState.currentBand[node.first]);
-					reusableState.currentBand[node.first] = false;
-				}
-				lastSlice.scoresVectorMap.removeVectorArray();
-				newSlice.scoresVectorMap.removeVectorArray();
-				break;
-			}
+// 			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
+// 			{
+// #ifndef NDEBUG
+// 				debugLastProcessedSlice = slice-1;
+// #endif
+// 				for (auto node : lastSlice.scores)
+// 				{
+// 					assert(reusableState.previousBand[node.first]);
+// 					reusableState.previousBand[node.first] = false;
+// 				}
+// 				for (auto node : newSlice.scores)
+// 				{
+// 					assert(reusableState.currentBand[node.first]);
+// 					reusableState.currentBand[node.first] = false;
+// 				}
+// 				lastSlice.scoresVectorMap.removeVectorArray();
+// 				newSlice.scoresVectorMap.removeVectorArray();
+// 				break;
+// 			}
 
 			if (!newSlice.correctness.CorrectFromCorrect())
 			{
