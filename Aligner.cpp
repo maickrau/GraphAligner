@@ -250,7 +250,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		delete coded_out;
 		delete gzip_out;
 		delete raw_out;
-		alignmentsOut.enqueue(token, strstr.str());
+		while (!alignmentsOut.try_enqueue(token, strstr.str()))
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
 
@@ -349,7 +352,7 @@ void alignReads(AlignerParams params)
 	std::vector<size_t> numAlnsPerThread;
 	numAlnsPerThread.resize(params.numThreads, 0);
 
-	moodycamel::ConcurrentQueue<std::string> outputAlns;
+	moodycamel::ConcurrentQueue<std::string> outputAlns { ((params.numThreads * 5 + 31) / 32) * 32 };
 	std::atomic<bool> allThreadsDone { false };
 	std::vector<moodycamel::ProducerToken> tokens;
 	tokens.reserve(params.numThreads);
