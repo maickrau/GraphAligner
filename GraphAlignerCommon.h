@@ -48,7 +48,7 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
+		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory, bool useSubgraph) :
 		calculableQueue(WordConfiguration<Word>::WordSize + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
@@ -62,9 +62,12 @@ public:
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
-			forwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
-			backwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
-			subgraph.resize(graph.UnitigReidSize(), false);
+			if (useSubgraph)
+			{
+				forwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+				backwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+				subgraph.resize(graph.UnitigReidSize(), false);
+			}
 		}
 		void clear()
 		{
