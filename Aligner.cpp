@@ -143,7 +143,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string>& alignmentsOut, moodycamel::ProducerToken& token)
 {
 	assertSetRead("Before any read", "No seed");
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory, params.useSubgraph };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (!params.quietMode)
