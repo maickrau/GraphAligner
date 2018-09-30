@@ -48,7 +48,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		bandwidth(0)
+		bandwidth(0),
+		scoresNotValid(false)
 #ifdef SLICEVERBOSE
 		,nodesProcessed(0)
 		,numCells(0)
@@ -63,7 +64,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		bandwidth(0)
+		bandwidth(0),
+		scoresNotValid(false)
 #ifdef SLICEVERBOSE
 		,nodesProcessed(0)
 		,numCells(0)
@@ -78,6 +80,7 @@ private:
 		LengthType j;
 		size_t cellsProcessed;
 		size_t bandwidth;
+		bool scoresNotValid;
 #ifdef SLICEVERBOSE
 		size_t nodesProcessed;
 		size_t numCells;
@@ -94,6 +97,7 @@ private:
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
 			result.bandwidth = bandwidth;
+			result.scoresNotValid = scoresNotValid;
 #ifdef SLICEVERBOSE
 			result.nodesProcessed = nodesProcessed;
 			result.numCells = numCells;
@@ -242,7 +246,7 @@ private:
 			assert(result.trace.back().first.seqPos < slice.slices[currentSlice].j + WordConfiguration<Word>::WordSize);
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().first.nodeOffset == 0)
 			{
-				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth));
+				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid));
 				continue;
 			}
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0)
@@ -254,7 +258,7 @@ private:
 					result.trace.emplace_back(MatrixPosition {currentNode, 0, result.trace.back().first.seqPos}, false);
 					continue;
 				}
-				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth);
+				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
 				if (crossing.first.first != result.trace.back().first) result.trace.push_back(crossing.first);
 				assert(crossing.second.first != result.trace.back().first);
 				result.trace.push_back(crossing.second);
@@ -263,7 +267,7 @@ private:
 			if (result.trace.back().first.nodeOffset == 0)
 			{
 				assert(result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize != 0);
-				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth);
+				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
 				if (crossing.first.first != result.trace.back().first) result.trace.push_back(crossing.first);
 				assert(crossing.second.first != result.trace.back().first);
 				result.trace.push_back(crossing.second);
@@ -350,7 +354,7 @@ private:
 		return MatrixPosition { pos.node, hori, vert + verticalOffset };
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		assert(current.hasNode(node));
 		auto startSlice = current.node(node).startSlice;
@@ -361,11 +365,11 @@ private:
 		size_t offset = pos.seqPos % WordConfiguration<Word>::WordSize;
 		if (offset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
 		}
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
 		ScoreType scoreHere = startSlice.getValue(offset);
-		if (scoreHere > quitScore)
+		if (scoresNotValid || scoreHere > quitScore)
 		{
 			//this location is out of the band so the usual horizontal and vertical score limits don't apply
 			//just pick the smallest scoring in-neighbor
@@ -417,7 +421,7 @@ private:
 		return std::make_pair(std::make_pair(MatrixPosition {0, 0, 0}, false), std::make_pair(MatrixPosition {0, 0, 0}, false));
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		assert(pos.nodeOffset > 0);
 		assert(pos.nodeOffset < nodeScores.size());
@@ -427,7 +431,7 @@ private:
 		}
 		if (pos.nodeOffset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
 		}
 		assert(previous.hasNode(node));
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
@@ -442,7 +446,7 @@ private:
 		ScoreType scoreUp = scoreDiagonal;
 		scoreUp += (previousNode.HP[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
 		scoreUp -= (previousNode.HN[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
-		if (scoreHere > quitScore)
+		if (scoresNotValid || scoreHere > quitScore)
 		{
 			//this location is out of the band so the usual horizontal and vertical score limits don't apply
 			//just pick the smallest scoring in-neighbor
@@ -462,10 +466,10 @@ private:
 		return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset - 1, pos.seqPos-1}, false));
 	}
 
-	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore) const
+	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
-		if (scoreHere > quitScore)
+		if (scoresNotValid || scoreHere > quitScore)
 		{
 			//this location is out of the band so the usual horizontal and vertical score limits don't apply
 			//just pick the smallest scoring in-neighbor
@@ -1113,7 +1117,7 @@ private:
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
 				ScoreType newEndPriorityScore = newEnd.getPriorityScore(j);
-				ScoreType newEndMinScore = newEnd.getMinScore();
+				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
 				assert(newEndPriorityScore >= zeroScore);
 				assert(newEndMinScore >= previousMinScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
@@ -1367,25 +1371,10 @@ private:
 
 			cellsProcessed += newSlice.cellsProcessed;
 
-// 			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
-// 			{
-// #ifndef NDEBUG
-// 				debugLastProcessedSlice = slice-1;
-// #endif
-// 				for (auto node : lastSlice.scores)
-// 				{
-// 					assert(reusableState.previousBand[node.first]);
-// 					reusableState.previousBand[node.first] = false;
-// 				}
-// 				for (auto node : newSlice.scores)
-// 				{
-// 					assert(reusableState.currentBand[node.first]);
-// 					reusableState.currentBand[node.first] = false;
-// 				}
-// 				lastSlice.scoresVectorMap.removeVectorArray();
-// 				newSlice.scoresVectorMap.removeVectorArray();
-// 				break;
-// 			}
+			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
+			{
+				newSlice.scoresNotValid = true;
+			}
 
 			if (!newSlice.correctness.CorrectFromCorrect())
 			{
