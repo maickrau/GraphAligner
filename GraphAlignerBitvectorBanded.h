@@ -1109,7 +1109,14 @@ private:
 					{
 						// if (!subgraph[params.graph.nodeUnitigReid[neighbor]]) continue;
 						// calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
-						calculableQueue.insert(newEndMinScore - previousMinScore + (subgraph[params.graph.nodeUnitigReid[neighbor]] ? 0 : bandwidth), EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						if (subgraph.size() != 0)
+						{
+							calculableQueue.insert(newEndMinScore - previousMinScore + (subgraph[params.graph.nodeUnitigReid[neighbor]] ? 0 : bandwidth), EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						}
+						else
+						{
+							calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						}
 					}
 				}
 			}
