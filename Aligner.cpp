@@ -239,6 +239,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		{
 			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, params.maxAlns, [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
 		}
+		
+		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 
 		std::string alignmentpositions;
 		size_t timems = 0;
