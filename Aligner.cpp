@@ -143,29 +143,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	allWriteDone = true;
 }
 
-void deallocStrings(moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allWriteDone)
-{
-	assertSetRead("Dealloc", "No seed");
-
-	std::string* alns[100] {};
-
-	while (true)
-	{
-		size_t gotAlns = deallocqueue.try_dequeue_bulk(alns, 100);
-		if (gotAlns == 0)
-		{
-			if (allWriteDone) break;
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			continue;
-		}
-		for (size_t i = 0; i < gotAlns; i++)
-		{
-			delete alns[i];
-		}
-	}
-}
-
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory, params.useSubgraph };
@@ -178,6 +156,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 	}
 	while (true)
 	{
+		std::string* dealloc;
+		while (deallocqueue.try_dequeue(dealloc))
+		{
+			delete dealloc;
+		}
 		const FastQ* fastq;
 		size_t fastqSize;
 		{
@@ -393,10 +376,9 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Align" << std::endl;
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, quietMode=params.quietMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, quietMode); } };
-	std::thread deallocThread { [&deallocAlns, &allWriteDone]() { deallocStrings(deallocAlns, allWriteDone); } };
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], outputAlns, tokens[i]); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
 	}
 
 	for (int i = 0; i < params.numThreads; i++)
@@ -408,7 +390,12 @@ void alignReads(AlignerParams params)
 	allThreadsDone = true;
 
 	writerThread.join();
-	deallocThread.join();
+
+	std::string* dealloc;
+	while (deallocAlns.try_dequeue(dealloc))
+	{
+		delete dealloc;
+	}
 
 	size_t numAlignments = 0;
 	for (size_t i = 0; i < params.numThreads; i++)
