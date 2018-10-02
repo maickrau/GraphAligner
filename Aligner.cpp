@@ -363,7 +363,7 @@ void alignReads(AlignerParams params)
 	std::vector<size_t> numAlnsPerThread;
 	numAlnsPerThread.resize(params.numThreads, 0);
 
-	moodycamel::ConcurrentQueue<std::string*> outputAlns { ((params.numThreads * 5 + 31) / 32) * 32 };
+	moodycamel::ConcurrentQueue<std::string*> outputAlns { ((params.numThreads * 50 + 31) / 32) * 32 };
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
 	std::atomic<bool> allThreadsDone { false };
 	std::atomic<bool> allWriteDone { false };
