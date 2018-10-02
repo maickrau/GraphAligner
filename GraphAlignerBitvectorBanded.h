@@ -388,7 +388,7 @@ private:
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos-1 };
 						nodeChange = true;
 					}
-					if (neighborSlice.getValue(offset) < smallestFound)
+					if (neighborSlice.getValue(offset) < smallestFound && neighbor != node)
 					{
 						smallestFound = neighborSlice.getValue(offset);
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos };
@@ -396,8 +396,8 @@ private:
 					}
 				}
 			}
-			assert(smallestFound < scoreHere+1);
 			assert(smallestPos != pos);
+			assert(smallestPos.seqPos < pos.seqPos || smallestFound < scoreHere);
 			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, nodeChange));
 		}
 		for (auto neighbor : params.graph.inNeighbors[node])
@@ -479,16 +479,13 @@ private:
 			if (previous.hasNode(node))
 			{
 				auto slice = previous.node(node).startSlice;
-				if (slice.scoreEnd < smallestFound)
-				{
-					smallestFound = slice.scoreEnd;
-					smallestPos = MatrixPosition { node, 0, j-1 };
-					nodeChange = false;
-				}
+				smallestFound = slice.scoreEnd;
+				smallestPos = MatrixPosition { node, 0, j-1 };
+				nodeChange = false;
 			}
 			for (auto neighbor : params.graph.inNeighbors[node])
 			{
-				if (current.hasNode(neighbor))
+				if (current.hasNode(neighbor) && neighbor != node)
 				{
 					auto neighborSlice = current.node(neighbor).endSlice;
 					if (neighborSlice.getValue(0) < smallestFound)
@@ -509,9 +506,8 @@ private:
 					}
 				}
 			}
-			assert(smallestFound < scoreHere+1);
+			assert(smallestPos.seqPos < j || smallestFound < scoreHere);
 			return std::make_pair(smallestPos, nodeChange);
-
 		}
 		assert(scoreHere <= quitScore);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
