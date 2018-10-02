@@ -247,6 +247,7 @@ private:
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().first.nodeOffset == 0)
 			{
 				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid));
+				checkBacktraceCircularity(result);
 				continue;
 			}
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0)
@@ -271,6 +272,7 @@ private:
 				if (crossing.first.first != result.trace.back().first) result.trace.push_back(crossing.first);
 				assert(crossing.second.first != result.trace.back().first);
 				result.trace.push_back(crossing.second);
+				checkBacktraceCircularity(result);
 				continue;
 			}
 			assert(result.trace.back().first.nodeOffset != 0);
@@ -313,6 +315,16 @@ private:
 			}
 		} while (false);
 		return result;
+	}
+
+	void checkBacktraceCircularity(const OnewayTrace& result) const
+	{
+		for (size_t i = result.trace.size()-2; i < result.trace.size(); i--)
+		{
+			assert(result.trace[i].first != result.trace.back().first);
+			if (result.trace[i].first == result.trace.back().first) std::abort();
+			if (result.trace[i].first.seqPos != result.trace.back().first.seqPos) return;
+		}
 	}
 
 	MatrixPosition pickBacktraceInside(LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, MatrixPosition pos, const std::string& sequence) const
@@ -397,7 +409,6 @@ private:
 				}
 			}
 			assert(smallestPos != pos);
-			assert(smallestPos.seqPos < pos.seqPos || smallestFound < scoreHere);
 			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, nodeChange));
 		}
 		for (auto neighbor : params.graph.inNeighbors[node])
@@ -485,16 +496,6 @@ private:
 			}
 			for (auto neighbor : params.graph.inNeighbors[node])
 			{
-				if (current.hasNode(neighbor) && neighbor != node)
-				{
-					auto neighborSlice = current.node(neighbor).endSlice;
-					if (neighborSlice.getValue(0) < smallestFound)
-					{
-						smallestFound = neighborSlice.getValue(0);
-						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j };
-						nodeChange = true;
-					}
-				}
 				if (previous.hasNode(neighbor))
 				{
 					auto neighborSlice = previous.node(neighbor).endSlice;
@@ -505,8 +506,17 @@ private:
 						nodeChange = true;
 					}
 				}
+				if (current.hasNode(neighbor) && neighbor != node)
+				{
+					auto neighborSlice = current.node(neighbor).endSlice;
+					if (neighborSlice.getValue(0) < smallestFound)
+					{
+						smallestFound = neighborSlice.getValue(0);
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j };
+						nodeChange = true;
+					}
+				}
 			}
-			assert(smallestPos.seqPos < j || smallestFound < scoreHere);
 			return std::make_pair(smallestPos, nodeChange);
 		}
 		assert(scoreHere <= quitScore);
