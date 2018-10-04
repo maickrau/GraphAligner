@@ -107,14 +107,22 @@ AlignmentCorrectnessEstimationState AlignmentCorrectnessEstimationState::NextSta
 	assert(rowSize == 64);
 	// assert(rowSize == 64 || rowSize == 1);
 	assert(mismatches >= 0);
-	assert(mismatches <= rowSize);
 	AlignmentCorrectnessEstimationState result;
 	result.correctFromCorrectTrace = correctLogOdds + correctToCorrectTransitionLogProbability >= falseLogOdds + falseToCorrectTransitionLogProbability;
 	result.falseFromCorrectTrace = correctLogOdds + correctToFalseTransitionLogProbability >= falseLogOdds + falseToFalseTransitionLogProbability;
 	double newCorrectProbability = std::max(correctLogOdds + correctToCorrectTransitionLogProbability, falseLogOdds + falseToCorrectTransitionLogProbability);
 	double newFalseProbability = std::max(correctLogOdds + correctToFalseTransitionLogProbability, falseLogOdds + falseToFalseTransitionLogProbability);
-	newCorrectProbability += precomputedCorrectLogOdds[mismatches];
-	newFalseProbability += precomputedWrongLogOdds[mismatches];
+	assert(precomputedCorrectLogOdds.size() == precomputedWrongLogOdds.size());
+	if (mismatches < precomputedCorrectLogOdds.size())
+	{
+		newCorrectProbability += precomputedCorrectLogOdds[mismatches];
+		newFalseProbability += precomputedWrongLogOdds[mismatches];
+	}
+	else
+	{
+		newCorrectProbability += precomputedCorrectLogOdds.back();
+		newFalseProbability += precomputedWrongLogOdds.back();
+	}
 	result.correctLogOdds = newCorrectProbability;
 	result.falseLogOdds = newFalseProbability;
 	return result;
