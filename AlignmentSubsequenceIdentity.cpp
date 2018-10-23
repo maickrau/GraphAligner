@@ -1,8 +1,22 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <tuple>
 #include "CommonUtils.h"
 #include "GfaGraph.h"
+
+
+namespace std 
+{
+	template <> 
+	struct hash<std::pair<size_t, size_t>>
+	{
+		size_t operator()(const std::pair<size_t, size_t>& x) const
+		{
+			return hash<size_t>()(x.first) ^ hash<size_t>()(x.second);
+		}
+	};
+}
 
 struct Node
 {
@@ -127,8 +141,11 @@ int main(int argc, char** argv)
 		}
 	}
 
-	for (auto read : reads)
+	std::unordered_map<std::pair<size_t, size_t>, double> readTranscriptBestPair;
+
+	for (size_t readi = 0; readi < reads.size(); readi++)
 	{
+		auto read = reads[readi];
 		std::set<size_t> possibleTranscripts;
 		for (size_t i = 0; i < read.path.size(); i++)
 		{
@@ -140,10 +157,14 @@ int main(int argc, char** argv)
 			auto identityFw = getAlignmentIdentity(read, transcripts[i], nodeLengths);
 			auto identityBw = getAlignmentIdentity(reverseread, transcripts[i], nodeLengths);
 			auto bigger = std::max(identityFw, identityBw);
-			if (bigger > 0)
+			if (bigger > 0 && (readTranscriptBestPair.count(std::make_pair(readi, i)) == 0 || readTranscriptBestPair[std::make_pair(readi, i)] < bigger))
 			{
-				std::cout << read.name << "\t" << transcripts[i].name << "\t" << bigger << std::endl;
+				readTranscriptBestPair[std::make_pair(readi, i)] = bigger;
 			}
 		}
+	}
+	for (auto mapping : readTranscriptBestPair)
+	{
+		std::cout << reads[mapping.first.first].name << "\t" << transcripts[mapping.first.second].name << "\t" << mapping.second << std::endl;
 	}
 }

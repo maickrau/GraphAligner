@@ -13,6 +13,7 @@
 #include "GraphAlignerCommon.h"
 #include "GraphAlignerVGAlignment.h"
 #include "GraphAlignerBitvectorBanded.h"
+#include "GraphAlignerSubgraphExtraction.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
@@ -22,7 +23,6 @@ private:
 	using BitvectorAligner = GraphAlignerBitvectorBanded<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
-	using SeedHit = typename Common::SeedHit;
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
 	using OnewayTrace = typename Common::OnewayTrace;
@@ -58,6 +58,52 @@ public:
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
 		result.alignments.push_back(alnItem);
+		return result;
+	}
+
+	AlignmentResult AlignOneWaySubgraph(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	{
+		if (seedHits.size() == 1)
+		{
+			reusableState.subgraph.assign(reusableState.subgraph.size(), true);
+			auto result = AlignOneWay(seq_id, sequence, seedHits, reusableState);
+			reusableState.subgraph.assign(reusableState.subgraph.size(), false);
+			return result;
+		}
+		assertSetRead(seq_id, "graph extraction");
+		logger << seq_id << " graph extraction ";
+		logger << BufferedWriter::Flush;
+		auto timeStart = std::chrono::system_clock::now();
+		SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, sequence.size());
+		auto timeEnd = std::chrono::system_clock::now();
+		logger << seq_id << " extraction " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << "ms" << BufferedWriter::Flush;
+		AlignmentResult result;
+		for (size_t i = 0; i < seedHits.size(); i++)
+		{
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
+			assertSetRead(seq_id, seedInfo);
+			if (params.sloppyOptimizations)
+			{
+				bool found = false;
+				for (auto aln : result.alignments)
+				{
+					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
+					{
+						logger << " already aligned";
+						logger << BufferedWriter::Flush;
+						found = true;
+						break;
+					}
+				}
+				if (found) continue;
+			}
+			logger << BufferedWriter::Flush;
+			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
+			if (item.alignmentFailed()) continue;
+			result.alignments.emplace_back(std::move(item));
+		}
+		assertSetRead(seq_id, "No seed");
 		return result;
 	}
 
@@ -153,6 +199,9 @@ private:
 		for (size_t i = 0; i < trace.size(); i++)
 		{
 			trace[i].first.seqPos += start;
+			auto nodeIndex = trace[i].first.node;
+			trace[i].first.node = params.graph.nodeIDs[nodeIndex];
+			trace[i].first.nodeOffset += params.graph.nodeOffset[nodeIndex];
 		}
 	}
 
@@ -166,9 +215,9 @@ private:
 			trace[i].first.seqPos = end - trace[i].first.seqPos;
 			size_t offset = params.graph.nodeOffset[trace[i].first.node] + trace[i].first.nodeOffset;
 			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].first.node], offset);
-			trace[i].first.node = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
-			trace[i].first.nodeOffset = reversePos.second - params.graph.nodeOffset[trace[i].first.node];
-			assert(trace[i].first.nodeOffset < params.graph.NodeLength(trace[i].first.node));
+			assert(reversePos.second < params.graph.originalNodeSize.at(params.graph.nodeIDs[trace[i].first.node]));
+			trace[i].first.node = reversePos.first;
+			trace[i].first.nodeOffset = reversePos.second;
 		}
 		for (size_t i = 0; i < trace.size() - 1; i++)
 		{
@@ -190,35 +239,6 @@ private:
 #endif
 		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos-1);
 		fixForwardTraceSeqPos(trace.forward.trace, seedHit.seqPos+1);
-
-// #ifndef NDEBUG
-// 		if (!trace.forward.failed() && !trace.backward.failed())
-// 		{
-// 			assert(trace.backward.trace.back().seqPos == trace.forward.trace[0].seqPos - 1);
-// 			auto debugBwPos = trace.backward.trace.back();
-// 			auto debugBwNodeId = params.graph.nodeIDs[debugBwPos.node];
-// 			auto debugBwOffset = params.graph.nodeOffset[debugBwPos.node] + debugBwPos.nodeOffset;
-// 			auto debugOldNodeidPos = params.graph.GetReversePosition(debugBwNodeId, debugBwOffset);
-// 			auto debugOldNode = params.graph.GetUnitigNode(debugOldNodeidPos.first, debugOldNodeidPos.second);
-// 			auto debugOldOffset = debugOldNodeidPos.second - params.graph.nodeOffset[debugOldNode];
-// 			assert(debugOldOffset >= 0);
-// 			assert(debugOldOffset < params.graph.NodeLength(debugOldNode));
-// 			if (trace.forward.trace[0].nodeOffset > 0)
-// 			{
-// 				assert(debugOldNode == trace.forward.trace[0].node);
-// 				assert(debugOldOffset <= trace.forward.trace[0].nodeOffset);
-// 			}
-// 			else
-// 			{
-// 				bool foundNeighbor = false;
-// 				for (auto neighbor : params.graph.inNeighbors[trace.forward.trace[0].node])
-// 				{
-// 					if (debugOldNode == neighbor && debugOldOffset == params.graph.NodeLength(neighbor)-1) foundNeighbor = true;
-// 				}
-// 				assert(foundNeighbor || (debugOldNode == trace.forward.trace[0].node && debugOldOffset == 0));
-// 			}
-// 		}
-// #endif
 
 		//failed alignment, don't output
 		if (trace.forward.failed() && trace.backward.failed())
@@ -263,9 +283,9 @@ private:
 		seqstart = mergedTrace.trace[0].first.seqPos;
 		seqend = mergedTrace.trace.back().first.seqPos;
 		assert(seqend < sequence.size());
-		result.alignment.set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
+		result.alignment->set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
 		// result.trace = traceVector;
-		result.alignment.set_query_position(seqstart);
+		result.alignment->set_query_position(seqstart);
 		result.alignmentStart = seqstart;
 		result.alignmentEnd = seqend + 1;
 		auto timeEnd = std::chrono::system_clock::now();

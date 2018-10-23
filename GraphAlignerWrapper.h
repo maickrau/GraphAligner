@@ -39,7 +39,7 @@ public:
 		alignmentStart(0),
 		alignmentEnd(0)
 		{}
-		AlignmentItem(vg::Alignment alignment, size_t cellsProcessed, size_t ms) :
+		AlignmentItem(std::shared_ptr<vg::Alignment> alignment, size_t cellsProcessed, size_t ms) :
 		alignment(alignment),
 		cellsProcessed(cellsProcessed),
 		elapsedMilliseconds(ms),
@@ -50,7 +50,7 @@ public:
 		{
 			return alignmentEnd == alignmentStart;
 		}
-		vg::Alignment alignment;
+		std::shared_ptr<vg::Alignment> alignment;
 		std::vector<TraceItem> trace;
 		size_t cellsProcessed;
 		size_t elapsedMilliseconds;
@@ -60,7 +60,26 @@ public:
 	std::vector<AlignmentItem> alignments;
 };
 
+class SeedHit
+{
+public:
+	SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, bool reverse) :
+	nodeID(nodeID),
+	nodeOffset(nodeOffset),
+	seqPos(seqPos),
+	matchLen(matchLen),
+	reverse(reverse)
+	{
+	}
+	int nodeID;
+	size_t nodeOffset;
+	size_t seqPos;
+	size_t matchLen;
+	bool reverse;
+};
+
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory);
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<std::tuple<int, size_t, size_t, size_t, bool>>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory);
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory);
+AlignmentResult AlignOneWaySubgraph(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, int initialBandwidth, int rampBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory);
 
 #endif

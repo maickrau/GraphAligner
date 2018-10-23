@@ -28,10 +28,10 @@ maxseeds: 10
 # Aligner parameters.
 # -b: Mandatory. Default bandwidth. eg -b 5. Higher means more accurate but slower alignment. Try values between 5-35.
 # -B: Optional. Higher bandwidth. eg -B 10. If aligning at -b fails, use this higher bandwidth at the failing spot. Higher means more accurate but slightly slower. Try values between 10-35.
-# -C: Optional. Max band size. eg -C 1000000. If the band grows higher than this, stop alignment. Use for complex graphs to skip tangles. For simple graphs, leave out, for complex graphs try values between 50'000-5'000'000
+# -C: Optional. Max band size. eg -C 1000. If the band grows higher than this, stop alignment. Use for complex graphs to skip tangles. For simple graphs, leave out, for complex graphs try values between 1'000-500'000
 # -u: Optional. Unsafe heuristics. eg -u. Use heuristics which speed up alignment but can lead to inoptimal results.
 # -q: Optional. Quiet mode. eg -q. Print less stuff
 # Example for RNA splice graph: -b 35
-# Example for human DBG: -b 5 -B 10 -C 1000000 -u
+# Example for human DBG: -b 5 -B 10 -C 1000 -u
 # Example for bacterial DBG: -b 10 -B 20
 aligner_params: -b 5

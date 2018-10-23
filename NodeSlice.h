@@ -23,7 +23,16 @@ struct NodeSliceMapItemStruct
 	HP(),
 	HN(),
 	minScore(0)
+#ifdef SLICEVERBOSE
+	,firstSlicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
+	,slicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
+#endif
 	{
+		for (size_t i = 0; i < NUM_CHUNKS; i++)
+		{
+			HP[i] = 0;
+			HN[i] = 0;
+		}
 	}
 	WordSlice<LengthType, ScoreType, Word> startSlice;
 	WordSlice<LengthType, ScoreType, Word> endSlice;
@@ -31,6 +40,10 @@ struct NodeSliceMapItemStruct
 	Word HP[NUM_CHUNKS];
 	Word HN[NUM_CHUNKS];
 	ScoreType minScore;
+#ifdef SLICEVERBOSE
+	size_t firstSlicesCalcedWhenCalced;
+	size_t slicesCalcedWhenCalced;
+#endif
 };
 
 template <typename LengthType, typename ScoreType, typename Word, bool UseVectorMap>
@@ -223,6 +236,10 @@ public:
 		(*vectorMap)[nodeIndex].minScore = std::numeric_limits<ScoreType>::max();
 		(*vectorMap)[nodeIndex].startSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
 		(*vectorMap)[nodeIndex].endSlice = { 0, 0, std::numeric_limits<ScoreType>::max() };
+#ifdef SLICEVERBOSE
+		(*vectorMap)[nodeIndex].slicesCalcedWhenCalced = std::numeric_limits<size_t>::max();
+		(*vectorMap)[nodeIndex].firstSlicesCalcedWhenCalced = std::numeric_limits<size_t>::max();
+#endif
 	}
 	template <bool HasVectorMap = UseVectorMap>
 	typename std::enable_if<!HasVectorMap>::type addNode(size_t nodeIndex)

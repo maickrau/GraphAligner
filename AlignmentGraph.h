@@ -55,10 +55,13 @@ public:
 	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
+	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
 	size_t NodeLength(size_t nodeIndex) const;
+	size_t UnitigReidSize() const;
+	size_t ReidLength(size_t reid) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
@@ -67,16 +70,22 @@ public:
 	int DBGOverlap;
 
 private:
-	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
+	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode, size_t reid);
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> unitigStartNode;
+	std::unordered_map<int, size_t> originalNodeSize;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<NodeChunkSequence> nodeSequences;
+	std::vector<size_t> nodeUnitigReid;
+	std::unordered_map<int, size_t> unitigReidLookup;
+	std::vector<size_t> unitigReidLength;
+	std::vector<std::vector<size_t>> unitigReidInNeighbors;
+	std::vector<std::vector<size_t>> unitigReidOutNeighbors;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
@@ -85,6 +94,8 @@ private:
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
+	template <typename LengthType, typename ScoreType, typename Word>
+	friend class SubgraphExtractor;
 };
 
 

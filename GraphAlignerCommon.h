@@ -48,8 +48,8 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory) :
-		calculableQueue(WordConfiguration<Word>::WordSize + maxBandwidth + 1, graph.NodeSize()),
+		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory, bool useSubgraph) :
+		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
@@ -62,6 +62,12 @@ public:
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
+			if (useSubgraph)
+			{
+				forwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+				backwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
+				subgraph.resize(graph.UnitigReidSize(), false);
+			}
 		}
 		void clear()
 		{
@@ -70,12 +76,20 @@ public:
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
+			forwardReidDist.assign(forwardReidDist.size(), std::numeric_limits<size_t>::max());
+			backwardReidDist.assign(backwardReidDist.size(), std::numeric_limits<size_t>::max());
+			subgraph.assign(subgraph.size(), false);
+			subgraphReids.clear();
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
+		std::vector<size_t> forwardReidDist;
+		std::vector<size_t> backwardReidDist;
+		std::vector<bool> subgraph;
+		std::vector<size_t> subgraphReids;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params
@@ -98,23 +112,6 @@ public:
 		const bool quietMode;
 		const bool sloppyOptimizations;
 		const bool lowMemory;
-	};
-	class SeedHit
-	{
-	public:
-		SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, bool reverse) :
-		nodeID(nodeID),
-		nodeOffset(nodeOffset),
-		seqPos(seqPos),
-		matchLen(matchLen),
-		reverse(reverse)
-		{
-		}
-		int nodeID;
-		size_t nodeOffset;
-		size_t seqPos;
-		size_t matchLen;
-		bool reverse;
 	};
 	class OnewayTrace
 	{

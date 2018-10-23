@@ -60,12 +60,13 @@ rule align:
 		"input/{reads}.fasta",
 		"tmp/seeds_{reads}_{graph}_picked.gam"
 	output:
-		"tmp/aln_{reads}_{graph}_raw.gam",
-		"tmp/aligner_stdout_{reads}_{graph}.txt",
-		"tmp/aligner_stderr_{reads}_{graph}.txt"
+		"tmp/aln_{reads}_{graph}_raw.gam"
+	log:
+		stdout = "tmp/aligner_stdout_{reads}_{graph}.txt",
+		stderr = "tmp/aligner_stderr_{reads}_{graph}.txt"
 	threads: 40
 	shell:
-		"/usr/bin/time -v {ALIGNERBINPATH}/Aligner -g tmp/{wildcards.graph}_idfix.gfa -f input/{wildcards.reads}.fasta -s tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam -a tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam -t {threads} {ALIGNERPARAMS} 1> tmp/aligner_stdout_{wildcards.reads}_{wildcards.graph}.txt 2> tmp/aligner_stderr_{wildcards.reads}_{wildcards.graph}.txt"
+		"/usr/bin/time -v {ALIGNERBINPATH}/Aligner -g tmp/{wildcards.graph}_idfix.gfa -f input/{wildcards.reads}.fasta -s tmp/seeds_{wildcards.reads}_{wildcards.graph}_picked.gam -a tmp/aln_{wildcards.reads}_{wildcards.graph}_raw.gam -t {threads} {ALIGNERPARAMS} 1> {log.stdout} 2> {log.stderr}"
 
 rule postprocess:
 	input:

@@ -12,6 +12,6 @@ public:
 	std::string quality;
 };
 
-std::vector<FastQ> loadFastqFromFile(std::string filename);
+std::vector<FastQ> loadFastqFromFile(std::string filename, bool includeQuality = true);
 
 #endif

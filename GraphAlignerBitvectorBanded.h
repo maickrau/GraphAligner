@@ -32,7 +32,6 @@ private:
 	using MatrixPosition = typename Common::MatrixPosition;
 	using Trace = typename Common::Trace;
 	using OnewayTrace = typename Common::OnewayTrace;
-	using SeedHit = typename Common::SeedHit;
 	using WordSlice = typename BV::WordSlice;
 	using EqVector = typename BV::EqVector;
 	using EdgeWithPriority = typename Common::EdgeWithPriority;
@@ -49,7 +48,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		bandwidth(0)
+		bandwidth(0),
+		scoresNotValid(false)
 #ifdef SLICEVERBOSE
 		,nodesProcessed(0)
 		,numCells(0)
@@ -64,7 +64,8 @@ private:
 		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
-		bandwidth(0)
+		bandwidth(0),
+		scoresNotValid(false)
 #ifdef SLICEVERBOSE
 		,nodesProcessed(0)
 		,numCells(0)
@@ -79,6 +80,7 @@ private:
 		LengthType j;
 		size_t cellsProcessed;
 		size_t bandwidth;
+		bool scoresNotValid;
 #ifdef SLICEVERBOSE
 		size_t nodesProcessed;
 		size_t numCells;
@@ -95,6 +97,7 @@ private:
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
 			result.bandwidth = bandwidth;
+			result.scoresNotValid = scoresNotValid;
 #ifdef SLICEVERBOSE
 			result.nodesProcessed = nodesProcessed;
 			result.numCells = numCells;
@@ -136,8 +139,9 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktraceFullStart(std::string sequence, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getBacktraceFullStart(std::string originalSequence, AlignerGraphsizedState& reusableState) const
 	{
+		assert(originalSequence.size() > 1);
 		DPSlice startSlice;
 		startSlice.j = -WordConfiguration<Word>::WordSize;
 		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
@@ -145,26 +149,47 @@ public:
 		startSlice.minScore = 0;
 		startSlice.minScoreNode = 0;
 		startSlice.minScoreNodeOffset = 0;
+		char firstChar = originalSequence[0];
 		for (size_t i = 0; i < params.graph.NodeSize(); i++)
 		{
 			startSlice.scores.addNodeToMap(i);
 			startSlice.scores.setMinScore(i, 0);
 			auto& node = startSlice.scores.node(i);
-			node.startSlice = {0, 0, 0};
-			node.endSlice = {0, 0, 0};
-			node.minScore = 0;
+			bool match = Common::characterMatch(firstChar, params.graph.NodeSequences(i, 0));
+			node.startSlice = {0, 0, match ? 0 : 1};
+			node.minScore = match ? 0 : 1;
+			for (size_t j = 1; j < params.graph.NodeLength(i); j++)
+			{
+				bool oldMatch = match;
+				match = Common::characterMatch(firstChar, params.graph.NodeSequences(i, j));
+				if (oldMatch && !match)
+				{
+					node.HP[j / params.graph.SPLIT_NODE_SIZE] |= ((Word)1) << (j % params.graph.SPLIT_NODE_SIZE);
+				}
+				else if (match && !oldMatch)
+				{
+					node.HN[j / params.graph.SPLIT_NODE_SIZE] |= ((Word)1) << (j % params.graph.SPLIT_NODE_SIZE);
+				}
+				if (match) node.minScore = 0;
+			}
+			node.endSlice = {0, 0, match ? 0 : 1};
 			node.exists = true;
 		}
-		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto slice = getSqrtSlices(sequence, startSlice, numSlices, reusableState);
+		std::string alignableSequence = originalSequence.substr(1);
+		assert(alignableSequence.size() > 0);
+		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, reusableState);
 		removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
-		auto result = getReverseTraceFromTable(sequence, slice, reusableState);
-		while (result.trace.back().first.seqPos == -1) result.trace.pop_back();
+		auto result = getReverseTraceFromTable(alignableSequence, slice, reusableState);
+		for (size_t i = 0; i < result.trace.size(); i++)
+		{
+			result.trace[i].first.seqPos += 1;
+		}
 		std::reverse(result.trace.begin(), result.trace.end());
 		assert(result.trace[0].first.seqPos == 0);
 		return result;
@@ -210,6 +235,9 @@ private:
 					}
 				}
 				nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence);
+#ifdef SLICEVERBOSE
+				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
+#endif
 			}
 			assert(result.trace.back().first.node == currentNode);
 			assert(result.trace.back().first.nodeOffset < params.graph.NodeLength(currentNode));
@@ -218,7 +246,8 @@ private:
 			assert(result.trace.back().first.seqPos < slice.slices[currentSlice].j + WordConfiguration<Word>::WordSize);
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().first.nodeOffset == 0)
 			{
-				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence));
+				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid));
+				checkBacktraceCircularity(result);
 				continue;
 			}
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0)
@@ -230,7 +259,7 @@ private:
 					result.trace.emplace_back(MatrixPosition {currentNode, 0, result.trace.back().first.seqPos}, false);
 					continue;
 				}
-				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence);
+				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
 				if (crossing.first.first != result.trace.back().first) result.trace.push_back(crossing.first);
 				assert(crossing.second.first != result.trace.back().first);
 				result.trace.push_back(crossing.second);
@@ -239,37 +268,63 @@ private:
 			if (result.trace.back().first.nodeOffset == 0)
 			{
 				assert(result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize != 0);
-				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence);
+				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().first, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
 				if (crossing.first.first != result.trace.back().first) result.trace.push_back(crossing.first);
 				assert(crossing.second.first != result.trace.back().first);
 				result.trace.push_back(crossing.second);
+				checkBacktraceCircularity(result);
 				continue;
 			}
 			assert(result.trace.back().first.nodeOffset != 0);
 			assert(result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize != 0);
 			result.trace.emplace_back(pickBacktraceInside(slice.slices[currentSlice].j, nodeSlices, result.trace.back().first, sequence), false);
 		}
-		assert(result.trace.back().first.seqPos == -1);
-		assert(slice.slices[0].scores.hasNode(result.trace.back().first.node));
-		auto node = slice.slices[0].scores.node(result.trace.back().first.node);
-		std::vector<ScoreType> beforeSliceScores;
-		beforeSliceScores.resize(params.graph.NodeLength(result.trace.back().first.node));
-		beforeSliceScores[0] = node.startSlice.scoreEnd;
-		for (size_t i = 1; i < beforeSliceScores.size(); i++)
+		do
 		{
-			size_t chunk = i / params.graph.SPLIT_NODE_SIZE;
-			size_t offset = i % params.graph.SPLIT_NODE_SIZE;
-			Word mask = ((Word)1) << offset;
-			beforeSliceScores[i] = beforeSliceScores[i-1] + ((node.HP[chunk] & mask) >> offset) - ((node.HN[chunk] & mask) >> offset);
-		}
-		assert(beforeSliceScores.back() == node.endSlice.scoreEnd);
-		while (beforeSliceScores[result.trace.back().first.nodeOffset] != 0)
-		{
-			assert(result.trace.back().first.nodeOffset > 0);
-			assert(beforeSliceScores[result.trace.back().first.nodeOffset-1] == beforeSliceScores[result.trace.back().first.nodeOffset] - 1);
-			result.trace.emplace_back(MatrixPosition {result.trace.back().first.node, result.trace.back().first.nodeOffset-1, result.trace.back().first.seqPos}, false);
-		}
+			assert(result.trace.back().first.seqPos == -1);
+			assert(slice.slices[0].scores.hasNode(result.trace.back().first.node));
+			auto node = slice.slices[0].scores.node(result.trace.back().first.node);
+			std::vector<ScoreType> beforeSliceScores;
+			beforeSliceScores.resize(params.graph.NodeLength(result.trace.back().first.node));
+			beforeSliceScores[0] = node.startSlice.scoreEnd;
+			for (size_t i = 1; i < beforeSliceScores.size(); i++)
+			{
+				size_t chunk = i / params.graph.SPLIT_NODE_SIZE;
+				size_t offset = i % params.graph.SPLIT_NODE_SIZE;
+				Word mask = ((Word)1) << offset;
+				beforeSliceScores[i] = beforeSliceScores[i-1] + ((node.HP[chunk] & mask) >> offset) - ((node.HN[chunk] & mask) >> offset);
+			}
+			assert(beforeSliceScores.back() == node.endSlice.scoreEnd);
+			while (beforeSliceScores[result.trace.back().first.nodeOffset] != 0 && result.trace.back().first.nodeOffset > 0 && beforeSliceScores[result.trace.back().first.nodeOffset-1] == beforeSliceScores[result.trace.back().first.nodeOffset] - 1)
+			{
+				result.trace.emplace_back(MatrixPosition {result.trace.back().first.node, result.trace.back().first.nodeOffset-1, result.trace.back().first.seqPos}, false);
+			}
+			if (result.trace.back().first.nodeOffset == 0 && beforeSliceScores[result.trace.back().first.nodeOffset] != 0)
+			{
+				bool found = false;
+				for (auto neighbor : params.graph.inNeighbors[result.trace.back().first.node])
+				{
+					if (slice.slices[0].scores.hasNode(neighbor) && slice.slices[0].scores.node(neighbor).endSlice.getScoreBeforeStart() == beforeSliceScores[result.trace.back().first.nodeOffset] - 1)
+					{
+						result.trace.emplace_back(MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, result.trace.back().first.seqPos}, true);
+						found = true;
+						break;
+					}
+				}
+				if (found) continue;
+			}
+		} while (false);
 		return result;
+	}
+
+	void checkBacktraceCircularity(const OnewayTrace& result) const
+	{
+		for (size_t i = result.trace.size()-2; i < result.trace.size(); i--)
+		{
+			assert(result.trace[i].first != result.trace.back().first);
+			if (result.trace[i].first == result.trace.back().first) std::abort();
+			if (result.trace[i].first.seqPos != result.trace.back().first.seqPos) return;
+		}
 	}
 
 	MatrixPosition pickBacktraceInside(LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, MatrixPosition pos, const std::string& sequence) const
@@ -311,7 +366,7 @@ private:
 		return MatrixPosition { pos.node, hori, vert + verticalOffset };
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		assert(current.hasNode(node));
 		auto startSlice = current.node(node).startSlice;
@@ -322,10 +377,40 @@ private:
 		size_t offset = pos.seqPos % WordConfiguration<Word>::WordSize;
 		if (offset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
 		}
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
 		ScoreType scoreHere = startSlice.getValue(offset);
+		if (scoresNotValid || scoreHere > quitScore)
+		{
+			//this location is out of the band so the usual horizontal and vertical score limits don't apply
+			//just pick the smallest scoring in-neighbor
+			assert(offset > 0);
+			ScoreType smallestFound = startSlice.getValue(offset-1);
+			MatrixPosition smallestPos { node, 0, pos.seqPos-1 };
+			bool nodeChange = false;
+			for (auto neighbor : params.graph.inNeighbors[node])
+			{
+				if (current.hasNode(neighbor))
+				{
+					auto neighborSlice = current.node(neighbor).endSlice;
+					if (neighborSlice.getValue(offset-1) < smallestFound)
+					{
+						smallestFound = neighborSlice.getValue(offset-1);
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos-1 };
+						nodeChange = true;
+					}
+					if (neighborSlice.getValue(offset) < smallestFound && neighbor != node)
+					{
+						smallestFound = neighborSlice.getValue(offset);
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos };
+						nodeChange = true;
+					}
+				}
+			}
+			assert(smallestPos != pos);
+			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, nodeChange));
+		}
 		for (auto neighbor : params.graph.inNeighbors[node])
 		{
 			if (current.hasNode(neighbor))
@@ -347,7 +432,7 @@ private:
 		return std::make_pair(std::make_pair(MatrixPosition {0, 0, 0}, false), std::make_pair(MatrixPosition {0, 0, 0}, false));
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		assert(pos.nodeOffset > 0);
 		assert(pos.nodeOffset < nodeScores.size());
@@ -357,7 +442,7 @@ private:
 		}
 		if (pos.nodeOffset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
 		}
 		assert(previous.hasNode(node));
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
@@ -372,6 +457,19 @@ private:
 		ScoreType scoreUp = scoreDiagonal;
 		scoreUp += (previousNode.HP[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
 		scoreUp -= (previousNode.HN[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
+		if (scoresNotValid || scoreHere > quitScore)
+		{
+			//this location is out of the band so the usual horizontal and vertical score limits don't apply
+			//just pick the smallest scoring in-neighbor
+			if (scoreDiagonal < scoreUp)
+			{
+				return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset - 1, pos.seqPos-1}, false));
+			}
+			else
+			{
+				return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset, pos.seqPos-1}, false));
+			}
+		}
 		assert(scoreUp >= scoreHere - 1);
 		assert(scoreDiagonal >= scoreHere - (eq?0:1));
 		if (scoreUp == scoreHere - 1) return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset, pos.seqPos-1}, false));
@@ -379,9 +477,49 @@ private:
 		return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset - 1, pos.seqPos-1}, false));
 	}
 
-	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence) const
+	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
+		if (scoresNotValid || scoreHere > quitScore)
+		{
+			//this location is out of the band so the usual horizontal and vertical score limits don't apply
+			//just pick the smallest scoring in-neighbor
+			ScoreType smallestFound = scoreHere+1;
+			MatrixPosition smallestPos { 0, 0, 0 };
+			bool nodeChange = false;
+			if (previous.hasNode(node))
+			{
+				auto slice = previous.node(node).startSlice;
+				smallestFound = slice.scoreEnd;
+				smallestPos = MatrixPosition { node, 0, j-1 };
+				nodeChange = false;
+			}
+			for (auto neighbor : params.graph.inNeighbors[node])
+			{
+				if (previous.hasNode(neighbor))
+				{
+					auto neighborSlice = previous.node(neighbor).endSlice;
+					if (neighborSlice.scoreEnd < smallestFound)
+					{
+						smallestFound = neighborSlice.scoreEnd;
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j-1 };
+						nodeChange = true;
+					}
+				}
+				if (current.hasNode(neighbor) && neighbor != node)
+				{
+					auto neighborSlice = current.node(neighbor).endSlice;
+					if (neighborSlice.getValue(0) < smallestFound)
+					{
+						smallestFound = neighborSlice.getValue(0);
+						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j };
+						nodeChange = true;
+					}
+				}
+			}
+			return std::make_pair(smallestPos, nodeChange);
+		}
+		assert(scoreHere <= quitScore);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
 		if (previous.hasNode(node))
 		{
@@ -837,33 +975,28 @@ private:
 				assert(pair.second.startSlice.getScoreBeforeStart() <= previousSlice.node(node).startSlice.scoreEnd);
 			}
 			bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
-			if (j == 0 && previousSlice.hasNode(node))
+			ScoreType foundMinScore = std::numeric_limits<ScoreType>::max();
+			foundMinScore = std::min(foundMinScore, currentSlice.node(node).startSlice.getScoreBeforeStart()+1);
+			if (previousSlice.hasNode(node) && previousSlice.node(node).exists && previousSlice.node(node).minScore <= previousMaxScore)
 			{
-				assert(pair.second.startSlice.getValue(0) == (eq ? 0 : 1));
+				foundMinScore = std::min(foundMinScore, previousSlice.node(node).startSlice.scoreEnd+1);
 			}
-			else
+			for (auto neighbor : params.graph.inNeighbors[node])
 			{
-				ScoreType foundMinScore = std::numeric_limits<ScoreType>::max();
-				if (previousSlice.hasNode(node) && previousSlice.node(node).exists)
+				if (currentSlice.hasNode(neighbor) && currentSlice.node(neighbor).exists)
 				{
-					foundMinScore = std::min(foundMinScore, previousSlice.node(node).startSlice.scoreEnd+1);
+					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(0)+1);
+					foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getScoreBeforeStart() + (eq?0:1));
 				}
-				for (auto neighbor : params.graph.inNeighbors[node])
+				if (previousSlice.hasNode(neighbor) && previousSlice.node(neighbor).exists && previousSlice.node(neighbor).minScore <= previousMaxScore)
 				{
-					if (currentSlice.hasNode(neighbor) && currentSlice.node(neighbor).exists)
-					{
-						foundMinScore = std::min(foundMinScore, currentSlice.node(neighbor).endSlice.getValue(0)+1);
-					}
-					if (previousSlice.hasNode(neighbor) && previousSlice.node(neighbor).exists)
-					{
-						foundMinScore = std::min(foundMinScore, previousSlice.node(neighbor).endSlice.scoreEnd + (eq ? 0 : 1));
-					}
+					foundMinScore = std::min(foundMinScore, previousSlice.node(neighbor).endSlice.scoreEnd + (eq ? 0 : 1));
 				}
-				if (pair.second.startSlice.getValue(0) <= maxScore || foundMinScore <= maxScore)
-				{
-					assert(foundMinScore != std::numeric_limits<ScoreType>::max());
-					assert(pair.second.startSlice.getValue(0) == foundMinScore);
-				}
+			}
+			if (pair.second.startSlice.getValue(0) <= maxScore || foundMinScore <= maxScore)
+			{
+				assert(foundMinScore != std::numeric_limits<ScoreType>::max());
+				assert(pair.second.startSlice.getValue(0) == foundMinScore);
 			}
 			bool hasMatch = Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0));
 			for (size_t i = 1; i < WordConfiguration<Word>::WordSize; i++)
@@ -872,10 +1005,6 @@ private:
 				eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
 				if (eq) hasMatch = true;
 				ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
-				if (j == 0 && previousSlice.hasNode(node))
-				{
-					foundMinScore = std::min(foundMinScore, (ScoreType)(j + i + (hasMatch ? 0 : 1)));
-				}
 				for (auto neighbor : params.graph.inNeighbors[node])
 				{
 					if (!currentSlice.hasNode(neighbor)) continue;
@@ -893,7 +1022,7 @@ private:
 #endif
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<bool>& subgraph) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		LengthType currentMinimumNode = -1;
@@ -906,13 +1035,14 @@ private:
 		EqVector EqV = BV::getEqVector(sequence, j);
 
 		assert(previousSlice.size() > 0);
+		ScoreType zeroScore = previousMinScore - j / 2 - 32;
 		if (j == 0)
 		{
 			for (auto node : previousSlice)
 			{
 				assert(node.second.minScore <= previousQuitScore);
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+				calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 			}
 		}
 		else
@@ -920,6 +1050,7 @@ private:
 			for (auto node : previousSlice)
 			{
 				assert(node.second.exists);
+				if (node.second.minScore > previousQuitScore) continue;
 				if (params.graph.inNeighbors[node.first].size() == 1)
 				{
 					auto neighbor = params.graph.inNeighbors[node.first][0];
@@ -931,7 +1062,7 @@ private:
 				 	}
 				}
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				calculableQueue.insert(node.second.minScore - previousMinScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+				calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 			}
 		}
 		assert(calculableQueue.size() > 0);
@@ -979,18 +1110,30 @@ private:
 			assert(nodeCalc.minScore <= previousQuitScore + 2 * WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
+#ifdef SLICEVERBOSE
+			volatile size_t firstslices = currentSlice.node(i).firstSlicesCalcedWhenCalced;
+			volatile size_t calcedslices = currentSlice.node(i).slicesCalcedWhenCalced;
+			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = cellsProcessed;
+			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < cellsProcessed);
+			currentSlice.node(i).slicesCalcedWhenCalced = cellsProcessed;
+			assert(currentSlice.node(i).firstSlicesCalcedWhenCalced <= currentSlice.node(i).slicesCalcedWhenCalced);
+#endif
 			auto newEnd = thisNode.endSlice;
 
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
+				ScoreType newEndPriorityScore = newEnd.getPriorityScore(j);
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
+				assert(newEndPriorityScore >= zeroScore);
 				assert(newEndMinScore >= previousMinScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
 				{
 					for (auto neighbor : params.graph.outNeighbors[i])
 					{
-						calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						// if (!subgraph[params.graph.nodeUnitigReid[neighbor]]) continue;
+						// calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+						calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 					}
 				}
 			}
@@ -1001,7 +1144,9 @@ private:
 				currentMinimumNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
 			assert(currentMinimumScore == currentMinScoreAtEndRow);
+			size_t oldCellsProcessed = cellsProcessed;
 			cellsProcessed += nodeCalc.cellsProcessed;
+			assert(cellsProcessed > oldCellsProcessed);
 #ifdef SLICEVERBOSE
 			nodesProcessed++;
 #endif
@@ -1031,7 +1176,9 @@ private:
 		std::cerr << "prefilternodes " << currentSlice.size() << " ";
 #endif
 
-		finalizeSlice(currentSlice, currentBand, currentMinScoreAtEndRow + bandwidth);
+		//this sometimes removes nodes which must be used for out-of-band backtrace
+		//comment until we figure out a solution
+		// finalizeSlice(currentSlice, currentBand, currentMinScoreAtEndRow + bandwidth);
 
 		calculableQueue.clear();
 
@@ -1103,25 +1250,25 @@ private:
 		assert(sliceCalc.minScoreNodeOffset < params.graph.NodeLength(sliceCalc.minScoreNode));
 	}
 
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
+	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth, const std::vector<bool>& subgraph) const
 	{
 		NodeCalculationResult sliceResult;
 		if (slice.scoresVectorMap.hasVectorMapCurrently())
 		{
 			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
 			{
-				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
 			}
 			else
 			{
-				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
 			}
 			slice.scores = slice.scoresVectorMap.getMapSlice();
 		}
 		else
 		{
 			assert(!previousSlice.scoresVectorMap.hasVectorMapCurrently());
-			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
+			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
 		}
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
@@ -1142,14 +1289,14 @@ private:
 #endif
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth, const std::vector<bool>& subgraph) const
 	{
 		if (!params.lowMemory)
 		{
 			DPSlice bandTest { &nodesliceMap };
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, subgraph);
 			return bandTest;
 		}
 		else
@@ -1158,7 +1305,7 @@ private:
 			bandTest.scores.addEmptyNodeMap(previous.scores.size());
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, subgraph);
 			return bandTest;
 		}
 	}
@@ -1209,7 +1356,7 @@ private:
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
 			auto timeStart = std::chrono::system_clock::now();
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, reusableState.subgraph);
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 #ifdef SLICEVERBOSE
@@ -1232,22 +1379,7 @@ private:
 
 			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
 			{
-#ifndef NDEBUG
-				debugLastProcessedSlice = slice-1;
-#endif
-				for (auto node : lastSlice.scores)
-				{
-					assert(reusableState.previousBand[node.first]);
-					reusableState.previousBand[node.first] = false;
-				}
-				for (auto node : newSlice.scores)
-				{
-					assert(reusableState.currentBand[node.first]);
-					reusableState.currentBand[node.first] = false;
-				}
-				lastSlice.scoresVectorMap.removeVectorArray();
-				newSlice.scoresVectorMap.removeVectorArray();
-				break;
+				newSlice.scoresNotValid = true;
 			}
 
 			if (!newSlice.correctness.CorrectFromCorrect())
@@ -1372,7 +1504,7 @@ private:
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
 		auto nodes = params.graph.nodeLookup.at(bigraphNodeId);
-		assert(offset < params.graph.nodeOffset[nodes.back()] + params.graph.NodeLength(nodes.back()));
+		assert(offset < params.graph.originalNodeSize.at(bigraphNodeId));
 		size_t nodeIndex = params.graph.GetUnitigNode(bigraphNodeId, offset);
 		assert(params.graph.nodeOffset[nodeIndex] <= offset);
 		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);
