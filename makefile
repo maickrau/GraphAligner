@@ -5,7 +5,7 @@ CPPFLAGS=-Wall -std=c++14 -O3 -g
 ODIR=obj
 BINDIR=bin
 
-LIBS=-lm -lprotobuf -lz
+LIBS=-lm -lprotobuf -lz -lboost_program_options
 JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
 
 DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h ByteStuff.h

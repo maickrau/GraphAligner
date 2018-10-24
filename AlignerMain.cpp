@@ -1,3 +1,4 @@
+#include <boost/program_options.hpp>
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
@@ -23,13 +24,60 @@ int main(int argc, char** argv)
 	}
 #endif
 
-    struct sigaction act;
-    act.sa_handler = ThreadReadAssertion::signal;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    sigaction(SIGSEGV, &act, 0);
+	struct sigaction act;
+	act.sa_handler = ThreadReadAssertion::signal;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+	sigaction(SIGSEGV, &act, 0);
 
-    AlignerParams params;
+	boost::program_options::options_description mandatory("Mandatory parameters");
+	mandatory.add_options()
+		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
+		("reads,f", boost::program_options::value<std::string>(), "input reads (fasta or fastq, uncompressed or gzipped)")
+		("bandwidth,b", boost::program_options::value<int>(), "default bandwidth (int)")
+		("threads,t", boost::program_options::value<int>(), "number of threads (int)")
+		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
+		;
+	boost::program_options::options_description optional("Optional parameters");
+	optional.add_options()
+		("help,h", "help message")
+		("seeds,s", boost::program_options::value<std::string>(), "input seeds (.gam)")
+		("first-full-rows,d", boost::program_options::value<int>(), "instead of seeds, calculate the first arg rows fully. VERY SLOW! (int)")
+		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
+		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
+		("max-alignments,A", boost::program_options::value<int>(), "return up to arg non-overlapping alignments instead of all alignments (int)")
+		("quiet,q", "don't print progress messages")
+		("sloppy-optimizations,u", "use speed-up heuristics which might result in missing alignments")
+		("low-memory,l", "use less memory with a higher runtime")
+	;
+	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
+	hidden.add_options()
+		("subgraph-extraction-heuristic,S", "")
+	;
+
+	boost::program_options::options_description cmdline_options;
+	cmdline_options.add(mandatory).add(optional).add(hidden);
+
+	boost::program_options::variables_map vm;
+	try
+	{
+		boost::program_options::store(boost::program_options::parse_command_line(argc, argv, cmdline_options), vm);
+	}
+	catch (std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		std::cerr << "run with option -h for help" << std::endl;
+		std::exit(1);
+	}
+	boost::program_options::notify(vm);
+
+	if (vm.count("help"))
+	{
+		std::cerr << mandatory << std::endl << optional << std::endl;
+		std::exit(0);
+	}
+
+	AlignerParams params;
 	params.graphFile = "";
 	params.fastqFile = "";
 	params.seedFile = "";
@@ -37,102 +85,83 @@ int main(int argc, char** argv)
 	params.numThreads = 0;
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
-	params.dynamicRowStart = 64;
+	params.dynamicRowStart = 0;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
-	bool initialFullBand = false;
 	params.quietMode = false;
 	params.sloppyOptimizations = false;
 	params.lowMemory = false;
 	params.maxAlns = 0;
 	params.useSubgraph = false;
-	int c;
 
-	while ((c = getopt(argc, argv, "g:f:t:b:B:is:d:C:a:A:qulS")) != -1)
+	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
+	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
+	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
+	if (vm.count("threads")) params.numThreads = vm["threads"].as<int>();
+	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
+
+	if (vm.count("seeds")) params.seedFile = vm["seeds"].as<std::string>();
+	if (vm.count("first-full-rows")) params.dynamicRowStart = vm["first-full-rows"].as<int>();
+	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
+	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();
+	if (vm.count("max-alignments")) params.maxAlns = vm["max-alignments"].as<int>();
+	if (vm.count("quiet")) params.quietMode = true;
+	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
+	if (vm.count("low-memory")) params.lowMemory = true;
+
+	if (vm.count("subgraph-extraction-heuristic")) params.useSubgraph = true;
+
+	bool paramError = false;
+
+	if (params.graphFile == "")
 	{
-		switch(c)
-		{
-			case 'g':
-				params.graphFile = std::string(optarg);
-				break;
-			case 'f':
-				params.fastqFile = std::string(optarg);
-				break;
-			case 't':
-				params.numThreads = std::stoi(optarg);
-				break;
-			case 'b':
-				params.initialBandwidth = std::stoi(optarg);
-				break;
-			case 'B':
-				params.rampBandwidth = std::stoi(optarg);
-				break;
-			case 'i':
-				initialFullBand = true;
-				break;
-			case 's':
-				params.seedFile = std::string(optarg);
-				break;
-			case 'd':
-				params.dynamicRowStart = std::stoi(optarg);
-				break;
-			case 'C':
-				params.maxCellsPerSlice = std::stol(optarg);
-				break;
-			case 'a':
-				params.outputAlignmentFile = std::string(optarg);
-				break;
-			case 'A':
-				params.maxAlns = std::stoi(optarg);
-				break;
-			case 'q':
-				params.quietMode = true;
-				break;
-			case 'u':
-				params.sloppyOptimizations = true;
-				break;
-			case 'l':
-				params.lowMemory = true;
-				break;
-			case 'S':
-				params.useSubgraph = true;
-				break;
-		}
+		std::cerr << "graph file must be given" << std::endl;
+		paramError = true;
 	}
-
+	if (params.fastqFile == "")
+	{
+		std::cerr << "read file must be given" << std::endl;
+		paramError = true;
+	}
 	if (params.outputAlignmentFile == "")
 	{
-		std::cerr << "output file must be given" << std::endl;
-		std::exit(0);
+		std::cerr << "alignments-out must be given" << std::endl;
+		paramError = true;
 	}
-
 	if (params.dynamicRowStart % 64 != 0)
 	{
-		std::cerr << "dynamic row start has to be a multiple of 64" << std::endl;
-		std::exit(0);
+		std::cerr << "first-full-rows has to be a multiple of 64" << std::endl;
+		paramError = true;
 	}
-
 	if (params.numThreads < 1)
 	{
 		std::cerr << "number of threads must be >= 1" << std::endl;
-		std::exit(0);
+		paramError = true;
 	}
-
 	if (params.initialBandwidth < 1)
 	{
-		std::cerr << "bandwidth must be >= 1" << std::endl;
-		std::exit(0);
+		std::cerr << "default bandwidth must be >= 1" << std::endl;
+		paramError = true;
 	}
-
 	if (params.rampBandwidth != 0 && params.rampBandwidth <= params.initialBandwidth)
 	{
-		std::cerr << "backup bandwidth must be higher than initial bandwidth" << std::endl;
-		std::exit(0);
+		std::cerr << "ramp bandwidth must be higher than default bandwidth" << std::endl;
+		paramError = true;
+	}
+	if (params.dynamicRowStart == 0 && params.seedFile == "")
+	{
+		std::cerr << "either the seed file (recommended) or first-full-rows (not recommended) must be set" << std::endl;
+		paramError = true;
+	}
+	if (params.dynamicRowStart != 0 && params.seedFile != "")
+	{
+		std::cerr << "only one of seed file (recommended) or first-full-rows (not recommended) may be set" << std::endl;
+		paramError = true;
 	}
 
-	if (!initialFullBand && params.seedFile == "")
+	if (paramError)
 	{
-		std::cerr << "either initial full band or seed file must be set" << std::endl;
-		std::exit(0);
+		std::cerr << "run with option -h for help" << std::endl;
+		std::exit(1);
 	}
 
 	alignReads(params);
