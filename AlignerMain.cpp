@@ -104,9 +104,9 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<int>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
 
-	if (vm.count("seeds-file")) params.seedFile = vm["seeds"].as<std::string>();
+	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
 	if (vm.count("seeds-mum")) params.mums = true;
-	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["first-full-rows"].as<int>();
+	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();

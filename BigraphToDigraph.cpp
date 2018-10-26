@@ -194,3 +194,45 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 	result.Finalize(64);
 	return result;
 }
+
+AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
+{
+	AlignmentGraph result;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		auto nodes = ConvertVGNodeToNodes(graph.node(i));
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+	}
+	for (int i = 0; i < graph.edge_size(); i++)
+	{
+		auto edges = ConvertVGEdgeToEdges(graph.edge(i));
+		result.AddEdgeNodeId(edges.first.fromId, edges.first.toId);
+		result.AddEdgeNodeId(edges.second.fromId, edges.second.toId);
+	}
+	result.Finalize(64);
+	return result;
+}
+
+AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
+{
+	AlignmentGraph result;
+	result.DBGOverlap = graph.edgeOverlap;
+	for (auto node : graph.nodes)
+	{
+		auto nodes = ConvertGFANodeToNodes(node.first, node.second);
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+	}
+	for (auto edge : graph.edges)
+	{
+		for (auto target : edge.second)
+		{
+			auto pair = ConvertGFAEdgeToEdges(edge.first.id, edge.first.end ? "+" : "-", target.id, target.end ? "+" : "-");
+			result.AddEdgeNodeId(pair.first.fromId, pair.first.toId);
+			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId);
+		}
+	}
+	result.Finalize(64);
+	return result;
+}

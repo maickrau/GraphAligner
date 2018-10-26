@@ -95,6 +95,11 @@ STSeeder::STSeeder(const GfaGraph& graph)
 	constructTree(graph);
 }
 
+STSeeder::STSeeder(const vg::Graph& graph)
+{
+	constructTree(graph);
+}
+
 void STSeeder::constructTree(const GfaGraph& graph)
 {
 	std::string seq;
@@ -109,6 +114,30 @@ void STSeeder::constructTree(const GfaGraph& graph)
 		nodeIDs.push_back(node.first);
 		nodeReverse.push_back(true);
 		seq += CommonUtils::ReverseComplement(node.second);
+		seq += '$';
+	}
+	nodePositions.push_back(seq.size());
+	for (size_t i = 0; i < seq.size(); i++)
+	{
+		seq[i] = lowercase(seq[i]);
+	}
+	sdsl::construct_im(tree, seq, 1);
+}
+
+void STSeeder::constructTree(const vg::Graph& graph)
+{
+	std::string seq;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(graph.node(i).id());
+		nodeReverse.push_back(false);
+		seq += graph.node(i).sequence();
+		seq += '$';
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(graph.node(i).id());
+		nodeReverse.push_back(true);
+		seq += CommonUtils::ReverseComplement(graph.node(i).sequence());
 		seq += '$';
 	}
 	nodePositions.push_back(seq.size());
