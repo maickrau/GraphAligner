@@ -14,6 +14,7 @@
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
+#include "STSeeder.h"
 
 bool is_file_exist(std::string fileName)
 {
@@ -143,7 +144,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	allWriteDone = true;
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, const STSeeder* seeder, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory, params.useSubgraph };
@@ -178,13 +179,20 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		try
 		{
-			if (graphAlignerSeedHits == nullptr)
+			if (seeder != nullptr || graphAlignerSeedHits != nullptr)
 			{
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.quietMode, reusableState, params.lowMemory);
-			}
-			else
-			{
-				if (graphAlignerSeedHits->find(fastq->seq_id) == graphAlignerSeedHits->end() || graphAlignerSeedHits->at(fastq->seq_id).size() == 0)
+				std::vector<SeedHit> seeds;
+				if (seeder != nullptr)
+				{
+					seeds = seeder->getMumSeeds(fastq->sequence);
+				}
+				else
+				{
+					assert(graphAlignerSeedHits != nullptr);
+					auto found = graphAlignerSeedHits->find(fastq->seq_id);
+					if (found != graphAlignerSeedHits->end()) seeds = found->second;
+				}
+				if (seeds.size() == 0)
 				{
 					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
@@ -194,12 +202,16 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				}
 				if (params.useSubgraph)
 				{
-					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq->seq_id), reusableState, params.lowMemory);
+					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeder->getMumSeeds(fastq->sequence), reusableState, params.lowMemory);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, graphAlignerSeedHits->at(fastq->seq_id), reusableState, params.lowMemory);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeder->getMumSeeds(fastq->sequence), reusableState, params.lowMemory);
 				}
+			}
+			else
+			{
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.quietMode, reusableState, params.lowMemory);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -355,6 +367,12 @@ void alignReads(AlignerParams params)
 
 	auto alignmentGraph = getGraph(params.graphFile);
 
+	STSeeder* seeder = nullptr;
+	if (params.mums)
+	{
+		seeder = new STSeeder { GfaGraph::LoadFromFile(params.graphFile) };
+	}
+
 	std::vector<std::thread> threads;
 
 	assertSetRead("Running alignments", "No seed");
@@ -378,7 +396,7 @@ void alignReads(AlignerParams params)
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, quietMode=params.quietMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, quietMode); } };
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns, seeder]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, seeder, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
 	}
 
 	for (int i = 0; i < params.numThreads; i++)
@@ -390,6 +408,8 @@ void alignReads(AlignerParams params)
 	allThreadsDone = true;
 
 	writerThread.join();
+
+	if (seeder != nullptr) delete seeder;
 
 	std::string* dealloc;
 	while (deallocAlns.try_dequeue(dealloc))

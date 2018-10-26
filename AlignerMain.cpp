@@ -38,11 +38,15 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<int>(), "number of threads (int)")
 		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
 		;
+	boost::program_options::options_description seeding("Seeding");
+	seeding.add_options()
+		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
+		("seeds-mum", "maximal unique matches fully contained in a node")
+		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
+	;
 	boost::program_options::options_description optional("Optional parameters");
 	optional.add_options()
 		("help,h", "help message")
-		("seeds,s", boost::program_options::value<std::string>(), "input seeds (.gam)")
-		("first-full-rows,d", boost::program_options::value<int>(), "instead of seeds, calculate the first arg rows fully. VERY SLOW! (int)")
 		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
 		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
 		("max-alignments,A", boost::program_options::value<int>(), "return up to arg non-overlapping alignments instead of all alignments (int)")
@@ -56,7 +60,7 @@ int main(int argc, char** argv)
 	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(optional).add(hidden);
+	cmdline_options.add(mandatory).add(seeding).add(optional).add(hidden);
 
 	boost::program_options::variables_map vm;
 	try
@@ -73,7 +77,7 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << optional << std::endl;
+		std::cerr << mandatory << std::endl << seeding << std::endl << optional << std::endl;
 		std::exit(0);
 	}
 
@@ -92,6 +96,7 @@ int main(int argc, char** argv)
 	params.lowMemory = false;
 	params.maxAlns = 0;
 	params.useSubgraph = false;
+	params.mums = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
@@ -99,8 +104,10 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<int>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
 
-	if (vm.count("seeds")) params.seedFile = vm["seeds"].as<std::string>();
-	if (vm.count("first-full-rows")) params.dynamicRowStart = vm["first-full-rows"].as<int>();
+	if (vm.count("seeds-file")) params.seedFile = vm["seeds"].as<std::string>();
+	if (vm.count("seeds-mum")) params.mums = true;
+	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["first-full-rows"].as<int>();
+
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();
 	if (vm.count("max-alignments")) params.maxAlns = vm["max-alignments"].as<int>();
@@ -147,14 +154,15 @@ int main(int argc, char** argv)
 		std::cerr << "ramp bandwidth must be higher than default bandwidth" << std::endl;
 		paramError = true;
 	}
-	if (params.dynamicRowStart == 0 && params.seedFile == "")
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + (params.mums ? 1 : 0);
+	if (pickedSeedingMethods == 0)
 	{
-		std::cerr << "either the seed file (recommended) or first-full-rows (not recommended) must be set" << std::endl;
+		std::cerr << "pick a seeding method" << std::endl;
 		paramError = true;
 	}
-	if (params.dynamicRowStart != 0 && params.seedFile != "")
+	if (pickedSeedingMethods > 1)
 	{
-		std::cerr << "only one of seed file (recommended) or first-full-rows (not recommended) may be set" << std::endl;
+		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
 	}
 

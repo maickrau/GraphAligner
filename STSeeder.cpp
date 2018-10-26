@@ -1,5 +1,5 @@
-#include <iostream>
 #include "STSeeder.h"
+#include "CommonUtils.h"
 
 char lowercase(char c)
 {
@@ -19,31 +19,8 @@ char lowercase(char c)
 	return 0;
 }
 
-STSeeder::STSeeder(const GfaGraph& graph)
-{
-	constructTree(graph);
-}
-
-void STSeeder::constructTree(const GfaGraph& graph)
-{
-	std::string seq;
-	for (auto node : graph.nodes)
-	{
-		nodePositions.push_back(seq.size());
-		nodeIDs.push_back(node.first);
-		seq += node.second;
-		seq += '$';
-	}
-	for (size_t i = 0; i < seq.size(); i++)
-	{
-		seq[i] = lowercase(seq[i]);
-	}
-	sdsl::construct_im(tree, seq, 1);
-	std::cout << tree.size() << std::endl;
-	std::cout << tree.nodes() << std::endl;
-}
-
-std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minMatchSize) const
+template <typename F>
+void getMums(const std::string& sequence, const sdsl::cst_sada<>& tree, F mumCallback)
 {
 	std::string lowercaseSeq = sequence;
 	for (size_t i = 0; i < sequence.size(); i++)
@@ -71,8 +48,7 @@ std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minM
 			{
 				if (tree.is_leaf(pos))
 				{
-					std::cout << "A: " << seqpos << " " << tree.sn(pos) << " " << depth << std::endl;
-					std::cout << sequence.substr(seqpos - depth, depth) << std::endl;
+					mumCallback(seqpos, tree.sn(pos), depth);
 				}
 				while (depth != tree.depth(pos) || tree.child(pos, c) == tree.root())
 				{
@@ -83,6 +59,7 @@ std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minM
 				}
 				continue;
 			}
+			if (seqpos == sequence.size() - 1) break;
 			depth++;
 			seqpos++;
 			continue;
@@ -93,8 +70,7 @@ std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minM
 		{
 			if (tree.is_leaf(pos))
 			{
-				std::cout << "B: " << seqpos << " " << tree.sn(pos) << " " << depth << std::endl;
-				std::cout << sequence.substr(seqpos - depth, depth) << std::endl;
+				mumCallback(seqpos, tree.sn(pos), depth);
 			}
 			while (nextpos == tree.root())
 			{
@@ -109,6 +85,7 @@ std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minM
 		}
 		else
 		{
+			if (seqpos == sequence.size() - 1) break;
 			pos = nextpos;
 			seqpos++;
 			depth++;
@@ -116,8 +93,94 @@ std::vector<SeedHit> STSeeder::getSeeds(const std::string& sequence, size_t minM
 	}
 	if (tree.is_leaf(pos))
 	{
-		std::cout << "C: " << seqpos << " " << tree.sn(pos) << " " << depth << std::endl;
-		std::cout << sequence.substr(seqpos - depth, depth) << std::endl;
+		mumCallback(seqpos, tree.sn(pos), depth);
+	}
+}
+
+STSeeder::STSeeder(const GfaGraph& graph)
+{
+	constructTree(graph);
+}
+
+void STSeeder::constructTree(const GfaGraph& graph)
+{
+	std::string seq;
+	for (auto node : graph.nodes)
+	{
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(node.first);
+		seq += node.second;
+		seq += '$';
+	}
+	nodePositions.push_back(seq.size());
+	for (size_t i = 0; i < seq.size(); i++)
+	{
+		seq[i] = lowercase(seq[i]);
+	}
+	sdsl::construct_im(tree, seq, 1);
+}
+
+size_t STSeeder::getNodeIndex(size_t indexPos) const
+{
+	auto next = std::upper_bound(nodePositions.begin(), nodePositions.end(), indexPos);
+	assert(next != nodePositions.begin());
+	size_t index = (next - nodePositions.begin()) - 1;
+	assert(index < nodePositions.size()-1);
+	return index;
+}
+
+std::vector<SeedHit> STSeeder::getMumSeeds(const std::string& sequence) const
+{
+	std::vector<SeedHit> result;
+	addFwMumSeeds(result, sequence);
+	addBwMumSeeds(result, sequence);
+	std::sort(result.begin(), result.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
+	result = removeContainedSeeds(result);
+	return result;
+}
+
+std::vector<SeedHit> STSeeder::removeContainedSeeds(const std::vector<SeedHit>& all) const
+{
+	std::vector<SeedHit> result;
+	for (size_t i = 0; i < all.size(); i++)
+	{
+		bool contained = false;
+		for (size_t j = 0; j < i; j++)
+		{
+			if (all[j].seqPos >= all[i].seqPos && all[j].seqPos - all[j].matchLen <= all[i].seqPos - all[i].matchLen)
+			{
+				contained = true;
+				break;
+			}
+		}
+		if (!contained)
+		{
+			result.push_back(all[i]);
+		}
 	}
 	return result;
+}
+
+void STSeeder::addFwMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const
+{
+	getMums(sequence, tree, [this, &result](size_t seqPos, size_t indexPos, size_t matchLen)
+	{
+		auto index = getNodeIndex(indexPos);
+		int nodeID = nodeIDs[index];
+		size_t nodeOffset = indexPos - nodePositions[index];
+		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, false);
+	});
+}
+
+void STSeeder::addBwMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const
+{
+	auto bw = CommonUtils::ReverseComplement(sequence);
+	getMums(bw, tree, [this, &result, &sequence](size_t seqPos, size_t indexPos, size_t matchLen)
+	{
+		auto index = getNodeIndex(indexPos);
+		int nodeID = nodeIDs[index];
+		size_t nodeOffset = (nodePositions[index+1] - nodePositions[index] - 1) - (indexPos - nodePositions[index]) - 1;
+		size_t seedSeqPos = sequence.size() - seqPos - 1;
+		result.emplace_back(nodeID, nodeOffset, seedSeqPos, matchLen, true);
+	});
 }
