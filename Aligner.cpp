@@ -184,7 +184,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				std::vector<SeedHit> seeds;
 				if (seeder != nullptr)
 				{
+					auto seedTimeStart = std::chrono::system_clock::now();
 					seeds = seeder->getMumSeeds(fastq->sequence);
+					auto seedTimeEnd = std::chrono::system_clock::now();
+					auto seedTimems = std::chrono::duration_cast<std::chrono::milliseconds>(seedTimeEnd - seedTimeStart).count();
+					coutoutput << "Read " << fastq->seq_id << " seeding took " << seedTimems << "ms" << BufferedWriter::Flush;
 				}
 				else
 				{
@@ -280,10 +284,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
 
-		coutoutput << "Read " << fastq->seq_id << " took " << timems << "ms" << BufferedWriter::Flush;
-		coutoutput << "Read " << fastq->seq_id << " alignment positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
-
-		coutoutput << "Thread " << threadnum << " aligned read " << fastq->seq_id << " with " << totalcells << " cells" << BufferedWriter::Flush;
+		coutoutput << "Read " << fastq->seq_id << " alignment took " << timems << "ms" << BufferedWriter::Flush;
+		coutoutput << "Read " << fastq->seq_id << " aligned by thread " << threadnum << " with positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 	}
 	assertSetRead("After all reads", "No seed");
 	coutoutput << "Thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
