@@ -22,12 +22,6 @@ char lowercase(char c)
 template <typename F>
 void getMums(const std::string& sequence, const sdsl::cst_sada<>& tree, F mumCallback)
 {
-	std::string lowercaseSeq = sequence;
-	for (size_t i = 0; i < sequence.size(); i++)
-	{
-		lowercaseSeq[i] = lowercase(sequence[i]);
-	}
-	std::vector<SeedHit> result;
 	size_t seqpos = 0;
 	auto pos = tree.root();
 	while (seqpos < sequence.size() && pos == tree.root())
@@ -40,7 +34,6 @@ void getMums(const std::string& sequence, const sdsl::cst_sada<>& tree, F mumCal
 	{
 		assert(depth <= tree.depth(pos));
 		assert(depth > tree.depth(tree.parent(pos)) || pos == tree.root());
-		assert(lowercaseSeq.substr(seqpos - depth, depth) == sdsl::extract(tree, pos).substr(0, depth));
 		auto c = lowercase(sequence[seqpos]);
 		if (depth < tree.depth(pos))
 		{
@@ -109,7 +102,13 @@ void STSeeder::constructTree(const GfaGraph& graph)
 	{
 		nodePositions.push_back(seq.size());
 		nodeIDs.push_back(node.first);
+		nodeReverse.push_back(false);
 		seq += node.second;
+		seq += '$';
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(node.first);
+		nodeReverse.push_back(true);
+		seq += CommonUtils::ReverseComplement(node.second);
 		seq += '$';
 	}
 	nodePositions.push_back(seq.size());
@@ -132,55 +131,18 @@ size_t STSeeder::getNodeIndex(size_t indexPos) const
 std::vector<SeedHit> STSeeder::getMumSeeds(const std::string& sequence) const
 {
 	std::vector<SeedHit> result;
-	addFwMumSeeds(result, sequence);
-	addBwMumSeeds(result, sequence);
+	addMumSeeds(result, sequence);
 	std::sort(result.begin(), result.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
-	result = removeContainedSeeds(result);
 	return result;
 }
 
-std::vector<SeedHit> STSeeder::removeContainedSeeds(const std::vector<SeedHit>& all) const
-{
-	std::vector<SeedHit> result;
-	for (size_t i = 0; i < all.size(); i++)
-	{
-		bool contained = false;
-		for (size_t j = 0; j < i; j++)
-		{
-			if (all[j].seqPos >= all[i].seqPos && all[j].seqPos - all[j].matchLen <= all[i].seqPos - all[i].matchLen)
-			{
-				contained = true;
-				break;
-			}
-		}
-		if (!contained)
-		{
-			result.push_back(all[i]);
-		}
-	}
-	return result;
-}
-
-void STSeeder::addFwMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const
+void STSeeder::addMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const
 {
 	getMums(sequence, tree, [this, &result](size_t seqPos, size_t indexPos, size_t matchLen)
 	{
 		auto index = getNodeIndex(indexPos);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = indexPos - nodePositions[index];
-		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, false);
-	});
-}
-
-void STSeeder::addBwMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const
-{
-	auto bw = CommonUtils::ReverseComplement(sequence);
-	getMums(bw, tree, [this, &result, &sequence](size_t seqPos, size_t indexPos, size_t matchLen)
-	{
-		auto index = getNodeIndex(indexPos);
-		int nodeID = nodeIDs[index];
-		size_t nodeOffset = (nodePositions[index+1] - nodePositions[index] - 1) - (indexPos - nodePositions[index]) - 1;
-		size_t seedSeqPos = sequence.size() - seqPos - 1;
-		result.emplace_back(nodeID, nodeOffset, seedSeqPos, matchLen, true);
+		result.emplace_back(nodeID, nodeOffset, seqPos - matchLen, matchLen, nodeReverse[index]);
 	});
 }
