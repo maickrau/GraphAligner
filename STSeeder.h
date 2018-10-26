@@ -19,7 +19,7 @@ private:
 	void constructTree(const GfaGraph& graph);
 	void constructTree(const vg::Graph& graph);
 	size_t getNodeIndex(size_t indexPos) const;
-	sdsl::cst_sada<> tree;
+	sdsl::cst_sct3<> tree;
 	std::vector<size_t> nodePositions;
 	std::vector<int> nodeIDs;
 	std::vector<bool> nodeReverse;

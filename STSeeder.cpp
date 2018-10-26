@@ -19,8 +19,8 @@ char lowercase(char c)
 	return 0;
 }
 
-template <typename F>
-void getMums(const std::string& sequence, const sdsl::cst_sada<>& tree, F mumCallback)
+template <typename Tree, typename F>
+void getMums(const std::string& sequence, const Tree& tree, F mumCallback)
 {
 	size_t seqpos = 0;
 	auto pos = tree.root();
