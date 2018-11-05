@@ -157,11 +157,16 @@ size_t STSeeder::getNodeIndex(size_t indexPos) const
 	return index;
 }
 
-std::vector<SeedHit> STSeeder::getMumSeeds(const std::string& sequence) const
+std::vector<SeedHit> STSeeder::getMumSeeds(const std::string& sequence, size_t maxCount) const
 {
 	std::vector<SeedHit> result;
 	addMumSeeds(result, sequence);
 	std::sort(result.begin(), result.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
+	if (result.size() > maxCount)
+	{
+		result.erase(result.begin() + maxCount, result.end());
+	}
+	assert(result.size() <= maxCount);
 	return result;
 }
 

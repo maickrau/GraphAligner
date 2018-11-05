@@ -20,7 +20,7 @@ struct AlignerParams
 	bool sloppyOptimizations;
 	bool lowMemory;
 	bool useSubgraph;
-	bool mums;
+	size_t mumCount;
 	size_t maxAlns;
 };
 

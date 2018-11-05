@@ -185,7 +185,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				if (seeder != nullptr)
 				{
 					auto seedTimeStart = std::chrono::system_clock::now();
-					seeds = seeder->getMumSeeds(fastq->sequence);
+					seeds = seeder->getMumSeeds(fastq->sequence, params.mumCount);
 					auto seedTimeEnd = std::chrono::system_clock::now();
 					auto seedTimems = std::chrono::duration_cast<std::chrono::milliseconds>(seedTimeEnd - seedTimeStart).count();
 					coutoutput << "Read " << fastq->seq_id << " seeding took " << seedTimems << "ms" << BufferedWriter::Flush;
@@ -206,11 +206,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				}
 				if (params.useSubgraph)
 				{
-					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeder->getMumSeeds(fastq->sequence), reusableState, params.lowMemory);
+					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeds, reusableState, params.lowMemory);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeder->getMumSeeds(fastq->sequence), reusableState, params.lowMemory);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeds, reusableState, params.lowMemory);
 				}
 			}
 			else
@@ -305,6 +305,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		if (loadSeeder)
 		{
 			auto graph = CommonUtils::LoadVGGraph(graphFile);
+			std::cout << "Build seeder from the graph" << std::endl;
 			*seeder = new STSeeder { graph };
 			return DirectedGraph::BuildFromVG(graph);
 		}
@@ -318,6 +319,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		if (loadSeeder)
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile);
+			std::cout << "Build seeder from the graph" << std::endl;
 			*seeder = new STSeeder { graph };
 			return DirectedGraph::BuildFromGFA(graph);
 		}
@@ -387,7 +389,7 @@ void alignReads(AlignerParams params)
 
 	STSeeder* seeder = nullptr;
 
-	auto alignmentGraph = getGraph(params.graphFile, &seeder, params.mums);
+	auto alignmentGraph = getGraph(params.graphFile, &seeder, params.mumCount != 0);
 
 	std::vector<std::thread> threads;
 

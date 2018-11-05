@@ -41,7 +41,7 @@ int main(int argc, char** argv)
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
-		("seeds-mum", "maximal unique matches fully contained in a node")
+		("seeds-mum", boost::program_options::value<int>(), "n longest maximal unique matches of fully contained in a node (int)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description optional("Optional parameters");
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
 	params.lowMemory = false;
 	params.maxAlns = 0;
 	params.useSubgraph = false;
-	params.mums = false;
+	params.mumCount = 0;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
@@ -105,7 +105,7 @@ int main(int argc, char** argv)
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
 
 	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
-	if (vm.count("seeds-mum")) params.mums = true;
+	if (vm.count("seeds-mum")) params.mumCount = vm["seeds-mum"].as<int>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
 		std::cerr << "ramp bandwidth must be higher than default bandwidth" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + (params.mums ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;

@@ -13,7 +13,7 @@ class STSeeder
 public:
 	STSeeder(const GfaGraph& graph);
 	STSeeder(const vg::Graph& graph);
-	std::vector<SeedHit> getMumSeeds(const std::string& sequence) const;
+	std::vector<SeedHit> getMumSeeds(const std::string& sequence, size_t maxCount) const;
 private:
 	void addMumSeeds(std::vector<SeedHit>& result, const std::string& sequence) const;
 	void constructTree(const GfaGraph& graph);
