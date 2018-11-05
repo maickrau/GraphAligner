@@ -80,7 +80,7 @@ public:
 		AlignmentResult result;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "(" + std::to_string(seedHits[i].nodeOffset) + ")," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen);
 			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
 			assertSetRead(seq_id, seedInfo);
 			if (params.sloppyOptimizations)
