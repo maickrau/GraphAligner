@@ -42,6 +42,7 @@ int main(int argc, char** argv)
 	seeding.add_options()
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
 		("seeds-mum", boost::program_options::value<int>(), "n longest maximal unique matches of fully contained in a node (int)")
+		("seeds-mum-cache-prefix", boost::program_options::value<std::string>(), "store the mum seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description optional("Optional parameters");
@@ -97,6 +98,7 @@ int main(int argc, char** argv)
 	params.maxAlns = 0;
 	params.useSubgraph = false;
 	params.mumCount = 0;
+	params.seederCachePrefix = "";
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
@@ -106,6 +108,7 @@ int main(int argc, char** argv)
 
 	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
 	if (vm.count("seeds-mum")) params.mumCount = vm["seeds-mum"].as<int>();
+	if (vm.count("seeds-mum-cache-prefix")) params.seederCachePrefix = vm["seeds-mum-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();

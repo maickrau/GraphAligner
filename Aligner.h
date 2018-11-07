@@ -22,6 +22,7 @@ struct AlignerParams
 	bool useSubgraph;
 	size_t mumCount;
 	size_t maxAlns;
+	std::string seederCachePrefix;
 };
 
 void alignReads(AlignerParams params);

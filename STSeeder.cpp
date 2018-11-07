@@ -1,3 +1,6 @@
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/vector.hpp>
 #include "STSeeder.h"
 #include "CommonUtils.h"
 
@@ -90,14 +93,60 @@ void getMums(const std::string& sequence, const Tree& tree, F mumCallback)
 	}
 }
 
-STSeeder::STSeeder(const GfaGraph& graph)
+bool fileExists(const std::string& fileName)
 {
-	constructTree(graph);
+	std::ifstream file { fileName };
+	return file.good();
 }
 
-STSeeder::STSeeder(const vg::Graph& graph)
+STSeeder::STSeeder(const GfaGraph& graph, const std::string& cachePrefix)
 {
-	constructTree(graph);
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".cst") && fileExists(cachePrefix + ".aux"))
+	{
+		loadFrom(cachePrefix);
+	}
+	else
+	{
+		constructTree(graph);
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
+}
+
+STSeeder::STSeeder(const vg::Graph& graph, const std::string& cachePrefix)
+{
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".cst") && fileExists(cachePrefix + ".aux"))
+	{
+		loadFrom(cachePrefix);
+	}
+	else
+	{
+		constructTree(graph);
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
+}
+
+void STSeeder::saveTo(const std::string& prefix) const
+{
+	std::ofstream file { prefix + ".aux", std::ios::binary };
+	{
+		boost::archive::text_oarchive oa(file);
+		oa << nodePositions;
+		oa << nodeIDs;
+		oa << nodeReverse;
+	}
+	sdsl::store_to_file(tree, prefix + ".cst");
+}
+
+void STSeeder::loadFrom(const std::string& prefix)
+{
+	std::ifstream file { prefix + ".aux", std::ios::binary };
+	{
+		boost::archive::text_iarchive ia(file);
+		ia >> nodePositions;
+		ia >> nodeIDs;
+		ia >> nodeReverse;
+	}
+	sdsl::load_from_file(tree, prefix + ".cst");
 }
 
 void STSeeder::constructTree(const GfaGraph& graph)

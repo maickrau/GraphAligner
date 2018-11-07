@@ -291,7 +291,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 	coutoutput << "Thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeeder)
+AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -306,7 +306,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		{
 			auto graph = CommonUtils::LoadVGGraph(graphFile);
 			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new STSeeder { graph };
+			*seeder = new STSeeder { graph, seederCachePrefix };
 			return DirectedGraph::BuildFromVG(graph);
 		}
 		else
@@ -320,7 +320,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile);
 			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new STSeeder { graph };
+			*seeder = new STSeeder { graph, seederCachePrefix };
 			return DirectedGraph::BuildFromGFA(graph);
 		}
 		else
@@ -389,7 +389,7 @@ void alignReads(AlignerParams params)
 
 	STSeeder* seeder = nullptr;
 
-	auto alignmentGraph = getGraph(params.graphFile, &seeder, params.mumCount != 0);
+	auto alignmentGraph = getGraph(params.graphFile, &seeder, params.mumCount != 0, params.seederCachePrefix);
 
 	std::vector<std::thread> threads;
 
