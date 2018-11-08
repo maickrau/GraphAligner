@@ -16,7 +16,7 @@ struct AlignerParams
 	size_t maxCellsPerSlice;
 	std::string seedFile;
 	std::string outputAlignmentFile;
-	bool quietMode;
+	bool verboseMode;
 	bool sloppyOptimizations;
 	bool highMemory;
 	bool useSubgraph;

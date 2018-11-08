@@ -40,9 +40,9 @@ int main(int argc, char** argv)
 	general.add_options()
 		("help,h", "help message")
 		("threads,t", boost::program_options::value<int>(), "number of threads (int) (default 1)")
-		("quiet,q", "don't print progress messages")
+		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("sloppy-optimizations,u", "use speed-up heuristics which might result in missing alignments")
+		("sloppy-optimizations", "use speed-up heuristics which might result in missing alignments")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -97,7 +97,7 @@ int main(int argc, char** argv)
 	params.rampBandwidth = 0;
 	params.dynamicRowStart = 0;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
-	params.quietMode = false;
+	params.verboseMode = false;
 	params.sloppyOptimizations = false;
 	params.highMemory = false;
 	params.useSubgraph = false;
@@ -123,7 +123,7 @@ int main(int argc, char** argv)
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();
 	if (vm.count("all-alignments")) params.outputAllAlns = true;
-	if (vm.count("quiet")) params.quietMode = true;
+	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 

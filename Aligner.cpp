@@ -156,7 +156,7 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool quietMode)
+void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode)
 {
 	assertSetRead("Writer", "No seed");
 	std::ofstream outfile { filename, std::ios::binary | std::ios::out };
@@ -166,7 +166,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	std::string* alns[100] {};
 
 	BufferedWriter coutoutput;
-	if (!quietMode)
+	if (verboseMode)
 	{
 		coutoutput = {std::cout};
 	}
@@ -212,7 +212,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory, params.useSubgraph };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
-	if (!params.quietMode)
+	if (params.verboseMode)
 	{
 		cerroutput = {std::cerr};
 		coutoutput = {std::cout};
@@ -254,16 +254,16 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				}
 				if (params.useSubgraph)
 				{
-					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
+					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, params.quietMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
 				}
 			}
 			else
 			{
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.quietMode, reusableState, !params.highMemory);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -482,7 +482,7 @@ void alignReads(AlignerParams params)
 	}
 
 	std::cout << "Align" << std::endl;
-	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, quietMode=params.quietMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, quietMode); } };
+	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
 	for (int i = 0; i < params.numThreads; i++)
 	{
 		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seeder, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seeder, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
