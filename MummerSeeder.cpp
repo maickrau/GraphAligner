@@ -1,3 +1,7 @@
+#include <iostream>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/vector.hpp>
 #include "CommonUtils.h"
 #include "MummerSeeder.h"
 
@@ -21,15 +25,42 @@ char lowercase(char c)
 	return std::numeric_limits<char>::max();
 }
 
-MummerSeeder::MummerSeeder(const GfaGraph& graph, size_t minL)
+bool fileExists(const std::string& fileName)
 {
-	constructTree(graph, minL);
-	minLen = minL;
+	std::ifstream file { fileName };
+	return file.good();
 }
 
-void MummerSeeder::constructTree(const GfaGraph& graph, size_t minLen)
+MummerSeeder::MummerSeeder(const GfaGraph& graph, size_t minL, const std::string& cachePrefix)
 {
-	std::string seq;
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".aux"))
+	{
+		loadFrom(cachePrefix);
+	}
+	else
+	{
+		initTree(graph, minL);
+		minLen = minL;
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
+}
+
+MummerSeeder::MummerSeeder(const vg::Graph& graph, size_t minL, const std::string& cachePrefix)
+{
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".aux"))
+	{
+		loadFrom(cachePrefix);
+	}
+	else
+	{
+		initTree(graph, minL);
+		minLen = minL;
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
+}
+
+void MummerSeeder::initTree(const GfaGraph& graph, size_t minLen)
+{
 	for (auto node : graph.nodes)
 	{
 		nodePositions.push_back(seq.size());
@@ -48,8 +79,32 @@ void MummerSeeder::constructTree(const GfaGraph& graph, size_t minLen)
 	{
 		seq[i] = lowercase(seq[i]);
 	}
+	seq.shrink_to_fit();
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 1, true));
-	matcher->construct();
+}
+
+void MummerSeeder::initTree(const vg::Graph& graph, size_t minLen)
+{
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(graph.node(i).id());
+		nodeReverse.push_back(false);
+		seq += graph.node(i).sequence();
+		seq += '$';
+		nodePositions.push_back(seq.size());
+		nodeIDs.push_back(graph.node(i).id());
+		nodeReverse.push_back(true);
+		seq += CommonUtils::ReverseComplement(graph.node(i).sequence());
+		seq += '$';
+	}
+	nodePositions.push_back(seq.size());
+	for (size_t i = 0; i < seq.size(); i++)
+	{
+		seq[i] = lowercase(seq[i]);
+	}
+	seq.shrink_to_fit();
+	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 1, true));
 }
 
 size_t MummerSeeder::getNodeIndex(size_t indexPos) const
@@ -61,6 +116,39 @@ size_t MummerSeeder::getNodeIndex(size_t indexPos) const
 	return index;
 }
 
+void MummerSeeder::saveTo(const std::string& prefix) const
+{
+	std::ofstream file { prefix + ".aux", std::ios::binary };
+	{
+		boost::archive::text_oarchive oa(file);
+		oa << minLen;
+		oa << seq;
+		oa << nodePositions;
+		oa << nodeIDs;
+		oa << nodeReverse;
+	}
+	matcher->save(prefix + "_index");
+}
+
+void MummerSeeder::loadFrom(const std::string& prefix)
+{
+	std::ifstream file { prefix + ".aux", std::ios::binary };
+	{
+		boost::archive::text_iarchive ia(file);
+		ia >> minLen;
+		ia >> seq;
+		ia >> nodePositions;
+		ia >> nodeIDs;
+		ia >> nodeReverse;
+	}
+	auto kmer = minLen;
+	if (kmer < 0) kmer = 0;
+	if (kmer > 10) kmer = 10;
+	// same params that create_auto passes
+	matcher = std::make_unique<mummer::mummer::sparseSA>(seq, false, 1, true, false, kmer>0, 1, kmer, true);
+	matcher->load(prefix + "_index");
+}
+
 std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxCount) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
@@ -70,14 +158,29 @@ std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxC
 	assert(matcher != nullptr);
 	std::vector<mummer::mummer::match_t> MAMs;
 	matcher->MAM(sequence, minLen, false, MAMs);
-	std::cerr << MAMs.size() << " seeds" << std::endl;
 	std::sort(MAMs.begin(), MAMs.end(), [](const mummer::mummer::match_t& left, const mummer::mummer::match_t& right) { return left.len > right.len; });
 	if (MAMs.size() > maxCount)
 	{
 		MAMs.erase(MAMs.begin() + maxCount, MAMs.end());
 	}
-	std::cerr << MAMs.size() << " seeds" << std::endl;
 	return matchesToSeeds(MAMs);
+}
+
+std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxCount) const
+{
+	for (size_t i = 0; i < sequence.size(); i++)
+	{
+		sequence[i] = lowercase(sequence[i]);
+	}
+	assert(matcher != nullptr);
+	std::vector<mummer::mummer::match_t> MEMs;
+	matcher->MEM(sequence, minLen, false, MEMs);
+	std::sort(MEMs.begin(), MEMs.end(), [](const mummer::mummer::match_t& left, const mummer::mummer::match_t& right) { return left.len > right.len; });
+	if (MEMs.size() > maxCount)
+	{
+		MEMs.erase(MEMs.begin() + maxCount, MEMs.end());
+	}
+	return matchesToSeeds(MEMs);
 }
 
 std::vector<SeedHit> MummerSeeder::matchesToSeeds(const std::vector<mummer::mummer::match_t>& matches) const

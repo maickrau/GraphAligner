@@ -41,8 +41,10 @@ int main(int argc, char** argv)
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
-		("seeds-mum", boost::program_options::value<int>(), "n longest maximal unique matches of fully contained in a node (int)")
-		("seeds-mum-cache-prefix", boost::program_options::value<std::string>(), "store the mum seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int)")
+		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("seeds-mum-count", boost::program_options::value<int>(), "n longest maximal unique matches fully contained in a node (int)")
+		("seeds-mem-count", boost::program_options::value<int>(), "n longest maximal exact matches fully contained in a node (int)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description optional("Optional parameters");
@@ -97,7 +99,9 @@ int main(int argc, char** argv)
 	params.lowMemory = false;
 	params.maxAlns = 0;
 	params.useSubgraph = false;
+	params.mxmLength = 20;
 	params.mumCount = 0;
+	params.memCount = 0;
 	params.seederCachePrefix = "";
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
@@ -107,8 +111,10 @@ int main(int argc, char** argv)
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
 
 	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
-	if (vm.count("seeds-mum")) params.mumCount = vm["seeds-mum"].as<int>();
-	if (vm.count("seeds-mum-cache-prefix")) params.seederCachePrefix = vm["seeds-mum-cache-prefix"].as<std::string>();
+	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<int>();
+	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<int>();
+	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<int>();
+	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
@@ -157,7 +163,12 @@ int main(int argc, char** argv)
 		std::cerr << "ramp bandwidth must be higher than default bandwidth" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0);
+	if (params.mxmLength < 2)
+	{
+		std::cerr << "mum/mem minimum length must be >= 2" << std::endl;
+		paramError = true;
+	}
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;

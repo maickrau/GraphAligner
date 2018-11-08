@@ -20,7 +20,9 @@ struct AlignerParams
 	bool sloppyOptimizations;
 	bool lowMemory;
 	bool useSubgraph;
+	size_t mxmLength;
 	size_t mumCount;
+	size_t memCount;
 	size_t maxAlns;
 	std::string seederCachePrefix;
 };

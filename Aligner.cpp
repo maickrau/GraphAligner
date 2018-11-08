@@ -14,7 +14,69 @@
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
-#include "STSeeder.h"
+#include "MummerSeeder.h"
+
+struct Seeder
+{
+	enum Mode
+	{
+		File, Mum, Mem, None
+	};
+	Mode mode;
+	size_t mumCount;
+	size_t memCount;
+	size_t mxmLength;
+	const MummerSeeder* mummerSeeder;
+	const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds;
+	Seeder(const AlignerParams& params, const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds, const MummerSeeder* mummerSeeder) :
+		mumCount(params.mumCount),
+		memCount(params.memCount),
+		mxmLength(params.mxmLength),
+		mummerSeeder(mummerSeeder),
+		fileSeeds(fileSeeds)
+	{
+		mode = Mode::None;
+		if (fileSeeds != nullptr)
+		{
+			assert(mummerSeeder == nullptr);
+			assert(mumCount == 0);
+			assert(memCount == 0);
+			mode = Mode::File;
+		}
+		if (mummerSeeder != nullptr)
+		{
+			assert(fileSeeds == nullptr);
+			assert(mumCount != 0 || memCount != 0);
+			if (mumCount != 0)
+			{
+				mode = Mode::Mum;
+				assert(memCount == 0);
+			}
+			if (memCount != 0)
+			{
+				mode = Mode::Mem;
+				assert(mumCount == 0);
+			}
+		}
+	}
+	std::vector<SeedHit> getSeeds(const std::string& seqName, const std::string& seq) const
+	{
+		switch(mode)
+		{
+			case Mode::File:
+				assert(fileSeeds != nullptr);
+				if (fileSeeds->count(seqName) == 0) return std::vector<SeedHit>{};
+				return fileSeeds->at(seqName);
+			case Mode::Mum:
+				assert(mummerSeeder != nullptr);
+				return mummerSeeder->getMumSeeds(seq, mumCount);
+			case Mode::Mem:
+				assert(mummerSeeder != nullptr);
+				return mummerSeeder->getMemSeeds(seq, memCount);
+		}
+		return std::vector<SeedHit>{};
+	}
+};
 
 bool is_file_exist(std::string fileName)
 {
@@ -144,7 +206,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	allWriteDone = true;
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const std::unordered_map<std::string, std::vector<SeedHit>>* graphAlignerSeedHits, const STSeeder* seeder, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const Seeder& seeder, AlignerParams params, size_t& numAlignments, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), params.lowMemory, params.useSubgraph };
@@ -179,23 +241,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 
 		try
 		{
-			if (seeder != nullptr || graphAlignerSeedHits != nullptr)
+			if (seeder.mode != Seeder::Mode::None)
 			{
-				std::vector<SeedHit> seeds;
-				if (seeder != nullptr)
-				{
-					auto seedTimeStart = std::chrono::system_clock::now();
-					seeds = seeder->getMumSeeds(fastq->sequence, params.mumCount);
-					auto seedTimeEnd = std::chrono::system_clock::now();
-					auto seedTimems = std::chrono::duration_cast<std::chrono::milliseconds>(seedTimeEnd - seedTimeStart).count();
-					coutoutput << "Read " << fastq->seq_id << " seeding took " << seedTimems << "ms" << BufferedWriter::Flush;
-				}
-				else
-				{
-					assert(graphAlignerSeedHits != nullptr);
-					auto found = graphAlignerSeedHits->find(fastq->seq_id);
-					if (found != graphAlignerSeedHits->end()) seeds = found->second;
-				}
+				std::vector<SeedHit> seeds = seeder.getSeeds(fastq->seq_id, fastq->sequence);
 				if (seeds.size() == 0)
 				{
 					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
@@ -291,7 +339,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 	coutoutput << "Thread " << threadnum << " finished with " << numAlignments << " alignments" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix, size_t mxmLength)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -306,7 +354,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		{
 			auto graph = CommonUtils::LoadVGGraph(graphFile);
 			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new STSeeder { graph, seederCachePrefix };
+			*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
 			return DirectedGraph::BuildFromVG(graph);
 		}
 		else
@@ -320,7 +368,7 @@ AlignmentGraph getGraph(std::string graphFile, STSeeder** seeder, bool loadSeede
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile);
 			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new STSeeder { graph, seederCachePrefix };
+			*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
 			return DirectedGraph::BuildFromGFA(graph);
 		}
 		else
@@ -387,9 +435,27 @@ void alignReads(AlignerParams params)
 		readPointers.push_back(&(fastqs[i]));
 	}
 
-	STSeeder* seeder = nullptr;
+	MummerSeeder* mummerseeder = nullptr;
 
-	auto alignmentGraph = getGraph(params.graphFile, &seeder, params.mumCount != 0, params.seederCachePrefix);
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix, params.mxmLength);
+
+	Seeder seeder { params, seedHitsToThreads, mummerseeder };
+
+	switch(seeder.mode)
+	{
+		case Seeder::Mode::File:
+			std::cout << "Seeds from file " << params.seedFile << std::endl;
+			break;
+		case Seeder::Mode::Mum:
+			std::cout << "Maximum unique matches as seeds, length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
+			break;
+		case Seeder::Mode::Mem:
+			std::cout << "Maximum exact matches as seeds, length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
+			break;
+		case Seeder::Mode::None:
+			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
+			break;
+	}
 
 	std::vector<std::thread> threads;
 
@@ -414,7 +480,7 @@ void alignReads(AlignerParams params)
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, quietMode=params.quietMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, quietMode); } };
 	for (int i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seedHitsToThreads, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns, seeder]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seedHitsToThreads, seeder, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
+		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seeder, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seeder, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
 	}
 
 	for (int i = 0; i < params.numThreads; i++)
@@ -427,7 +493,7 @@ void alignReads(AlignerParams params)
 
 	writerThread.join();
 
-	if (seeder != nullptr) delete seeder;
+	if (mummerseeder != nullptr) delete mummerseeder;
 
 	std::string* dealloc;
 	while (deallocAlns.try_dequeue(dealloc))
