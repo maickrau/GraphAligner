@@ -29,7 +29,7 @@ The aligner's file formats are interoperable with the [vg toolkit](https://githu
 
 The aligner has two built-in methods for finding seed hits: maximal unique matches (MUMs) (default) and maximal exact matches (MEMs). These modes use MUMmer4 to find matches between the read and nodes. Only matches entirely within a node are found. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to disk for reuse instead of rebuilding it each time.
 
-Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, and `query_position` the position in the read. Match length (`path.mapping[0].edit[0]`) is only used to order the seeds, with longer matches tried before shorter matches.
+Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, `name` the name of the read and `query_position` the position in the read. Match length (`path.mapping[0].edit[0]`) is only used to order the seeds, with longer matches tried before shorter matches.
 
 Alternatively you can use the parameter `--seeds-first-full-rows` to use the dynamic programming alignment algorithm on the entire first row instead of using seeded alignment. This is very slow except on tiny graphs, and not recommended.
 
@@ -37,7 +37,7 @@ Alternatively you can use the parameter `--seeds-first-full-rows` to use the dyn
 
 The aligner uses a bitvector banded DP alignment algorithm to extend the seed hits. The DP matrix is calculated inside a certain area (the band), which depends on the extension parameters. Note that "bandwidth" in graph alignment does NOT directly correspond to bandwidth in linear alignment. The bandwidth parameter describes the maximum allowed score difference between the minimum score in a row and a cell, with cells whose score is higher than that falling outside the band. Generally the bandwidth parameters should be between 1-35.
 
-The algorithm starts using the initial bandwidth. Should it detect that the alignment is incorrect, it will rewind and rerun with the ramp bandwidth parameter, aligning high-error areas without slowing down alignment in low-error areas. The tangle effort parameter determines how much time the aligner spends inside complex cyclic areas. If the size of the band grows beyond the tangle effort parameter, the aligner will use the currently best alignment and move on. This might miss the optimal alignment.
+The algorithm starts using the initial bandwidth. Should it detect that the alignment is incorrect, it will rewind and rerun with the ramp bandwidth parameter, aligning high-error parts of the read without slowing down alignment in low-error parts. The tangle effort parameter determines how much time the aligner spends inside complex cyclic subgraphs. If the size of the band grows beyond the tangle effort parameter, the aligner will use the current best alignment for the aligned prefix and move forward along the read. This might miss the optimal alignment.
 
 ### Running the snakemake pipeline
 
@@ -83,4 +83,4 @@ The parameters below are only relevant if manually running GraphAligner. If you 
 - `--seeds-mem-count` MEM seeds. Use the longest n maximal exact matches for alignment. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n
 - `--seeds-mxm-cache-prefix` MUM/MEM file cache prefix. Store the MUM/MEM index into disk for reuse. Recommended unless you are sure you won't align to the same graph multiple times
-- `--seeds-first-full-rows` Don't use seeds. Instead uses the DP alignment on the first row fully. The runtime depends on the size of the graph so this is very slow. Not recommended
+- `--seeds-first-full-rows` Don't use seeds. Instead use the DP alignment on the first row. The runtime depends on the size of the graph so this is very slow. Not recommended
