@@ -1,6 +1,6 @@
 # GraphAligner
 
-Seed-and-extend program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running manually"](#running-manually). For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
+Seed-and-extend program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running"](#running). For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
 
 ### Installation
 
@@ -15,7 +15,7 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
   - Install MUMmer4 binaries https://github.com/mummer4/mummer
   - Install snakemake binaries https://snakemake.readthedocs.io/en/stable/
 
-### Running manually
+### Running
 
 Quickstart: `bin/Aligner -g graph_file -f read_file -a output_file.gam`
 
