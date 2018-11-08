@@ -56,13 +56,14 @@ The file `_all.gam` contains all found alignments, usually including multiple in
 - `-b` alignment bandwidth. Unlike linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
 - `-B` extra bandwidth. If a read cannot be aligned with the aligner bandwidth, switch to extra bandwidth at the problematic location. Values should be between 1-35.
 - `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
-- `-l` low memory mode. Uses a lot less memory but runs a bit slower. Recommended.
 - `-u` unsafe heuristics. Speeds up alignment in some cases but might lead to inoptimal results.
+- `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others.
+- `--high-memory` high memory mode. Runs a bit faster but uses a lot more memory
 
 Suggested example parameters:
 - Variation graph: `-b 35`
 - RNA splice graph: `-b 35`
-- Human de Bruijn graph: `-b 5 -B 10 -C 1000 -l -u`
+- Human de Bruijn graph: `-b 5 -B 10 -C 1000 -u`
 - Bacterial de Bruijn graph: `-b 10 -B 20`
 
 The parameters below are only relevant if manually running GraphAligner. If you are using the snakefile, you shouldn't do anything with these
@@ -72,7 +73,6 @@ The parameters below are only relevant if manually running GraphAligner. If you 
 - `-s` input seeds. Format .gam
 - `-t` number of threads
 - `-a` output file name. Format .gam
-- `-A` maximum number of output alignments. Outputs only the n best non-overlapping alignments. -1 for all non-overlapping alignments. Recommended -1
 - `--seeds-mum-count` MUM seeds. Use the longest n maximal unique matches for alignment. -1 for all MUMs
 - `--seeds-mem-count` MEM seeds. Use the longest n maximal exact matches for alignment. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n

@@ -52,10 +52,10 @@ int main(int argc, char** argv)
 		("help,h", "help message")
 		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
 		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
-		("max-alignments,A", boost::program_options::value<int>(), "return up to arg non-overlapping alignments instead of all alignments (int)")
+		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("quiet,q", "don't print progress messages")
 		("sloppy-optimizations,u", "use speed-up heuristics which might result in missing alignments")
-		("low-memory,l", "use less memory with a higher runtime")
+		("high-memory", "use slightly less CPU but a lot more memory")
 	;
 	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
 	hidden.add_options()
@@ -96,13 +96,13 @@ int main(int argc, char** argv)
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.quietMode = false;
 	params.sloppyOptimizations = false;
-	params.lowMemory = false;
-	params.maxAlns = 0;
+	params.highMemory = false;
 	params.useSubgraph = false;
 	params.mxmLength = 20;
 	params.mumCount = 0;
 	params.memCount = 0;
 	params.seederCachePrefix = "";
+	params.outputAllAlns = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
@@ -119,10 +119,10 @@ int main(int argc, char** argv)
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();
-	if (vm.count("max-alignments")) params.maxAlns = vm["max-alignments"].as<int>();
+	if (vm.count("all-alignments")) params.outputAllAlns = true;
 	if (vm.count("quiet")) params.quietMode = true;
 	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
-	if (vm.count("low-memory")) params.lowMemory = true;
+	if (vm.count("high-memory")) params.highMemory = true;
 
 	if (vm.count("subgraph-extraction-heuristic")) params.useSubgraph = true;
 
