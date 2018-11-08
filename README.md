@@ -19,17 +19,17 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 
 Quickstart: `bin/Aligner -g graph_file -f read_file -a output_file.gam`
 
-See ["Parameters"](#parameters), the option `bin/Aligner --help` and the subsections below for more information and options
+See [Parameters](#parameters), the option `bin/Aligner --help` and the subsections below for more information and options
 
 #### File formats
 
-The aligner's file formats are interoperable with the ["vg toolkit"](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [".gfa format"](https://github.com/GFA-spec/GFA-spec) or [".vg format"](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [".gam format"](https://github.com/vgteam/vg/blob/master/src/vg.proto). Seeds can be inputed in [".gam format"](https://github.com/vgteam/vg/blob/master/src/vg.proto).
+The aligner's file formats are interoperable with the [vg toolkit](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
 
 #### Seed hits
 
 The aligner has two built-in methods for finding seed hits: maximal unique matches (MUMs) and maximal exact matches (MEMs). The aligner uses MUMmerv4 to find matches between the read and nodes. Only matches entirely within a node are found. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to file for reuse instead of rebuilding it each time.
 
-Alternatively you can use any method to find seed hits and then import the seeds in [".gam format"](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, and `query_position` the position in the read. Match length (`path.mapping[0].edit[0]`) is only used to order the seeds, with longer matches tried before shorter matches.
+Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, and `query_position` the position in the read. Match length (`path.mapping[0].edit[0]`) is only used to order the seeds, with longer matches tried before shorter matches.
 
 Alternatively you can use the parameter `--seeds-first-full-rows` to use the dynamic programming alignment algorithm on the entire first row instead of using seeded alignment. This is very slow except on tiny graphs, and not recommended.
 
