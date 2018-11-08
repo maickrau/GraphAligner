@@ -9,7 +9,7 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
   - Install concurrentqueue development libraries https://github.com/cameron314/concurrentqueue
   - Install protobuf v3.0.0 development libraries https://github.com/google/protobuf/releases/tag/v3.0.0
   - Install sparsehash development libraries https://github.com/sparsehash/sparsehash
-  - Install libumdmummer development libraries https://github.com/mummer4/mummer
+  - Install MUMmerv4's libumdmummer development libraries https://github.com/mummer4/mummer
   - `make all`
 - Optional: Install programs used by the snakemake pipeline
   - Install MUMmerv4 binaries https://github.com/mummer4/mummer
