@@ -1,6 +1,6 @@
 # GraphAligner
 
-Program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running manually"](#running-manually) For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
+Seed-and-extend program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running manually"](#running-manually) For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
 
 ### Installation
 

@@ -447,15 +447,20 @@ void alignReads(AlignerParams params)
 			std::cout << "Seeds from file " << params.seedFile << std::endl;
 			break;
 		case Seeder::Mode::Mum:
-			std::cout << "Maximum unique matches as seeds, length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
+			std::cout << "MUM seeds, min length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
 			break;
 		case Seeder::Mode::Mem:
-			std::cout << "Maximum exact matches as seeds, length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
+			std::cout << "MEM seeds, min length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
 			break;
 		case Seeder::Mode::None:
 			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
 			break;
 	}
+
+	std::cout << "Initial bandwidth " << params.initialBandwidth;
+	if (params.rampBandwidth > 0) std::cout << ", ramp bandwidth " << params.rampBandwidth;
+	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
+	std::cout << std::endl;
 
 	std::vector<std::thread> threads;
 

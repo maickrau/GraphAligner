@@ -34,36 +34,39 @@ int main(int argc, char** argv)
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::string>(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("bandwidth,b", boost::program_options::value<int>(), "default bandwidth (int)")
-		("threads,t", boost::program_options::value<int>(), "number of threads (int)")
 		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
-		;
+	;
+	boost::program_options::options_description general("General parameters");
+	general.add_options()
+		("help,h", "help message")
+		("threads,t", boost::program_options::value<int>(), "number of threads (int) (default 1)")
+		("quiet,q", "don't print progress messages")
+		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
+		("sloppy-optimizations,u", "use speed-up heuristics which might result in missing alignments")
+	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
-		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
-		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int)")
-		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
-		("seeds-mum-count", boost::program_options::value<int>(), "n longest maximal unique matches fully contained in a node (int)")
+		("seeds-mum-count", boost::program_options::value<int>(), "n longest maximal unique matches fully contained in a node (int) (default all)")
 		("seeds-mem-count", boost::program_options::value<int>(), "n longest maximal exact matches fully contained in a node (int)")
+		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int) (default 20)")
+		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
-	boost::program_options::options_description optional("Optional parameters");
-	optional.add_options()
-		("help,h", "help message")
+	boost::program_options::options_description alignment("Extension");
+	alignment.add_options()
+		("bandwidth,b", boost::program_options::value<int>(), "alignment bandwidth (int) (default 5)")
 		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
 		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
-		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("quiet,q", "don't print progress messages")
-		("sloppy-optimizations,u", "use speed-up heuristics which might result in missing alignments")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
 	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
 	hidden.add_options()
-		("subgraph-extraction-heuristic,S", "")
+		("subgraph-extraction-heuristic", "")
 	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(seeding).add(optional).add(hidden);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden);
 
 	boost::program_options::variables_map vm;
 	try
@@ -80,7 +83,7 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << seeding << std::endl << optional << std::endl;
+		std::cerr << mandatory << std::endl << general << std::endl << seeding << std::endl << alignment << std::endl << std::endl;
 		std::exit(0);
 	}
 
@@ -89,7 +92,7 @@ int main(int argc, char** argv)
 	params.fastqFile = "";
 	params.seedFile = "";
 	params.outputAlignmentFile = "";
-	params.numThreads = 0;
+	params.numThreads = 1;
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
 	params.dynamicRowStart = 0;
@@ -153,6 +156,11 @@ int main(int argc, char** argv)
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
 	}
+	if (params.initialBandwidth == 0 && params.rampBandwidth == 0)
+	{
+		//use 5 as the default bandwidth
+		params.initialBandwidth = 5;
+	}
 	if (params.initialBandwidth < 1)
 	{
 		std::cerr << "default bandwidth must be >= 1" << std::endl;
@@ -171,8 +179,8 @@ int main(int argc, char** argv)
 	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
-		std::cerr << "pick a seeding method" << std::endl;
-		paramError = true;
+		//use MUMs as the default seeding method
+		params.mumCount = -1;
 	}
 	if (pickedSeedingMethods > 1)
 	{
