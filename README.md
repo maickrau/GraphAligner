@@ -17,9 +17,9 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 
 ### Running manually
 
-Quickstart: `bin/Aligner -g graph_file -f read_file --seeds-mum-count -1 --seeds-mxm-length 20 -b 5 -t 1 -a output_file.gam -A -1`
+Quickstart: `bin/Aligner -g graph_file -f read_file -a output_file.gam`
 
-See ["Parameters"](#parameters), the option `bin/Aligner --help` and the subsections below for more information
+See ["Parameters"](#parameters), the option `bin/Aligner --help` and the subsections below for more information and options
 
 #### File formats
 
