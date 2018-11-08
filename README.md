@@ -1,6 +1,6 @@
 # GraphAligner
 
-Seed-and-extend program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running manually"](#running-manually) For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
+Seed-and-extend program for aligning long error-prone reads to genome graphs. For simple usage, see ["Running manually"](#running-manually). For using the snakemake file, see ["Running the snakemake pipeline"](#running-the-snakemake-pipeline). For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
 
 ### Installation
 
@@ -9,10 +9,10 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
   - Install concurrentqueue development libraries https://github.com/cameron314/concurrentqueue
   - Install protobuf v3.0.0 development libraries https://github.com/google/protobuf/releases/tag/v3.0.0
   - Install sparsehash development libraries https://github.com/sparsehash/sparsehash
-  - Install MUMmerv4's libumdmummer development libraries https://github.com/mummer4/mummer
+  - Install MUMmer4's libumdmummer development libraries https://github.com/mummer4/mummer
   - `make all`
 - Optional: Install programs used by the snakemake pipeline
-  - Install MUMmerv4 binaries https://github.com/mummer4/mummer
+  - Install MUMmer4 binaries https://github.com/mummer4/mummer
   - Install snakemake binaries https://snakemake.readthedocs.io/en/stable/
 
 ### Running manually
@@ -27,11 +27,17 @@ The aligner's file formats are interoperable with the [vg toolkit](https://githu
 
 #### Seed hits
 
-The aligner has two built-in methods for finding seed hits: maximal unique matches (MUMs) and maximal exact matches (MEMs). The aligner uses MUMmerv4 to find matches between the read and nodes. Only matches entirely within a node are found. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to file for reuse instead of rebuilding it each time.
+The aligner has two built-in methods for finding seed hits: maximal unique matches (MUMs) (default) and maximal exact matches (MEMs). These modes use MUMmer4 to find matches between the read and nodes. Only matches entirely within a node are found. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to disk for reuse instead of rebuilding it each time.
 
 Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, and `query_position` the position in the read. Match length (`path.mapping[0].edit[0]`) is only used to order the seeds, with longer matches tried before shorter matches.
 
 Alternatively you can use the parameter `--seeds-first-full-rows` to use the dynamic programming alignment algorithm on the entire first row instead of using seeded alignment. This is very slow except on tiny graphs, and not recommended.
+
+#### Extension
+
+The aligner uses a bitvector banded DP alignment algorithm to extend the seed hits. The DP matrix is calculated inside a certain area (the band), which depends on the extension parameters. Note that "bandwidth" in graph alignment does NOT directly correspond to bandwidth in linear alignment. The bandwidth parameter describes the maximum allowed score difference between the minimum score in a row and a cell, with cells whose score is higher than that falling outside the band. Generally the bandwidth parameters should be between 1-35.
+
+The algorithm starts using the initial bandwidth. Should it detect that the alignment is incorrect, it will rewind and rerun with the ramp bandwidth parameter, aligning high-error areas without slowing down alignment in low-error areas. The tangle effort parameter determines how much time the aligner spends inside complex cyclic areas. If the size of the band grows beyond the tangle effort parameter, the aligner will use the currently best alignment and move on. This might miss the optimal alignment.
 
 ### Running the snakemake pipeline
 
@@ -39,7 +45,7 @@ Alternatively you can use the parameter `--seeds-first-full-rows` to use the dyn
 - Acquire a graph and save it in run_folder/input/
 - Acquire reads and save them in run_folder/input/
 - Edit run_folder/config.yaml
-  - Point the paths at the repository folder and mummerv4
+  - Point the paths at the repository folder and mummer4
   - Add the input file names
   - Optionally edit the aligner parameters
 - Run `snakemake --cores [number of threads] all` in run_folder
