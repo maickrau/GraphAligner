@@ -192,7 +192,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		{
 			if (seeder.mode != Seeder::Mode::None)
 			{
+				auto timeStart = std::chrono::system_clock::now();
 				std::vector<SeedHit> seeds = seeder.getSeeds(fastq->seq_id, fastq->sequence);
+				auto timeEnd = std::chrono::system_clock::now();
+				size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+				coutoutput << "Read " << fastq->seq_id << " seeding took " << time << "ms" << BufferedWriter::Flush;
 				if (seeds.size() == 0)
 				{
 					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
