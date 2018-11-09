@@ -10,10 +10,11 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
   - Install protobuf v3.0.0 development libraries https://github.com/google/protobuf/releases/tag/v3.0.0
   - Install sparsehash development libraries https://github.com/sparsehash/sparsehash
   - Install MUMmer4's libumdmummer development libraries https://github.com/mummer4/mummer
-  - `make all`
+  - `make bin/Aligner`
 - Optional: Install programs used by the snakemake pipeline
   - Install MUMmer4 binaries https://github.com/mummer4/mummer
   - Install snakemake binaries https://snakemake.readthedocs.io/en/stable/
+  - `make all`
 
 ### Running
 
