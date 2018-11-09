@@ -62,14 +62,14 @@ The file `_all.gam` contains all found alignments, usually including multiple in
 - `-b` alignment bandwidth. Unlike linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
 - `-B` extra bandwidth. If a read cannot be aligned with the aligner bandwidth, switch to extra bandwidth at the problematic location. Values should be between 1-35.
 - `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
-- `-u` unsafe heuristics. Speeds up alignment in some cases but might lead to inoptimal results.
+- `--sloppy-optimizations` unsafe heuristics. Speeds up alignment in some cases but might lead to inoptimal results.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others.
 - `--high-memory` high memory mode. Runs a bit faster but uses a lot more memory
 
 Suggested example parameters:
 - Variation graph: `-b 35`
 - RNA splice graph: `-b 35`
-- Human de Bruijn graph: `-b 5 -B 10 -C 1000 -u`
+- Human de Bruijn graph: `-b 5 -B 10 -C 1000 --sloppy-optimizations`
 - Bacterial de Bruijn graph: `-b 10 -B 20`
 
 The parameters below are only relevant if manually running GraphAligner. If you are using the snakefile, you shouldn't do anything with these
