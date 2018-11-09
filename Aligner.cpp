@@ -73,6 +73,8 @@ struct Seeder
 			case Mode::Mem:
 				assert(mummerSeeder != nullptr);
 				return mummerSeeder->getMemSeeds(seq, memCount);
+			case Mode::None:
+				assert(false);
 		}
 		return std::vector<SeedHit>{};
 	}
@@ -82,59 +84,6 @@ bool is_file_exist(std::string fileName)
 {
 	std::ifstream infile(fileName);
 	return infile.good();
-}
-
-// augment base VG graph with alignments by embedding alignment paths
-vg::Graph augmentGraphwithAlignment(const vg::Graph& graph, const std::vector<vg::Alignment>& alignments)
-{
-	vg::Graph augmentedGraph;
-	std::vector<const vg::Node*> allNodes;
-	std::vector<const vg::Edge*> allEdges;
-	
-	for (int j = 0; j < graph.node_size(); j++)
-	{
-		allNodes.push_back(&graph.node(j));
-	}
-// 	for (int j = 0; j < graph.edge_size(); j++)
-// 	{
-// 		allEdges.push_back(&graph.edge(j));
-// 	}
-	for (size_t i = 0; i < allNodes.size(); i++)
-	{
-		auto node = augmentedGraph.add_node();
-		node->set_id(allNodes[i]->id());
-		node->set_sequence(allNodes[i]->sequence());
-		node->set_name(allNodes[i]->name());
-	}
-// 	for (size_t i = 0; i < allEdges.size(); i++)
-// 	{
-// 		auto edge = augmentedGraph.add_edge();
-// 		edge->set_from(allEdges[i]->from());
-// 		edge->set_to(allEdges[i]->to());
-// 		edge->set_from_start(allEdges[i]->from_start());
-// 		edge->set_to_end(allEdges[i]->to_end());
-// 		edge->set_overlap(allEdges[i]->overlap());
-// 	}
-	
-	for(int k=0; k < alignments.size(); k++)
-	{
-		for (int i = 0; i < alignments[k].path().mapping_size()-1; i++)
-		{
-			auto edge = augmentedGraph.add_edge();
-			edge->set_from(alignments[k].path().mapping(i).position().node_id());
-			edge->set_to(alignments[k].path().mapping(i+1).position().node_id());
-			edge->set_overlap(0);
-			edge->set_from_start(0);
-			edge->set_to_end(0);
-			if (alignments[k].path().mapping(i).position().is_reverse()) {  
-				edge->set_from_start(1);
-			}
-			if (alignments[k].path().mapping(i+1).position().is_reverse()){
-				edge->set_to_end(1);
-			}
-		}
-	}
-	return augmentedGraph;
 }
 
 void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
@@ -476,19 +425,19 @@ void alignReads(AlignerParams params)
 	std::atomic<bool> allWriteDone { false };
 	std::vector<moodycamel::ProducerToken> tokens;
 	tokens.reserve(params.numThreads);
-	for (int i = 0; i < params.numThreads; i++)
+	for (size_t i = 0; i < params.numThreads; i++)
 	{
 		tokens.emplace_back(outputAlns);
 	}
 
 	std::cout << "Align" << std::endl;
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
-	for (int i = 0; i < params.numThreads; i++)
+	for (size_t i = 0; i < params.numThreads; i++)
 	{
 		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seeder, params, &numAlnsPerThread, &outputAlns, &tokens, &deallocAlns]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seeder, params, numAlnsPerThread[i], outputAlns, tokens[i], deallocAlns); });
 	}
 
-	for (int i = 0; i < params.numThreads; i++)
+	for (size_t i = 0; i < params.numThreads; i++)
 	{
 		threads[i].join();
 	}

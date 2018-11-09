@@ -109,18 +109,18 @@ int main(int argc, char** argv)
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
 	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
-	if (vm.count("threads")) params.numThreads = vm["threads"].as<int>();
+	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
 
 	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
-	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<int>();
-	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<int>();
-	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<int>();
+	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<size_t>();
+	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
+	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
-	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<int>();
+	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("all-alignments")) params.outputAllAlns = true;
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
@@ -179,7 +179,7 @@ int main(int argc, char** argv)
 	if (pickedSeedingMethods == 0)
 	{
 		//use MUMs as the default seeding method
-		params.mumCount = -1;
+		params.mumCount = std::numeric_limits<size_t>::max();
 	}
 	if (pickedSeedingMethods > 1)
 	{

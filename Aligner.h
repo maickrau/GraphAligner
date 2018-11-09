@@ -9,9 +9,9 @@ struct AlignerParams
 {
 	std::string graphFile;
 	std::string fastqFile;
-	int numThreads;
-	int initialBandwidth;
-	int rampBandwidth;
+	size_t numThreads;
+	size_t initialBandwidth;
+	size_t rampBandwidth;
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::string seedFile;

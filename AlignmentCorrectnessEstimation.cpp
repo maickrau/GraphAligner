@@ -113,10 +113,10 @@ AlignmentCorrectnessEstimationState AlignmentCorrectnessEstimationState::NextSta
 	double newCorrectProbability = std::max(correctLogOdds + correctToCorrectTransitionLogProbability, falseLogOdds + falseToCorrectTransitionLogProbability);
 	double newFalseProbability = std::max(correctLogOdds + correctToFalseTransitionLogProbability, falseLogOdds + falseToFalseTransitionLogProbability);
 	assert(precomputedCorrectLogOdds.size() == precomputedWrongLogOdds.size());
-	if (mismatches < precomputedCorrectLogOdds.size())
+	if ((size_t)mismatches < precomputedCorrectLogOdds.size())
 	{
-		newCorrectProbability += precomputedCorrectLogOdds[mismatches];
-		newFalseProbability += precomputedWrongLogOdds[mismatches];
+		newCorrectProbability += precomputedCorrectLogOdds[(size_t)mismatches];
+		newFalseProbability += precomputedWrongLogOdds[(size_t)mismatches];
 	}
 	else
 	{

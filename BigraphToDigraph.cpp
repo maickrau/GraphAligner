@@ -25,7 +25,9 @@ toId(to)
 
 std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertVGNodeToNodes(const vg::Node& node)
 {
-	return std::make_pair(DirectedGraph::Node { node.id() * 2, node.id(), true, node.sequence() }, DirectedGraph::Node { node.id() * 2 + 1, node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
+	assert(node.id() < std::numeric_limits<int>::max() / 2);
+	assert(node.id()+1 < std::numeric_limits<int>::max() / 2);
+	return std::make_pair(DirectedGraph::Node { (int)node.id() * 2, (int)node.id(), true, node.sequence() }, DirectedGraph::Node { (int)node.id() * 2 + 1, (int)node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdgeToEdges(const vg::Edge& edge)

@@ -46,7 +46,8 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	unitigReidInNeighbors.emplace_back();
 	unitigReidOutNeighbors.emplace_back();
 	unitigReidLength.push_back(sequence.size());
-	for (size_t i = 0; i < DBGOverlap; i += SPLIT_NODE_SIZE)
+	assert(DBGOverlap >= 0);
+	for (size_t i = 0; i < (size_t)DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
 		size_t size = SPLIT_NODE_SIZE;
 		if (DBGOverlap - i < size) size = DBGOverlap - i;
