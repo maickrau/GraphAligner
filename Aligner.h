@@ -17,7 +17,7 @@ struct AlignerParams
 	std::string seedFile;
 	std::string outputAlignmentFile;
 	bool verboseMode;
-	bool sloppyOptimizations;
+	bool tryAllSeeds;
 	bool highMemory;
 	bool useSubgraph;
 	size_t mxmLength;

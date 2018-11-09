@@ -203,11 +203,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 				}
 				if (params.useSubgraph)
 				{
-					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
+					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, params.sloppyOptimizations, seeds, reusableState, !params.highMemory);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
 				}
 			}
 			else

@@ -41,7 +41,7 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<int>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("sloppy-optimizations", "use speed-up heuristics which might result in missing alignments")
+		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -100,7 +100,7 @@ int main(int argc, char** argv)
 	params.dynamicRowStart = 0;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
-	params.sloppyOptimizations = false;
+	params.tryAllSeeds = false;
 	params.highMemory = false;
 	params.useSubgraph = false;
 	params.mxmLength = 20;
@@ -126,7 +126,7 @@ int main(int argc, char** argv)
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("all-alignments")) params.outputAllAlns = true;
 	if (vm.count("verbose")) params.verboseMode = true;
-	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
+	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 
 	if (vm.count("subgraph-extraction-heuristic")) params.useSubgraph = true;
