@@ -1353,9 +1353,9 @@ private:
 		size_t rampUntil = 0;
 #ifndef NDEBUG
 		volatile size_t debugLastProcessedSlice;
-		// https://stackoverflow.com/questions/3599160/how-to-suppress-unused-parameter-warnings-in-c
-		// we want to keep this variable for debugging purposes but don't want unused variable warnings
-		(void)(debugLastProcessedSlice);
+		// we want to keep this variable for debugging purposes
+		// useless self-assignment to prevent unused variable compilation warning
+		debugLastProcessedSlice = debugLastProcessedSlice;
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
