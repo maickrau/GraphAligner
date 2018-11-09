@@ -38,25 +38,25 @@ int main(int argc, char** argv)
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
 		("help,h", "help message")
-		("threads,t", boost::program_options::value<int>(), "number of threads (int) (default 1)")
+		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
-		("seeds-mum-count", boost::program_options::value<int>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
-		("seeds-mem-count", boost::program_options::value<int>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
-		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int)")
+		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
+		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
+		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
-		("bandwidth,b", boost::program_options::value<int>(), "alignment bandwidth (int)")
-		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
-		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
+		("bandwidth,b", boost::program_options::value<size_t>(), "alignment bandwidth (int)")
+		("ramp-bandwidth,B", boost::program_options::value<size_t>(), "ramp bandwidth (int)")
+		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
 	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
