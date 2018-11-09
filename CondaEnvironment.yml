@@ -7,6 +7,7 @@ channels:
 dependencies:
   - filechunkio=1.6=py36_0
   - ftputil=3.2=py36_0
+  - libdivsufsort=2.0.2=h470a237_2
   - mummer4=4.0.0beta2=pl526hfc679d8_2
   - pysftp=0.2.9=py36_0
   - snakemake=3.13.3=py36_0
