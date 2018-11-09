@@ -1,6 +1,6 @@
 CC=gcc
 GPP=g++
-CPPFLAGS=-Wall -std=c++14 -O3 -g `pkg-config --cflags mummer` -fopenmp
+CPPFLAGS=-Wall -Wextra -std=c++14 -O3 -g `pkg-config --cflags mummer` -fopenmp -Wno-unused-parameter
 
 ODIR=obj
 BINDIR=bin

@@ -135,17 +135,15 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
-	auto from = nodeLookup[node_id_from].back();
-	auto to = unitigStartNode[node_id_to];
-	assert(to >= 0);
-	assert(from >= 0);
+	size_t from = nodeLookup[node_id_from].back();
+	size_t to = unitigStartNode[node_id_to];
 	assert(to < inNeighbors.size());
 	assert(from < nodeLength.size());
 
 	assert(unitigReidLookup.count(node_id_from) == 1);
 	assert(unitigReidLookup.count(node_id_to) == 1);
-	auto reidFrom = unitigReidLookup[node_id_from];
-	auto reidTo = unitigReidLookup[node_id_to];
+	size_t reidFrom = unitigReidLookup[node_id_from];
+	size_t reidTo = unitigReidLookup[node_id_to];
 	assert(reidFrom < unitigReidOutNeighbors.size());
 	assert(reidTo < unitigReidInNeighbors.size());
 	unitigReidOutNeighbors[reidFrom].push_back(reidTo);

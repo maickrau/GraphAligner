@@ -187,7 +187,7 @@ namespace CommonUtils
 
 BufferedWriter::BufferedWriter() : stream(nullptr) {};
 BufferedWriter::BufferedWriter(std::ostream& stream) : stream(&stream) {};
-BufferedWriter& BufferedWriter::operator<<(FlushClass f)
+BufferedWriter& BufferedWriter::operator<<(FlushClass)
 {
 	if (stream == nullptr) return *this;
 	flush();

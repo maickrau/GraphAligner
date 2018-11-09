@@ -22,7 +22,7 @@ namespace CommonUtils
 	template <typename T, typename F>
 	std::vector<T> SelectAlignments(std::vector<T> alignments, size_t maxnum, F alnGetter)
 	{
-		std::function<const vg::Alignment* const(const T&)> f = [alnGetter](const T& aln) { return (const vg::Alignment* const)alnGetter(aln); };
+		std::function<const vg::Alignment*(const T&)> f = [alnGetter](const T& aln) { return (const vg::Alignment*)alnGetter(aln); };
 		std::sort(alignments.begin(), alignments.end(), [f](const T& left, const T& right) { return inner::alignmentScoreCompare(f(left), f(right)); });
 		std::stable_sort(alignments.begin(), alignments.end(), [f](const T& left, const T& right) { return inner::alignmentLengthCompare(f(left), f(right)); });
 		std::vector<T> result;

@@ -141,8 +141,7 @@ void MummerSeeder::loadFrom(const std::string& prefix)
 		ia >> nodeIDs;
 		ia >> nodeReverse;
 	}
-	auto kmer = minLen;
-	if (kmer < 0) kmer = 0;
+	size_t kmer = minLen;
 	if (kmer > 10) kmer = 10;
 	// same params that create_auto passes
 	matcher = std::make_unique<mummer::mummer::sparseSA>(seq, false, 1, true, false, kmer>0, 1, kmer, true);
