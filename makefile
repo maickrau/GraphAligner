@@ -5,16 +5,16 @@ CPPFLAGS=-Wall -Wextra -std=c++14 -O3 -g -Iconcurrentqueue -Izstr/src `pkg-confi
 ODIR=obj
 BINDIR=bin
 
-LIBS=`pkg-config --libs mummer` -lm -lz -lboost_serialization -lboost_program_options -lsdsl -ldivsufsort -ldivsufsort64
+LIBS=-lm -lz -lboost_serialization -lboost_program_options -lsdsl -ldivsufsort -ldivsufsort64 `pkg-config --libs mummer`
 JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
 PROTOBUFFLAGS = `pkg-config --libs protobuf`
 
 DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h MummerSeeder.h
 
-_OBJ = Aligner.o AlignerMain.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o GfaGraph.o AlignmentCorrectnessEstimation.o MummerSeeder.o
+_OBJ = Aligner.o AlignerMain.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o GfaGraph.o AlignmentCorrectnessEstimation.o MummerSeeder.o MummerExtra.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
-LINKFLAGS = -Wl,--verbose $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS) $(PROTOBUFFLAGS)
+LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS) $(PROTOBUFFLAGS)
 
 GITCOMMIT := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
