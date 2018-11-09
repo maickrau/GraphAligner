@@ -45,18 +45,18 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
-		("seeds-mum-count", boost::program_options::value<int>(), "n longest maximal unique matches fully contained in a node (int) (default all)")
-		("seeds-mem-count", boost::program_options::value<int>(), "n longest maximal exact matches fully contained in a node (int)")
-		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int) (default 20)")
+		("seeds-mum-count", boost::program_options::value<int>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
+		("seeds-mem-count", boost::program_options::value<int>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
+		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
-		("bandwidth,b", boost::program_options::value<int>(), "alignment bandwidth (int) (default 5)")
+		("bandwidth,b", boost::program_options::value<int>(), "alignment bandwidth (int)")
 		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
-		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
+		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
 	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
@@ -82,7 +82,10 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << general << std::endl << seeding << std::endl << alignment << std::endl << std::endl;
+		std::cerr << mandatory << std::endl << general << std::endl << seeding;
+		std::cerr << "defaults are --seeds-mum-count -1 --seeds-mxm-length 20" << std::endl << std::endl;
+		std::cerr << alignment;
+		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
 	}
 
@@ -155,10 +158,12 @@ int main(int argc, char** argv)
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
 	}
-	if (params.initialBandwidth == 0 && params.rampBandwidth == 0)
+	if (params.initialBandwidth == 0 && params.rampBandwidth == 0 && params.maxCellsPerSlice == std::numeric_limits<decltype(params.maxCellsPerSlice)>::max())
 	{
-		//use 5 as the default bandwidth
+		//default extension parameters
 		params.initialBandwidth = 5;
+		params.rampBandwidth = 10;
+		params.maxCellsPerSlice = 10000;
 	}
 	if (params.initialBandwidth < 1)
 	{
