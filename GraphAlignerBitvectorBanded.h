@@ -40,9 +40,9 @@ private:
 	{
 	public:
 		DPSlice() :
-		minScore(std::numeric_limits<ScoreType>::min()),
-		minScoreNode(-1),
-		minScoreNodeOffset(-1),
+		minScore(std::numeric_limits<ScoreType>::max()),
+		minScoreNode(std::numeric_limits<LengthType>::max()),
+		minScoreNodeOffset(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(),
 		scores(),
 		correctness(),
@@ -56,9 +56,9 @@ private:
 #endif
 		{}
 		DPSlice(std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>* vectorMap) :
-		minScore(std::numeric_limits<ScoreType>::min()),
-		minScoreNode(-1),
-		minScoreNodeOffset(-1),
+		minScore(std::numeric_limits<ScoreType>::max()),
+		minScoreNode(std::numeric_limits<LengthType>::max()),
+		minScoreNodeOffset(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(vectorMap),
 		scores(),
 		correctness(),
@@ -130,7 +130,9 @@ public:
 		{
 			return OnewayTrace::TraceFailed();
 		}
-		assert(slice.slices.back().minScore <= sequence.size() + WordConfiguration<Word>::WordSize * 2);
+		assert(sequence.size() <= std::numeric_limits<ScoreType>::max() - WordConfiguration<Word>::WordSize * 2);
+		assert(slice.slices.back().minScore >= 0);
+		assert(slice.slices.back().minScore <= (ScoreType)sequence.size() + (ScoreType)WordConfiguration<Word>::WordSize * 2);
 
 		OnewayTrace result;
 
@@ -200,15 +202,15 @@ private:
 	OnewayTrace getReverseTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
 	{
 		assert(slice.slices.size() > 0);
-		assert(slice.slices.back().minScoreNode != -1);
-		assert(slice.slices.back().minScoreNodeOffset != -1);
+		assert(slice.slices.back().minScoreNode != std::numeric_limits<LengthType>::max());
+		assert(slice.slices.back().minScoreNodeOffset != std::numeric_limits<LengthType>::max());
 		OnewayTrace result;
 		result.score = slice.slices.back().minScore;
 		result.trace.emplace_back(MatrixPosition {slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1)}, false);
-		LengthType currentNode = -1;
+		LengthType currentNode = std::numeric_limits<LengthType>::max();
 		size_t currentSlice = slice.slices.size();
 		std::vector<WordSlice> nodeSlices;
-		while (result.trace.back().first.seqPos != -1)
+		while (result.trace.back().first.seqPos != (size_t)-1)
 		{
 			size_t newSlice = result.trace.back().first.seqPos / WordConfiguration<Word>::WordSize + 1;
 			assert(newSlice < slice.slices.size());
@@ -244,6 +246,9 @@ private:
 			assert(nodeSlices.size() == params.graph.NodeLength(currentNode));
 			assert(result.trace.back().first.seqPos >= slice.slices[currentSlice].j);
 			assert(result.trace.back().first.seqPos < slice.slices[currentSlice].j + WordConfiguration<Word>::WordSize);
+			assert((ScoreType)slice.slices[currentSlice].bandwidth >= 0);
+			assert((ScoreType)slice.slices[currentSlice].bandwidth < std::numeric_limits<ScoreType>::max());
+			assert(slice.slices[currentSlice].minScore < std::numeric_limits<ScoreType>::max() - (ScoreType)slice.slices[currentSlice].bandwidth);
 			if (result.trace.back().first.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().first.nodeOffset == 0)
 			{
 				result.trace.emplace_back(pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid));
@@ -281,7 +286,7 @@ private:
 		}
 		do
 		{
-			assert(result.trace.back().first.seqPos == -1);
+			assert(result.trace.back().first.seqPos == (size_t)-1);
 			assert(slice.slices[0].scores.hasNode(result.trace.back().first.node));
 			auto node = slice.slices[0].scores.node(result.trace.back().first.node);
 			std::vector<ScoreType> beforeSliceScores;
@@ -612,7 +617,6 @@ private:
 		size_t chunk = 0;
 		size_t offset = 1;
 		Word hinN, hinP, Eq;
-		char graphChar;
 		size_t pos;
 		WordSlice newWs;
 		size_t nodeLength = params.graph.NodeLength(node);
@@ -686,8 +690,8 @@ private:
 		bool hasWs = false;
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max();
-		result.minScoreNode = -1;
-		result.minScoreNodeOffset = -1;
+		result.minScoreNode = std::numeric_limits<LengthType>::max();
+		result.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
 		result.cellsProcessed = 0;
 		auto nodeLength = params.graph.NodeLength(i);
 		AlignmentGraph::NodeChunkSequence nodeChunks = params.graph.NodeChunks(i);
@@ -1144,9 +1148,8 @@ private:
 				currentMinimumNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
 			assert(currentMinimumScore == currentMinScoreAtEndRow);
-			size_t oldCellsProcessed = cellsProcessed;
 			cellsProcessed += nodeCalc.cellsProcessed;
-			assert(cellsProcessed > oldCellsProcessed);
+			assert(nodeCalc.cellsProcessed > 0);
 #ifdef SLICEVERBOSE
 			nodesProcessed++;
 #endif
@@ -1157,7 +1160,7 @@ private:
 		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore);
 #endif
 
-		assert(currentMinimumNode != -1);
+		assert(currentMinimumNode != std::numeric_limits<LengthType>::max());
 		NodeCalculationResult result;
 		result.minScore = currentMinimumScore;
 		result.minScoreNode = currentMinimumNode;
@@ -1205,8 +1208,8 @@ private:
 		assert(j < sequence.size());
 		assert(sequence.size() - j < WordConfiguration<Word>::WordSize);
 		sliceCalc.minScore = std::numeric_limits<ScoreType>::max();
-		sliceCalc.minScoreNode = -1;
-		sliceCalc.minScoreNodeOffset = -1;
+		sliceCalc.minScoreNode = std::numeric_limits<LengthType>::max();
+		sliceCalc.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
 		auto offset = sequence.size() - j;
 		assert(offset >= 0);
 		assert(offset < WordConfiguration<Word>::WordSize);
@@ -1253,6 +1256,9 @@ private:
 	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth, const std::vector<bool>& subgraph) const
 	{
 		NodeCalculationResult sliceResult;
+		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
+		assert((ScoreType)previousSlice.bandwidth >= 0);
+		assert(previousSlice.minScore < std::numeric_limits<ScoreType>::max() - (ScoreType)previousSlice.bandwidth);
 		if (slice.scoresVectorMap.hasVectorMapCurrently())
 		{
 			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
@@ -1274,9 +1280,9 @@ private:
 		slice.minScoreNode = sliceResult.minScoreNode;
 		slice.minScoreNodeOffset = sliceResult.minScoreNodeOffset;
 		slice.minScore = sliceResult.minScore;
+		assert(slice.minScore >= previousSlice.minScore);
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 		slice.bandwidth = bandwidth;
-		assert(slice.minScore >= previousSlice.minScore);
 #ifdef SLICEVERBOSE
 		slice.nodesProcessed = sliceResult.nodesProcessed;
 		for (auto node : slice.scores)
@@ -1324,7 +1330,7 @@ private:
 
 	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState) const
 	{
-		assert(initialSlice.j == -WordConfiguration<Word>::WordSize);
+		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		DPTable result;
 		result.slices.reserve(numSlices + 1);
@@ -1347,6 +1353,9 @@ private:
 		size_t rampUntil = 0;
 #ifndef NDEBUG
 		volatile size_t debugLastProcessedSlice;
+		// https://stackoverflow.com/questions/3599160/how-to-suppress-unused-parameter-warnings-in-c
+		// we want to keep this variable for debugging purposes but don't want unused variable warnings
+		(void)(debugLastProcessedSlice);
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
@@ -1355,16 +1364,18 @@ private:
 			debugLastProcessedSlice = slice;
 			debugLastRowMinScore = lastSlice.minScore;
 #endif
+#ifdef SLICEVERBOSE
 			auto timeStart = std::chrono::system_clock::now();
+#endif
 			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, reusableState.subgraph);
+#ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-#ifdef SLICEVERBOSE
 			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " nodes " << newSlice.scores.size() << " slices " << newSlice.numCells << " nodesprocessed " << newSlice.nodesProcessed << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
 #endif
-			assert(newSlice.minScore != -1);
-			assert(newSlice.minScoreNode != -1);
-			assert(newSlice.minScoreNodeOffset != -1);
+			assert(newSlice.minScore != std::numeric_limits<ScoreType>::max());
+			assert(newSlice.minScoreNode != std::numeric_limits<LengthType>::max());
+			assert(newSlice.minScoreNodeOffset != std::numeric_limits<LengthType>::max());
 			assert(newSlice.scores.hasNode(newSlice.minScoreNode));
 			assert(newSlice.minScoreNodeOffset < params.graph.NodeLength(newSlice.minScoreNode));
 
@@ -1423,12 +1434,12 @@ private:
 					assert(!reusableState.previousBand[node.first]);
 					reusableState.previousBand[node.first] = true;
 				}
-				if (slice == -1)
+				if (slice == (size_t)-1)
 				{
 					result.slices.clear();
 				}
 				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
-				assert(slice == -1 || result.slices.size() == slice+2);
+				assert(slice == (size_t)-1 || result.slices.size() == slice+2);
 				assert(result.slices.back().j == lastSlice.j);
 #ifdef SLICEVERBOSE
 				std::cerr << " ramp to " << slice;
@@ -1449,7 +1460,7 @@ private:
 				assert(reusableState.previousBand[node.first]);
 				reusableState.previousBand[node.first] = false;
 			}
-			assert(newSlice.minScore != std::numeric_limits<LengthType>::max());
+			assert(newSlice.minScore != std::numeric_limits<ScoreType>::max());
 			assert(newSlice.minScore >= lastSlice.minScore);
 			if (slice == numSlices - 1)
 			{
@@ -1482,7 +1493,6 @@ private:
 #ifndef NDEBUG
 		if (result.slices.size() > 0)
 		{
-			volatile size_t lastExisting = 0;
 			for (size_t i = 1; i < result.slices.size(); i++)
 			{
 				assert(result.slices[i].j == result.slices[i-1].j + WordConfiguration<Word>::WordSize);
@@ -1514,8 +1524,8 @@ private:
 		result.minScoreNode = nodeIndex;
 		result.minScoreNodeOffset = offsetInNode;
 		auto& node = result.scores.node(nodeIndex);
-		node.startSlice = {0, 0, offsetInNode};
-		node.endSlice = {0, 0, params.graph.NodeLength(nodeIndex) - 1 - offsetInNode};
+		node.startSlice = {0, 0, (int)offsetInNode};
+		node.endSlice = {0, 0, (int)params.graph.NodeLength(nodeIndex) - 1 - (int)offsetInNode};
 		node.minScore = 0;
 		node.exists = true;
 		for (size_t i = 1; i <= offsetInNode; i++)

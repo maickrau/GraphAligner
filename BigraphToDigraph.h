@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 #include "AlignmentGraph.h"
+#include "vg.pb.h"
+#include "GfaGraph.h"
 
 class DirectedGraph
 {
@@ -29,6 +31,8 @@ public:
 	static std::pair<Node, Node> ConvertGFANodeToNodes(const std::string& line);
 	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(int from, const std::string& fromStart, int to, const std::string& toEnd);
 	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(const std::string& line);
+	static AlignmentGraph BuildFromVG(const vg::Graph& graph);
+	static AlignmentGraph BuildFromGFA(const GfaGraph& graph);
 	static AlignmentGraph StreamVGGraphFromFile(std::string filename);
 	static AlignmentGraph StreamGFAGraphFromFile(std::string filename);
 private:

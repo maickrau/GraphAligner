@@ -80,7 +80,7 @@ public:
 		AlignmentResult result;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "(" + std::to_string(seedHits[i].nodeOffset) + ")," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen);
 			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
 			assertSetRead(seq_id, seedInfo);
 			if (params.sloppyOptimizations)
@@ -115,7 +115,7 @@ public:
 		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos);
+			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen) + "," + std::to_string(seedHits[i].nodeOffset);
 			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
 			assertSetRead(seq_id, seedInfo);
 			// auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
@@ -183,12 +183,12 @@ private:
 		if (!result.backward.failed())
 		{
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
-			assert(result.backward.trace.back().first.seqPos == -1 && params.graph.nodeIDs[result.backward.trace.back().first.node] == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().first.node] + result.backward.trace.back().first.nodeOffset == reversePos.second);
+			assert(result.backward.trace.back().first.seqPos == (size_t)-1 && params.graph.nodeIDs[result.backward.trace.back().first.node] == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().first.node] + result.backward.trace.back().first.nodeOffset == reversePos.second);
 			std::reverse(result.backward.trace.begin(), result.backward.trace.end());
 		}
 		if (!result.forward.failed())
 		{
-			assert(result.forward.trace.back().first.seqPos == -1 && params.graph.nodeIDs[result.forward.trace.back().first.node] == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().first.node] + result.forward.trace.back().first.nodeOffset == seedHit.nodeOffset);
+			assert(result.forward.trace.back().first.seqPos == (size_t)-1 && params.graph.nodeIDs[result.forward.trace.back().first.node] == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().first.node] + result.forward.trace.back().first.nodeOffset == seedHit.nodeOffset);
 			std::reverse(result.forward.trace.begin(), result.forward.trace.end());
 		}
 		return result;
@@ -211,7 +211,7 @@ private:
 		std::reverse(trace.begin(), trace.end());
 		for (size_t i = 0; i < trace.size(); i++)
 		{
-			assert(trace[i].first.seqPos <= end || trace[i].first.seqPos == -1);
+			assert(trace[i].first.seqPos <= end || trace[i].first.seqPos == (size_t)-1);
 			trace[i].first.seqPos = end - trace[i].first.seqPos;
 			size_t offset = params.graph.nodeOffset[trace[i].first.node] + trace[i].first.nodeOffset;
 			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace[i].first.node], offset);
@@ -251,16 +251,6 @@ private:
 		auto mergedTrace = trace.backward;
 		if (trace.backward.failed()) mergedTrace.score = 0;
 
-		int seedHitNodeId;
-		if (seedHit.reverse)
-		{
-			seedHitNodeId = seedHit.nodeID * 2 + 1;
-		}
-		else
-		{
-			seedHitNodeId = seedHit.nodeID * 2;
-		}
-		auto middleNode = params.graph.GetUnitigNode(seedHitNodeId, seedHit.nodeOffset);
 		if (!trace.backward.failed() && !trace.forward.failed())
 		{
 			assert(mergedTrace.trace.back().first == trace.forward.trace[0].first);
@@ -314,7 +304,7 @@ private:
 	void verifyTrace(const std::vector<std::pair<MatrixPosition, bool>>& trace, const std::string& sequence, volatile ScoreType score) const
 	{
 		size_t start = 0;
-		while (trace[start].first.seqPos == -1)
+		while (trace[start].first.seqPos == (size_t)-1)
 		{
 			start++;
 			assert(start < trace.size());

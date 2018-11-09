@@ -48,7 +48,7 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, int maxBandwidth, bool lowMemory, bool useSubgraph) :
+		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory, bool useSubgraph) :
 		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),

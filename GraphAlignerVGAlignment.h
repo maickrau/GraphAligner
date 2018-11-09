@@ -35,7 +35,6 @@ public:
 		auto path = new vg::Path;
 		result->set_allocated_path(path);
 		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
-		size_t currentPosIndex = 0;
 		MergedNodePos currentPos;
 		currentPos.nodeId = trace[0].first.node;
 		currentPos.reverse = (trace[0].first.node % 2) == 1;
@@ -79,12 +78,12 @@ public:
 			assert(btNodeEnd.nodeId == btNodeStart.nodeId);
 			assert(btNodeEnd.seqPos >= btNodeStart.seqPos);
 			assert(btNodeEnd.nodeOffset >= btNodeStart.nodeOffset);
-			assert(btNodeEnd.seqPos >= btBeforeNode.seqPos || btBeforeNode.seqPos == -1);
+			assert(btNodeEnd.seqPos >= btBeforeNode.seqPos || btBeforeNode.seqPos == (size_t)-1);
 
 			edit->set_to_length(edit->to_length() + btNodeEnd.seqPos - btBeforeNode.seqPos);
-			if (btNodeEnd.seqPos > btBeforeNode.seqPos || btBeforeNode.seqPos == -1)
+			if (btNodeEnd.seqPos > btBeforeNode.seqPos || btBeforeNode.seqPos == (size_t)-1)
 			{
-				assert(btBeforeNode.seqPos < sequence.size() - 1 || btBeforeNode.seqPos == -1);
+				assert(btBeforeNode.seqPos < sequence.size() - 1 || btBeforeNode.seqPos == (size_t)-1);
 				edit->set_sequence(edit->sequence() + sequence.substr(btBeforeNode.seqPos+1, btNodeEnd.seqPos - btBeforeNode.seqPos));
 			}
 			assert(btNodeEnd.nodeOffset + 1 >= btNodeStart.nodeOffset);
@@ -104,13 +103,12 @@ public:
 			btBeforeNode = btNodeEnd;
 			btNodeStart = newPos;
 			btNodeEnd = newPos;
-			currentPosIndex = pos;
 		}
-		assert(btNodeEnd.seqPos >= btBeforeNode.seqPos || btBeforeNode.seqPos == -1);
+		assert(btNodeEnd.seqPos >= btBeforeNode.seqPos || btBeforeNode.seqPos == (size_t)-1);
 		edit->set_to_length(edit->to_length() + btNodeEnd.seqPos - btBeforeNode.seqPos);
 		if (btBeforeNode.seqPos != btNodeEnd.seqPos)
 		{
-			assert(btBeforeNode.seqPos < sequence.size() - 1 || btBeforeNode.seqPos == -1);
+			assert(btBeforeNode.seqPos < sequence.size() - 1 || btBeforeNode.seqPos == (size_t)-1);
 			edit->set_sequence(edit->sequence() + sequence.substr(btBeforeNode.seqPos+1, btNodeEnd.seqPos - btBeforeNode.seqPos));
 		}
 		assert(btNodeEnd.nodeOffset >= btNodeStart.nodeOffset);

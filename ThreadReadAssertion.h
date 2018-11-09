@@ -16,11 +16,11 @@ namespace ThreadReadAssertion
 
 #endif
 
-#ifndef NDEBUG
-
 #ifdef assert
 #undef assert
 #endif
+
+#ifndef NDEBUG
 
 //https://stackoverflow.com/questions/9701229/c-assert-implementation-in-assert-h
 #define assert(expression) (void)((expression) || (ThreadReadAssertion::assertFailed(#expression, __FILE__, __LINE__),0))

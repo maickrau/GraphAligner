@@ -46,7 +46,8 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	unitigReidInNeighbors.emplace_back();
 	unitigReidOutNeighbors.emplace_back();
 	unitigReidLength.push_back(sequence.size());
-	for (size_t i = 0; i < DBGOverlap; i += SPLIT_NODE_SIZE)
+	assert(DBGOverlap >= 0);
+	for (size_t i = 0; i < (size_t)DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
 		size_t size = SPLIT_NODE_SIZE;
 		if (DBGOverlap - i < size) size = DBGOverlap - i;
@@ -134,17 +135,15 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
-	auto from = nodeLookup[node_id_from].back();
-	auto to = unitigStartNode[node_id_to];
-	assert(to >= 0);
-	assert(from >= 0);
+	size_t from = nodeLookup[node_id_from].back();
+	size_t to = unitigStartNode[node_id_to];
 	assert(to < inNeighbors.size());
 	assert(from < nodeLength.size());
 
 	assert(unitigReidLookup.count(node_id_from) == 1);
 	assert(unitigReidLookup.count(node_id_to) == 1);
-	auto reidFrom = unitigReidLookup[node_id_from];
-	auto reidTo = unitigReidLookup[node_id_to];
+	size_t reidFrom = unitigReidLookup[node_id_from];
+	size_t reidTo = unitigReidLookup[node_id_to];
 	assert(reidFrom < unitigReidOutNeighbors.size());
 	assert(reidTo < unitigReidInNeighbors.size());
 	unitigReidOutNeighbors[reidFrom].push_back(reidTo);

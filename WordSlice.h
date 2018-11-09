@@ -1,8 +1,6 @@
 #ifndef WordSlice_h
 #define WordSlice_h
 
-#include "ByteStuff.h"
-
 template <typename Word>
 class WordConfiguration
 {
@@ -527,50 +525,6 @@ private:
 		assert((leftSmaller & rightSmaller) == 0);
 		assert(onesmaller == 0 || onebigger == 0);
 #endif
-		return std::make_pair(leftSmaller, rightSmaller);
-	}
-
-	__attribute__((optimize("unroll-loops")))
-	static std::pair<Word, Word> differenceMasksBytePrecalc(Word leftVP, Word leftVN, Word rightVP, Word rightVN, int scoreDifference)
-	{
-		assert(ByteStuff::byteStuffPrecalculated());
-		assert(scoreDifference >= 0);
-		Word VPcommon = ~(leftVP & rightVP);
-		Word VNcommon = ~(leftVN & rightVN);
-		leftVP &= VPcommon;
-		leftVN &= VNcommon;
-		rightVP &= VPcommon;
-		rightVN &= VNcommon;
-		Word twosmaller = leftVN & rightVP;
-		Word onesmaller = (rightVP & ~leftVN) | (leftVN & ~rightVP);
-		Word equal = ~leftVP & ~leftVN & ~rightVP & ~rightVN;
-		Word onebigger = (leftVP & ~rightVN) | (rightVN & ~leftVP);
-		Word twobigger = rightVN & leftVP;
-		Word sign = onesmaller | twosmaller;
-		Word low = ~equal;
-		Word high = twosmaller | twobigger;
-		Word leftSmaller = 0;
-		Word rightSmaller = 0;
-		for (size_t i = 0; i < sizeof(Word); i++)
-		{
-			if (scoreDifference >= 0)
-			{
-				std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(std::min(scoreDifference, 17)) << 24) + ((sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
-				leftSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
-				rightSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
-				scoreDifference += std::get<2>(bytePrecalced);
-			}
-			else
-			{
-				std::tuple<uint8_t, uint8_t, int8_t> bytePrecalced = ByteStuff::precalcedVPVNChanges[((size_t)(std::min(-scoreDifference, 17)) << 24) + ((~sign & 0xFF) << 16) + ((low & 0xFF) << 8) + (high & 0xFF)];
-				leftSmaller |= ((Word)std::get<1>(bytePrecalced)) << (i * 8);
-				rightSmaller |= ((Word)std::get<0>(bytePrecalced)) << (i * 8);
-				scoreDifference -= std::get<2>(bytePrecalced);
-			}
-			sign >>= 8;
-			low >>= 8;
-			high >>= 8;
-		}
 		return std::make_pair(leftSmaller, rightSmaller);
 	}
 

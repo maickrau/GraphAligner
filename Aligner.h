@@ -9,18 +9,22 @@ struct AlignerParams
 {
 	std::string graphFile;
 	std::string fastqFile;
-	int numThreads;
-	int initialBandwidth;
-	int rampBandwidth;
+	size_t numThreads;
+	size_t initialBandwidth;
+	size_t rampBandwidth;
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::string seedFile;
 	std::string outputAlignmentFile;
-	bool quietMode;
+	bool verboseMode;
 	bool sloppyOptimizations;
-	bool lowMemory;
+	bool highMemory;
 	bool useSubgraph;
-	size_t maxAlns;
+	size_t mxmLength;
+	size_t mumCount;
+	size_t memCount;
+	bool outputAllAlns;
+	std::string seederCachePrefix;
 };
 
 void alignReads(AlignerParams params);

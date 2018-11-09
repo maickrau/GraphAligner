@@ -25,7 +25,9 @@ toId(to)
 
 std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertVGNodeToNodes(const vg::Node& node)
 {
-	return std::make_pair(DirectedGraph::Node { node.id() * 2, node.id(), true, node.sequence() }, DirectedGraph::Node { node.id() * 2 + 1, node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
+	assert(node.id() < std::numeric_limits<int>::max() / 2);
+	assert(node.id()+1 < std::numeric_limits<int>::max() / 2);
+	return std::make_pair(DirectedGraph::Node { (int)node.id() * 2, (int)node.id(), true, node.sequence() }, DirectedGraph::Node { (int)node.id() * 2 + 1, (int)node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdgeToEdges(const vg::Edge& edge)
@@ -190,6 +192,48 @@ AlignmentGraph DirectedGraph::StreamGFAGraphFromFile(std::string filename)
 	for (auto edge : edges)
 	{
 		result.AddEdgeNodeId(edge.fromId, edge.toId);
+	}
+	result.Finalize(64);
+	return result;
+}
+
+AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
+{
+	AlignmentGraph result;
+	for (int i = 0; i < graph.node_size(); i++)
+	{
+		auto nodes = ConvertVGNodeToNodes(graph.node(i));
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+	}
+	for (int i = 0; i < graph.edge_size(); i++)
+	{
+		auto edges = ConvertVGEdgeToEdges(graph.edge(i));
+		result.AddEdgeNodeId(edges.first.fromId, edges.first.toId);
+		result.AddEdgeNodeId(edges.second.fromId, edges.second.toId);
+	}
+	result.Finalize(64);
+	return result;
+}
+
+AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
+{
+	AlignmentGraph result;
+	result.DBGOverlap = graph.edgeOverlap;
+	for (auto node : graph.nodes)
+	{
+		auto nodes = ConvertGFANodeToNodes(node.first, node.second);
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+	}
+	for (auto edge : graph.edges)
+	{
+		for (auto target : edge.second)
+		{
+			auto pair = ConvertGFAEdgeToEdges(edge.first.id, edge.first.end ? "+" : "-", target.id, target.end ? "+" : "-");
+			result.AddEdgeNodeId(pair.first.fromId, pair.first.toId);
+			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId);
+		}
 	}
 	result.Finalize(64);
 	return result;

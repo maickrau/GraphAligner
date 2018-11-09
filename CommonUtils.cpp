@@ -24,10 +24,12 @@ namespace CommonUtils
 		bool alignmentIncompatible(const vg::Alignment* const left, const vg::Alignment* const right)
 		{
 			auto minOverlapLen = std::min(left->sequence().size(), right->sequence().size()) * OverlapIncompatibleFractionCutoff;
-			auto leftStart = left->query_position();
-			auto leftEnd = leftStart + left->sequence().size();
-			auto rightStart = right->query_position();
-			auto rightEnd = rightStart + right->sequence().size();
+			assert(left->query_position() >= 0);
+			assert(right->query_position() >= 0);
+			size_t leftStart = left->query_position();
+			size_t leftEnd = leftStart + left->sequence().size();
+			size_t rightStart = right->query_position();
+			size_t rightEnd = rightStart + right->sequence().size();
 			if (leftStart > rightStart)
 			{
 				std::swap(leftStart, rightStart);
@@ -52,14 +54,14 @@ namespace CommonUtils
 
 	void mergeGraphs(vg::Graph& graph, const vg::Graph& part)
 	{
-		for (size_t i = 0; i < part.node_size(); i++)
+		for (int i = 0; i < part.node_size(); i++)
 		{
 			auto node = graph.add_node();
 			node->set_id(part.node(i).id());
 			node->set_sequence(part.node(i).sequence());
 			node->set_name(part.node(i).name());
 		}
-		for (size_t i = 0; i < part.edge_size(); i++)
+		for (int i = 0; i < part.edge_size(); i++)
 		{
 			auto edge = graph.add_edge();
 			edge->set_from(part.edge(i).from());
@@ -185,7 +187,7 @@ namespace CommonUtils
 
 BufferedWriter::BufferedWriter() : stream(nullptr) {};
 BufferedWriter::BufferedWriter(std::ostream& stream) : stream(&stream) {};
-BufferedWriter& BufferedWriter::operator<<(FlushClass f)
+BufferedWriter& BufferedWriter::operator<<(FlushClass)
 {
 	if (stream == nullptr) return *this;
 	flush();
