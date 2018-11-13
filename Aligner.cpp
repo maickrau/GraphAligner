@@ -100,6 +100,7 @@ struct AlignmentStats
 	std::atomic<size_t> fullLengthAlignments;
 	std::atomic<size_t> readsWithAnAlignment;
 	std::atomic<size_t> bpInReads;
+	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
 	std::atomic<size_t> bpInFullAlignments;
 };
@@ -243,6 +244,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					continue;
 				}
 				stats.readsWithASeed += 1;
+				stats.bpInReadsWithASeed += fastq->sequence.size();
 				if (params.useSubgraph)
 				{
 					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
@@ -394,6 +396,8 @@ void alignReads(AlignerParams params)
 
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
+	MummerSeeder* mummerseeder = nullptr;
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix, params.mxmLength);
 
 	if (params.seedFile != "")
 	{
@@ -416,10 +420,6 @@ void alignReads(AlignerParams params)
 		}
 		seedHitsToThreads = &seedHits;
 	}
-
-	MummerSeeder* mummerseeder = nullptr;
-
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix, params.mxmLength);
 
 	Seeder seeder { params, seedHitsToThreads, mummerseeder };
 
@@ -491,8 +491,7 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Alignment finished" << std::endl;
 	std::cout << "Input reads: " << stats.reads << " (" << stats.bpInReads << "bp)" << std::endl;
-	std::cout << "Seeds: " << stats.seeds << std::endl;
-	std::cout << "Reads with a seed: " << stats.readsWithASeed << std::endl;
+	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
 	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
 	std::cout << "Output end-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
