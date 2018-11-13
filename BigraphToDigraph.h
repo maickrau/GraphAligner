@@ -28,13 +28,10 @@ public:
 	static std::pair<Node, Node> ConvertVGNodeToNodes(const vg::Node& node);
 	static std::pair<Edge, Edge> ConvertVGEdgeToEdges(const vg::Edge& edge);
 	static std::pair<Node, Node> ConvertGFANodeToNodes(int id, const std::string& seq);
-	static std::pair<Node, Node> ConvertGFANodeToNodes(const std::string& line);
 	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(int from, const std::string& fromStart, int to, const std::string& toEnd);
-	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(const std::string& line);
 	static AlignmentGraph BuildFromVG(const vg::Graph& graph);
 	static AlignmentGraph BuildFromGFA(const GfaGraph& graph);
 	static AlignmentGraph StreamVGGraphFromFile(std::string filename);
-	static AlignmentGraph StreamGFAGraphFromFile(std::string filename);
 private:
 };
 

@@ -145,6 +145,19 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 	return LoadFromStream(file);
 }
 
+int checkAndConvertToInt(std::string str)
+{
+	//https://stackoverflow.com/questions/4654636/how-to-determine-if-a-string-is-a-number-with-c
+	char* p;
+	long converted = strtol(str.c_str(), &p, 10);
+	if (*p) {
+		throw GfaGraph::NonIntegerNodeIdsException {};
+	}
+	else {
+		return converted;
+	}
+}
+
 GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 {
 	GfaGraph result;
@@ -158,12 +171,13 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		if (line[0] == 'S')
 		{
 			std::stringstream sstr {line};
-			int id;
+			std::string idstr;
 			std::string dummy;
 			std::string seq;
 			sstr >> dummy;
 			assert(dummy == "S");
-			sstr >> id;
+			sstr >> idstr;
+			int id = checkAndConvertToInt(idstr);
 			sstr >> seq;
 			std::string tags;
 			while (sstr.good())
@@ -180,17 +194,19 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		if (line[0] == 'L')
 		{
 			std::stringstream sstr {line};
-			int from;
-			int to;
+			std::string fromstr;
+			std::string tostr;
 			std::string fromstart;
 			std::string toend;
 			std::string dummy;
 			int overlap;
 			sstr >> dummy;
 			assert(dummy == "L");
-			sstr >> from;
+			sstr >> fromstr;
+			int from = checkAndConvertToInt(fromstr);
 			sstr >> fromstart;
-			sstr >> to;
+			sstr >> tostr;
+			int to = checkAndConvertToInt(tostr);
 			sstr >> toend;
 			sstr >> overlap;
 			assert(overlap >= 0);

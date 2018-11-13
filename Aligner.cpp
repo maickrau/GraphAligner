@@ -364,16 +364,21 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 	}
 	else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 	{
-		if (loadSeeder)
+		try
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile);
-			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
+			if (loadSeeder)
+			{
+				std::cout << "Build seeder from the graph" << std::endl;
+				*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
+			}
 			return DirectedGraph::BuildFromGFA(graph);
 		}
-		else
+		catch (GfaGraph::NonIntegerNodeIdsException)
 		{
-			return DirectedGraph::StreamGFAGraphFromFile(graphFile);
+			std::cout << "Non-integer node IDs are not supported. Change the input graph node IDs" << std::endl;
+			std::cerr << "Non-integer node IDs are not supported. Change the input graph node IDs" << std::endl;
+			std::exit(1);
 		}
 	}
 	else
