@@ -1,4 +1,3 @@
-#include <mutex>
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -130,6 +129,18 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
+void readFastqs(const std::string& filename, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
+{
+	assertSetRead("Read streamer", "No seed");
+	FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
+	{
+		std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
+		std::swap(*ptr, read);
+		writequeue.enqueue(ptr);
+	});
+	readStreamingFinished = true;
+}
+
 void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode)
 {
 	assertSetRead("Writer", "No seed");
@@ -180,7 +191,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	allWriteDone = true;
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<const FastQ*>& fastQs, std::mutex& fastqMutex, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory, params.useSubgraph };
@@ -198,17 +209,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, std::vector<cons
 		{
 			delete dealloc;
 		}
-		const FastQ* fastq;
-		size_t fastqSize;
+		std::shared_ptr<FastQ> fastq = nullptr;
+		while (!readFastqsQueue.try_dequeue(fastq))
 		{
-			std::lock_guard<std::mutex> lock {fastqMutex};
-			if (fastQs.size() == 0) break;
-			fastq = fastQs.back();
-			fastQs.pop_back();
-			fastqSize = fastQs.size();
+			bool tryBreaking = readStreamingFinished;
+			if (!readFastqsQueue.try_dequeue(fastq) && tryBreaking) break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
+		if (fastq == nullptr) break;
 		assertSetRead(fastq->seq_id, "No seed");
-		coutoutput << "Thread " << threadnum << " " << fastqSize << " left\n";
 		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 		stats.reads += 1;
 		stats.bpInReads += fastq->sequence.size();
@@ -378,35 +387,18 @@ void alignReads(AlignerParams params)
 {
 	assertSetRead("Preprocessing", "No seed");
 
-	std::vector<FastQ> fastqs;
-	if (is_file_exist(params.fastqFile)){
-		std::cout << "Load reads from " << params.fastqFile << std::endl;
-		fastqs = loadFastqFromFile(params.fastqFile, false);
-		std::cout << fastqs.size() << " reads" << std::endl;
-	}
-	else{
-		std::cerr << "No fastq file exists" << std::endl;
-		std::exit(0);
-	}
-
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 
 	if (params.seedFile != "")
 	{
-		for (auto read : fastqs)
-		{
-			seedHits[read.seq_id] = {};
-		}
 		{
 			if (is_file_exist(params.seedFile)){
 				std::cout << "Load seeds from " << params.seedFile << std::endl;
 				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
 				size_t numSeeds = 0;
 				std::function<void(vg::Alignment&)> alignmentLambda = [&seedHits, &numSeeds](vg::Alignment& seedhit) {
-					auto pos = seedHits.find(seedhit.name());
-					if (pos == seedHits.end()) return;
-					pos->second.emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
+					seedHits[seedhit.name()].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
 					numSeeds += 1;
 				};
 				stream::for_each(seedfile, alignmentLambda);
@@ -418,12 +410,6 @@ void alignReads(AlignerParams params)
 			}
 		}
 		seedHitsToThreads = &seedHits;
-	}
-
-	std::vector<const FastQ*> readPointers;
-	for (size_t i = 0; i < fastqs.size(); i++)
-	{
-		readPointers.push_back(&(fastqs[i]));
 	}
 
 	MummerSeeder* mummerseeder = nullptr;
@@ -456,10 +442,11 @@ void alignReads(AlignerParams params)
 	std::vector<std::thread> threads;
 
 	assertSetRead("Running alignments", "No seed");
-	std::mutex readMutex;
 
 	moodycamel::ConcurrentQueue<std::string*> outputAlns { ((params.numThreads * 50 + 31) / 32) * 32 };
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
+	moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>> readFastqsQueue;
+	std::atomic<bool> readStreamingFinished { false };
 	std::atomic<bool> allThreadsDone { false };
 	std::atomic<bool> allWriteDone { false };
 	std::vector<moodycamel::ProducerToken> tokens;
@@ -471,10 +458,11 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
+	std::thread fastqThread { [file=params.fastqFile, &readFastqsQueue, &readStreamingFinished]() { readFastqs(file, readFastqsQueue, readStreamingFinished); } };
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readPointers, &readMutex, i, seeder, params, &outputAlns, &tokens, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readPointers, readMutex, i, seeder, params, outputAlns, tokens[i], deallocAlns, stats); });
+		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputAlns, &tokens, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputAlns, tokens[i], deallocAlns, stats); });
 	}
 
 	for (size_t i = 0; i < params.numThreads; i++)
@@ -486,6 +474,7 @@ void alignReads(AlignerParams params)
 	allThreadsDone = true;
 
 	writerThread.join();
+	fastqThread.join();
 
 	if (mummerseeder != nullptr) delete mummerseeder;
 
