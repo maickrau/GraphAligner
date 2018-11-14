@@ -33,7 +33,7 @@ bool fileExists(const std::string& fileName)
 	return file.good();
 }
 
-MummerSeeder::MummerSeeder(const GfaGraph& graph, size_t minL, const std::string& cachePrefix)
+MummerSeeder::MummerSeeder(const GfaGraph& graph, const std::string& cachePrefix)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".aux"))
 	{
@@ -41,13 +41,12 @@ MummerSeeder::MummerSeeder(const GfaGraph& graph, size_t minL, const std::string
 	}
 	else
 	{
-		initTree(graph, minL);
-		minLen = minL;
+		initTree(graph);
 		if (cachePrefix.size() > 0) saveTo(cachePrefix);
 	}
 }
 
-MummerSeeder::MummerSeeder(const vg::Graph& graph, size_t minL, const std::string& cachePrefix)
+MummerSeeder::MummerSeeder(const vg::Graph& graph, const std::string& cachePrefix)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".aux"))
 	{
@@ -55,13 +54,12 @@ MummerSeeder::MummerSeeder(const vg::Graph& graph, size_t minL, const std::strin
 	}
 	else
 	{
-		initTree(graph, minL);
-		minLen = minL;
+		initTree(graph);
 		if (cachePrefix.size() > 0) saveTo(cachePrefix);
 	}
 }
 
-void MummerSeeder::initTree(const GfaGraph& graph, size_t minLen)
+void MummerSeeder::initTree(const GfaGraph& graph)
 {
 	for (auto node : graph.nodes)
 	{
@@ -80,7 +78,7 @@ void MummerSeeder::initTree(const GfaGraph& graph, size_t minLen)
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 0, true));
 }
 
-void MummerSeeder::initTree(const vg::Graph& graph, size_t minLen)
+void MummerSeeder::initTree(const vg::Graph& graph)
 {
 	for (int i = 0; i < graph.node_size(); i++)
 	{
@@ -113,7 +111,6 @@ void MummerSeeder::saveTo(const std::string& prefix) const
 	std::ofstream file { prefix + ".aux", std::ios::binary };
 	{
 		boost::archive::text_oarchive oa(file);
-		oa << minLen;
 		oa << seq;
 		oa << nodePositions;
 		oa << nodeIDs;
@@ -126,7 +123,6 @@ void MummerSeeder::loadFrom(const std::string& prefix)
 	std::ifstream file { prefix + ".aux", std::ios::binary };
 	{
 		boost::archive::text_iarchive ia(file);
-		ia >> minLen;
 		ia >> seq;
 		ia >> nodePositions;
 		ia >> nodeIDs;
@@ -136,7 +132,7 @@ void MummerSeeder::loadFrom(const std::string& prefix)
 	matcher->load(prefix + "_index");
 }
 
-std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxCount) const
+std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxCount, size_t minLen) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
@@ -157,7 +153,7 @@ std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxC
 	return seeds;
 }
 
-std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxCount) const
+std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxCount, size_t minLen) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{

@@ -68,10 +68,10 @@ struct Seeder
 				return fileSeeds->at(seqName);
 			case Mode::Mum:
 				assert(mummerSeeder != nullptr);
-				return mummerSeeder->getMumSeeds(seq, mumCount);
+				return mummerSeeder->getMumSeeds(seq, mumCount, mxmLength);
 			case Mode::Mem:
 				assert(mummerSeeder != nullptr);
-				return mummerSeeder->getMemSeeds(seq, memCount);
+				return mummerSeeder->getMemSeeds(seq, memCount, mxmLength);
 			case Mode::None:
 				assert(false);
 		}
@@ -341,7 +341,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix, size_t mxmLength)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -356,7 +356,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 		{
 			auto graph = CommonUtils::LoadVGGraph(graphFile);
 			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
+			*seeder = new MummerSeeder { graph, seederCachePrefix };
 			return DirectedGraph::BuildFromVG(graph);
 		}
 		else
@@ -372,7 +372,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 			if (loadSeeder)
 			{
 				std::cout << "Build seeder from the graph" << std::endl;
-				*seeder = new MummerSeeder { graph, mxmLength, seederCachePrefix };
+				*seeder = new MummerSeeder { graph, seederCachePrefix };
 			}
 			return DirectedGraph::BuildFromGFA(graph);
 		}
@@ -397,7 +397,7 @@ void alignReads(AlignerParams params)
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix, params.mxmLength);
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix);
 
 	if (params.seedFile != "")
 	{
