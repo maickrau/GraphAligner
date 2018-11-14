@@ -43,6 +43,7 @@ namespace std
 class GfaGraph
 {
 public:
+	struct NonATCGNodeSequencesException {};
 	struct NonIntegerNodeIdsException {};
 	static GfaGraph LoadFromFile(std::string filename);
 	static GfaGraph LoadFromStream(std::istream& stream);

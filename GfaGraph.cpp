@@ -3,6 +3,41 @@
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
 
+std::vector<bool> validNodeSequenceCharacters {
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, true, false, true, false, false, false, true,  //A, C, G
+false, false, false, false, false, false, false, false, 
+false, false, false, false, true, false, false, false,  //T
+false, false, false, false, false, false, false, false, 
+false, true, false, true, false, false, false, true,  //a, c, g
+false, false, false, false, false, false, false, false, 
+false, false, false, false, true, false, false, false,  //t
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false
+};
+
 NodePos::NodePos() :
 id(0),
 end(false)
@@ -179,6 +214,10 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			sstr >> idstr;
 			int id = checkAndConvertToInt(idstr);
 			sstr >> seq;
+			for (size_t i = 0; i < seq.size(); i++)
+			{
+				if (!validNodeSequenceCharacters[seq[i]]) throw NonATCGNodeSequencesException {};
+			}
 			std::string tags;
 			while (sstr.good())
 			{

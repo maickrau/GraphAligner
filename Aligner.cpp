@@ -382,6 +382,12 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 			std::cerr << "Non-integer node IDs are not supported. Change the input graph node IDs" << std::endl;
 			std::exit(1);
 		}
+		catch (GfaGraph::NonATCGNodeSequencesException)
+		{
+			std::cout << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
+			std::cerr << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
+			std::exit(1);
+		}
 	}
 	else
 	{
