@@ -112,13 +112,18 @@ bool is_file_exist(std::string fileName)
 	return infile.good();
 }
 
-void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment)
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const AlignmentGraph& graph)
 {
 	for (int i = 0; i < alignment.path().mapping_size(); i++)
 	{
 		int digraphNodeId = alignment.path().mapping(i).position().node_id();
 		int originalNodeId = digraphNodeId / 2;
 		alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_node_id(originalNodeId);
+		std::string name = graph.OriginalNodeName(digraphNodeId);
+		if (name.size() > 0)
+		{
+			alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_name(name);
+		}
 	}
 }
 
@@ -308,7 +313,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.bpInFullAlignments += alignments.alignments[i].alignment->sequence().size();
 			}
 			stats.bpInAlignments += alignments.alignments[i].alignment->sequence().size();
-			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment);
+			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 			timems += alignments.alignments[i].elapsedMilliseconds;
 			totalcells += alignments.alignments[i].cellsProcessed;
@@ -369,12 +374,6 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 				*seeder = new MummerSeeder { graph, seederCachePrefix };
 			}
 			return DirectedGraph::BuildFromGFA(graph);
-		}
-		catch (GfaGraph::NonIntegerNodeIdsException)
-		{
-			std::cout << "Non-integer node IDs are not supported. Change the input graph node IDs" << std::endl;
-			std::cerr << "Non-integer node IDs are not supported. Change the input graph node IDs" << std::endl;
-			std::exit(1);
 		}
 		catch (GfaGraph::NonATCGNodeSequencesException)
 		{

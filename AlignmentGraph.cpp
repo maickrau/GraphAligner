@@ -31,13 +31,14 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	nodeOffset.reserve(numSplitNodes);
 }
 
-void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool reverseNode)
+void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode)
 {
 	assert(!finalized);
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
 	originalNodeSize[nodeId] = sequence.size();
+	originalNodeName[nodeId] = name;
 	assert(DBGOverlap >= 0);
 	for (size_t i = 0; i < (size_t)DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
@@ -302,4 +303,11 @@ AlignmentGraph AlignmentGraph::GetSubgraph(const std::unordered_map<size_t, size
 
 	result.finalized = true;
 	return result;
+}
+
+std::string AlignmentGraph::OriginalNodeName(int nodeId) const
+{
+	auto found = originalNodeName.find(nodeId);
+	if (found == originalNodeName.end()) return "";
+	return found->second;
 }

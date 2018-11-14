@@ -52,7 +52,7 @@ public:
 	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
-	void AddNode(int nodeId, const std::string& sequence, bool reverseNode);
+	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode);
 	void AddEdgeNodeId(int node_id_from, int node_id_to);
 	void Finalize(int wordSize);
 	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
@@ -66,6 +66,7 @@ public:
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	int DBGOverlap;
+	std::string OriginalNodeName(int nodeId) const;
 
 private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
@@ -73,6 +74,7 @@ private:
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> unitigStartNode;
 	std::unordered_map<int, size_t> originalNodeSize;
+	std::unordered_map<int, std::string> originalNodeName;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;

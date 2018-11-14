@@ -44,7 +44,6 @@ class GfaGraph
 {
 public:
 	struct NonATCGNodeSequencesException {};
-	struct NonIntegerNodeIdsException {};
 	static GfaGraph LoadFromFile(std::string filename);
 	static GfaGraph LoadFromStream(std::istream& stream);
 	void SaveToFile(std::string filename) const;
@@ -52,11 +51,14 @@ public:
 	void AddSubgraph(const GfaGraph& subgraph);
 	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
 	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;
+	std::string OriginalNodeName(int nodeId) const;
 	std::unordered_map<int, std::string> nodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
 	int edgeOverlap;
 private:
+	void numberBackToIntegers();
 	std::unordered_map<int, std::string> tags;
+	std::unordered_map<int, std::string> originalNodeName;
 	GfaGraph();
 };
 

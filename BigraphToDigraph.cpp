@@ -9,11 +9,12 @@
 #include "ThreadReadAssertion.h"
 #include "stream.hpp"
 
-DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence) :
+DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence, std::string name) :
 nodeId(nodeId),
 originalNodeId(originalNodeId),
 rightEnd(rightEnd),
-sequence(sequence)
+sequence(sequence),
+name(name)
 {
 }
 
@@ -27,7 +28,7 @@ std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertVGNode
 {
 	assert(node.id() < std::numeric_limits<int>::max() / 2);
 	assert(node.id()+1 < std::numeric_limits<int>::max() / 2);
-	return std::make_pair(DirectedGraph::Node { (int)node.id() * 2, (int)node.id(), true, node.sequence() }, DirectedGraph::Node { (int)node.id() * 2 + 1, (int)node.id(), false, CommonUtils::ReverseComplement(node.sequence()) });
+	return std::make_pair(DirectedGraph::Node { (int)node.id() * 2, (int)node.id(), true, node.sequence(), node.name() }, DirectedGraph::Node { (int)node.id() * 2 + 1, (int)node.id(), false, CommonUtils::ReverseComplement(node.sequence()), node.name() });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdgeToEdges(const vg::Edge& edge)
@@ -56,9 +57,9 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdge
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight }, DirectedGraph::Edge { toLeft, fromLeft });
 }
 
-std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence)
+std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence, const std::string& name)
 {
-	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence) });
+	return std::make_pair(DirectedGraph::Node { id * 2, id, true, sequence, name }, DirectedGraph::Node { id * 2 + 1, id, false, CommonUtils::ReverseComplement(sequence), name });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdgeToEdges(int from, const std::string& fromstart, int to, const std::string& toend)
@@ -98,8 +99,8 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 			for (int i = 0; i < g.node_size(); i++)
 			{
 				auto nodes = ConvertVGNodeToNodes(g.node(i));
-				result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
-				result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+				result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd);
+				result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd);
 			}
 		};
 		stream::for_each(graphfile, lambda);
@@ -126,8 +127,8 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 	for (int i = 0; i < graph.node_size(); i++)
 	{
 		auto nodes = ConvertVGNodeToNodes(graph.node(i));
-		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
-		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd);
 	}
 	for (int i = 0; i < graph.edge_size(); i++)
 	{
@@ -145,9 +146,10 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 	result.DBGOverlap = graph.edgeOverlap;
 	for (auto node : graph.nodes)
 	{
-		auto nodes = ConvertGFANodeToNodes(node.first, node.second);
-		result.AddNode(nodes.first.nodeId, nodes.first.sequence, !nodes.first.rightEnd);
-		result.AddNode(nodes.second.nodeId, nodes.second.sequence, !nodes.second.rightEnd);
+		std::string name = graph.OriginalNodeName(node.first);
+		auto nodes = ConvertGFANodeToNodes(node.first, node.second, name);
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd);
 	}
 	for (auto edge : graph.edges)
 	{
