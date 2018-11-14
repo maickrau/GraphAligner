@@ -19,7 +19,6 @@ struct AlignerParams
 	bool verboseMode;
 	bool tryAllSeeds;
 	bool highMemory;
-	bool useSubgraph;
 	size_t mxmLength;
 	size_t mumCount;
 	size_t memCount;
