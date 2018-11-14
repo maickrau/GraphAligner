@@ -89,6 +89,7 @@ struct AlignmentStats
 	fullLengthAlignments(0),
 	readsWithAnAlignment(0),
 	bpInReads(0),
+	bpInReadsWithASeed(0),
 	bpInAlignments(0),
 	bpInFullAlignments(0)
 	{
