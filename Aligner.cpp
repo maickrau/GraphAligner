@@ -195,7 +195,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	assertSetRead("Before any read", "No seed");
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory, params.useSubgraph };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (params.verboseMode)
@@ -245,14 +245,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				}
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
-				if (params.useSubgraph)
-				{
-					alignments = AlignOneWaySubgraph(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
-				}
-				else
-				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
-				}
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
 			}
 			else
 			{

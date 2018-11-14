@@ -60,13 +60,9 @@ int main(int argc, char** argv)
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
-	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
-	hidden.add_options()
-		("subgraph-extraction-heuristic", "")
-	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment);
 
 	boost::program_options::variables_map vm;
 	try
@@ -103,7 +99,6 @@ int main(int argc, char** argv)
 	params.verboseMode = false;
 	params.tryAllSeeds = false;
 	params.highMemory = false;
-	params.useSubgraph = false;
 	params.mxmLength = 20;
 	params.mumCount = 0;
 	params.memCount = 0;
@@ -133,8 +128,6 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
-
-	if (vm.count("subgraph-extraction-heuristic")) params.useSubgraph = true;
 
 	bool paramError = false;
 

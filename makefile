@@ -22,7 +22,7 @@ GITDATE := $(shell git show -s --format=%ci)
 $(shell mkdir -p bin)
 $(shell mkdir -p obj)
 
-$(ODIR)/GraphAlignerWrapper.o: GraphAlignerWrapper.cpp GraphAligner.h NodeSlice.h WordSlice.h ArrayPriorityQueue.h GraphAlignerVGAlignment.h GraphAlignerBitvectorBanded.h GraphAlignerBitvectorCommon.h GraphAlignerCommon.h GraphAlignerSubgraphExtraction.h $(DEPS)
+$(ODIR)/GraphAlignerWrapper.o: GraphAlignerWrapper.cpp GraphAligner.h NodeSlice.h WordSlice.h ArrayPriorityQueue.h GraphAlignerVGAlignment.h GraphAlignerBitvectorBanded.h GraphAlignerBitvectorCommon.h GraphAlignerCommon.h $(DEPS)
 
 $(ODIR)/AlignerMain.o: AlignerMain.cpp $(DEPS)
 	$(GPP) -c -o $@ $< $(CPPFLAGS) -DGITBRANCH=\"$(GITBRANCH)\" -DGITCOMMIT=\"$(GITCOMMIT)\" -DGITDATE="\"$(GITDATE)\""
