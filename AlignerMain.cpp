@@ -125,7 +125,11 @@ int main(int argc, char** argv)
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
-	if (vm.count("all-alignments")) params.outputAllAlns = true;
+	if (vm.count("all-alignments"))
+	{
+		params.outputAllAlns = true;
+		params.tryAllSeeds = true;
+	}
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
