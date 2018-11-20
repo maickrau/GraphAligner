@@ -1,3 +1,4 @@
+#include <omp.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <unistd.h>
@@ -38,34 +39,30 @@ int main(int argc, char** argv)
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
 		("help,h", "help message")
-		("threads,t", boost::program_options::value<int>(), "number of threads (int) (default 1)")
+		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("sloppy-optimizations", "use speed-up heuristics which might result in missing alignments")
+		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
-		("seeds-mum-count", boost::program_options::value<int>(), "n longest maximal unique matches fully contained in a node (int) (default all)")
-		("seeds-mem-count", boost::program_options::value<int>(), "n longest maximal exact matches fully contained in a node (int)")
-		("seeds-mxm-length", boost::program_options::value<int>(), "minimum length for maximal unique / exact matches (int) (default 20)")
+		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
+		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
+		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
-		("bandwidth,b", boost::program_options::value<int>(), "alignment bandwidth (int) (default 5)")
-		("ramp-bandwidth,B", boost::program_options::value<int>(), "ramp bandwidth (int)")
-		("tangle-effort,C", boost::program_options::value<int>(), "tangle effort limit, higher results in slower but more accurate alignments, default is unlimited (int)")
+		("bandwidth,b", boost::program_options::value<size_t>(), "alignment bandwidth (int)")
+		("ramp-bandwidth,B", boost::program_options::value<size_t>(), "ramp bandwidth (int)")
+		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
-	;
-	boost::program_options::options_description hidden("don't use these unless you know what you're doing");
-	hidden.add_options()
-		("subgraph-extraction-heuristic", "")
 	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment);
 
 	boost::program_options::variables_map vm;
 	try
@@ -82,7 +79,10 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << general << std::endl << seeding << std::endl << alignment << std::endl << std::endl;
+		std::cerr << mandatory << std::endl << general << std::endl << seeding;
+		std::cerr << "defaults are --seeds-mum-count -1 --seeds-mxm-length 20" << std::endl << std::endl;
+		std::cerr << alignment;
+		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
 	}
 
@@ -97,9 +97,8 @@ int main(int argc, char** argv)
 	params.dynamicRowStart = 0;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
-	params.sloppyOptimizations = false;
+	params.tryAllSeeds = false;
 	params.highMemory = false;
-	params.useSubgraph = false;
 	params.mxmLength = 20;
 	params.mumCount = 0;
 	params.memCount = 0;
@@ -121,12 +120,14 @@ int main(int argc, char** argv)
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
-	if (vm.count("all-alignments")) params.outputAllAlns = true;
+	if (vm.count("all-alignments"))
+	{
+		params.outputAllAlns = true;
+		params.tryAllSeeds = true;
+	}
 	if (vm.count("verbose")) params.verboseMode = true;
-	if (vm.count("sloppy-optimizations")) params.sloppyOptimizations = true;
+	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
-
-	if (vm.count("subgraph-extraction-heuristic")) params.useSubgraph = true;
 
 	bool paramError = false;
 
@@ -155,10 +156,12 @@ int main(int argc, char** argv)
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
 	}
-	if (params.initialBandwidth == 0 && params.rampBandwidth == 0)
+	if (params.initialBandwidth == 0 && params.rampBandwidth == 0 && params.maxCellsPerSlice == std::numeric_limits<decltype(params.maxCellsPerSlice)>::max())
 	{
-		//use 5 as the default bandwidth
+		//default extension parameters
 		params.initialBandwidth = 5;
+		params.rampBandwidth = 10;
+		params.maxCellsPerSlice = 10000;
 	}
 	if (params.initialBandwidth < 1)
 	{
@@ -192,6 +195,8 @@ int main(int argc, char** argv)
 		std::cerr << "run with option -h for help" << std::endl;
 		std::exit(1);
 	}
+
+	omp_set_num_threads(params.numThreads);
 
 	alignReads(params);
 

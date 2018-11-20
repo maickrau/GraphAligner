@@ -13,7 +13,6 @@
 #include "GraphAlignerCommon.h"
 #include "GraphAlignerVGAlignment.h"
 #include "GraphAlignerBitvectorBanded.h"
-#include "GraphAlignerSubgraphExtraction.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
@@ -61,52 +60,6 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWaySubgraph(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
-	{
-		if (seedHits.size() == 1)
-		{
-			reusableState.subgraph.assign(reusableState.subgraph.size(), true);
-			auto result = AlignOneWay(seq_id, sequence, seedHits, reusableState);
-			reusableState.subgraph.assign(reusableState.subgraph.size(), false);
-			return result;
-		}
-		assertSetRead(seq_id, "graph extraction");
-		logger << seq_id << " graph extraction ";
-		logger << BufferedWriter::Flush;
-		auto timeStart = std::chrono::system_clock::now();
-		SubgraphExtractor<LengthType, ScoreType, Word>::ExtractSubgraph(reusableState, params.graph, seedHits, sequence.size());
-		auto timeEnd = std::chrono::system_clock::now();
-		logger << seq_id << " extraction " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << "ms" << BufferedWriter::Flush;
-		AlignmentResult result;
-		for (size_t i = 0; i < seedHits.size(); i++)
-		{
-			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "(" + std::to_string(seedHits[i].nodeOffset) + ")," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen);
-			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
-			assertSetRead(seq_id, seedInfo);
-			if (params.sloppyOptimizations)
-			{
-				bool found = false;
-				for (auto aln : result.alignments)
-				{
-					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
-					{
-						logger << " already aligned";
-						logger << BufferedWriter::Flush;
-						found = true;
-						break;
-					}
-				}
-				if (found) continue;
-			}
-			logger << BufferedWriter::Flush;
-			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
-			if (item.alignmentFailed()) continue;
-			result.alignments.emplace_back(std::move(item));
-		}
-		assertSetRead(seq_id, "No seed");
-		return result;
-	}
-
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
@@ -118,22 +71,25 @@ public:
 			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen) + "," + std::to_string(seedHits[i].nodeOffset);
 			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
 			assertSetRead(seq_id, seedInfo);
-			// auto nodeIndex = params.graph.nodeLookup.at(std::get<0>(seedHits[i]) * 2);
-			// auto pos = std::get<1>(seedHits[i]);
-			// if (std::any_of(triedAlignmentNodes.begin(), triedAlignmentNodes.end(), [nodeIndex, pos](auto triple) { return std::get<0>(triple) <= pos && std::get<1>(triple) >= pos && std::get<2>(triple) == nodeIndex; }))
-			// {
-			// 	logger << "seed " << i << " already aligned" << BufferedWriter::Flush;
-			// 	continue;
-			// }
+			if (params.sloppyOptimizations)
+			{
+				bool found = false;
+				for (auto aln : result.alignments)
+				{
+					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
+					{
+						logger << " skipped";
+						logger << BufferedWriter::Flush;
+						found = true;
+						break;
+					}
+				}
+				if (found) continue;
+			}
 			logger << BufferedWriter::Flush;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
 			result.alignments.push_back(item);
-			// addAlignmentNodes(triedAlignmentNodes, item);
-			if (params.sloppyOptimizations && item.alignmentStart == 0 && item.alignmentEnd >= sequence.size() - params.graph.DBGOverlap - 1)
-			{
-				break;
-			}
 		}
 		assertSetRead(seq_id, "No seed");
 

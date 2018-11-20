@@ -3,6 +3,41 @@
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
 
+std::vector<bool> validNodeSequenceCharacters {
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, true, false, true, false, false, false, true,  //A, C, G
+false, false, false, false, false, false, false, false, 
+false, false, false, false, true, false, false, false,  //T
+false, false, false, false, false, false, false, false, 
+false, true, false, true, false, false, false, true,  //a, c, g
+false, false, false, false, false, false, false, false, 
+false, false, false, false, true, false, false, false,  //t
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false, 
+false, false, false, false, false, false, false, false
+};
+
 NodePos::NodePos() :
 id(0),
 end(false)
@@ -145,8 +180,42 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 	return LoadFromStream(file);
 }
 
+int getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name)
+{
+	auto found = assigned.find(name);
+	if (found == assigned.end())
+	{
+		int result = assigned.size();
+		assigned[name] = result;
+		return result;
+	}
+	return found->second;
+}
+
+void GfaGraph::numberBackToIntegers()
+{
+	std::unordered_map<int, std::string> newNodes;
+	std::unordered_map<NodePos, std::vector<NodePos>> newEdges;
+	for (auto pair : nodes)
+	{
+		assert(originalNodeName.count(pair.first) == 1);
+		newNodes[std::stoi(originalNodeName[pair.first])] = pair.second;
+	}
+	for (auto edge : edges)
+	{
+		for (auto target : edge.second)
+		{
+			newEdges[NodePos { std::stoi(originalNodeName[edge.first.id]), edge.first.end }].push_back(NodePos { std::stoi(originalNodeName[target.id]), target.end });
+		}
+	}
+	nodes = std::move(newNodes);
+	edges = std::move(newEdges);
+	originalNodeName.clear();
+}
+
 GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 {
+	std::unordered_map<std::string, int> nameMapping;
 	GfaGraph result;
 	while (file.good())
 	{
@@ -158,13 +227,18 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		if (line[0] == 'S')
 		{
 			std::stringstream sstr {line};
-			int id;
+			std::string idstr;
 			std::string dummy;
 			std::string seq;
 			sstr >> dummy;
 			assert(dummy == "S");
-			sstr >> id;
+			sstr >> idstr;
+			int id = getNameId(nameMapping, idstr);
 			sstr >> seq;
+			for (size_t i = 0; i < seq.size(); i++)
+			{
+				if (!validNodeSequenceCharacters[seq[i]]) throw NonATCGNodeSequencesException {};
+			}
 			std::string tags;
 			while (sstr.good())
 			{
@@ -180,17 +254,19 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		if (line[0] == 'L')
 		{
 			std::stringstream sstr {line};
-			int from;
-			int to;
+			std::string fromstr;
+			std::string tostr;
 			std::string fromstart;
 			std::string toend;
 			std::string dummy;
 			int overlap;
 			sstr >> dummy;
 			assert(dummy == "L");
-			sstr >> from;
+			sstr >> fromstr;
+			int from = getNameId(nameMapping, fromstr);
 			sstr >> fromstart;
-			sstr >> to;
+			sstr >> tostr;
+			int to = getNameId(nameMapping, tostr);
 			sstr >> toend;
 			sstr >> overlap;
 			assert(overlap >= 0);
@@ -200,6 +276,24 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			NodePos topos {to, toend == "+"};
 			result.edges[frompos].push_back(topos);
 		}
+	}
+	bool allIdsIntegers = true;
+	for (auto pair : nameMapping)
+	{
+		assert(result.originalNodeName.count(pair.second) == 0);
+		result.originalNodeName[pair.second] = pair.first;
+		if (allIdsIntegers)
+		{
+			char* p;
+			strtol(pair.first.c_str(), &p, 10);
+			if (*p) {
+				allIdsIntegers = false;
+			}
+		}
+	}
+	if (allIdsIntegers)
+	{
+		result.numberBackToIntegers();
 	}
 	std::vector<NodePos> nonexistantEdges;
 	for (auto& edge : result.edges)
@@ -222,3 +316,9 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 	return result;
 }
 
+std::string GfaGraph::OriginalNodeName(int nodeId) const
+{
+	auto found = originalNodeName.find(nodeId);
+	if (found == originalNodeName.end()) return "";
+	return found->second;
+}

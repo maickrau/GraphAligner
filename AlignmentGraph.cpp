@@ -29,30 +29,23 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	outNeighbors.reserve(numSplitNodes);
 	reverse.reserve(numSplitNodes);
 	nodeOffset.reserve(numSplitNodes);
-	nodeUnitigReid.reserve(numSplitNodes);
-	unitigReidInNeighbors.reserve(numNodes);
-	unitigReidOutNeighbors.reserve(numNodes);
 }
 
-void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool reverseNode)
+void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode)
 {
 	assert(!finalized);
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
 	originalNodeSize[nodeId] = sequence.size();
-	size_t reid = unitigReidInNeighbors.size();
-	unitigReidLookup[nodeId] = reid;
-	unitigReidInNeighbors.emplace_back();
-	unitigReidOutNeighbors.emplace_back();
-	unitigReidLength.push_back(sequence.size());
+	originalNodeName[nodeId] = name;
 	assert(DBGOverlap >= 0);
 	for (size_t i = 0; i < (size_t)DBGOverlap; i += SPLIT_NODE_SIZE)
 	{
 		size_t size = SPLIT_NODE_SIZE;
 		if (DBGOverlap - i < size) size = DBGOverlap - i;
 		if (size == 0) continue;
-		AddNode(nodeId, i, sequence.substr(i, size), reverseNode, reid);
+		AddNode(nodeId, i, sequence.substr(i, size), reverseNode);
 		if (i > 0)
 		{
 			assert(outNeighbors.size() >= 2);
@@ -68,7 +61,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	unitigStartNode[nodeId] = outNeighbors.size();
 	for (size_t i = DBGOverlap; i < sequence.size(); i += SPLIT_NODE_SIZE)
 	{
-		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode, reid);
+		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
 		if (i > 0)
 		{
 			assert(outNeighbors.size() >= 2);
@@ -83,12 +76,11 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, bool rever
 	}
 }
 
-void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode, size_t reid)
+void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode)
 {
 	assert(!finalized);
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
 
-	nodeUnitigReid.push_back(reid);
 	nodeLookup[nodeId].push_back(nodeLength.size());
 	nodeLength.push_back(sequence.size());
 	nodeIDs.push_back(nodeId);
@@ -140,15 +132,6 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
 	assert(to < inNeighbors.size());
 	assert(from < nodeLength.size());
 
-	assert(unitigReidLookup.count(node_id_from) == 1);
-	assert(unitigReidLookup.count(node_id_to) == 1);
-	size_t reidFrom = unitigReidLookup[node_id_from];
-	size_t reidTo = unitigReidLookup[node_id_to];
-	assert(reidFrom < unitigReidOutNeighbors.size());
-	assert(reidTo < unitigReidInNeighbors.size());
-	unitigReidOutNeighbors[reidFrom].push_back(reidTo);
-	unitigReidInNeighbors[reidTo].push_back(reidFrom);
-
 	//don't add double edges
 	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
 	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
@@ -161,10 +144,6 @@ void AlignmentGraph::Finalize(int wordSize)
 	assert(outNeighbors.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeUnitigReid.size() == nodeLength.size());
-	assert(unitigReidOutNeighbors.size() == unitigReidInNeighbors.size());
-	assert(unitigReidLookup.size() == unitigReidInNeighbors.size());
-	assert(unitigReidLength.size() == unitigReidInNeighbors.size());
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
 	finalized = true;
@@ -269,32 +248,6 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 	return std::make_pair(reverseNodeId, newOffset);
 }
 
-
-// size_t AlignmentGraph::GetReverseNode(size_t node) const
-// {
-// 	assert(node < nodeLength.size());
-
-// 	size_t originalNodeSize = (nodeLookup.at(nodeIDs[node]).size() - 1) * SPLIT_NODE_SIZE + NodeLength(nodeLookup.at(nodeIDs[node]).back());
-// 	size_t currentOffset = nodeOffset[node];
-// 	assert(currentOffset < originalNodeSize);
-// 	size_t reverseOffset = originalNodeSize - currentOffset - 1;
-// 	assert(reverseOffset < originalNodeSize);
-// 	size_t reverseNodeOriginalId;
-// 	if (nodeIDs[node] % 2 == 0)
-// 	{
-// 		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2 + 1;
-// 	}
-// 	else
-// 	{
-// 		reverseNodeOriginalId = (nodeIDs[node] / 2) * 2;
-// 	}
-// 	assert(nodeLookup.count(reverseNodeOriginalId) == 1);
-// 	assert(nodeLookup.at(reverseNodeOriginalId).size() > reverseOffset / SPLIT_NODE_SIZE);
-// 	size_t reverseNode = nodeLookup.at(reverseNodeOriginalId)[reverseOffset / SPLIT_NODE_SIZE];
-
-// 	return reverseNode;
-// }
-
 AlignmentGraph::MatrixPosition::MatrixPosition(size_t node, size_t nodeOffset, size_t seqPos) :
 	node(node),
 	nodeOffset(nodeOffset),
@@ -352,12 +305,9 @@ AlignmentGraph AlignmentGraph::GetSubgraph(const std::unordered_map<size_t, size
 	return result;
 }
 
-size_t AlignmentGraph::UnitigReidSize() const
+std::string AlignmentGraph::OriginalNodeName(int nodeId) const
 {
-	return unitigReidInNeighbors.size();
-}
-
-size_t AlignmentGraph::ReidLength(size_t reid) const
-{
-	return unitigReidLength[reid];
+	auto found = originalNodeName.find(nodeId);
+	if (found == originalNodeName.end()) return "";
+	return found->second;
 }

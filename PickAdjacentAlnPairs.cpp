@@ -5,13 +5,14 @@
 #include "CommonUtils.h"
 #include "fastqloader.h"
 
-std::vector<vg::Alignment> pickPairs(const std::vector<vg::Alignment>& alns, const std::unordered_map<std::string, size_t>& readLens, int maxSplitDist)
+std::vector<vg::Alignment> pickPairs(const std::vector<vg::Alignment>& alns, const std::unordered_map<std::string, size_t>& readLens, int maxSplitDist, int minPartialLen)
 {
 	std::unordered_map<std::string, std::vector<const vg::Alignment*>> startsPerRead;
 	std::unordered_map<std::string, std::vector<const vg::Alignment*>> endsPerRead;
 	for (auto& aln : alns)
 	{
 		assert(readLens.count(aln.name()) == 1);
+		if (aln.sequence().size() < minPartialLen) continue;
 		if (aln.query_position() == 0)
 		{
 			startsPerRead[aln.name()].push_back(&aln);
@@ -63,10 +64,11 @@ int main(int argc, char** argv)
 	int maxSplitDist = std::stoi(argv[2]);
 	std::string readFile { argv[3] };
 	std::string outputAlns { argv[4] };
+	int minPartialLen = std::stoi(argv[5]);
 
 	auto readLens = getReadLens(readFile);
 	auto alns = CommonUtils::LoadVGAlignments(inputAlns);
-	auto pairs = pickPairs(alns, readLens, maxSplitDist);
+	auto pairs = pickPairs(alns, readLens, maxSplitDist, minPartialLen);
 
 	std::ofstream alignmentOut { outputAlns, std::ios::out | std::ios::binary };
 	stream::write_buffered(alignmentOut, pairs, 0);

@@ -48,7 +48,7 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory, bool useSubgraph) :
+		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
 		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
@@ -62,12 +62,6 @@ public:
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
-			if (useSubgraph)
-			{
-				forwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
-				backwardReidDist.resize(graph.UnitigReidSize(), std::numeric_limits<size_t>::max());
-				subgraph.resize(graph.UnitigReidSize(), false);
-			}
 		}
 		void clear()
 		{
@@ -76,20 +70,12 @@ public:
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
-			forwardReidDist.assign(forwardReidDist.size(), std::numeric_limits<size_t>::max());
-			backwardReidDist.assign(backwardReidDist.size(), std::numeric_limits<size_t>::max());
-			subgraph.assign(subgraph.size(), false);
-			subgraphReids.clear();
 		}
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
-		std::vector<size_t> forwardReidDist;
-		std::vector<size_t> backwardReidDist;
-		std::vector<bool> subgraph;
-		std::vector<size_t> subgraphReids;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params

@@ -1026,7 +1026,7 @@ private:
 #endif
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<bool>& subgraph) const
+	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		LengthType currentMinimumNode = -1;
@@ -1135,7 +1135,6 @@ private:
 				{
 					for (auto neighbor : params.graph.outNeighbors[i])
 					{
-						// if (!subgraph[params.graph.nodeUnitigReid[neighbor]]) continue;
 						// calculableQueue.insert(newEndMinScore - previousMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 						calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 					}
@@ -1253,7 +1252,7 @@ private:
 		assert(sliceCalc.minScoreNodeOffset < params.graph.NodeLength(sliceCalc.minScoreNode));
 	}
 
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth, const std::vector<bool>& subgraph) const
+	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -1263,18 +1262,18 @@ private:
 		{
 			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
 			{
-				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
+				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 			}
 			else
 			{
-				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
+				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 			}
 			slice.scores = slice.scoresVectorMap.getMapSlice();
 		}
 		else
 		{
 			assert(!previousSlice.scoresVectorMap.hasVectorMapCurrently());
-			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, subgraph);
+			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore);
 		}
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
@@ -1295,14 +1294,14 @@ private:
 #endif
 	}
 
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth, const std::vector<bool>& subgraph) const
+	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, ArrayPriorityQueue<EdgeWithPriority>& calculableQueue, int bandwidth) const
 	{
 		if (!params.lowMemory)
 		{
 			DPSlice bandTest { &nodesliceMap };
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, subgraph);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
 			return bandTest;
 		}
 		else
@@ -1311,7 +1310,7 @@ private:
 			bandTest.scores.addEmptyNodeMap(previous.scores.size());
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, subgraph);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth);
 			return bandTest;
 		}
 	}
@@ -1353,9 +1352,9 @@ private:
 		size_t rampUntil = 0;
 #ifndef NDEBUG
 		volatile size_t debugLastProcessedSlice;
-		// https://stackoverflow.com/questions/3599160/how-to-suppress-unused-parameter-warnings-in-c
-		// we want to keep this variable for debugging purposes but don't want unused variable warnings
-		(void)(debugLastProcessedSlice);
+		// we want to keep this variable for debugging purposes
+		// useless self-assignment to prevent unused variable compilation warning
+		debugLastProcessedSlice = debugLastProcessedSlice;
 #endif
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
@@ -1367,7 +1366,7 @@ private:
 #ifdef SLICEVERBOSE
 			auto timeStart = std::chrono::system_clock::now();
 #endif
-			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, reusableState.subgraph);
+			auto newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth);
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
