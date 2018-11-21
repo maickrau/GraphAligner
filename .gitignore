@@ -1,2 +1,4 @@
 obj/*
 bin/*
+src/vg.pb.cc
+src/vg.pb.h
