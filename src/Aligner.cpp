@@ -367,7 +367,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 	{
 		try
 		{
-			auto graph = GfaGraph::LoadFromFile(graphFile);
+			auto graph = GfaGraph::LoadFromFile(graphFile, true);
 			if (loadSeeder)
 			{
 				std::cout << "Build seeder from the graph" << std::endl;
@@ -375,10 +375,10 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 			}
 			return DirectedGraph::BuildFromGFA(graph);
 		}
-		catch (GfaGraph::NonATCGNodeSequencesException)
+		catch (const GfaGraph::InvalidGraphException& e)
 		{
-			std::cout << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
-			std::cerr << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
+			std::cout << "Error in the graph: " << e.what() << std::endl;
+			std::cerr << "Error in the graph: " << e.what() << std::endl;
 			std::exit(1);
 		}
 	}

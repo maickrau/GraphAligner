@@ -43,9 +43,12 @@ namespace std
 class GfaGraph
 {
 public:
-	struct NonATCGNodeSequencesException {};
-	static GfaGraph LoadFromFile(std::string filename);
-	static GfaGraph LoadFromStream(std::istream& stream);
+	struct InvalidGraphException : std::runtime_error
+	{
+		InvalidGraphException(const char* c);
+	};
+	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false);
+	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false);
 	void SaveToFile(std::string filename) const;
 	void SaveToStream(std::ostream& stream) const;
 	void AddSubgraph(const GfaGraph& subgraph);
@@ -54,7 +57,8 @@ public:
 	std::string OriginalNodeName(int nodeId) const;
 	std::unordered_map<int, std::string> nodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
-	int edgeOverlap;
+	std::unordered_map<std::pair<NodePos, NodePos>, size_t> varyingOverlaps;
+	size_t edgeOverlap;
 private:
 	void numberBackToIntegers();
 	std::unordered_map<int, std::string> tags;

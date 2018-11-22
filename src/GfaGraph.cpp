@@ -1,3 +1,4 @@
+#include <limits>
 #include <fstream>
 #include <sstream>
 #include "GfaGraph.h"
@@ -38,6 +39,10 @@ false, false, false, false, false, false, false, false,
 false, false, false, false, false, false, false, false
 };
 
+GfaGraph::InvalidGraphException::InvalidGraphException(const char* c) : std::runtime_error(c) 
+{
+}
+
 NodePos::NodePos() :
 id(0),
 end(false)
@@ -68,7 +73,8 @@ NodePos NodePos::Reverse() const
 GfaGraph::GfaGraph() :
 nodes(),
 edges(),
-edgeOverlap(-1)
+varyingOverlaps(),
+edgeOverlap(std::numeric_limits<size_t>::max())
 {
 }
 
@@ -152,7 +158,12 @@ void GfaGraph::SaveToStream(std::ostream& file) const
 	{
 		for (auto target : edge.second)
 		{
-			file << "L\t" << edge.first.id << "\t" << (edge.first.end ? "+" : "-") << "\t" << target.id << "\t" << (target.end ? "+" : "-") << "\t" << edgeOverlap << "M" << std::endl;
+			auto overlap = edgeOverlap;
+			if (varyingOverlaps.count(std::make_pair(edge.first, target)) == 1)
+			{
+				overlap = varyingOverlaps.at(std::make_pair(edge.first, target));
+			}
+			file << "L\t" << edge.first.id << "\t" << (edge.first.end ? "+" : "-") << "\t" << target.id << "\t" << (target.end ? "+" : "-") << "\t" << overlap << "M" << std::endl;
 		}
 	}
 }
@@ -170,14 +181,18 @@ void GfaGraph::AddSubgraph(const GfaGraph& other)
 		for (auto target : edge.second)
 		{
 			edges[edge.first].push_back(target);
+			if (other.varyingOverlaps.count(std::make_pair(edge.first, target)) == 1)
+			{
+				varyingOverlaps[std::make_pair(edge.first, target)] = other.varyingOverlaps.at(std::make_pair(edge.first, target));
+			}
 		}
 	}
 }
 
-GfaGraph GfaGraph::LoadFromFile(std::string filename)
+GfaGraph GfaGraph::LoadFromFile(std::string filename, bool allowVaryingOverlaps)
 {
 	std::ifstream file {filename};
-	return LoadFromStream(file);
+	return LoadFromStream(file, allowVaryingOverlaps);
 }
 
 int getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name)
@@ -213,7 +228,7 @@ void GfaGraph::numberBackToIntegers()
 	originalNodeName.clear();
 }
 
-GfaGraph GfaGraph::LoadFromStream(std::istream& file)
+GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 {
 	std::unordered_map<std::string, int> nameMapping;
 	GfaGraph result;
@@ -237,7 +252,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			sstr >> seq;
 			for (size_t i = 0; i < seq.size(); i++)
 			{
-				if (!validNodeSequenceCharacters[seq[i]]) throw NonATCGNodeSequencesException {};
+				if (!validNodeSequenceCharacters[seq[i]]) throw InvalidGraphException { "Non-ATCG node sequences are currently not supported. Change the input graph" };
 			}
 			std::string tags;
 			while (sstr.good())
@@ -269,12 +284,20 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			int to = getNameId(nameMapping, tostr);
 			sstr >> toend;
 			sstr >> overlap;
+			if (overlap < 0) throw InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
-			assert(result.edgeOverlap == -1 || overlap == result.edgeOverlap);
+			if (!allowVaryingOverlaps && result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
+			{
+				throw InvalidGraphException { "Varying edge overlaps are not allowed" };
+			}
 			result.edgeOverlap = overlap;
 			NodePos frompos {from, fromstart == "+"};
 			NodePos topos {to, toend == "+"};
 			result.edges[frompos].push_back(topos);
+			if (allowVaryingOverlaps)
+			{
+				result.varyingOverlaps[std::make_pair(frompos, topos)] = overlap;
+			}
 		}
 	}
 	bool allIdsIntegers = true;

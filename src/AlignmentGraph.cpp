@@ -7,10 +7,8 @@
 #include "ThreadReadAssertion.h"
 
 AlignmentGraph::AlignmentGraph() :
-DBGOverlap(0),
 nodeLength(),
 nodeLookup(),
-unitigStartNode(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
@@ -22,7 +20,6 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 {
 	nodeSequences.reserve(numSplitNodes);
 	nodeLookup.reserve(numNodes);
-	unitigStartNode.reserve(numNodes);
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
 	inNeighbors.reserve(numSplitNodes);
@@ -31,7 +28,7 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	nodeOffset.reserve(numSplitNodes);
 }
 
-void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode)
+void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
 {
 	assert(!finalized);
 	//subgraph extraction might produce different subgraphs with common nodes
@@ -39,39 +36,31 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 	if (nodeLookup.count(nodeId) != 0) return;
 	originalNodeSize[nodeId] = sequence.size();
 	originalNodeName[nodeId] = name;
-	assert(DBGOverlap >= 0);
-	for (size_t i = 0; i < (size_t)DBGOverlap; i += SPLIT_NODE_SIZE)
+	assert(breakpoints[0] == 0);
+	assert(breakpoints.back() == sequence.size());
+	for (size_t breakpoint = 0; breakpoint < breakpoints.size(); breakpoint++)
 	{
-		size_t size = SPLIT_NODE_SIZE;
-		if (DBGOverlap - i < size) size = DBGOverlap - i;
-		if (size == 0) continue;
-		AddNode(nodeId, i, sequence.substr(i, size), reverseNode);
-		if (i > 0)
+		assert(breakpoint == 0 || breakpoints[breakpoint] >= breakpoints[breakpoint-1]);
+		if (breakpoint > 0 && breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
+		size_t start = 0;
+		if (breakpoint > 0) start = breakpoints[breakpoint-1];
+		for (size_t offset = start; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
 		{
-			assert(outNeighbors.size() >= 2);
-			assert(outNeighbors.size() == inNeighbors.size());
-			assert(nodeIDs.size() == outNeighbors.size());
-			assert(nodeOffset.size() == outNeighbors.size());
-			assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-			assert(nodeOffset[outNeighbors.size()-2] + SPLIT_NODE_SIZE == nodeOffset[outNeighbors.size()-1]);
-			outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-			inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
-		}
-	}
-	unitigStartNode[nodeId] = outNeighbors.size();
-	for (size_t i = DBGOverlap; i < sequence.size(); i += SPLIT_NODE_SIZE)
-	{
-		AddNode(nodeId, i, sequence.substr(i, SPLIT_NODE_SIZE), reverseNode);
-		if (i > 0)
-		{
-			assert(outNeighbors.size() >= 2);
-			assert(outNeighbors.size() == inNeighbors.size());
-			assert(nodeIDs.size() == outNeighbors.size());
-			assert(nodeOffset.size() == outNeighbors.size());
-			assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-			assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
-			outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-			inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+			size_t size = SPLIT_NODE_SIZE;
+			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
+			assert(size > 0);
+			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
+			if (offset > 0)
+			{
+				assert(outNeighbors.size() >= 2);
+				assert(outNeighbors.size() == inNeighbors.size());
+				assert(nodeIDs.size() == outNeighbors.size());
+				assert(nodeOffset.size() == outNeighbors.size());
+				assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
+				assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
+				outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
+				inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+			}
 		}
 	}
 }
@@ -122,13 +111,22 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	assert(inNeighbors.size() == outNeighbors.size());
 }
 
-void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to)
+void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset)
 {
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
 	size_t from = nodeLookup[node_id_from].back();
-	size_t to = unitigStartNode[node_id_to];
+	size_t to = std::numeric_limits<size_t>::max();
+	for (auto node : nodeLookup[node_id_to])
+	{
+		if (nodeOffset[node] == startOffset)
+		{
+			to = node;
+			break;
+		}
+	}
+	assert(to != std::numeric_limits<size_t>::max());
 	assert(to < inNeighbors.size());
 	assert(from < nodeLength.size());
 
