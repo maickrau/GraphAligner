@@ -43,10 +43,6 @@ namespace std
 class GfaGraph
 {
 public:
-	struct InvalidGraphException : std::runtime_error
-	{
-		InvalidGraphException(const char* c);
-	};
 	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false);
 	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false);
 	void SaveToFile(std::string filename) const;

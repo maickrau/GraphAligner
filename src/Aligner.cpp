@@ -349,23 +349,23 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 		std::cerr << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	if (graphFile.substr(graphFile.size()-3) == ".vg")
+	try
 	{
-		if (loadSeeder)
+		if (graphFile.substr(graphFile.size()-3) == ".vg")
 		{
-			auto graph = CommonUtils::LoadVGGraph(graphFile);
-			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new MummerSeeder { graph, seederCachePrefix };
-			return DirectedGraph::BuildFromVG(graph);
+			if (loadSeeder)
+			{
+				auto graph = CommonUtils::LoadVGGraph(graphFile);
+				std::cout << "Build seeder from the graph" << std::endl;
+				*seeder = new MummerSeeder { graph, seederCachePrefix };
+				return DirectedGraph::BuildFromVG(graph);
+			}
+			else
+			{
+				return DirectedGraph::StreamVGGraphFromFile(graphFile);
+			}
 		}
-		else
-		{
-			return DirectedGraph::StreamVGGraphFromFile(graphFile);
-		}
-	}
-	else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
-	{
-		try
+		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile, true);
 			if (loadSeeder)
@@ -375,17 +375,17 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 			}
 			return DirectedGraph::BuildFromGFA(graph);
 		}
-		catch (const GfaGraph::InvalidGraphException& e)
+		else
 		{
-			std::cout << "Error in the graph: " << e.what() << std::endl;
-			std::cerr << "Error in the graph: " << e.what() << std::endl;
-			std::exit(1);
+			std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
+			std::exit(0);
 		}
 	}
-	else
+	catch (const CommonUtils::InvalidGraphException& e)
 	{
-		std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
-		std::exit(0);
+		std::cout << "Error in the graph: " << e.what() << std::endl;
+		std::cerr << "Error in the graph: " << e.what() << std::endl;
+		std::exit(1);
 	}
 }
 

@@ -21,7 +21,9 @@ char lowercase(char c)
 		case 't':
 		case 'T':
 			return 't';
-		case '`': return '`';
+		default:
+		case '`':
+			return '`';
 	}
 	assert(false);
 	return std::numeric_limits<char>::max();

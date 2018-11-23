@@ -3,45 +3,7 @@
 #include <sstream>
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
-
-std::vector<bool> validNodeSequenceCharacters {
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, true, false, true, false, false, false, true,  //A, C, G
-false, false, false, false, false, false, false, false, 
-false, false, false, false, true, false, false, false,  //T
-false, false, false, false, false, false, false, false, 
-false, true, false, true, false, false, false, true,  //a, c, g
-false, false, false, false, false, false, false, false, 
-false, false, false, false, true, false, false, false,  //t
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false, 
-false, false, false, false, false, false, false, false
-};
-
-GfaGraph::InvalidGraphException::InvalidGraphException(const char* c) : std::runtime_error(c) 
-{
-}
+#include "CommonUtils.h"
 
 NodePos::NodePos() :
 id(0),
@@ -250,10 +212,6 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			sstr >> idstr;
 			int id = getNameId(nameMapping, idstr);
 			sstr >> seq;
-			for (size_t i = 0; i < seq.size(); i++)
-			{
-				if (!validNodeSequenceCharacters[seq[i]]) throw InvalidGraphException { "Non-ATCG node sequences are currently not supported. Change the input graph" };
-			}
 			std::string tags;
 			while (sstr.good())
 			{
@@ -284,11 +242,11 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			int to = getNameId(nameMapping, tostr);
 			sstr >> toend;
 			sstr >> overlap;
-			if (overlap < 0) throw InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
+			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
 			if (!allowVaryingOverlaps && result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
 			{
-				throw InvalidGraphException { "Varying edge overlaps are not allowed" };
+				throw CommonUtils::InvalidGraphException { "Varying edge overlaps are not allowed" };
 			}
 			result.edgeOverlap = overlap;
 			NodePos frompos {from, fromstart == "+"};

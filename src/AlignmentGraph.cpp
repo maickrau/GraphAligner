@@ -38,6 +38,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 	originalNodeName[nodeId] = name;
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
+	size_t firstNode = nodeIDs.size();
 	for (size_t breakpoint = 0; breakpoint < breakpoints.size(); breakpoint++)
 	{
 		assert(breakpoint == 0 || breakpoints[breakpoint] >= breakpoints[breakpoint-1]);
@@ -48,18 +49,102 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 		{
 			size_t size = SPLIT_NODE_SIZE;
 			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
-			assert(size > 0);
-			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
-			if (offset > 0)
+			if (size == 1)
 			{
-				assert(outNeighbors.size() >= 2);
-				assert(outNeighbors.size() == inNeighbors.size());
-				assert(nodeIDs.size() == outNeighbors.size());
-				assert(nodeOffset.size() == outNeighbors.size());
-				assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-				assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
-				outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-				inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+				switch(sequence[offset])
+				{
+					case 'a':
+					case 'A':
+					case 't':
+					case 'T':
+					case 'c':
+					case 'C':
+					case 'g':
+					case 'G':
+						AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
+						break;
+					case 'n':
+					case 'N':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					case 'y':
+					case 'Y':
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					case 'r':
+					case 'R':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						break;
+					case 'w':
+					case 'W':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					case 's':
+					case 'S':
+						AddNode(nodeId, offset, "g", reverseNode);
+						AddNode(nodeId, offset, "c", reverseNode);
+						break;
+					case 'k':
+					case 'K':
+						AddNode(nodeId, offset, "t", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						break;
+					case 'm':
+					case 'M':
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "a", reverseNode);
+						break;
+					case 'd':
+					case 'D':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					case 'v':
+					case 'V':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						break;
+					case 'h':
+					case 'H':
+						AddNode(nodeId, offset, "a", reverseNode);
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					case 'b':
+					case 'B':
+						AddNode(nodeId, offset, "c", reverseNode);
+						AddNode(nodeId, offset, "g", reverseNode);
+						AddNode(nodeId, offset, "t", reverseNode);
+						break;
+					default:
+						assert(false);
+				}
+			}
+			else
+			{
+				AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
+			}
+			assert(size > 0);
+		}
+	}
+	size_t lastNode = nodeIDs.size();
+	for (size_t i = firstNode; i < lastNode; i++)
+	{
+		for (size_t j = (i > firstNode + 8) ? (i - 8) : firstNode; j < i; j++)
+		{
+			assert(nodeIDs[j] == nodeIDs[i]);
+			if (nodeOffset[j] + nodeLength[j] == nodeOffset[i])
+			{
+				outNeighbors[j].push_back(i);
+				inNeighbors[i].push_back(j);
 			}
 		}
 	}
@@ -116,23 +201,37 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
-	size_t from = nodeLookup[node_id_from].back();
-	size_t to = std::numeric_limits<size_t>::max();
-	for (auto node : nodeLookup[node_id_to])
+	std::vector<size_t> fromNodes;
+	auto& fromvec = nodeLookup[node_id_from];
+	for (size_t i = fromvec.size() > 4 ? fromvec.size() - 4 : 0; i < fromvec.size(); i++)
 	{
-		if (nodeOffset[node] == startOffset)
+		size_t node = fromvec[i];
+		if (nodeOffset[node] + nodeLength[node] == originalNodeSize[node_id_from])
 		{
-			to = node;
-			break;
+			fromNodes.push_back(node);
 		}
 	}
-	assert(to != std::numeric_limits<size_t>::max());
-	assert(to < inNeighbors.size());
-	assert(from < nodeLength.size());
-
-	//don't add double edges
-	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
-	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
+	assert(fromNodes.size() >= 1);
+	assert(fromNodes.size() <= 4);
+#ifndef NDEBUG
+	size_t debugFound = 0;
+#endif
+	for (auto to : nodeLookup[node_id_to])
+	{
+		if (nodeOffset[to] == startOffset)
+		{
+			for (auto from : fromNodes)
+			{
+				//don't add double edges
+				if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
+				if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
+#ifndef NDEBUG
+				debugFound += 1;
+#endif
+			}
+		}
+	}
+	assert(debugFound >= 1);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
