@@ -12,6 +12,7 @@ nodeLookup(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
+bpSize(0),
 finalized(false)
 {
 }
@@ -70,6 +71,7 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	assert(!finalized);
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
 
+	bpSize += sequence.size();
 	nodeLookup[nodeId].push_back(nodeLength.size());
 	nodeLength.push_back(sequence.size());
 	nodeIDs.push_back(nodeId);
@@ -308,4 +310,9 @@ std::string AlignmentGraph::OriginalNodeName(int nodeId) const
 	auto found = originalNodeName.find(nodeId);
 	if (found == originalNodeName.end()) return "";
 	return found->second;
+}
+
+size_t AlignmentGraph::SizeInBP() const
+{
+	return bpSize;
 }

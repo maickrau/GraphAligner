@@ -14,6 +14,7 @@
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
 #include "MummerSeeder.h"
+#include "AlignmentSelection.h"
 
 struct Seeder
 {
@@ -202,6 +203,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 {
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory };
+	AlignmentSelection::SelectionOptions selectionOptions;
+	selectionOptions.method = params.alignmentSelectionMethod;
+	selectionOptions.graphSize = alignmentGraph.SizeInBP();
+	selectionOptions.ECutoff = params.selectionECutoff;
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (params.verboseMode)
@@ -226,6 +231,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		if (fastq == nullptr) break;
 		assertSetRead(fastq->seq_id, "No seed");
 		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
+		selectionOptions.readSize = fastq->sequence.size();
 		stats.reads += 1;
 		stats.bpInReads += fastq->sequence.size();
 
@@ -266,6 +272,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions, [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
+
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
 		{
@@ -276,10 +284,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		stats.readsWithAnAlignment += 1;
 
-		if (!params.outputAllAlns)
-		{
-			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max(), [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
-		}
 		
 		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 
@@ -477,8 +481,8 @@ void alignReads(AlignerParams params)
 
 	allThreadsDone = true;
 
-	writerThread.join();
 	fastqThread.join();
+	writerThread.join();
 
 	if (mummerseeder != nullptr) delete mummerseeder;
 

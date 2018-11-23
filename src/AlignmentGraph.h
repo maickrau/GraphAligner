@@ -59,6 +59,7 @@ public:
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
+	size_t SizeInBP() const;
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
@@ -79,6 +80,7 @@ private:
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<NodeChunkSequence> nodeSequences;
+	size_t bpSize;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>

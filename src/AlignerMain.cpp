@@ -41,8 +41,19 @@ int main(int argc, char** argv)
 		("help,h", "help message")
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
-		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
+	;
+	boost::program_options::options_description results("Outputted alignments");
+	results.add_options()
+		("E-cutoff", boost::program_options::value<double>(), "all alignments with E-value <= arg")
+		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
+		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
+		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
+		("schedule-length", "optimally select a non-overlapping set based on the alignment length")
+		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
+		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
+		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
+		("all-alignments", "return all alignments instead of a set of non-overlapping alignments (also forces --try-all-seeds)")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -62,7 +73,7 @@ int main(int argc, char** argv)
 	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(results);
 
 	boost::program_options::variables_map vm;
 	try
@@ -79,7 +90,9 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << general << std::endl << seeding;
+		std::cerr << mandatory << std::endl << general << std::endl << results;
+		std::cerr << "default is --greedy-length" << std::endl << std::endl;
+		std::cerr << seeding;
 		std::cerr << "defaults are --seeds-mum-count -1 --seeds-mxm-length 20" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
@@ -103,7 +116,8 @@ int main(int argc, char** argv)
 	params.mumCount = 0;
 	params.memCount = 0;
 	params.seederCachePrefix = "";
-	params.outputAllAlns = false;
+	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
+	params.selectionECutoff = 0;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
@@ -120,14 +134,58 @@ int main(int argc, char** argv)
 
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
-	if (vm.count("all-alignments"))
-	{
-		params.outputAllAlns = true;
-		params.tryAllSeeds = true;
-	}
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
+
+	int resultSelectionMethods = 0;
+	if (vm.count("all-alignments"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::All;
+		params.tryAllSeeds = true;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("greedy-length"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("greedy-score"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyScore;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("greedy-E"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyE;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("E-cutoff"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ECutoff;
+		params.selectionECutoff = vm["E-cutoff"].as<double>();
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-inverse-E-sum"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseESum;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-inverse-E-product"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseEProduct;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-score"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleScore;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-length"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleLength;
+		resultSelectionMethods += 1;
+	}
 
 	bool paramError = false;
 
@@ -188,6 +246,10 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
+	}
+	if (resultSelectionMethods > 1)
+	{
+		std::cerr << "pick only one method for selecting outputted alignments" << std::endl;
 	}
 
 	if (paramError)
