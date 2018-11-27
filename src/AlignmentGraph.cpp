@@ -40,20 +40,19 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 	if (nodeLookup.count(nodeId) != 0) return;
 	originalNodeSize[nodeId] = sequence.size();
 	originalNodeName[nodeId] = name;
+	assert(breakpoints.size() >= 2);
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
-	for (size_t breakpoint = 0; breakpoint < breakpoints.size(); breakpoint++)
+	for (size_t breakpoint = 1; breakpoint < breakpoints.size(); breakpoint++)
 	{
-		assert(breakpoint == 0 || breakpoints[breakpoint] >= breakpoints[breakpoint-1]);
-		if (breakpoint > 0 && breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
-		size_t start = 0;
-		if (breakpoint > 0) start = breakpoints[breakpoint-1];
-		for (size_t offset = start; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
+		if (breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
+		assert(breakpoints[breakpoint] > breakpoints[breakpoint-1]);
+		for (size_t offset = breakpoints[breakpoint-1]; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
 		{
 			size_t size = SPLIT_NODE_SIZE;
 			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
-			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
 			assert(size > 0);
+			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
 			if (offset > 0)
 			{
 				assert(outNeighbors.size() >= 2);
@@ -222,6 +221,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	size_t from = nodeLookup.at(node_id_from).back();
 	size_t to = std::numeric_limits<size_t>::max();
 	assert(nodeOffset[from] + nodeLength[from] == originalNodeSize[node_id_from]);
+	auto looked = nodeLookup[node_id_to];
 	for (auto node : nodeLookup[node_id_to])
 	{
 		if (nodeOffset[node] == startOffset)

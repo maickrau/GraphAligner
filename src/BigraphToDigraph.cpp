@@ -218,8 +218,12 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 	std::unordered_map<int, std::vector<size_t>> breakpoints;
 	for (auto pair : graph.varyingOverlaps)
 	{
-		breakpoints[pair.first.second.id * 2].push_back(pair.second);
-		breakpoints[pair.first.first.id * 2 + 1].push_back(pair.second);
+		int to = pair.first.second.id * 2;
+		if (!pair.first.second.end) to += 1;
+		int from = pair.first.first.Reverse().id * 2;
+		if (!pair.first.first.Reverse().end) from += 1;
+		breakpoints[from].push_back(pair.second);
+		breakpoints[to].push_back(pair.second);
 	}
 	for (auto node : graph.nodes)
 	{
