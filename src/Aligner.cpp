@@ -91,7 +91,8 @@ struct AlignmentStats
 	bpInReads(0),
 	bpInReadsWithASeed(0),
 	bpInAlignments(0),
-	bpInFullAlignments(0)
+	bpInFullAlignments(0),
+	assertionBroke(false)
 	{
 	}
 	std::atomic<size_t> reads;
@@ -104,6 +105,7 @@ struct AlignmentStats
 	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
 	std::atomic<size_t> bpInFullAlignments;
+	std::atomic<bool> assertionBroke;
 };
 
 bool is_file_exist(std::string fileName)
@@ -263,6 +265,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			coutoutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			cerroutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			reusableState.clear();
+			stats.assertionBroke = true;
 			continue;
 		}
 
@@ -304,6 +307,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
 				reusableState.clear();
+				stats.assertionBroke = true;
 				continue;
 			}
 			stats.alignments += 1;
@@ -494,4 +498,8 @@ void alignReads(AlignerParams params)
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
 	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
 	std::cout << "Output end-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
+	if (stats.assertionBroke)
+	{
+		std::cout << "Alignment broke with some reads. Look at stderr output." << std::endl;
+	}
 }
