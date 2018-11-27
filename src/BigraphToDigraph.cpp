@@ -258,19 +258,5 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 		}
 	}
 	result.Finalize(64);
-#ifndef NDEBUG
-	for (size_t node = 0; node < result.NodeSize(); node++)
-	{
-		int originalNodeId = result.nodeIDs[node] / 2;
-		bool originalReverse = result.reverse[node];
-		std::string originalSeq = graph.nodes.at(originalNodeId);
-		if (originalReverse) originalSeq = CommonUtils::ReverseComplement(originalSeq);
-		for (size_t offset = 0; offset < result.NodeLength(node); offset++)
-		{
-			auto charHere = result.NodeSequences(node, offset);
-			assert(toupper(charHere) == toupper(originalSeq[offset + result.nodeOffset[node]]));
-		}
-	}
-#endif
 	return result;
 }
