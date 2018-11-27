@@ -12,6 +12,8 @@ nodeLookup(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
+ambiguousNodeSequences(),
+firstAmbiguous(std::numeric_limits<size_t>::max()),
 finalized(false)
 {
 }
@@ -19,6 +21,7 @@ finalized(false)
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 {
 	nodeSequences.reserve(numSplitNodes);
+	ambiguousNodeSequences.reserve(numSplitNodes);
 	nodeLookup.reserve(numNodes);
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
@@ -30,6 +33,7 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 
 void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
 {
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
@@ -38,7 +42,6 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 	originalNodeName[nodeId] = name;
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
-	size_t firstNode = nodeIDs.size();
 	for (size_t breakpoint = 0; breakpoint < breakpoints.size(); breakpoint++)
 	{
 		assert(breakpoint == 0 || breakpoints[breakpoint] >= breakpoints[breakpoint-1]);
@@ -49,102 +52,18 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 		{
 			size_t size = SPLIT_NODE_SIZE;
 			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
-			if (size == 1)
-			{
-				switch(sequence[offset])
-				{
-					case 'a':
-					case 'A':
-					case 't':
-					case 'T':
-					case 'c':
-					case 'C':
-					case 'g':
-					case 'G':
-						AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
-						break;
-					case 'n':
-					case 'N':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					case 'y':
-					case 'Y':
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					case 'r':
-					case 'R':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						break;
-					case 'w':
-					case 'W':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					case 's':
-					case 'S':
-						AddNode(nodeId, offset, "g", reverseNode);
-						AddNode(nodeId, offset, "c", reverseNode);
-						break;
-					case 'k':
-					case 'K':
-						AddNode(nodeId, offset, "t", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						break;
-					case 'm':
-					case 'M':
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "a", reverseNode);
-						break;
-					case 'd':
-					case 'D':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					case 'v':
-					case 'V':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						break;
-					case 'h':
-					case 'H':
-						AddNode(nodeId, offset, "a", reverseNode);
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					case 'b':
-					case 'B':
-						AddNode(nodeId, offset, "c", reverseNode);
-						AddNode(nodeId, offset, "g", reverseNode);
-						AddNode(nodeId, offset, "t", reverseNode);
-						break;
-					default:
-						assert(false);
-				}
-			}
-			else
-			{
-				AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
-			}
+			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
 			assert(size > 0);
-		}
-	}
-	size_t lastNode = nodeIDs.size();
-	for (size_t i = firstNode; i < lastNode; i++)
-	{
-		for (size_t j = (i > firstNode + 8) ? (i - 8) : firstNode; j < i; j++)
-		{
-			assert(nodeIDs[j] == nodeIDs[i]);
-			if (nodeOffset[j] + nodeLength[j] == nodeOffset[i])
+			if (offset > 0)
 			{
-				outNeighbors[j].push_back(i);
-				inNeighbors[i].push_back(j);
+				assert(outNeighbors.size() >= 2);
+				assert(outNeighbors.size() == inNeighbors.size());
+				assert(nodeIDs.size() == outNeighbors.size());
+				assert(nodeOffset.size() == outNeighbors.size());
+				assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
+				assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
+				outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
+				inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
 			}
 		}
 	}
@@ -152,6 +71,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 
 void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode)
 {
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
 
@@ -162,34 +82,131 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	outNeighbors.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeOffset.push_back(offset);
-	nodeSequences.emplace_back();
+	NodeChunkSequence normalSeq;
+	for (size_t i = 0; i < CHUNKS_IN_NODE; i++)
+	{
+		normalSeq[i] = 0;
+	}
+	AmbiguousChunkSequence ambiguousSeq;
+	ambiguousSeq.A = 0;
+	ambiguousSeq.C = 0;
+	ambiguousSeq.G = 0;
+	ambiguousSeq.T = 0;
+	bool ambiguous = false;
+	assert(sequence.size() <= sizeof(size_t)*8);
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
 		size_t chunk = i / BP_IN_CHUNK;
+		assert(chunk < CHUNKS_IN_NODE);
 		size_t offset = (i % BP_IN_CHUNK) * 2;
-		size_t c = 0;
 		switch(sequence[i])
 		{
 			case 'a':
 			case 'A':
-				c = 0;
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				normalSeq[chunk] |= ((size_t)0) << offset;
 				break;
 			case 'c':
 			case 'C':
-				c = 1;
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				normalSeq[chunk] |= ((size_t)1) << offset;
 				break;
 			case 'g':
 			case 'G':
-				c = 2;
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				normalSeq[chunk] |= ((size_t)2) << offset;
 				break;
 			case 't':
 			case 'T':
-				c = 3;
+			case 'u':
+			case 'U':
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				normalSeq[chunk] |= ((size_t)3) << offset;
+				break;
+			case 'r':
+			case 'R':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'y':
+			case 'Y':
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 's':
+			case 'S':
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'w':
+			case 'W':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'k':
+			case 'K':
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'm':
+			case 'M':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'b':
+			case 'B':
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'd':
+			case 'D':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'h':
+			case 'H':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'v':
+			case 'V':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguous = true;
+				break;
+			case 'n':
+			case 'N':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				ambiguous = true;
 				break;
 			default:
 				assert(false);
 		}
-		nodeSequences.back()[chunk] |= c << offset;
+	}
+	ambiguousNodes.push_back(ambiguous);
+	if (ambiguous)
+	{
+		ambiguousNodeSequences.emplace_back(ambiguousSeq);
+	}
+	else
+	{
+		nodeSequences.emplace_back(normalSeq);
 	}
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(nodeLength.size() == inNeighbors.size());
@@ -198,51 +215,38 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 
 void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset)
 {
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
-	std::vector<size_t> fromNodes;
-	auto& fromvec = nodeLookup[node_id_from];
-	for (size_t i = fromvec.size() > 4 ? fromvec.size() - 4 : 0; i < fromvec.size(); i++)
+	size_t from = nodeLookup.at(node_id_from).back();
+	size_t to = std::numeric_limits<size_t>::max();
+	assert(nodeOffset[from] + nodeLength[from] == originalNodeSize[node_id_from]);
+	for (auto node : nodeLookup[node_id_to])
 	{
-		size_t node = fromvec[i];
-		if (nodeOffset[node] + nodeLength[node] == originalNodeSize[node_id_from])
+		if (nodeOffset[node] == startOffset)
 		{
-			fromNodes.push_back(node);
+			to = node;
 		}
 	}
-	assert(fromNodes.size() >= 1);
-	assert(fromNodes.size() <= 4);
-#ifndef NDEBUG
-	size_t debugFound = 0;
-#endif
-	for (auto to : nodeLookup[node_id_to])
-	{
-		if (nodeOffset[to] == startOffset)
-		{
-			for (auto from : fromNodes)
-			{
-				//don't add double edges
-				if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
-				if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
-#ifndef NDEBUG
-				debugFound += 1;
-#endif
-			}
-		}
-	}
-	assert(debugFound >= 1);
+	assert(to != std::numeric_limits<size_t>::max());
+	//don't add double edges
+	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
+	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
 {
-	assert(nodeSequences.size() == nodeLength.size());
+	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
 	assert(outNeighbors.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
+	RenumberAmbiguousToEnd();
+	ambiguousNodes.clear();
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
+	std::cout << ambiguousNodeSequences.size() << " ambiguous split nodes" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
@@ -255,7 +259,7 @@ void AlignmentGraph::Finalize(int wordSize)
 	}
 	std::cout << edges << " edges" << std::endl;
 	std::cout << specialNodes << " nodes with in-degree >= 2" << std::endl;
-	assert(nodeSequences.size() == nodeLength.size());
+	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
 	assert(outNeighbors.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
@@ -267,6 +271,7 @@ void AlignmentGraph::Finalize(int wordSize)
 	outNeighbors.shrink_to_fit();
 	reverse.shrink_to_fit();
 	nodeSequences.shrink_to_fit();
+	ambiguousNodeSequences.shrink_to_fit();
 }
 
 #ifdef NDEBUG
@@ -279,11 +284,43 @@ size_t AlignmentGraph::NodeLength(size_t index) const
 
 char AlignmentGraph::NodeSequences(size_t node, size_t pos) const
 {
-	assert(node < nodeSequences.size());
 	assert(pos < nodeLength[node]);
-	size_t chunk = pos / BP_IN_CHUNK;
-	size_t offset = (pos % BP_IN_CHUNK) * 2;
-	return "ACGT"[(nodeSequences[node][chunk] >> offset) & 3];
+	if (node < firstAmbiguous)
+	{
+		assert(node < nodeSequences.size());
+		size_t chunk = pos / BP_IN_CHUNK;
+		size_t offset = (pos % BP_IN_CHUNK) * 2;
+		return "ACGT"[(nodeSequences[node][chunk] >> offset) & 3];
+	}
+	else
+	{
+		assert(node >= firstAmbiguous);
+		assert(node - firstAmbiguous < ambiguousNodeSequences.size());
+		assert(pos < sizeof(size_t) * 8);
+		bool A = (ambiguousNodeSequences[node - firstAmbiguous].A >> pos) & 1;
+		bool C = (ambiguousNodeSequences[node - firstAmbiguous].C >> pos) & 1;
+		bool G = (ambiguousNodeSequences[node - firstAmbiguous].G >> pos) & 1;
+		bool T = (ambiguousNodeSequences[node - firstAmbiguous].T >> pos) & 1;
+		assert(A + C + G + T >= 1);
+		assert(A + C + G + T <= 4);
+		if ( A && !C && !G && !T) return 'A';
+		if (!A &&  C && !G && !T) return 'C';
+		if (!A && !C &&  G && !T) return 'G';
+		if (!A && !C && !G &&  T) return 'T';
+		if ( A && !C &&  G && !T) return 'R';
+		if (!A &&  C && !G &&  T) return 'Y';
+		if (!A &&  C &&  G && !T) return 'S';
+		if ( A && !C && !G &&  T) return 'W';
+		if (!A && !C &&  G &&  T) return 'K';
+		if ( A &&  C && !G && !T) return 'M';
+		if (!A &&  C &&  G &&  T) return 'B';
+		if ( A && !C &&  G &&  T) return 'D';
+		if ( A &&  C && !G &&  T) return 'H';
+		if ( A &&  C &&  G && !T) return 'V';
+		if ( A &&  C &&  G &&  T) return 'N';
+		assert(false);
+		return 'N';
+	}
 }
 
 #ifdef NDEBUG
@@ -293,6 +330,16 @@ AlignmentGraph::NodeChunkSequence AlignmentGraph::NodeChunks(size_t index) const
 {
 	assert(index < nodeSequences.size());
 	return nodeSequences[index];
+}
+
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+AlignmentGraph::AmbiguousChunkSequence AlignmentGraph::AmbiguousNodeChunks(size_t index) const
+{
+	assert(index >= firstAmbiguous);
+	assert(index - firstAmbiguous < ambiguousNodeSequences.size());
+	return ambiguousNodeSequences[index - firstAmbiguous];
 }
 
 size_t AlignmentGraph::NodeSize() const
@@ -362,49 +409,120 @@ bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosi
 	return !(*this == other);
 }
 
-AlignmentGraph AlignmentGraph::GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const
-{
-	AlignmentGraph result;
-	result.nodeLength.resize(nodeMapping.size());
-	result.nodeOffset.resize(nodeMapping.size());
-	result.nodeIDs.resize(nodeMapping.size());
-	result.inNeighbors.resize(nodeMapping.size());
-	result.outNeighbors.resize(nodeMapping.size());
-	result.reverse.resize(nodeMapping.size());
-	result.nodeSequences.resize(nodeMapping.size());
-
-	for (auto pair : nodeMapping)
-	{
-		for (auto inNeighbor : inNeighbors[pair.first])
-		{
-			if (nodeMapping.count(inNeighbor) == 1)
-			{
-				result.inNeighbors[pair.second].push_back(nodeMapping.at(inNeighbor));
-			}
-		}
-		for (auto outNeighbor : outNeighbors[pair.first])
-		{
-			if (nodeMapping.count(outNeighbor) == 1)
-			{
-				result.outNeighbors[pair.second].push_back(nodeMapping.at(outNeighbor));
-			}
-		}
-		result.nodeLength[pair.second] = nodeLength[pair.first];
-		result.nodeOffset[pair.second] = nodeOffset[pair.first];
-		result.nodeIDs[pair.second] = nodeIDs[pair.first];
-		result.reverse[pair.second] = reverse[pair.first];
-		result.nodeSequences[pair.second] = nodeSequences[pair.first];
-		result.nodeLookup[result.nodeIDs[pair.second]].push_back(pair.second);
-		result.originalNodeSize[result.nodeIDs[pair.second]] = originalNodeSize.at(nodeIDs[pair.first]);
-	}
-
-	result.finalized = true;
-	return result;
-}
-
 std::string AlignmentGraph::OriginalNodeName(int nodeId) const
 {
 	auto found = originalNodeName.find(nodeId);
 	if (found == originalNodeName.end()) return "";
 	return found->second;
+}
+
+std::vector<size_t> renumber(const std::vector<size_t>& vec, const std::vector<size_t>& renumbering)
+{
+	std::vector<size_t> result;
+	result.reserve(vec.size());
+	for (size_t i = 0; i < vec.size(); i++)
+	{
+		assert(vec[i] < renumbering.size());
+		result.push_back(renumbering[vec[i]]);
+	}
+	return result;
+}
+
+template <typename T>
+std::vector<T> reorder(const std::vector<T>& vec, const std::vector<size_t>& renumbering)
+{
+	assert(vec.size() == renumbering.size());
+	std::vector<T> result;
+	result.resize(vec.size());
+	for (size_t i = 0; i < vec.size(); i++)
+	{
+		result[renumbering[i]] = vec[i];
+	}
+	return result;
+}
+
+void AlignmentGraph::RenumberAmbiguousToEnd()
+{
+	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
+	assert(inNeighbors.size() == nodeLength.size());
+	assert(outNeighbors.size() == nodeLength.size());
+	assert(reverse.size() == nodeLength.size());
+	assert(nodeIDs.size() == nodeLength.size());
+	assert(ambiguousNodes.size() == nodeLength.size());
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
+	assert(!finalized);
+	std::vector<size_t> renumbering;
+	renumbering.reserve(ambiguousNodes.size());
+	size_t nonAmbiguousCount = 0;
+	size_t ambiguousCount = 0;
+	for (size_t i = 0; i < ambiguousNodes.size(); i++)
+	{
+		if (!ambiguousNodes[i])
+		{
+			renumbering.push_back(nonAmbiguousCount);
+			nonAmbiguousCount++;
+		}
+		else
+		{
+			assert(ambiguousCount < ambiguousNodes.size());
+			assert(ambiguousNodes.size()-1-ambiguousCount > nonAmbiguousCount);
+			renumbering.push_back(ambiguousNodes.size()-1-ambiguousCount);
+			ambiguousCount++;
+		}
+	}
+	assert(renumbering.size() == ambiguousNodes.size());
+	assert(nonAmbiguousCount + ambiguousCount == ambiguousNodes.size());
+	assert(ambiguousCount == ambiguousNodeSequences.size());
+	assert(nonAmbiguousCount == nodeSequences.size());
+	firstAmbiguous = nonAmbiguousCount;
+
+	if (ambiguousCount == 0) return;
+
+	//the ambiguous nodes were added in the reverse order, reverse the sequence containers too
+	std::reverse(ambiguousNodeSequences.begin(), ambiguousNodeSequences.end());
+
+	nodeLength = reorder(nodeLength, renumbering);
+	nodeOffset = reorder(nodeOffset, renumbering);
+	nodeIDs = reorder(nodeIDs, renumbering);
+	inNeighbors = reorder(inNeighbors, renumbering);
+	outNeighbors = reorder(outNeighbors, renumbering);
+	reverse = reorder(reverse, renumbering);
+	for (auto& pair : nodeLookup)
+	{
+		pair.second = renumber(pair.second, renumbering);
+	}
+	assert(inNeighbors.size() == outNeighbors.size());
+	for (size_t i = 0; i < inNeighbors.size(); i++)
+	{
+		inNeighbors[i] = renumber(inNeighbors[i], renumbering);
+		outNeighbors[i] = renumber(outNeighbors[i], renumbering);
+	}
+
+#ifndef NDEBUG
+	assert(inNeighbors.size() == outNeighbors.size());
+	for (size_t i = 0; i < inNeighbors.size(); i++)
+	{
+		for (auto neighbor : inNeighbors[i])
+		{
+			assert(std::find(outNeighbors[neighbor].begin(), outNeighbors[neighbor].end(), i) != outNeighbors[neighbor].end());
+		}
+		for (auto neighbor : outNeighbors[i])
+		{
+			assert(std::find(inNeighbors[neighbor].begin(), inNeighbors[neighbor].end(), i) != inNeighbors[neighbor].end());
+		}
+	}
+	for (auto pair : nodeLookup)
+	{
+		size_t foundSize = 0;
+		std::set<size_t> offsets;
+		for (auto node : pair.second)
+		{
+			assert(offsets.count(nodeOffset[node]) == 0);
+			offsets.insert(nodeOffset[node]);
+			assert(nodeIDs[node] == pair.first);
+			foundSize += nodeLength[node];
+		}
+		assert(foundSize == originalNodeSize[pair.first]);
+	}
+#endif
 }

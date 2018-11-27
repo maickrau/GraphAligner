@@ -31,6 +31,39 @@ public:
 		}
 		size_t s[CHUNKS_IN_NODE];
 	};
+	struct AmbiguousChunkSequence
+	{
+		static_assert(SPLIT_NODE_SIZE == sizeof(size_t)*8);
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator[](size_t pos) const
+		{
+			AmbiguousChunkSequence result = *this;
+			result.A >>= pos * BP_IN_CHUNK;
+			result.C >>= pos * BP_IN_CHUNK;
+			result.G >>= pos * BP_IN_CHUNK;
+			result.T >>= pos * BP_IN_CHUNK;
+			return result;
+		}
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator>>=(size_t amount)
+		{
+			assert(amount % 2 == 0);
+			A >>= amount / 2;
+			T >>= amount / 2;
+			C >>= amount / 2;
+			G >>= amount / 2;
+			return *this;
+		}
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator&(size_t val)
+		{
+			return *this;
+		}
+		size_t A;
+		size_t T;
+		size_t C;
+		size_t G;
+	};
 
 	struct MatrixPosition
 	{
@@ -62,6 +95,7 @@ public:
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
+	AmbiguousChunkSequence AmbiguousNodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
@@ -69,6 +103,7 @@ public:
 
 private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
+	void RenumberAmbiguousToEnd();
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> originalNodeSize;
@@ -79,6 +114,9 @@ private:
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<NodeChunkSequence> nodeSequences;
+	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
+	std::vector<bool> ambiguousNodes;
+	size_t firstAmbiguous;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
@@ -87,6 +125,7 @@ private:
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
+	friend class DirectedGraph;
 };
 
 

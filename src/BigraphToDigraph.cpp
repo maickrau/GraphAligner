@@ -9,7 +9,7 @@
 #include "ThreadReadAssertion.h"
 #include "stream.hpp"
 
-static std::vector<bool> getClearNucleotides()
+static std::vector<bool> getAllowedNucleotides()
 {
 	std::vector<bool> result;
 	result.resize(256, false);
@@ -21,13 +21,6 @@ static std::vector<bool> getClearNucleotides()
 	result['G'] = true;
 	result['t'] = true;
 	result['T'] = true;
-	return result;
-}
-
-static std::vector<bool> getAmbiguousNucleotides()
-{
-	std::vector<bool> result;
-	result.resize(256, false);
 	result['y'] = true;
 	result['Y'] = true;
 	result['r'] = true;
@@ -53,8 +46,7 @@ static std::vector<bool> getAmbiguousNucleotides()
 	return result;
 }
 
-auto valids = getClearNucleotides();
-auto ambigous = getAmbiguousNucleotides();
+auto allowed = getAllowedNucleotides();
 
 DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence, std::string name) :
 nodeId(nodeId),
@@ -153,28 +145,13 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 			{
 				for (size_t j = 0; j < g.node(i).sequence().size(); j++)
 				{
-					if (!valids[g.node(i).sequence()[j]] && !ambigous[g.node(i).sequence()[j]])
+					if (!allowed[g.node(i).sequence()[j]])
 					{
 						throw CommonUtils::InvalidGraphException("Invalid sequence character: " + g.node(i).sequence()[j]);
 					}
 				}
 				auto nodes = ConvertVGNodeToNodes(g.node(i));
 				assert(nodes.first.sequence.size() == nodes.second.sequence.size());
-				for (size_t j = 0; j < nodes.first.sequence.size(); j++)
-				{
-					if (!valids[nodes.first.sequence[j]])
-					{
-						assert(ambigous[nodes.first.sequence[j]]);
-						breakpointsFw.push_back(j);
-						breakpointsFw.push_back(j+1);
-					}
-					if (!valids[nodes.second.sequence[j]])
-					{
-						assert(ambigous[nodes.second.sequence[j]]);
-						breakpointsBw.push_back(j);
-						breakpointsBw.push_back(j+1);
-					}
-				}
 				breakpointsFw.push_back(g.node(i).sequence().size());
 				breakpointsBw.push_back(g.node(i).sequence().size());
 				result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
@@ -212,27 +189,12 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 	{
 		for (size_t j = 0; j < graph.node(i).sequence().size(); j++)
 		{
-			if (!valids[graph.node(i).sequence()[j]] && !ambigous[graph.node(i).sequence()[j]])
+			if (!allowed[graph.node(i).sequence()[j]])
 			{
 				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + graph.node(i).sequence()[j]);
 			}
 		}
 		auto nodes = ConvertVGNodeToNodes(graph.node(i));
-		for (size_t j = 0; j < nodes.first.sequence.size(); j++)
-		{
-			if (!valids[nodes.first.sequence[j]])
-			{
-				assert(ambigous[nodes.first.sequence[j]]);
-				breakpointsFw.push_back(j);
-				breakpointsFw.push_back(j+1);
-			}
-			if (!valids[nodes.second.sequence[j]])
-			{
-				assert(ambigous[nodes.second.sequence[j]]);
-				breakpointsBw.push_back(j);
-				breakpointsBw.push_back(j+1);
-			}
-		}
 		breakpointsFw.push_back(graph.node(i).sequence().size());
 		breakpointsBw.push_back(graph.node(i).sequence().size());
 		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
@@ -263,7 +225,7 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 	{
 		for (size_t j = 0; j < node.second.size(); j++)
 		{
-			if (!valids[node.second[j]] && !ambigous[node.second[j]])
+			if (!allowed[node.second[j]])
 			{
 				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + node.second[j]);
 			}
@@ -272,21 +234,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 		auto nodes = ConvertGFANodeToNodes(node.first, node.second, name);
 		std::vector<size_t> breakpointsFw = breakpoints[node.first * 2];
 		std::vector<size_t> breakpointsBw = breakpoints[node.first * 2 + 1];
-		for (size_t j = 0; j < nodes.first.sequence.size(); j++)
-		{
-			if (!valids[nodes.first.sequence[j]])
-			{
-				assert(ambigous[nodes.first.sequence[j]]);
-				breakpointsFw.push_back(j);
-				breakpointsFw.push_back(j+1);
-			}
-			if (!valids[nodes.second.sequence[j]])
-			{
-				assert(ambigous[nodes.second.sequence[j]]);
-				breakpointsBw.push_back(j);
-				breakpointsBw.push_back(j+1);
-			}
-		}
 		breakpointsFw.push_back(0);
 		breakpointsFw.push_back(node.second.size());
 		breakpointsBw.push_back(0);
@@ -311,5 +258,19 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 		}
 	}
 	result.Finalize(64);
+#ifndef NDEBUG
+	for (size_t node = 0; node < result.NodeSize(); node++)
+	{
+		int originalNodeId = result.nodeIDs[node] / 2;
+		bool originalReverse = result.reverse[node];
+		std::string originalSeq = graph.nodes.at(originalNodeId);
+		if (originalReverse) originalSeq = CommonUtils::ReverseComplement(originalSeq);
+		for (size_t offset = 0; offset < result.NodeLength(node); offset++)
+		{
+			auto charHere = result.NodeSequences(node, offset);
+			assert(toupper(charHere) == toupper(originalSeq[offset + result.nodeOffset[node]]));
+		}
+	}
+#endif
 	return result;
 }

@@ -35,23 +35,67 @@ public:
 			masks[2] = BG;
 			masks[3] = BT;
 		}
-		Word getEq(char c) const
+		Word getEqI(AlignmentGraph::AmbiguousChunkSequence eq) const
+		{
+			assert((eq.A | eq.C | eq.G | eq.T) & 1);
+			Word result = 0;
+			if (eq.A & 1) result |= A();
+			if (eq.C & 1) result |= C();
+			if (eq.G & 1) result |= G();
+			if (eq.T & 1) result |= T();
+			return result;
+		}
+		Word getEqC(char c) const
 		{
 			switch(c)
 			{
 				case 'A':
 				case 'a':
-					return masks[0];
+					return A();
 				case 'C':
 				case 'c':
-					return masks[1];
+					return C();
 				case 'G':
 				case 'g':
-					return masks[2];
+					return G();
 				case 'T':
 				case 't':
-					return masks[3];
-				case '-':
+				case 'U':
+				case 'u':
+					return T();
+				case 'R':
+				case 'r':
+					return A() | G();
+				case 'Y':
+				case 'y':
+					return C() | T();
+				case 'S':
+				case 's':
+					return G() | C();
+				case 'W':
+				case 'w':
+					return A() | T();
+				case 'K':
+				case 'k':
+					return G() | T();
+				case 'M':
+				case 'm':
+					return A() | C();
+				case 'B':
+				case 'b':
+					return C() | G() | T();
+				case 'D':
+				case 'd':
+					return A() | G() | T();
+				case 'H':
+				case 'h':
+					return A() | C() | T();
+				case 'V':
+				case 'v':
+					return A() | C() | G();
+				case 'N':
+				case 'n':
+					return A() | C() | G() | T();
 				default:
 					assert(false);
 			}
@@ -60,9 +104,27 @@ public:
 		}
 		Word getEqI(size_t i) const
 		{
+			assert(i < 4);
 			return masks[i];
 		}
 		Word masks[4];
+	private:
+		Word A() const
+		{
+			return masks[0];
+		}
+		Word C() const
+		{
+			return masks[1];
+		}
+		Word G() const
+		{
+			return masks[2];
+		}
+		Word T() const
+		{
+			return masks[3];
+		}
 	};
 
 	GraphAlignerBitvectorCommon() = delete;

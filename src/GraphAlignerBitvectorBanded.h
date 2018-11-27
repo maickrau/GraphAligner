@@ -630,7 +630,7 @@ private:
 			{
 				pos = chunk * WordConfiguration<Word>::WordSize + offset;
 				if (pos >= nodeLength) break;
-				Eq = EqV.getEq(params.graph.NodeSequences(node, pos));
+				Eq = EqV.getEqC(params.graph.NodeSequences(node, pos));
 				Eq &= forceEq;
 				if ((HN & 1) && (scoreBefore == scoreComparison - 1))
 				{
@@ -682,7 +682,8 @@ private:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand) const
+	template <typename NodeChunkType>
+	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks) const
 	{
 		assert(incoming.size() > 0);
 		WordSlice newWs;
@@ -694,7 +695,6 @@ private:
 		result.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
 		result.cellsProcessed = 0;
 		auto nodeLength = params.graph.NodeLength(i);
-		AlignmentGraph::NodeChunkSequence nodeChunks = params.graph.NodeChunks(i);
 
 		Word Eq = EqV.getEqI(nodeChunks[0] & 3);
 		bool hasSkipless = false;
@@ -915,7 +915,7 @@ private:
 			size_t bigChunkOffset = (smallChunk % 2) * (WordConfiguration<Word>::WordSize / 2);
 			Word HP = previousSlice.HP[bigChunk] >> bigChunkOffset;
 			Word HN = previousSlice.HN[bigChunk] >> bigChunkOffset;
-			Word charChunk = nodeChunks[smallChunk];
+			auto charChunk = nodeChunks[smallChunk];
 			HP >>= offset;
 			HN >>= offset;
 			charChunk >>= offset * 2;
@@ -1109,7 +1109,15 @@ private:
 				}
 				previousThisNode.exists = false;
 			}
-			auto nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, calculableQueue.getExtras(i), previousBand);
+			NodeCalculationResult nodeCalc;
+			if (i < params.graph.firstAmbiguous)
+			{
+				nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, calculableQueue.getExtras(i), previousBand, params.graph.NodeChunks(i));
+			}
+			else
+			{
+				nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, calculableQueue.getExtras(i), previousBand, params.graph.AmbiguousNodeChunks(i));
+			}
 			calculableQueue.removeExtras(i);
 			assert(nodeCalc.minScore <= previousQuitScore + 2 * WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
