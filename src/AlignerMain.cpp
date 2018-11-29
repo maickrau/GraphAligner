@@ -109,7 +109,7 @@ int main(int argc, char** argv)
 	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
 	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
-	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<int>();
+	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
 	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
 	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<size_t>();
@@ -118,7 +118,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
-	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<int>();
+	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("all-alignments"))
 	{

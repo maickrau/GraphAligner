@@ -91,7 +91,8 @@ struct AlignmentStats
 	bpInReads(0),
 	bpInReadsWithASeed(0),
 	bpInAlignments(0),
-	bpInFullAlignments(0)
+	bpInFullAlignments(0),
+	assertionBroke(false)
 	{
 	}
 	std::atomic<size_t> reads;
@@ -104,6 +105,7 @@ struct AlignmentStats
 	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
 	std::atomic<size_t> bpInFullAlignments;
+	std::atomic<bool> assertionBroke;
 };
 
 bool is_file_exist(std::string fileName)
@@ -263,6 +265,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			coutoutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			cerroutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			reusableState.clear();
+			stats.assertionBroke = true;
 			continue;
 		}
 
@@ -304,6 +307,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
 				reusableState.clear();
+				stats.assertionBroke = true;
 				continue;
 			}
 			stats.alignments += 1;
@@ -349,25 +353,25 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 		std::cerr << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	if (graphFile.substr(graphFile.size()-3) == ".vg")
+	try
 	{
-		if (loadSeeder)
+		if (graphFile.substr(graphFile.size()-3) == ".vg")
 		{
-			auto graph = CommonUtils::LoadVGGraph(graphFile);
-			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new MummerSeeder { graph, seederCachePrefix };
-			return DirectedGraph::BuildFromVG(graph);
+			if (loadSeeder)
+			{
+				auto graph = CommonUtils::LoadVGGraph(graphFile);
+				std::cout << "Build seeder from the graph" << std::endl;
+				*seeder = new MummerSeeder { graph, seederCachePrefix };
+				return DirectedGraph::BuildFromVG(graph);
+			}
+			else
+			{
+				return DirectedGraph::StreamVGGraphFromFile(graphFile);
+			}
 		}
-		else
+		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
-			return DirectedGraph::StreamVGGraphFromFile(graphFile);
-		}
-	}
-	else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
-	{
-		try
-		{
-			auto graph = GfaGraph::LoadFromFile(graphFile);
+			auto graph = GfaGraph::LoadFromFile(graphFile, true);
 			if (loadSeeder)
 			{
 				std::cout << "Build seeder from the graph" << std::endl;
@@ -375,17 +379,17 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 			}
 			return DirectedGraph::BuildFromGFA(graph);
 		}
-		catch (GfaGraph::NonATCGNodeSequencesException)
+		else
 		{
-			std::cout << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
-			std::cerr << "Non-ATCG node sequences are not supported. Change the input graph" << std::endl;
-			std::exit(1);
+			std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
+			std::exit(0);
 		}
 	}
-	else
+	catch (const CommonUtils::InvalidGraphException& e)
 	{
-		std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
-		std::exit(0);
+		std::cout << "Error in the graph: " << e.what() << std::endl;
+		std::cerr << "Error in the graph: " << e.what() << std::endl;
+		std::exit(1);
 	}
 }
 
@@ -494,4 +498,8 @@ void alignReads(AlignerParams params)
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
 	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
 	std::cout << "Output end-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
+	if (stats.assertionBroke)
+	{
+		std::cout << "Alignment broke with some reads. Look at stderr output." << std::endl;
+	}
 }

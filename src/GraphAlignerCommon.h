@@ -131,73 +131,83 @@ public:
 #endif
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
-		assert(graphCharacter == 'A' || graphCharacter == 'T' || graphCharacter == 'C' || graphCharacter == 'G');
-		switch(sequenceCharacter)
+		return (ambiguousMatch(sequenceCharacter, 'A') && ambiguousMatch(graphCharacter, 'A'))
+		|| (ambiguousMatch(sequenceCharacter, 'C') && ambiguousMatch(graphCharacter, 'C'))
+		|| (ambiguousMatch(sequenceCharacter, 'G') && ambiguousMatch(graphCharacter, 'G'))
+		|| (ambiguousMatch(sequenceCharacter, 'T') && ambiguousMatch(graphCharacter, 'T'));
+	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static bool ambiguousMatch(char ambiguousChar, char exactChar)
+	{
+		assert(exactChar == 'A' || exactChar == 'T' || exactChar == 'C' || exactChar == 'G');
+		switch(ambiguousChar)
 		{
 			case 'A':
 			case 'a':
-			return graphCharacter == 'A';
+				return exactChar == 'A';
 			break;
 			case 'T':
 			case 't':
-			return graphCharacter == 'T';
+				return exactChar == 'T';
 			break;
 			case 'C':
 			case 'c':
-			return graphCharacter == 'C';
+				return exactChar == 'C';
 			break;
 			case 'G':
 			case 'g':
-			return graphCharacter == 'G';
+				return exactChar == 'G';
 			break;
 			case 'N':
 			case 'n':
-			return true;
+				return true;
 			break;
 			case 'R':
 			case 'r':
-			return graphCharacter == 'A' || graphCharacter == 'G';
+				return exactChar == 'A' || exactChar == 'G';
 			break;
 			case 'Y':
 			case 'y':
-			return graphCharacter == 'C' || graphCharacter == 'T';
+				return exactChar == 'C' || exactChar == 'T';
 			break;
 			case 'K':
 			case 'k':
-			return graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'M':
 			case 'm':
-			return graphCharacter == 'C' || graphCharacter == 'A';
+				return exactChar == 'C' || exactChar == 'A';
 			break;
 			case 'S':
 			case 's':
-			return graphCharacter == 'C' || graphCharacter == 'G';
+				return exactChar == 'C' || exactChar == 'G';
 			break;
 			case 'W':
 			case 'w':
-			return graphCharacter == 'A' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'T';
 			break;
 			case 'B':
 			case 'b':
-			return graphCharacter == 'C' || graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'C' || exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'D':
 			case 'd':
-			return graphCharacter == 'A' || graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'H':
 			case 'h':
-			return graphCharacter == 'A' || graphCharacter == 'C' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'C' || exactChar == 'T';
 			break;
 			case 'V':
 			case 'v':
-			return graphCharacter == 'A' || graphCharacter == 'C' || graphCharacter == 'G';
+				return exactChar == 'A' || exactChar == 'C' || exactChar == 'G';
 			break;
 			default:
-			assert(false);
-			std::abort();
-			return false;
+				assert(false);
+				std::abort();
+				return false;
 			break;
 		}
 	}

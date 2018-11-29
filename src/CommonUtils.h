@@ -9,6 +9,10 @@
 
 namespace CommonUtils
 {
+	struct InvalidGraphException : std::runtime_error
+	{
+		InvalidGraphException(const char* c);
+	};
 	namespace inner
 	{
 		bool alignmentLengthCompare(const vg::Alignment* const left, const vg::Alignment* const right);

@@ -3,6 +3,10 @@
 
 namespace CommonUtils
 {
+	InvalidGraphException::InvalidGraphException(const char* c) : std::runtime_error(c) 
+	{
+	}
+
 	namespace inner
 	{
 		//an overlap which is larger than the fraction cutoff of the smaller alignment means the alignments are incompatible
@@ -176,6 +180,7 @@ namespace CommonUtils
 				case 'H':
 				case 'h':
 				result += 'D';
+				break;
 				default:
 				assert(false);
 			}

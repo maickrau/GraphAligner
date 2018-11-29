@@ -19,7 +19,7 @@ See [Parameters](#parameters), the option `bin/Aligner --help` and the subsectio
 
 #### File formats
 
-The aligner's file formats are interoperable with the [vg toolkit](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
+The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
 
 #### Seed hits
 
@@ -39,16 +39,16 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 
 - `-g` input graph. Format .gfa / .vg
 - `-f` input reads. Format .fasta / .fastq / .fasta.gz / .fastq.gz
-- `-s` input seeds. Format .gam
-- `-t` number of aligner threads. The program uses two IO threads in addition to these.
+- `-t` number of aligner threads. The program also uses two IO threads in addition to these.
 - `-a` output file name. Format .gam
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
 
 Seeding:
 
-- `--seeds-mum-count` MUM seeds. Use the longest n maximal unique matches for alignment. -1 for all MUMs
-- `--seeds-mem-count` MEM seeds. Use the longest n maximal exact matches for alignment. -1 for all MEMs
+- `-s` External seeds. Load seeds from a .gam file.
+- `--seeds-mum-count` MUM seeds. Use the n longest maximal unique matches. -1 for all MUMs
+- `--seeds-mem-count` MEM seeds. Use the n longest maximal exact matches. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n
 - `--seeds-mxm-cache-prefix` MUM/MEM file cache prefix. Store the MUM/MEM index into disk for reuse. Recommended unless you are sure you won't align to the same graph multiple times
 - `--seeds-first-full-rows` Don't use seeds. Instead use the DP alignment on the first row. The runtime depends on the size of the graph so this is very slow. Not recommended
@@ -57,8 +57,8 @@ Default uses all MUMs of length 20bp or longer
 
 Extension:
 
-- `-b` alignment bandwidth. Unlike linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
-- `-B` ramp bandwidth. If a read cannot be aligned with the aligner bandwidth, switch to ramp bandwidth at the problematic location. Values should be between 1-35.
+- `-b` alignment bandwidth. Unlike in linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
+- `-B` ramp bandwidth. If a read cannot be aligned with the alignment bandwidth, switch to the ramp bandwidth at the problematic location. Values should be between 1-35.
 - `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
 - `--high-memory` high memory mode. Runs a bit faster but uses a lot more memory
 

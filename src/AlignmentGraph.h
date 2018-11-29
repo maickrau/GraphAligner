@@ -31,6 +31,39 @@ public:
 		}
 		size_t s[CHUNKS_IN_NODE];
 	};
+	struct AmbiguousChunkSequence
+	{
+		static_assert(SPLIT_NODE_SIZE == sizeof(size_t)*8);
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator[](size_t pos) const
+		{
+			AmbiguousChunkSequence result = *this;
+			result.A >>= pos * BP_IN_CHUNK;
+			result.C >>= pos * BP_IN_CHUNK;
+			result.G >>= pos * BP_IN_CHUNK;
+			result.T >>= pos * BP_IN_CHUNK;
+			return result;
+		}
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator>>=(size_t amount)
+		{
+			assert(amount % 2 == 0);
+			A >>= amount / 2;
+			T >>= amount / 2;
+			C >>= amount / 2;
+			G >>= amount / 2;
+			return *this;
+		}
+		//weird interface because it should behave like NodeChunkSequence, which is just a number
+		AmbiguousChunkSequence operator&(size_t val)
+		{
+			return *this;
+		}
+		size_t A;
+		size_t T;
+		size_t C;
+		size_t G;
+	};
 
 	struct MatrixPosition
 	{
@@ -52,8 +85,8 @@ public:
 	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
-	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode);
-	void AddEdgeNodeId(int node_id_from, int node_id_to);
+	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
+	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
 	void Finalize(int wordSize);
 	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
@@ -62,17 +95,17 @@ public:
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
+	AmbiguousChunkSequence AmbiguousNodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
-	int DBGOverlap;
 	std::string OriginalNodeName(int nodeId) const;
 
 private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
+	void RenumberAmbiguousToEnd();
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
-	std::unordered_map<int, size_t> unitigStartNode;
 	std::unordered_map<int, size_t> originalNodeSize;
 	std::unordered_map<int, std::string> originalNodeName;
 	std::vector<size_t> nodeOffset;
@@ -81,6 +114,9 @@ private:
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
 	std::vector<NodeChunkSequence> nodeSequences;
+	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
+	std::vector<bool> ambiguousNodes;
+	size_t firstAmbiguous;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>
@@ -89,6 +125,7 @@ private:
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
+	friend class DirectedGraph;
 };
 
 
