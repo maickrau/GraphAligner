@@ -38,7 +38,7 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 ### Parameters
 
 - `-g` input graph. Format .gfa / .vg
-- `-f` input reads. Format .fasta / .fastq / .fasta.gz / .fastq.gz
+- `-f` input reads. Format .fasta / .fastq / .fasta.gz / .fastq.gz. You can input multiple files with `-f file1 -f file2 ...` or `-f file1 file2 ...`
 - `-t` number of aligner threads. The program also uses two IO threads in addition to these.
 - `-a` output file name. Format .gam
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
@@ -46,7 +46,7 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 
 Seeding:
 
-- `-s` External seeds. Load seeds from a .gam file.
+- `-s` External seeds. Load seeds from a .gam file. You can input multiple files with `-s file1 -s file2 ...` or `-s file1 file2 ...`
 - `--seeds-mum-count` MUM seeds. Use the n longest maximal unique matches. -1 for all MUMs
 - `--seeds-mem-count` MEM seeds. Use the n longest maximal exact matches. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n
