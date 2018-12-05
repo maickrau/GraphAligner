@@ -8,13 +8,13 @@
 struct AlignerParams
 {
 	std::string graphFile;
-	std::string fastqFile;
+	std::vector<std::string> fastqFiles;
 	size_t numThreads;
 	size_t initialBandwidth;
 	size_t rampBandwidth;
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
-	std::string seedFile;
+	std::vector<std::string> seedFiles;
 	std::string outputAlignmentFile;
 	bool verboseMode;
 	bool tryAllSeeds;

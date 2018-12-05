@@ -138,15 +138,18 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void readFastqs(const std::string& filename, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
+void readFastqs(const std::vector<std::string>& filenames, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
 {
 	assertSetRead("Read streamer", "No seed");
-	FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
+	for (auto filename : filenames)
 	{
-		std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
-		std::swap(*ptr, read);
-		writequeue.enqueue(ptr);
-	});
+		FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
+		{
+			std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
+			std::swap(*ptr, read);
+			writequeue.enqueue(ptr);
+		});
+	}
 	readStreamingFinished = true;
 }
 
@@ -402,12 +405,13 @@ void alignReads(AlignerParams params)
 	MummerSeeder* mummerseeder = nullptr;
 	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix);
 
-	if (params.seedFile != "")
+	if (params.seedFiles.size() > 0)
 	{
+		for (auto file : params.seedFiles)
 		{
-			if (is_file_exist(params.seedFile)){
-				std::cout << "Load seeds from " << params.seedFile << std::endl;
-				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
+			if (is_file_exist(file)){
+				std::cout << "Load seeds from " << file << std::endl;
+				std::ifstream seedfile { file, std::ios::in | std::ios::binary };
 				size_t numSeeds = 0;
 				std::function<void(vg::Alignment&)> alignmentLambda = [&seedHits, &numSeeds](vg::Alignment& seedhit) {
 					seedHits[seedhit.name()].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
@@ -429,7 +433,7 @@ void alignReads(AlignerParams params)
 	switch(seeder.mode)
 	{
 		case Seeder::Mode::File:
-			std::cout << "Seeds from file " << params.seedFile << std::endl;
+			std::cout << "Seeds from file" << std::endl;
 			break;
 		case Seeder::Mode::Mum:
 			std::cout << "MUM seeds, min length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
@@ -466,7 +470,7 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
-	std::thread fastqThread { [file=params.fastqFile, &readFastqsQueue, &readStreamingFinished]() { readFastqs(file, readFastqsQueue, readStreamingFinished); } };
+	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
