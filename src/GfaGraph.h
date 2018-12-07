@@ -35,7 +35,13 @@ namespace std
 	{
 		size_t operator()(const std::pair<NodePos, NodePos>& x) const
 		{
-			return hash<NodePos>()(x.first) ^ hash<NodePos>()(x.second);
+			// simple hashing with hash<NodePos>()(x.first) ^ hash<NodePos>()(x.second) collides each edge formed like (x -> x+1)
+			// instead: 
+			// https://stackoverflow.com/questions/682438/hash-function-providing-unique-uint-from-an-integer-coordinate-pair
+			// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
+			// and arbitrarily ignore directionality
+			size_t pairing = .5 * (x.first.id + x.second.id) * (x.first.id + x.second.id + 1) + x.second.id;
+			return hash<size_t>()(pairing);
 		}
 	};
 }
