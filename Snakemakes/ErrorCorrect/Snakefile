@@ -23,7 +23,7 @@ rule all:
 		OUTDIR + "corrected.fa",
 		OUTDIR + "stats.txt"
 
-rule correct_reads:
+rule correct_short_reads:
 	input:
 		expand(SHORTREADDIR + "{name}.{ext}", zip, name=SHORTREADNAMES, ext=SHORTREADEXTENSIONS)
 	output:
@@ -39,26 +39,31 @@ rule correct_reads:
 		"/usr/bin/time -v {LIGHTERPATH} -od {TMPDIR} -t {threads} -k {SMALLK} {GENOMESIZE} {params.alpha} {params.files} 1> {log.stdout} 2> {log.stderr}"
 
 rule read_names:
-	input: rules.correct_reads.output
+	input: rules.correct_short_reads.output
 	output: temp("filenames")
 	shell: "ls -1 {input} > {output}"
 
 rule run_bcalm:
 	input: 
 		name = "filenames",
-		files = rules.correct_reads.output
-	output: temp(TMPDIR + "filenames.unitigs.fa")
+		files = rules.correct_short_reads.output
+	output: temp("filenames.unitigs.fa")
 	shadow: "full"
 	log:
 		stdout = TMPDIR + "bcalm_stdout.txt",
 		stderr = TMPDIR + "bcalm_stderr.txt"
 	threads: 40
-	shell: "/usr/bin/time -v {BCALMPATH} -nb-cores {threads} -out {TMPDIR}filenames -in {input.name} -kmer-size {BIGK} -abundance-min {ABUNDANCE} > {log.stdout} 2> {log.stderr}"
+	shell: "/usr/bin/time -v {BCALMPATH} -nb-cores {threads} -in {input.name} -kmer-size {BIGK} -abundance-min {ABUNDANCE} > {log.stdout} 2> {log.stderr}"
 
 rule convert_bcalm:
-	input: TMPDIR + "filenames.unitigs.fa"
-	output: TMPDIR + "graph.gfa"
+	input: rules.run_bcalm.output
+	output: temp(TMPDIR + "graph-tip.gfa")
 	shell: "{BCALMCONVERTPATH} {input} {output} {BIGK}"
+
+rule untip_graph:
+	input: rules.convert_bcalm.output
+	output: TMPDIR + "graph.gfa"
+	shell: "{ALIGNERBINDIR}UntipRelative 10 1000 0.1 < {input} > {output}"
 
 rule align_reads:
 	input:
