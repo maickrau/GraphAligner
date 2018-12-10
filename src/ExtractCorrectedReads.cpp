@@ -120,6 +120,12 @@ int main(int argc, char** argv)
 	std::string alnfilename { argv[2] };
 	std::string readfilename { argv[3] };
 	//output in stdout
+	auto reads = loadFastqFromFile(readfilename);
+	for (int i = 4; i < argc; i++)
+	{
+		auto extrareads = loadFastqFromFile(argv[i]);
+		reads.insert(reads.end(), extrareads.begin(), extrareads.end());
+	}
 
 	std::unordered_map<std::string, std::vector<PartialAlignment>> partials;
 	if (graphfilename.substr(graphfilename.size()-3) == ".vg")
@@ -155,7 +161,6 @@ int main(int argc, char** argv)
 		}
 	}
 
-	auto reads = loadFastqFromFile(readfilename);
 
 	mergePartials(partials, reads);
 }
