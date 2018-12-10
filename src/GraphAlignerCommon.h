@@ -148,6 +148,8 @@ public:
 			case 'a':
 				return exactChar == 'A';
 			break;
+			case 'u':
+			case 'U':
 			case 'T':
 			case 't':
 				return exactChar == 'T';
