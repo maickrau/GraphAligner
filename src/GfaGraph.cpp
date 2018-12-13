@@ -312,3 +312,59 @@ std::string GfaGraph::OriginalNodeName(int nodeId) const
 	if (found == originalNodeName.end()) return "";
 	return found->second;
 }
+
+void GfaGraph::confirmDoublesidedEdges()
+{
+	for (auto node : nodes)
+	{
+		NodePos source;
+		source.id = node.first;
+		source.end = true;
+		NodePos revSource = source;
+		revSource.end = false;
+		if (edges.count(source) == 1)
+		{
+			auto targets = edges[source];
+			for (auto target : targets)
+			{
+				bool found = false;
+				auto revTarget = target;
+				revTarget.end = !revTarget.end;
+				for (auto check : edges[revTarget])
+				{
+					if (check == revSource)
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					edges[revTarget].emplace_back(revSource);
+				}
+			}
+		}
+		if (edges.count(revSource) == 1)
+		{
+			auto targets = edges[revSource];
+			for (auto target : targets)
+			{
+				bool found = false;
+				auto revTarget = target;
+				revTarget.end = !revTarget.end;
+				for (auto check : edges[revTarget])
+				{
+					if (check == source)
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					edges[revTarget].emplace_back(source);
+				}
+			}
+		}
+	}
+}

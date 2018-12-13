@@ -62,8 +62,13 @@ rule convert_bcalm:
 
 rule untip_graph:
 	input: rules.convert_bcalm.output
-	output: TMPDIR + "graph.gfa"
+	output: temp(TMPDIR + "graph-untip.gfa")
 	shell: "{ALIGNERBINDIR}UntipRelative 10 1000 0.1 < {input} > {output}"
+
+rule reunitigify_graph:
+	input: rules.untip_graph.output
+	output: TMPDIR + "graph.gfa"
+	shell: "{ALIGNERBINDIR}UnitigifyDBG {input} {output}"
 
 rule align_reads:
 	input:

@@ -49,6 +49,7 @@ namespace std
 class GfaGraph
 {
 public:
+	GfaGraph();
 	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false);
 	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false);
 	void SaveToFile(std::string filename) const;
@@ -57,6 +58,7 @@ public:
 	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
 	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;
 	std::string OriginalNodeName(int nodeId) const;
+	void confirmDoublesidedEdges();
 	std::unordered_map<int, std::string> nodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
 	std::unordered_map<std::pair<NodePos, NodePos>, size_t> varyingOverlaps;
@@ -65,7 +67,6 @@ private:
 	void numberBackToIntegers();
 	std::unordered_map<int, std::string> tags;
 	std::unordered_map<int, std::string> originalNodeName;
-	GfaGraph();
 };
 
 #endif
