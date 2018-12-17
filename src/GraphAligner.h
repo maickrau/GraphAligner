@@ -87,6 +87,7 @@ public:
 				if (found) continue;
 			}
 			logger << BufferedWriter::Flush;
+			result.seedsExtended += 1;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
 			result.alignments.push_back(item);

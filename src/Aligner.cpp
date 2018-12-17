@@ -84,6 +84,8 @@ struct AlignmentStats
 	AlignmentStats() :
 	reads(0),
 	seeds(0),
+	seedsFound(0),
+	seedsExtended(0),
 	readsWithASeed(0),
 	alignments(0),
 	fullLengthAlignments(0),
@@ -97,6 +99,8 @@ struct AlignmentStats
 	}
 	std::atomic<size_t> reads;
 	std::atomic<size_t> seeds;
+	std::atomic<size_t> seedsFound;
+	std::atomic<size_t> seedsExtended;
 	std::atomic<size_t> readsWithASeed;
 	std::atomic<size_t> alignments;
 	std::atomic<size_t> fullLengthAlignments;
@@ -254,6 +258,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
+				stats.seedsFound += seeds.size();
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
@@ -280,6 +285,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		stats.seedsExtended += alignments.seedsExtended;
 		stats.readsWithAnAlignment += 1;
 
 		if (!params.outputAllAlns)
@@ -498,6 +504,8 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Alignment finished" << std::endl;
 	std::cout << "Input reads: " << stats.reads << " (" << stats.bpInReads << "bp)" << std::endl;
+	std::cout << "Seeds found: " << stats.seedsFound << std::endl;
+	std::cout << "Seeds extended: " << stats.seedsExtended << std::endl;
 	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
 	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;

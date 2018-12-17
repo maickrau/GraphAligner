@@ -11,6 +11,10 @@
 class AlignmentResult
 {
 public:
+	AlignmentResult() :
+		alignments(),
+		seedsExtended(0)
+	{}
 	enum TraceMatchType
 	{
 		//relative to the graph, aka insertion has no graphchar, but has readchar
@@ -58,6 +62,7 @@ public:
 		size_t alignmentEnd;
 	};
 	std::vector<AlignmentItem> alignments;
+	size_t seedsExtended;
 };
 
 class SeedHit
