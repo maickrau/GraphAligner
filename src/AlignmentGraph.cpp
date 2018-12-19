@@ -235,7 +235,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
 }
 
-void AlignmentGraph::Finalize(int wordSize)
+void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
@@ -272,6 +272,11 @@ void AlignmentGraph::Finalize(int wordSize)
 	reverse.shrink_to_fit();
 	nodeSequences.shrink_to_fit();
 	ambiguousNodeSequences.shrink_to_fit();
+	if (doComponents)
+	{
+		std::cout << "use component ordering" << std::endl;
+		doComponentOrder();
+	}
 }
 
 #ifdef NDEBUG
@@ -525,4 +530,117 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 		assert(foundSize == originalNodeSize[pair.first]);
 	}
 #endif
+}
+
+void AlignmentGraph::doComponentOrder()
+{
+	std::vector<std::tuple<size_t, int, size_t>> callStack;
+	size_t i = 0;
+	std::vector<size_t> index;
+	std::vector<size_t> lowlink;
+	std::vector<bool> onStack;
+	std::vector<size_t> stack;
+	index.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	lowlink.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	onStack.resize(nodeLength.size(), false);
+	size_t checknode = 0;
+	size_t nextComponent = 0;
+	componentNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	while (true)
+	{
+		if (callStack.size() == 0)
+		{
+			while (checknode < nodeLength.size() && index[checknode] != std::numeric_limits<size_t>::max())
+			{
+				checknode++;
+			}
+			if (checknode == nodeLength.size()) break;
+			callStack.emplace_back(checknode, 0, 0);
+			checknode++;
+		}
+		auto top = callStack.back();
+		const size_t v = std::get<0>(top);
+		int state = std::get<1>(top);
+		size_t w;
+		size_t neighborI = std::get<2>(top);
+		callStack.pop_back();
+		switch(state)
+		{
+			case 0:
+				assert(index[v] == std::numeric_limits<size_t>::max());
+				assert(lowlink[v] == std::numeric_limits<size_t>::max());
+				assert(!onStack[v]);
+				index[v] = i;
+				lowlink[v] = i;
+				i += 1;
+				stack.push_back(v);
+				onStack[v] = true;
+			startloop:
+			case 1:
+				if (neighborI >= outNeighbors[v].size()) goto endloop;
+				assert(neighborI < outNeighbors[v].size());
+				w = outNeighbors[v][neighborI];
+				if (index[w] == std::numeric_limits<size_t>::max())
+				{
+					assert(lowlink[w] == std::numeric_limits<size_t>::max());
+					assert(!onStack[w]);
+					callStack.emplace_back(v, 2, neighborI);
+					callStack.emplace_back(w, 0, 0);
+					continue;
+				}
+				else if (onStack[w])
+				{
+					lowlink[v] = std::min(lowlink[v], index[w]);
+					neighborI += 1;
+					goto startloop;
+				}
+				else
+				{
+					neighborI += 1;
+					goto startloop;
+				}
+			case 2:
+				assert(neighborI < outNeighbors[v].size());
+				w = outNeighbors[v][neighborI];
+				assert(index[w] != std::numeric_limits<size_t>::max());
+				assert(lowlink[w] != std::numeric_limits<size_t>::max());
+				lowlink[v] = std::min(lowlink[v], lowlink[w]);
+				neighborI++;
+				goto startloop;
+			endloop:
+			case 3:
+				if (lowlink[v] == index[v])
+				{
+					do
+					{
+						w = stack.back();
+						stack.pop_back();
+						onStack[w] = false;
+						componentNumber[w] = nextComponent;
+					} while (w != v);
+					nextComponent++;
+				}
+		}
+	}
+	assert(stack.size() == 0);
+	for (size_t i = 0; i < componentNumber.size(); i++)
+	{
+		assert(componentNumber[i] != std::numeric_limits<size_t>::max());
+		assert(componentNumber[i] <= nextComponent-1);
+		componentNumber[i] = nextComponent-1-componentNumber[i];
+	}
+#ifdef EXTRACORRECTNESSASSERTIONS
+	for (size_t i = 0; i < nodeLength.size(); i++)
+	{
+		for (auto neighbor : outNeighbors[i])
+		{
+			assert(componentNumber[neighbor] >= componentNumber[i]);
+		}
+	}
+#endif
+}
+
+size_t AlignmentGraph::ComponentSize() const
+{
+	return componentNumber.size();
 }

@@ -177,9 +177,13 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 		size_t gotAlns = writequeue.try_dequeue_bulk(alns, 100);
 		if (gotAlns == 0)
 		{
-			if (allThreadsDone) break;
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			continue;
+			if (!writequeue.try_dequeue(alns[0]))
+			{
+				if (allThreadsDone) break;
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				continue;
+			}
+			gotAlns = 1;
 		}
 		coutoutput << "write " << gotAlns << ", " << writequeue.size_approx() << " left" << BufferedWriter::Flush;
 		for (size_t i = 0; i < gotAlns; i++)
@@ -339,9 +343,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		delete gzip_out;
 		delete raw_out;
 		std::string* writeAlns = new std::string { strstr.str() };
-		while (!alignmentsOut.try_enqueue(token, writeAlns))
+		size_t waited = 0;
+		while (!alignmentsOut.try_enqueue(token, writeAlns) && !alignmentsOut.try_enqueue(writeAlns))
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			waited++;
+			if (waited >= 1000)
+			{
+				if (alignmentsOut.size_approx() < 100 && alignmentsOut.enqueue(writeAlns)) break;
+			}
 		}
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
@@ -353,7 +363,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, bool tryDAG, const std::string& seederCachePrefix)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -371,11 +381,11 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 				auto graph = CommonUtils::LoadVGGraph(graphFile);
 				std::cout << "Build seeder from the graph" << std::endl;
 				*seeder = new MummerSeeder { graph, seederCachePrefix };
-				return DirectedGraph::BuildFromVG(graph);
+				return DirectedGraph::BuildFromVG(graph, tryDAG);
 			}
 			else
 			{
-				return DirectedGraph::StreamVGGraphFromFile(graphFile);
+				return DirectedGraph::StreamVGGraphFromFile(graphFile, tryDAG);
 			}
 		}
 		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
@@ -386,7 +396,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 				std::cout << "Build seeder from the graph" << std::endl;
 				*seeder = new MummerSeeder { graph, seederCachePrefix };
 			}
-			return DirectedGraph::BuildFromGFA(graph);
+			return DirectedGraph::BuildFromGFA(graph, tryDAG);
 		}
 		else
 		{
@@ -409,7 +419,7 @@ void alignReads(AlignerParams params)
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix);
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.maxCellsPerSlice == std::numeric_limits<size_t>::max(), params.seederCachePrefix);
 
 	if (params.seedFiles.size() > 0)
 	{
@@ -461,7 +471,7 @@ void alignReads(AlignerParams params)
 
 	assertSetRead("Running alignments", "No seed");
 
-	moodycamel::ConcurrentQueue<std::string*> outputAlns { ((params.numThreads * 50 + 31) / 32) * 32 };
+	moodycamel::ConcurrentQueue<std::string*> outputAlns;
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
 	moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>> readFastqsQueue;
 	std::atomic<bool> readStreamingFinished { false };

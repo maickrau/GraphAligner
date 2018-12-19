@@ -4,6 +4,7 @@
 #include <vector>
 #include "AlignmentGraph.h"
 #include "ArrayPriorityQueue.h"
+#include "ComponentPriorityQueue.h"
 #include "NodeSlice.h"
 #include "WordSlice.h"
 
@@ -49,6 +50,7 @@ public:
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
+		componentQueue(graph.ComponentSize()),
 		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
@@ -67,10 +69,12 @@ public:
 		{
 			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
+			componentQueue.clear();
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
+		ComponentPriorityQueue<EdgeWithPriority> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
