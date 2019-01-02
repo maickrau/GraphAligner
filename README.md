@@ -43,6 +43,7 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 - `-a` output file name. Format .gam
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
+- `--global-alignment` force the read to be aligned end-to-end. Normally the alignment is stopped if the score gets too poor. This forces the alignment to continue to the end of the read regardless of score. If you use this you should do some other filtering on the alignments to remove false alignments.
 
 Seeding:
 
