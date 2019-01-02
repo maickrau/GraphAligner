@@ -50,6 +50,10 @@ public:
 		//failed alignment, don't output
 		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
 		if (trace.trace.size() == 0) return result;
+#ifndef NDEBUG
+		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
+#endif
+		fixForwardTraceSeqPos(trace.trace, 0);
 		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
 		alnItem.alignmentStart = trace.trace[0].first.seqPos;
 		alnItem.alignmentEnd = trace.trace.back().first.seqPos;

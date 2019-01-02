@@ -221,6 +221,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			sstr >> idstr;
 			int id = getNameId(nameMapping, idstr);
 			sstr >> seq;
+			assert(seq.size() >= 1);
 			std::string tags;
 			while (sstr.good())
 			{
@@ -250,7 +251,12 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			sstr >> tostr;
 			int to = getNameId(nameMapping, tostr);
 			sstr >> toend;
+			assert(fromstart == "+" || fromstart == "-");
+			assert(toend == "+" || toend == "-");
 			sstr >> overlap;
+			char dummyc;
+			sstr >> dummyc;
+			assert(dummyc == 'M');
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
 			if (!allowVaryingOverlaps && result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
