@@ -85,14 +85,15 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
 		sloppyOptimizations(sloppyOptimizations),
-		lowMemory(lowMemory)
+		lowMemory(lowMemory),
+		forceGlobal(forceGlobal)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -102,6 +103,7 @@ public:
 		const bool quietMode;
 		const bool sloppyOptimizations;
 		const bool lowMemory;
+		const bool forceGlobal;
 	};
 	class OnewayTrace
 	{

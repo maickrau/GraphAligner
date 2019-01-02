@@ -120,12 +120,12 @@ public:
 	{
 	}
 
-	OnewayTrace getReverseTraceFromSeed(const std::string& sequence, int bigraphNodeId, size_t nodeOffset, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromSeed(const std::string& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
-		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, reusableState);
-		removeWronglyAlignedEnd(slice);
+		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
+		if (!forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -141,7 +141,7 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktraceFullStart(std::string originalSequence, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getBacktraceFullStart(std::string originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
 		DPSlice startSlice;
@@ -180,8 +180,8 @@ public:
 		std::string alignableSequence = originalSequence.substr(1);
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, reusableState);
-		removeWronglyAlignedEnd(slice);
+		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
+		if (!forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -1365,7 +1365,7 @@ private:
 		}
 	}
 
-	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState) const
+	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
@@ -1438,61 +1438,65 @@ private:
 				newSlice.scoresNotValid = true;
 			}
 
-			if (!newSlice.correctness.CorrectFromCorrect())
+			// if forcing global alignment, the whole read must be aligned -> don't allow breaking even if the alignment looks wrong
+			if (!forceGlobal)
 			{
+				if (!newSlice.correctness.CorrectFromCorrect())
+				{
 #ifndef NDEBUG
-				debugLastProcessedSlice = slice-1;
+					debugLastProcessedSlice = slice-1;
 #endif
-				for (auto node : lastSlice.scores)
-				{
-					assert(reusableState.previousBand[node.first]);
-					reusableState.previousBand[node.first] = false;
+					for (auto node : lastSlice.scores)
+					{
+						assert(reusableState.previousBand[node.first]);
+						reusableState.previousBand[node.first] = false;
+					}
+					for (auto node : newSlice.scores)
+					{
+						assert(reusableState.currentBand[node.first]);
+						reusableState.currentBand[node.first] = false;
+					}
+					lastSlice.scoresVectorMap.removeVectorArray();
+					newSlice.scoresVectorMap.removeVectorArray();
+					break;
 				}
-				for (auto node : newSlice.scores)
+				if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && params.rampBandwidth > params.initialBandwidth)
 				{
-					assert(reusableState.currentBand[node.first]);
-					reusableState.currentBand[node.first] = false;
-				}
-				lastSlice.scoresVectorMap.removeVectorArray();
-				newSlice.scoresVectorMap.removeVectorArray();
-				break;
-			}
-			if (!newSlice.correctness.CurrentlyCorrect() && rampUntil < slice && params.rampBandwidth > params.initialBandwidth)
-			{
-				for (auto node : newSlice.scores)
-				{
-					assert(reusableState.currentBand[node.first]);
-					reusableState.currentBand[node.first] = false;
-				}
-				for (auto node : lastSlice.scores)
-				{
-					assert(reusableState.previousBand[node.first]);
-					reusableState.previousBand[node.first] = false;
-				}
-				lastSlice.scoresVectorMap.removeVectorArray();
-				newSlice.scoresVectorMap.removeVectorArray();
-				rampUntil = slice;
-				std::swap(slice, rampRedoIndex);
-				std::swap(lastSlice, rampSlice);
-				for (auto node : lastSlice.scores)
-				{
-					assert(!reusableState.previousBand[node.first]);
-					reusableState.previousBand[node.first] = true;
-				}
-				if (slice == (size_t)-1)
-				{
-					result.slices.clear();
-				}
-				while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
-				assert(slice == (size_t)-1 || result.slices.size() == slice+2);
-				assert(result.slices.back().j == lastSlice.j);
+					for (auto node : newSlice.scores)
+					{
+						assert(reusableState.currentBand[node.first]);
+						reusableState.currentBand[node.first] = false;
+					}
+					for (auto node : lastSlice.scores)
+					{
+						assert(reusableState.previousBand[node.first]);
+						reusableState.previousBand[node.first] = false;
+					}
+					lastSlice.scoresVectorMap.removeVectorArray();
+					newSlice.scoresVectorMap.removeVectorArray();
+					rampUntil = slice;
+					std::swap(slice, rampRedoIndex);
+					std::swap(lastSlice, rampSlice);
+					for (auto node : lastSlice.scores)
+					{
+						assert(!reusableState.previousBand[node.first]);
+						reusableState.previousBand[node.first] = true;
+					}
+					if (slice == (size_t)-1)
+					{
+						result.slices.clear();
+					}
+					while (result.slices.size() > 1 && result.slices.back().j > slice * WordConfiguration<Word>::WordSize) result.slices.pop_back();
+					assert(slice == (size_t)-1 || result.slices.size() == slice+2);
+					assert(result.slices.back().j == lastSlice.j);
 #ifdef SLICEVERBOSE
-				std::cerr << " ramp to " << slice;
-				std::cerr << std::endl;
-				if (result.slices.size() > 0) std::cerr << " slices.back().j " << result.slices.back().j; else std::cerr << " slices.size() 0";
-				std::cerr << std::endl;
+					std::cerr << " ramp to " << slice;
+					std::cerr << std::endl;
+					if (result.slices.size() > 0) std::cerr << " slices.back().j " << result.slices.back().j; else std::cerr << " slices.size() 0";
+					std::cerr << std::endl;
 #endif
-				continue;
+					continue;
+				}
 			}
 
 #ifdef SLICEVERBOSE

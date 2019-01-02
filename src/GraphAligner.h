@@ -105,7 +105,7 @@ private:
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
-		return bvAligner.getBacktraceFullStart(sequence, reusableState);
+		return bvAligner.getBacktraceFullStart(sequence, params.forceGlobal, reusableState);
 	}
 
 	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -132,13 +132,13 @@ private:
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos));
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
 			assert(reversePos.first == backwardNodeId);
-			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
+			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, params.forceGlobal, reusableState);
 		}
 		if (seedHit.seqPos < sequence.size()-1)
 		{
 			auto forwardPart = sequence.substr(seedHit.seqPos+1);
 			size_t offset = seedHit.nodeOffset;
-			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, reusableState);
+			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, params.forceGlobal, reusableState);
 		}
 
 		if (!result.backward.failed())

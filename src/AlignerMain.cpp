@@ -43,6 +43,7 @@ int main(int argc, char** argv)
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
+		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -102,6 +103,7 @@ int main(int argc, char** argv)
 	params.memCount = 0;
 	params.seederCachePrefix = "";
 	params.outputAllAlns = false;
+	params.forceGlobal = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -126,6 +128,7 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
+	if (vm.count("global-alignment")) params.forceGlobal = true;
 
 	bool paramError = false;
 

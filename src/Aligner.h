@@ -24,6 +24,7 @@ struct AlignerParams
 	size_t memCount;
 	bool outputAllAlns;
 	std::string seederCachePrefix;
+	bool forceGlobal;
 };
 
 void alignReads(AlignerParams params);
