@@ -153,21 +153,15 @@ public:
 	VP(0),
 	VN(0),
 	scoreEnd(0),
-	scoreBeforeStart(0),
-	scoreBeforeExists(false),
-	sliceExists(false),
 	minScore(-1)
 #ifdef SLICEVERBOSE
 	,debugCalcCount(0)
 #endif
 	{}
-	WordSlice(Word VP, Word VN, ScoreType scoreEnd, ScoreType scoreBeforeStart, bool scoreBeforeExists) :
+	WordSlice(Word VP, Word VN, ScoreType scoreEnd) :
 	VP(VP),
 	VN(VN),
 	scoreEnd(scoreEnd),
-	scoreBeforeStart(scoreBeforeStart),
-	scoreBeforeExists(scoreBeforeExists),
-	sliceExists(false),
 	minScore(-1)
 #ifdef SLICEVERBOSE
 	,debugCalcCount(0)
@@ -176,10 +170,7 @@ public:
 	Word VP;
 	Word VN;
 	ScoreType scoreEnd;
-	ScoreType scoreBeforeStart;
 	ScoreType minScore;
-	bool scoreBeforeExists;
-	bool sliceExists;
 #ifdef SLICEVERBOSE
 	int debugCalcCount;
 #endif
@@ -192,9 +183,14 @@ public:
 #endif
 	}
 
+	ScoreType getScoreBeforeStart() const
+	{
+		return scoreEnd - WordConfiguration<Word>::popcount(VP) + WordConfiguration<Word>::popcount(VN);
+	}
+
 	ScoreType changedMinScore(WordSlice other) const
 	{
-		if (other.scoreBeforeStart == std::numeric_limits<ScoreType>::max()) return std::min(scoreBeforeStart, minScore);
+		if (other.scoreEnd == std::numeric_limits<ScoreType>::max()) return std::min(getScoreBeforeStart(), minScore);
 		auto result = changedMinScoreLocalMinima(other);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(result == changedMinScoreCellByCell(other));
@@ -218,7 +214,7 @@ public:
 	{
 		auto mask = WordConfiguration<Word>::AllOnes;
 		if (row < WordConfiguration<Word>::WordSize-1) mask = ~(WordConfiguration<Word>::AllOnes << (row + 1));
-		auto value = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & mask) - WordConfiguration<Word>::popcount(VN & mask);
+		auto value = getScoreBeforeStart() + WordConfiguration<Word>::popcount(VP & mask) - WordConfiguration<Word>::popcount(VN & mask);
 		return value;
 	}
 
@@ -227,8 +223,8 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 	ScoreType changedMinScoreCellByCell(WordSlice oldSlice) const
 	{
-		ScoreType oldScore = oldSlice.scoreBeforeStart;
-		ScoreType newScore = scoreBeforeStart;
+		ScoreType oldScore = oldSlice.getScoreBeforeStart();
+		ScoreType newScore = getScoreBeforeStart();
 		Word mask = 1;
 		ScoreType result = std::numeric_limits<ScoreType>::max();
 		if (newScore < oldScore) result = std::min(result, newScore);
@@ -246,8 +242,8 @@ private:
 
 	ScoreType minScoreCellByCell() const
 	{
-		ScoreType minScore = scoreBeforeStart;
-		ScoreType scoreHere = scoreBeforeStart;
+		ScoreType minScore = getScoreBeforeStart();
+		ScoreType scoreHere = getScoreBeforeStart();
 		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
 		{
 			Word mask = ((Word)1) << i;
@@ -261,6 +257,7 @@ private:
 
 	bool minScoreLocalMinimaSmallerThan(ScoreType score) const
 	{
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
 		Word possibleLocalMinima = (VP & (VN - VP));
 		//shift right by one to get the minimum
@@ -287,6 +284,7 @@ private:
 
 	ScoreType minScoreLocalMinima() const
 	{
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
 		Word possibleLocalMinima = (VP & (VN - VP));
 		//shift right by one to get the minimum
@@ -307,13 +305,15 @@ private:
 
 	ScoreType changedMinScoreLocalMinima(WordSlice oldSlice) const
 	{
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
+		ScoreType oldSliceScoreBeforeStart = oldSlice.getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
 		Word possibleLocalMinima = (VP & (VN - VP));
 		//shift right by one to get the minimum
 		possibleLocalMinima >>= 1;
 		//leftmost bit might be a minimum if there is no VP to its right
 		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (VN | ~(VN - VP)) & ~VP;
-		auto masks = differenceMasks(VP, VN, oldSlice.VP, oldSlice.VN, oldSlice.scoreBeforeStart - scoreBeforeStart);
+		auto masks = differenceMasks(VP, VN, oldSlice.VP, oldSlice.VN, oldSliceScoreBeforeStart - scoreBeforeStart);
 		Word smaller = masks.first;
 		//corner cases
 		if (smaller != WordConfiguration<Word>::AllOnes)
@@ -324,7 +324,7 @@ private:
 			possibleLocalMinima |= WordConfiguration<Word>::LastBit;
 			possibleLocalMinima &= smaller;
 		}
-		ScoreType result = (scoreBeforeStart < oldSlice.scoreBeforeStart) ? scoreBeforeStart : std::numeric_limits<ScoreType>::max();
+		ScoreType result = (scoreBeforeStart < oldSliceScoreBeforeStart) ? scoreBeforeStart : std::numeric_limits<ScoreType>::max();
 		while (possibleLocalMinima != 0)
 		{
 			//all cells from the right up to the first minimum are one
@@ -338,7 +338,7 @@ private:
 
 	ScoreType minScoreLogW() const
 	{
-		if (VP == WordConfiguration<Word>::AllOnes) return scoreBeforeStart + 1;
+		if (VP == WordConfiguration<Word>::AllOnes) return getScoreBeforeStart() + 1;
 		if (VN == WordConfiguration<Word>::AllOnes) return scoreEnd;
 		Word tmpVP = VP;
 		Word tmpVN = VN;
@@ -364,7 +364,7 @@ private:
 			ScoreType value = (chunkMin & 0xFF) - 16 + (VPVN & 0x7F) - (VPVN & 0x80);
 			result = std::min(result, value);
 		}
-		return result + scoreBeforeStart;
+		return result + getScoreBeforeStart();
 	}
 
 	static uint64_t bytePrefixSums(uint64_t value, int addition)
@@ -395,14 +395,14 @@ private:
 	static WordSlice mergeWithVerticalSlice(WordSlice slice, WordSlice fullVertical)
 	{
 		assert(fullVertical.VP == WordConfiguration<Word>::AllOnes);
-		assert(slice.scoreBeforeStart > fullVertical.scoreBeforeStart);
+		assert(slice.getScoreBeforeStart() > fullVertical.getScoreBeforeStart());
 		if (slice.scoreEnd >= fullVertical.scoreEnd)
 		{
 			return fullVertical;
 		}
-		auto masks = differenceMaskFullVertical(slice, fullVertical.scoreBeforeStart);
+		auto masks = differenceMaskFullVertical(slice, fullVertical.getScoreBeforeStart());
 #ifdef EXTRACORRECTNESSASSERTIONS
-		auto debugCompare = differenceMasks(fullVertical.VP, fullVertical.VN, slice.VP, slice.VN, slice.scoreBeforeStart - fullVertical.scoreBeforeStart);
+		auto debugCompare = differenceMasks(fullVertical.VP, fullVertical.VN, slice.VP, slice.VN, slice.getScoreBeforeStart() - fullVertical.getScoreBeforeStart());
 		assert(masks.first == debugCompare.first);
 		assert(masks.second == debugCompare.second);
 #endif
@@ -415,8 +415,8 @@ private:
 		Word high = slice.VN;
 		Word mortonLow = WordConfiguration<Word>::MortonLow(high, low);
 		Word mortonHigh = WordConfiguration<Word>::MortonHigh(high, low);
-		auto pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.scoreBeforeStart - fullVerticalScore - 1);
-		auto nextpos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.scoreBeforeStart - fullVerticalScore);
+		auto pos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.getScoreBeforeStart() - fullVerticalScore - 1);
+		auto nextpos = WordConfiguration<Word>::BitPosition(mortonLow, mortonHigh, slice.getScoreBeforeStart() - fullVerticalScore);
 		auto bitpos = pos / 2;
 		auto nextbitpos = nextpos / 2;
 		auto verticalSmaller = ~(WordConfiguration<Word>::AllOnes << bitpos);
@@ -428,25 +428,24 @@ private:
 	{
 		//O(log w), because prefix sums need log w chunks of log w bits
 		static_assert(std::is_same<Word, uint64_t>::value, "non-64 bit words are currently not supported");
-		if (left.scoreBeforeStart > right.scoreBeforeStart) std::swap(left, right);
+		if (left.getScoreBeforeStart() > right.getScoreBeforeStart()) std::swap(left, right);
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
-		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.scoreBeforeStart - left.scoreBeforeStart);
+		auto masks = differenceMasks(left.VP, left.VN, right.VP, right.VN, right.getScoreBeforeStart() - left.getScoreBeforeStart());
 		return mergeTwoSlices(left, right, masks.first, masks.second);
 	}
 
 	static WordSlice mergeTwoSlices(WordSlice left, WordSlice right, Word leftSmaller, Word rightSmaller)
 	{
-		assert(left.scoreBeforeStart <= right.scoreBeforeStart);
+		assert(left.getScoreBeforeStart() <= right.getScoreBeforeStart());
 		WordSlice result;
-		result.sliceExists = true;
 		assert((left.VP & left.VN) == WordConfiguration<Word>::AllZeros);
 		assert((right.VP & right.VN) == WordConfiguration<Word>::AllZeros);
 		assert((leftSmaller & rightSmaller) == 0);
 		auto mask = (rightSmaller | ((leftSmaller | rightSmaller) - (rightSmaller << 1))) & ~leftSmaller;
 		uint64_t leftReduction = leftSmaller & (rightSmaller << 1);
 		uint64_t rightReduction = rightSmaller & (leftSmaller << 1);
-		if ((rightSmaller & 1) && left.scoreBeforeStart < right.scoreBeforeStart)
+		if ((rightSmaller & 1) && left.getScoreBeforeStart() < right.getScoreBeforeStart())
 		{
 			rightReduction |= 1;
 		}
@@ -459,14 +458,8 @@ private:
 		result.VN = (left.VN & ~mask) | (right.VN & mask);
 		result.VP = (left.VP & ~mask) | (right.VP & mask);
 		assert((result.VP & result.VN) == 0);
-		result.scoreBeforeStart = left.scoreBeforeStart;
 		result.scoreEnd = std::min(left.scoreEnd, right.scoreEnd);
-		result.scoreBeforeExists = left.scoreBeforeExists;
-		if (right.scoreBeforeStart == left.scoreBeforeStart)
-		{
-			result.scoreBeforeExists |= right.scoreBeforeExists;
-		}
-		assert(result.scoreEnd == result.scoreBeforeStart + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
+		assert(result.scoreEnd == result.getScoreBeforeStart() + WordConfiguration<Word>::popcount(result.VP) - WordConfiguration<Word>::popcount(result.VN));
 		return result;
 	}
 

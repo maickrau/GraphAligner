@@ -1,6 +1,7 @@
 #ifndef AlignmentGraph_h
 #define AlignmentGraph_h
 
+#include <limits>
 #include <functional>
 #include <vector>
 #include <set>
@@ -13,8 +14,8 @@ class CycleCutCalculation;
 class AlignmentGraph
 {
 public:
-	//arbitrarily 100, shouldn't be too small because of per-node overhead, and not too high because of in-band-but-not-calculated overhead
-	static constexpr int SPLIT_NODE_SIZE = 100;
+	//remove because not useful in non-banded alignment
+	static constexpr int SPLIT_NODE_SIZE = std::numeric_limits<int>::max();
 
 	typedef std::pair<size_t, size_t> MatrixPosition;
 	class SeedHit

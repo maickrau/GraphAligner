@@ -103,8 +103,8 @@ public:
 	{
 		std::vector<WordSlice> currentSlice;
 		std::vector<WordSlice> previousSlice;
-		currentSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
-		previousSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0, 0, true });
+		currentSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize });
+		previousSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0 });
 		int slices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		for (int slice = 0; slice < slices; slice++)
 		{
@@ -134,8 +134,8 @@ public:
 	{
 		std::vector<WordSlice> currentSlice;
 		std::vector<WordSlice> previousSlice;
-		currentSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
-		previousSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0, 0, true });
+		currentSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize });
+		previousSlice.resize(params.graph.NodeSequencesSize(), { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0 });
 		int slices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		for (int slice = 0; slice < slices; slice++)
 		{
@@ -158,7 +158,6 @@ public:
 					{
 						calculateNodeAcyclic(currentSlice, previousSlice, sequence, EqV, j, component[0]);
 						currentSlice[params.graph.NodeEnd(component[0])-1].calcMinScore();
-						currentSlice[params.graph.NodeEnd(component[0])-1].sliceExists = true;
 						continue;
 					}
 				}
@@ -166,7 +165,7 @@ public:
 			}
 			// verifyCorrectness(currentSlice, previousSlice, sequence, EqV, j);
 			std::swap(previousSlice, currentSlice);
-			currentSlice.assign(currentSlice.size(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
+			currentSlice.assign(currentSlice.size(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize });
 		}
 		size_t extra = slices * WordConfiguration<Word>::WordSize - (sequence.size() - 1);
 		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
@@ -191,7 +190,7 @@ private:
 			ScoreType startPriority = std::numeric_limits<ScoreType>::max();
 			for (size_t i = 0; i < params.graph.NodeLength(node); i++)
 			{
-				currentSlice[start+i] = { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousSlice[start+i].scoreEnd+WordConfiguration<Word>::WordSize, previousSlice[start+i].scoreEnd, true };
+				currentSlice[start+i] = { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousSlice[start+i].scoreEnd+WordConfiguration<Word>::WordSize };
 				startPriority = std::min(startPriority, previousSlice[start+i].scoreEnd);
 			}
 			calculables.emplace(node, startPriority, true);
@@ -201,23 +200,19 @@ private:
 				{
 					auto u = params.graph.NodeEnd(neighbor)-1;
 					auto slice = currentSlice[u];
-					assert(slice.sliceExists);
 					assert(slice.minScore >= 0);
 					assert(slice.minScore != std::numeric_limits<ScoreType>::max());
 					auto graphChar = params.graph.NodeSequences(start);
 					Word Eq = EqV.getEq(graphChar);
-					WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[u], (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[u]);
-					if (newSlice.scoreBeforeStart > previousSlice[start].scoreEnd)
+					Word hinP = (previousSlice[start].scoreEnd > previousSlice[u].scoreEnd) ? 1 : 0;
+					Word hinN = (previousSlice[start].scoreEnd < previousSlice[u].scoreEnd) ? 1 : 0;
+					WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[u], hinP, hinN);
+					if (newSlice.getScoreBeforeStart() > previousSlice[start].scoreEnd)
 					{
 						auto vertical = getSourceSliceFromScore(previousSlice[start].scoreEnd);
 						newSlice = newSlice.mergeWithVertical(vertical);
-						newSlice.scoreBeforeExists = true;
 					}
-					if (currentSlice[start].sliceExists)
-					{
-						newSlice = newSlice.mergeWith(currentSlice[start]);
-					}
-					newSlice.sliceExists = true;
+					newSlice = newSlice.mergeWith(currentSlice[start]);
 					currentSlice[start] = newSlice;
 				}
 			}
@@ -235,28 +230,25 @@ private:
 				auto graphChar = params.graph.NodeSequences(w);
 				Word Eq = EqV.getEq(graphChar);
 				WordSlice oldSlice = currentSlice[w];
-				WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[w-1], (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[w-1]);
-				if (newSlice.scoreBeforeStart > previousSlice[w].scoreEnd)
+				Word hinP = (previousSlice[w].scoreEnd > previousSlice[w-1].scoreEnd) ? 1 : 0;
+				Word hinN = (previousSlice[w].scoreEnd < previousSlice[w-1].scoreEnd) ? 1 : 0;
+				WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[w-1], hinP, hinN);
+				if (newSlice.getScoreBeforeStart() > previousSlice[w].scoreEnd)
 				{
 					auto vertical = getSourceSliceFromScore(previousSlice[w].scoreEnd);
 					newSlice = newSlice.mergeWithVertical(vertical);
-					newSlice.scoreBeforeExists = true;
 				}
-				if (oldSlice.sliceExists)
+				BV::assertSliceCorrectness(oldSlice, previousSlice[w], true);
+				newSlice = newSlice.mergeWith(oldSlice);
+				if (!top.full)
 				{
-					BV::assertSliceCorrectness(oldSlice, previousSlice[w], true);
-					newSlice = newSlice.mergeWith(oldSlice);
-					if (!top.full)
+					auto newPriority = newSlice.changedMinScore(oldSlice);
+					if (newPriority == std::numeric_limits<ScoreType>::max())
 					{
-						auto newPriority = newSlice.changedMinScore(oldSlice);
-						if (newPriority == std::numeric_limits<ScoreType>::max())
-						{
-							calculatedToEnd = false;
-							break;
-						}
+						calculatedToEnd = false;
+						break;
 					}
 				}
-				newSlice.sliceExists = true;
 				currentSlice[w] = newSlice;
 			}
 			if (calculatedToEnd)
@@ -269,12 +261,13 @@ private:
 						auto graphChar = params.graph.NodeSequences(u);
 						Word Eq = EqV.getEq(graphChar);
 						WordSlice oldSlice = currentSlice[u];
-						WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[end-1], (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[end-1]);
-						if (newSlice.scoreBeforeStart > previousSlice[u].scoreEnd)
+						Word hinP = (previousSlice[u].scoreEnd > previousSlice[end-1].scoreEnd) ? 1 : 0;
+						Word hinN = (previousSlice[u].scoreEnd < previousSlice[end-1].scoreEnd) ? 1 : 0;
+						WordSlice newSlice = BV::getNextSliceFullBand(Eq, currentSlice[end-1], hinP, hinN);
+						if (newSlice.getScoreBeforeStart() > previousSlice[u].scoreEnd)
 						{
 							auto vertical = getSourceSliceFromScore(previousSlice[u].scoreEnd);
 							newSlice = newSlice.mergeWithVertical(vertical);
-							newSlice.scoreBeforeExists = true;
 						}
 						ScoreType newPriority;
 						BV::assertSliceCorrectness(oldSlice, previousSlice[u], true);
@@ -287,7 +280,6 @@ private:
 							calculatedToEnd = false;
 							continue;
 						}
-						newSlice.sliceExists = true;
 						currentSlice[u] = newSlice;
 						calculables.emplace(neighbor, newPriority, false);
 						stillInQueues++;
@@ -299,8 +291,7 @@ private:
 
 	WordSlice getSourceSliceFromScore(ScoreType previousScore) const
 	{
-		WordSlice result { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize, previousScore, false };
-		result.sliceExists = true;
+		WordSlice result { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, previousScore+WordConfiguration<Word>::WordSize };
 		return result;
 	}
 
@@ -329,7 +320,9 @@ private:
 		if (params.graph.inNeighbors[node].size() == 1)
 		{
 			size_t u = params.graph.NodeEnd(params.graph.inNeighbors[node][0])-1;
-			return BV::getNextSliceFullBand(Eq, currentSlice[u], (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[u]);
+			Word hinP = (previousSlice[start].scoreEnd > previousSlice[u].scoreEnd) ? 1 : 0;
+			Word hinN = (previousSlice[start].scoreEnd < previousSlice[u].scoreEnd) ? 1 : 0;
+			return BV::getNextSliceFullBand(Eq, currentSlice[u], hinP, hinN);
 		}
 		WordSlice result;
 		WordSlice up;
@@ -342,9 +335,11 @@ private:
 			size_t u = params.graph.NodeEnd(neighbor)-1;
 			previous = currentSlice[u];
 			previousUp = previousSlice[u];
-			assert(previous.scoreBeforeStart == previousUp.scoreEnd);
+			assert(previous.getScoreBeforeStart() == previousUp.scoreEnd);
 			BV::assertSliceCorrectness(previous, previousUp, true);
-			auto resultHere = BV::getNextSliceFullBand(Eq, previous, previousEq, previousUp);
+			Word hinP = (previousSlice[start].scoreEnd > previousSlice[u].scoreEnd) ? 1 : 0;
+			Word hinN = (previousSlice[start].scoreEnd < previousSlice[u].scoreEnd) ? 1 : 0;
+			auto resultHere = BV::getNextSliceFullBand(Eq, previous, hinP, hinN);
 			if (!foundOne)
 			{
 				result = resultHere;
@@ -365,25 +360,20 @@ private:
 		auto end = params.graph.NodeEnd(node);
 		auto length = end-start;
 		currentSlice[start] = getStartSliceAcyclic(currentSlice, previousSlice, sequence, EqV, j, node, start, (j == 0) || (j > 0 && params.graph.NodeSequences(start) == sequence[j-1]));
-		currentSlice[start].scoreBeforeExists = true;
-		if (currentSlice[start].scoreBeforeStart > previousSlice[start].scoreEnd)
+		if (currentSlice[start].getScoreBeforeStart() > previousSlice[start].scoreEnd)
 		{
 			auto vertical = getSourceSliceFromScore(previousSlice[start].scoreEnd);
 			currentSlice[start] = currentSlice[start].mergeWithVertical(vertical);
-			currentSlice[start].scoreBeforeExists = true;
 		}
 		BV::assertSliceCorrectness(currentSlice[start], previousSlice[start], true);
 		for (size_t w = start+1; w < end; w++)
 		{
 			char graphChar = params.graph.NodeSequences(w);
 			Word Eq = EqV.getEq(graphChar);
-			currentSlice[w] = BV::getNextSliceFullBand(Eq, currentSlice[w-1], (j == 0) || (j > 0 && graphChar == sequence[j-1]), previousSlice[w-1]);
-			if (currentSlice[w].scoreBeforeStart > previousSlice[w].scoreEnd)
-			{
-				auto vertical = getSourceSliceFromScore(previousSlice[w].scoreEnd);
-				currentSlice[w] = currentSlice[w].mergeWithVertical(vertical);
-			}
-			currentSlice[w].scoreBeforeExists = true;
+			Word hinP = (previousSlice[w].scoreEnd > previousSlice[w-1].scoreEnd) ? 1 : 0;
+			Word hinN = (previousSlice[w].scoreEnd < previousSlice[w-1].scoreEnd) ? 1 : 0;
+			currentSlice[w] = BV::getNextSliceFullBand(Eq, currentSlice[w-1], hinP, hinN);
+			assert(currentSlice[w].getScoreBeforeStart() == previousSlice[w].scoreEnd);
 			BV::assertSliceCorrectness(currentSlice[w], previousSlice[w], true);
 		}
 	}

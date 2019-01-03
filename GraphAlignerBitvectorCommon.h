@@ -116,113 +116,39 @@ public:
 	#ifndef NDEBUG
 		auto wcvp = WordConfiguration<Word>::popcount(current.VP);
 		auto wcvn = WordConfiguration<Word>::popcount(current.VN);
-		assert(current.scoreEnd == current.scoreBeforeStart + wcvp - wcvn);
+		assert(current.scoreEnd == current.getScoreBeforeStart() + wcvp - wcvn);
 
-		assert(current.scoreBeforeStart >= 0);
+		assert(current.getScoreBeforeStart() >= 0);
 		assert(current.scoreEnd >= 0);
-		assert(current.scoreBeforeStart <= current.scoreEnd + WordConfiguration<Word>::WordSize);
-		assert(current.scoreEnd <= current.scoreBeforeStart + WordConfiguration<Word>::WordSize);
+		assert(current.getScoreBeforeStart() <= current.scoreEnd + WordConfiguration<Word>::WordSize);
+		assert(current.scoreEnd <= current.getScoreBeforeStart() + WordConfiguration<Word>::WordSize);
 		assert((current.VP & current.VN) == WordConfiguration<Word>::AllZeros);
 
-		assert(!previousBand || current.scoreBeforeStart <= up.scoreEnd);
-		assert(current.scoreBeforeStart >= 0);
+		assert(!previousBand || current.getScoreBeforeStart() <= up.scoreEnd);
+		assert(current.getScoreBeforeStart() >= 0);
 	#endif
 	}
 
 	GraphAlignerBitvectorCommon() = delete;
 
-	static WordSlice getNextSlice(Word Eq, WordSlice slice, bool upInsideBand, bool upleftInsideBand, bool diagonalInsideBand, bool previousEq, WordSlice previous, WordSlice up)
+	static WordSlice getNextSliceFullBand(Word Eq, WordSlice slice, Word hinP, Word hinN)
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
 
-		auto oldValue = slice.scoreBeforeStart;
-		if (!slice.scoreBeforeExists) Eq &= ~((Word)1);
-		slice.scoreBeforeExists = upInsideBand;
-		if (!diagonalInsideBand) Eq &= ~((Word)1);
-		if (!upleftInsideBand)
-		{
-			slice.scoreBeforeStart += 1;
-		}
-		else
-		{
-			const auto lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize - 1);
-			assert(slice.scoreBeforeStart <= previous.scoreEnd);
-			slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
-		}
-		auto hin = slice.scoreBeforeStart - oldValue;
-
-		Word Xv = Eq | slice.VN;
-		//between 7 and 8
-		if (hin < 0) Eq |= 1;
-		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
-		Word Ph = slice.VN | ~(Xh | slice.VP);
-		Word Mh = slice.VP & Xh;
-		// if (~Ph & confirmedMask) confirmTentative = true;
-		const Word lastBitMask = (((Word)1) << (WordConfiguration<Word>::WordSize - 1));
-		if (Ph & lastBitMask)
-		{
-			slice.scoreEnd += 1;
-		}
-		else if (Mh & lastBitMask)
-		{
-			slice.scoreEnd -= 1;
-		}
-		Ph <<= 1;
-		Mh <<= 1;
-		//between 16 and 17
-		if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
-		slice.VP = Mh | ~(Xv | Ph);
-		slice.VN = Ph & Xv;
-
-		slice.sliceExists = true;
-
-#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
-		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
-#endif
-
-		return slice;
-	}
-
-	static WordSlice getNextSliceFullBand(Word Eq, WordSlice slice, bool previousEq, WordSlice previous)
-	{
-		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
-		//pages 405 and 408
-
-		auto oldValue = slice.scoreBeforeStart;
-		const Word lastBitMask = ((Word)1) << (WordConfiguration<Word>::WordSize - 1);
-		assert(slice.scoreBeforeStart <= previous.scoreEnd);
-		slice.scoreBeforeStart = std::min(slice.scoreBeforeStart + 1, previous.scoreEnd - ((previous.VP & lastBitMask) ? 1 : 0) + ((previous.VN & lastBitMask) ? 1 : 0) + (previousEq ? 0 : 1));
-		auto hin = slice.scoreBeforeStart - oldValue;
-
-		Word Xv = Eq | slice.VN;
-		//between 7 and 8
-		if (hin < 0) Eq |= 1;
-		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq;
-		Word Ph = slice.VN | ~(Xh | slice.VP);
-		Word Mh = slice.VP & Xh;
-		if (Ph & lastBitMask)
-		{
-			slice.scoreEnd += 1;
-		}
-		else if (Mh & lastBitMask)
-		{
-			slice.scoreEnd -= 1;
-		}
-		Ph <<= 1;
-		Mh <<= 1;
-		//between 16 and 17
-		if (hin < 0) Mh |= 1; else if (hin > 0) Ph |= 1;
-		slice.VP = Mh | ~(Xv | Ph);
-		slice.VN = Ph & Xv;
-
-#ifndef NDEBUG
-		auto wcvp = WordConfiguration<Word>::popcount(slice.VP);
-		auto wcvn = WordConfiguration<Word>::popcount(slice.VN);
-		assert(slice.scoreEnd == slice.scoreBeforeStart + wcvp - wcvn);
-#endif
+		Word Xv = Eq | slice.VN; //line 7
+		Eq |= hinN; //between lines 7-8
+		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq; //line 8
+		Word Ph = slice.VN | ~(Xh | slice.VP); //line 9
+		Word Mh = slice.VP & Xh; //line 10
+		Word tempMh = (Mh << 1) | hinN; //line 16 + between lines 16-17
+		hinN = Mh >> (WordConfiguration<Word>::WordSize-1); //line 11
+		Word tempPh = (Ph << 1) | hinP; //line 15 + between lines 16-17
+		slice.VP = tempMh | ~(Xv | tempPh); //line 17
+		hinP = Ph >> (WordConfiguration<Word>::WordSize-1); //line 13
+		slice.VN = tempPh & Xv; //line 18
+		slice.scoreEnd -= hinN; //line 12
+		slice.scoreEnd += hinP; //line 14
 
 		return slice;
 	}

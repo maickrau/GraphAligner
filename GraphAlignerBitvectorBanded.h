@@ -1,6 +1,6 @@
 #ifndef GraphAlignerBitvectorBanded_h
 #define GraphAlignerBitvectorBanded_h
-
+/*
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -1989,5 +1989,5 @@ private:
 	}
 
 };
-
+*/
 #endif
