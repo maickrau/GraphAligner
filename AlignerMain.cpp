@@ -55,7 +55,7 @@ int main(int argc, char** argv)
 		std::exit(0);
 	}
 
-	ByteStuff::precalculateByteStuff();
+	// ByteStuff::precalculateByteStuff();
 
 	wabiExperiments(params);
 	// alignReads(params);

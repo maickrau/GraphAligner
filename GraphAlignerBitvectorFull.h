@@ -118,7 +118,7 @@ public:
 			// verifyCorrectness(currentSlice, previousSlice, sequence, EqV, j);
 			std::swap(previousSlice, currentSlice);
 		}
-		size_t extra = slices * WordConfiguration<Word>::WordSize - sequence.size();
+		size_t extra = slices * WordConfiguration<Word>::WordSize - (sequence.size() - 1);
 		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
 		assert(scorepos < WordConfiguration<Word>::WordSize);
 
@@ -168,7 +168,7 @@ public:
 			std::swap(previousSlice, currentSlice);
 			currentSlice.assign(currentSlice.size(), { WordConfiguration<Word>::AllOnes, WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::WordSize, 0, true });
 		}
-		size_t extra = slices * WordConfiguration<Word>::WordSize - sequence.size();
+		size_t extra = slices * WordConfiguration<Word>::WordSize - (sequence.size() - 1);
 		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
 		assert(scorepos < WordConfiguration<Word>::WordSize);
 

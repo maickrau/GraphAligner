@@ -472,8 +472,8 @@ private:
 
 	static std::pair<uint64_t, uint64_t> differenceMasks(uint64_t leftVP, uint64_t leftVN, uint64_t rightVP, uint64_t rightVN, int scoreDifference)
 	{
-		// auto result = differenceMasksBitTwiddle(leftVP, leftVN, rightVP, rightVN, scoreDifference);
-		auto result = differenceMasksBytePrecalc(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		auto result = differenceMasksBitTwiddle(leftVP, leftVN, rightVP, rightVN, scoreDifference);
+		// auto result = differenceMasksBytePrecalc(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		auto debugCompare = differenceMasksWord(leftVP, leftVN, rightVP, rightVN, scoreDifference);
 		assert(result.first == debugCompare.first);
