@@ -76,6 +76,15 @@ void wabiExperiments(AlignerParams params)
 	{
 		std::cout << "The graph is cyclic" << std::endl;
 	}
+	if (params.linear)
+	{
+		std::cout << "Use whole-column processing. NOTE: if the graph is not linear then the results will be wrong!" << std::endl;
+		if (!isTree)
+		{
+			std::cout << "The graph cannot be used with whole-column processing" << std::endl;
+			std::abort();
+		}
+	}
 	size_t numEdges = 0;
 	for (const auto& list : alignmentGraph.inNeighbors)
 	{
