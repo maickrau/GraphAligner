@@ -121,7 +121,7 @@ public:
 			hinP[slice] = 0;
 			EqV.push_back(BV::getEqVector(sequence, slice * WordConfiguration<Word>::WordSize));
 		}
-		for (size_t w = 0; w < sequence.size(); w++)
+		for (size_t w = 0; w < params.graph.NodeSequencesSize(); w++)
 		{
 			char graphChar = params.graph.NodeSequences(w);
 			std::tie(vertiSlices[0], hinN[0], hinP[0]) = BV::getNextSliceFullBandPlusHinNHinP(EqV[0].getEq(graphChar), vertiSlices[0], 0, 0);
