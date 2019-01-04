@@ -29,9 +29,10 @@ int main(int argc, char** argv)
 	bool initialFullBand = false;
 	params.quietMode = false;
 	params.sloppyOptimizations = false;
+	params.linear = false;
 	int c;
 
-	while ((c = getopt(argc, argv, "g:f:")) != -1)
+	while ((c = getopt(argc, argv, "g:f:l")) != -1)
 	{
 		switch(c)
 		{
@@ -40,6 +41,9 @@ int main(int argc, char** argv)
 				break;
 			case 'f':
 				params.fastqFile = std::string(optarg);
+				break;
+			case 'l':
+				params.linear = true;
 				break;
 		}
 	}

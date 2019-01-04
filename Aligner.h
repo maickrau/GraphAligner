@@ -17,6 +17,7 @@ struct AlignerParams
 	std::string outputAlignmentFile;
 	bool quietMode;
 	bool sloppyOptimizations;
+	bool linear;
 };
 
 void alignReads(AlignerParams params);

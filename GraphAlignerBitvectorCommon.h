@@ -131,6 +131,28 @@ public:
 
 	GraphAlignerBitvectorCommon() = delete;
 
+	static std::tuple<WordSlice, Word, Word> getNextSliceFullBandPlusHinNHinP(Word Eq, WordSlice slice, Word hinP, Word hinN)
+	{
+		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
+		//pages 405 and 408
+
+		Word Xv = Eq | slice.VN; //line 7
+		Eq |= hinN; //between lines 7-8
+		Word Xh = (((Eq & slice.VP) + slice.VP) ^ slice.VP) | Eq; //line 8
+		Word Ph = slice.VN | ~(Xh | slice.VP); //line 9
+		Word Mh = slice.VP & Xh; //line 10
+		Word tempMh = (Mh << 1) | hinN; //line 16 + between lines 16-17
+		hinN = Mh >> (WordConfiguration<Word>::WordSize-1); //line 11
+		Word tempPh = (Ph << 1) | hinP; //line 15 + between lines 16-17
+		slice.VP = tempMh | ~(Xv | tempPh); //line 17
+		hinP = Ph >> (WordConfiguration<Word>::WordSize-1); //line 13
+		slice.VN = tempPh & Xv; //line 18
+		slice.scoreEnd -= hinN; //line 12
+		slice.scoreEnd += hinP; //line 14
+
+		return std::make_tuple(slice, hinN, hinP);
+	}
+
 	static WordSlice getNextSliceFullBand(Word Eq, WordSlice slice, Word hinP, Word hinN)
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf

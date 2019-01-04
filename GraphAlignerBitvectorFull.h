@@ -99,6 +99,43 @@ public:
 		}
 	}
 
+	ScoreType alignAndGetScoreLinear(const std::string& sequence) const
+	{
+		std::vector<WordSlice> vertiSlices;
+		std::vector<Word> hinP;
+		std::vector<Word> hinN;
+		std::vector<EqVector> EqV;
+		int slices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		vertiSlices.resize(slices);
+		hinN.resize(slices);
+		hinP.resize(slices);
+		size_t extra = slices * WordConfiguration<Word>::WordSize - (sequence.size() - 1);
+		size_t scorepos = WordConfiguration<Word>::WordSize - extra;
+		ScoreType result = sequence.size();
+		for (int slice = 0; slice < slices; slice++)
+		{
+			vertiSlices[slice].VP = WordConfiguration<Word>::AllOnes;
+			vertiSlices[slice].VN = WordConfiguration<Word>::AllZeros;
+			vertiSlices[slice].scoreEnd = (WordConfiguration<Word>::WordSize) * (slice + 1);
+			hinN[slice] = 0;
+			hinP[slice] = 0;
+			EqV.push_back(BV::getEqVector(sequence, slice * WordConfiguration<Word>::WordSize));
+		}
+		for (size_t w = 0; w < sequence.size(); w++)
+		{
+			char graphChar = params.graph.NodeSequences(w);
+			std::tie(vertiSlices[0], hinN[0], hinP[0]) = BV::getNextSliceFullBandPlusHinNHinP(EqV[0].getEq(graphChar), vertiSlices[0], 0, 0);
+			BV::assertSliceCorrectness(vertiSlices[0], vertiSlices[0], false);
+			for (int slice = 1; slice < slices; slice++)
+			{
+				std::tie(vertiSlices[slice], hinN[slice], hinP[slice]) = BV::getNextSliceFullBandPlusHinNHinP(EqV[slice].getEq(graphChar), vertiSlices[slice], hinP[slice-1], hinN[slice-1]);
+				BV::assertSliceCorrectness(vertiSlices[slice], vertiSlices[slice-1], true);
+			}
+			result = std::min(result, vertiSlices.back().getValue(scorepos));
+		}
+		return result;
+	}
+
 	ScoreType alignAndGetScoreAcyclic(const std::string& sequence) const
 	{
 		std::vector<WordSlice> currentSlice;

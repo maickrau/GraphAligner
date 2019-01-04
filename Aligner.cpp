@@ -101,7 +101,11 @@ void wabiExperiments(AlignerParams params)
 	for (auto fastq : fastqs)
 	{
 		size_t score;
-		if (isAcyclic)
+		if (params.linear)
+		{
+			score = bv.alignAndGetScoreLinear(fastq.sequence);
+		}
+		else if (isAcyclic)
 		{
 			score = bv.alignAndGetScoreAcyclic(fastq.sequence);
 		}
