@@ -175,6 +175,7 @@ void GfaGraph::numberBackToIntegers()
 	std::unordered_map<int, std::string> newNodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> newEdges;
 	std::unordered_map<std::pair<NodePos, NodePos>, size_t> newVaryingOverlaps;
+	std::unordered_map<int, std::string> newTags;
 	for (auto pair : varyingOverlaps)
 	{
 		auto key = pair.first;
@@ -194,9 +195,14 @@ void GfaGraph::numberBackToIntegers()
 			newEdges[NodePos { std::stoi(originalNodeName[edge.first.id]), edge.first.end }].push_back(NodePos { std::stoi(originalNodeName[target.id]), target.end });
 		}
 	}
+	for (auto tag : tags)
+	{
+		newTags[std::stoi(originalNodeName[tag.first])] = tag.second;
+	}
 	varyingOverlaps = std::move(newVaryingOverlaps);
 	nodes = std::move(newNodes);
 	edges = std::move(newEdges);
+	tags = std::move(newTags);
 	originalNodeName.clear();
 }
 
