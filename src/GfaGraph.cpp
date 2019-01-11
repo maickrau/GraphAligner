@@ -49,6 +49,7 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
 	{
 		if (nodes.count(node) == 0) continue;
 		result.nodes[node] = nodes.at(node);
+		if (originalNodeName.count(node) == 1) result.originalNodeName[node] = originalNodeName.at(node);
 		if (tags.count(node) == 1) result.tags[node] = tags.at(node);
 		NodePos end {node, true};
 		if (edges.count(end) == 1)
@@ -56,6 +57,7 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
 			for (auto target : edges.at(end))
 			{
 				if (ids.count(target.id) == 0) continue;
+				if (varyingOverlaps.count(std::make_pair(end, target)) == 1) result.varyingOverlaps[std::make_pair(end, target)] = varyingOverlaps.at(std::make_pair(end, target));
 				result.edges[end].push_back(target);
 			}
 		}
@@ -65,6 +67,7 @@ GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
 			for (auto target : edges.at(start))
 			{
 				if (ids.count(target.id) == 0) continue;
+				if (varyingOverlaps.count(std::make_pair(start, target)) == 1) result.varyingOverlaps[std::make_pair(start, target)] = varyingOverlaps.at(std::make_pair(start, target));
 				result.edges[start].push_back(target);
 			}
 		}
