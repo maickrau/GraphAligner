@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include "AlignmentGraph.h"
 #include "vg.pb.h"
 
 struct AlignerParams
@@ -28,5 +29,6 @@ struct AlignerParams
 };
 
 void alignReads(AlignerParams params);
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const AlignmentGraph& graph);
 
 #endif
