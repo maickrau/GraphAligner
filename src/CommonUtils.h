@@ -9,6 +9,10 @@
 
 namespace CommonUtils
 {
+	struct InvalidGraphException : std::runtime_error
+	{
+		InvalidGraphException(const char* c);
+	};
 	vg::Graph LoadVGGraph(std::string filename);
 	std::string ReverseComplement(std::string original);
 	vg::Alignment LoadVGAlignment(std::string filename);

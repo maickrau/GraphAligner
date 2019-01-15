@@ -33,7 +33,7 @@ int main(int argc, char** argv)
 	boost::program_options::options_description mandatory("Mandatory parameters");
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
-		("reads,f", boost::program_options::value<std::string>(), "input reads (fasta or fastq, uncompressed or gzipped)")
+		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
 		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
 	;
 	boost::program_options::options_description general("General parameters");
@@ -42,6 +42,7 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
+		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 	;
 	boost::program_options::options_description results("Outputted alignments");
 	results.add_options()
@@ -61,7 +62,7 @@ int main(int argc, char** argv)
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
-		("seeds-file,s", boost::program_options::value<std::string>(), "external seeds (.gam)")
+		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
@@ -101,8 +102,6 @@ int main(int argc, char** argv)
 
 	AlignerParams params;
 	params.graphFile = "";
-	params.fastqFile = "";
-	params.seedFile = "";
 	params.outputAlignmentFile = "";
 	params.numThreads = 1;
 	params.initialBandwidth = 0;
@@ -118,14 +117,15 @@ int main(int argc, char** argv)
 	params.seederCachePrefix = "";
 	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
 	params.selectionECutoff = 0;
+	params.forceGlobal = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
-	if (vm.count("reads")) params.fastqFile = vm["reads"].as<std::string>();
+	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
 	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
-	if (vm.count("seeds-file")) params.seedFile = vm["seeds-file"].as<std::string>();
+	if (vm.count("seeds-file")) params.seedFiles = vm["seeds-file"].as<std::vector<std::string>>();
 	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<size_t>();
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
@@ -186,6 +186,10 @@ int main(int argc, char** argv)
 		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleLength;
 		resultSelectionMethods += 1;
 	}
+	if (vm.count("verbose")) params.verboseMode = true;
+	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
+	if (vm.count("high-memory")) params.highMemory = true;
+	if (vm.count("global-alignment")) params.forceGlobal = true;
 
 	bool paramError = false;
 
@@ -194,7 +198,7 @@ int main(int argc, char** argv)
 		std::cerr << "graph file must be given" << std::endl;
 		paramError = true;
 	}
-	if (params.fastqFile == "")
+	if (params.fastqFiles.size() == 0)
 	{
 		std::cerr << "read file must be given" << std::endl;
 		paramError = true;
@@ -236,7 +240,7 @@ int main(int argc, char** argv)
 		std::cerr << "mum/mem minimum length must be >= 2" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFile != "") ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		//use MUMs as the default seeding method

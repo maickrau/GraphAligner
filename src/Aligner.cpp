@@ -85,6 +85,8 @@ struct AlignmentStats
 	AlignmentStats() :
 	reads(0),
 	seeds(0),
+	seedsFound(0),
+	seedsExtended(0),
 	readsWithASeed(0),
 	alignments(0),
 	fullLengthAlignments(0),
@@ -92,11 +94,14 @@ struct AlignmentStats
 	bpInReads(0),
 	bpInReadsWithASeed(0),
 	bpInAlignments(0),
-	bpInFullAlignments(0)
+	bpInFullAlignments(0),
+	assertionBroke(false)
 	{
 	}
 	std::atomic<size_t> reads;
 	std::atomic<size_t> seeds;
+	std::atomic<size_t> seedsFound;
+	std::atomic<size_t> seedsExtended;
 	std::atomic<size_t> readsWithASeed;
 	std::atomic<size_t> alignments;
 	std::atomic<size_t> fullLengthAlignments;
@@ -105,6 +110,7 @@ struct AlignmentStats
 	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
 	std::atomic<size_t> bpInFullAlignments;
+	std::atomic<bool> assertionBroke;
 };
 
 bool is_file_exist(std::string fileName)
@@ -137,15 +143,18 @@ void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std:
 	}
 }
 
-void readFastqs(const std::string& filename, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
+void readFastqs(const std::vector<std::string>& filenames, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
 {
 	assertSetRead("Read streamer", "No seed");
-	FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
+	for (auto filename : filenames)
 	{
-		std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
-		std::swap(*ptr, read);
-		writequeue.enqueue(ptr);
-	});
+		FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
+		{
+			std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
+			std::swap(*ptr, read);
+			writequeue.enqueue(ptr);
+		});
+	}
 	readStreamingFinished = true;
 }
 
@@ -169,9 +178,13 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 		size_t gotAlns = writequeue.try_dequeue_bulk(alns, 100);
 		if (gotAlns == 0)
 		{
-			if (allThreadsDone) break;
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			continue;
+			if (!writequeue.try_dequeue(alns[0]))
+			{
+				if (allThreadsDone) break;
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				continue;
+			}
+			gotAlns = 1;
 		}
 		coutoutput << "write " << gotAlns << ", " << writequeue.size_approx() << " left" << BufferedWriter::Flush;
 		for (size_t i = 0; i < gotAlns; i++)
@@ -255,13 +268,14 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					continue;
 				}
+				stats.seedsFound += seeds.size();
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal);
 			}
 			else
 			{
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -269,6 +283,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			coutoutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			cerroutput << "Read " << fastq->seq_id << " alignment failed (assertion!)" << BufferedWriter::Flush;
 			reusableState.clear();
+			stats.assertionBroke = true;
 			continue;
 		}
 
@@ -282,6 +297,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		stats.seedsExtended += alignments.seedsExtended;
 		stats.readsWithAnAlignment += 1;
 
 		
@@ -308,6 +324,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
 				reusableState.clear();
+				stats.assertionBroke = true;
 				continue;
 			}
 			stats.alignments += 1;
@@ -330,9 +347,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		delete gzip_out;
 		delete raw_out;
 		std::string* writeAlns = new std::string { strstr.str() };
-		while (!alignmentsOut.try_enqueue(token, writeAlns))
+		size_t waited = 0;
+		while (!alignmentsOut.try_enqueue(token, writeAlns) && !alignmentsOut.try_enqueue(writeAlns))
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			waited++;
+			if (waited >= 1000)
+			{
+				if (alignmentsOut.size_approx() < 100 && alignmentsOut.enqueue(writeAlns)) break;
+			}
 		}
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
@@ -344,7 +367,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, const std::string& seederCachePrefix)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadSeeder, bool tryDAG, const std::string& seederCachePrefix)
 {
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -353,23 +376,23 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 		std::cerr << "No graph file exists" << std::endl;
 		std::exit(0);
 	}
-	if (graphFile.substr(graphFile.size()-3) == ".vg")
+	try
 	{
-		if (loadSeeder)
+		if (graphFile.substr(graphFile.size()-3) == ".vg")
 		{
-			auto graph = CommonUtils::LoadVGGraph(graphFile);
-			std::cout << "Build seeder from the graph" << std::endl;
-			*seeder = new MummerSeeder { graph, seederCachePrefix };
-			return DirectedGraph::BuildFromVG(graph);
+			if (loadSeeder)
+			{
+				auto graph = CommonUtils::LoadVGGraph(graphFile);
+				std::cout << "Build seeder from the graph" << std::endl;
+				*seeder = new MummerSeeder { graph, seederCachePrefix };
+				return DirectedGraph::BuildFromVG(graph, tryDAG);
+			}
+			else
+			{
+				return DirectedGraph::StreamVGGraphFromFile(graphFile, tryDAG);
+			}
 		}
-		else
-		{
-			return DirectedGraph::StreamVGGraphFromFile(graphFile);
-		}
-	}
-	else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
-	{
-		try
+		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile, true);
 			if (loadSeeder)
@@ -377,19 +400,19 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 				std::cout << "Build seeder from the graph" << std::endl;
 				*seeder = new MummerSeeder { graph, seederCachePrefix };
 			}
-			return DirectedGraph::BuildFromGFA(graph);
+			return DirectedGraph::BuildFromGFA(graph, tryDAG);
 		}
-		catch (const GfaGraph::InvalidGraphException& e)
+		else
 		{
-			std::cout << "Error in the graph: " << e.what() << std::endl;
-			std::cerr << "Error in the graph: " << e.what() << std::endl;
-			std::exit(1);
+			std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
+			std::exit(0);
 		}
 	}
-	else
+	catch (const CommonUtils::InvalidGraphException& e)
 	{
-		std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
-		std::exit(0);
+		std::cout << "Error in the graph: " << e.what() << std::endl;
+		std::cerr << "Error in the graph: " << e.what() << std::endl;
+		std::exit(1);
 	}
 }
 
@@ -400,14 +423,15 @@ void alignReads(AlignerParams params)
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.seederCachePrefix);
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params.mumCount != 0 || params.memCount != 0, params.maxCellsPerSlice == std::numeric_limits<size_t>::max(), params.seederCachePrefix);
 
-	if (params.seedFile != "")
+	if (params.seedFiles.size() > 0)
 	{
+		for (auto file : params.seedFiles)
 		{
-			if (is_file_exist(params.seedFile)){
-				std::cout << "Load seeds from " << params.seedFile << std::endl;
-				std::ifstream seedfile { params.seedFile, std::ios::in | std::ios::binary };
+			if (is_file_exist(file)){
+				std::cout << "Load seeds from " << file << std::endl;
+				std::ifstream seedfile { file, std::ios::in | std::ios::binary };
 				size_t numSeeds = 0;
 				std::function<void(vg::Alignment&)> alignmentLambda = [&seedHits, &numSeeds](vg::Alignment& seedhit) {
 					seedHits[seedhit.name()].emplace_back(seedhit.path().mapping(0).position().node_id(), seedhit.path().mapping(0).position().offset(), seedhit.query_position(), seedhit.path().mapping(0).edit(0).from_length(), seedhit.path().mapping(0).position().is_reverse());
@@ -429,7 +453,7 @@ void alignReads(AlignerParams params)
 	switch(seeder.mode)
 	{
 		case Seeder::Mode::File:
-			std::cout << "Seeds from file " << params.seedFile << std::endl;
+			std::cout << "Seeds from file" << std::endl;
 			break;
 		case Seeder::Mode::Mum:
 			std::cout << "MUM seeds, min length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
@@ -451,7 +475,7 @@ void alignReads(AlignerParams params)
 
 	assertSetRead("Running alignments", "No seed");
 
-	moodycamel::ConcurrentQueue<std::string*> outputAlns { ((params.numThreads * 50 + 31) / 32) * 32 };
+	moodycamel::ConcurrentQueue<std::string*> outputAlns;
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
 	moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>> readFastqsQueue;
 	std::atomic<bool> readStreamingFinished { false };
@@ -466,7 +490,7 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
-	std::thread fastqThread { [file=params.fastqFile, &readFastqsQueue, &readStreamingFinished]() { readFastqs(file, readFastqsQueue, readStreamingFinished); } };
+	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
 	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
@@ -494,8 +518,14 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Alignment finished" << std::endl;
 	std::cout << "Input reads: " << stats.reads << " (" << stats.bpInReads << "bp)" << std::endl;
+	std::cout << "Seeds found: " << stats.seedsFound << std::endl;
+	std::cout << "Seeds extended: " << stats.seedsExtended << std::endl;
 	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
 	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
 	std::cout << "Output end-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
+	if (stats.assertionBroke)
+	{
+		std::cout << "Alignment broke with some reads. Look at stderr output." << std::endl;
+	}
 }

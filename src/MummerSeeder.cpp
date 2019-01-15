@@ -18,10 +18,14 @@ char lowercase(char c)
 		case 'g':
 		case 'G':
 			return 'g';
+		case 'u':
+		case 'U':
 		case 't':
 		case 'T':
 			return 't';
-		case '`': return '`';
+		default:
+		case '`':
+			return '`';
 	}
 	assert(false);
 	return std::numeric_limits<char>::max();
@@ -222,6 +226,7 @@ void MummerSeeder::revcompInPlace(std::string& seq) const
 			case 'a':
 				seq[i] = 't';
 				break;
+			case 'u':
 			case 't':
 				seq[i] = 'a';
 				break;

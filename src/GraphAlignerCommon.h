@@ -4,6 +4,7 @@
 #include <vector>
 #include "AlignmentGraph.h"
 #include "ArrayPriorityQueue.h"
+#include "ComponentPriorityQueue.h"
 #include "NodeSlice.h"
 #include "WordSlice.h"
 
@@ -49,6 +50,7 @@ public:
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
+		componentQueue(graph.ComponentSize()),
 		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
@@ -67,10 +69,12 @@ public:
 		{
 			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
+			componentQueue.clear();
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
+		ComponentPriorityQueue<EdgeWithPriority> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
@@ -81,14 +85,15 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
 		sloppyOptimizations(sloppyOptimizations),
-		lowMemory(lowMemory)
+		lowMemory(lowMemory),
+		forceGlobal(forceGlobal)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -98,6 +103,7 @@ public:
 		const bool quietMode;
 		const bool sloppyOptimizations;
 		const bool lowMemory;
+		const bool forceGlobal;
 	};
 	class OnewayTrace
 	{
@@ -131,73 +137,85 @@ public:
 #endif
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
-		assert(graphCharacter == 'A' || graphCharacter == 'T' || graphCharacter == 'C' || graphCharacter == 'G');
-		switch(sequenceCharacter)
+		return (ambiguousMatch(sequenceCharacter, 'A') && ambiguousMatch(graphCharacter, 'A'))
+		|| (ambiguousMatch(sequenceCharacter, 'C') && ambiguousMatch(graphCharacter, 'C'))
+		|| (ambiguousMatch(sequenceCharacter, 'G') && ambiguousMatch(graphCharacter, 'G'))
+		|| (ambiguousMatch(sequenceCharacter, 'T') && ambiguousMatch(graphCharacter, 'T'));
+	}
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static bool ambiguousMatch(char ambiguousChar, char exactChar)
+	{
+		assert(exactChar == 'A' || exactChar == 'T' || exactChar == 'C' || exactChar == 'G');
+		switch(ambiguousChar)
 		{
 			case 'A':
 			case 'a':
-			return graphCharacter == 'A';
+				return exactChar == 'A';
 			break;
+			case 'u':
+			case 'U':
 			case 'T':
 			case 't':
-			return graphCharacter == 'T';
+				return exactChar == 'T';
 			break;
 			case 'C':
 			case 'c':
-			return graphCharacter == 'C';
+				return exactChar == 'C';
 			break;
 			case 'G':
 			case 'g':
-			return graphCharacter == 'G';
+				return exactChar == 'G';
 			break;
 			case 'N':
 			case 'n':
-			return true;
+				return true;
 			break;
 			case 'R':
 			case 'r':
-			return graphCharacter == 'A' || graphCharacter == 'G';
+				return exactChar == 'A' || exactChar == 'G';
 			break;
 			case 'Y':
 			case 'y':
-			return graphCharacter == 'C' || graphCharacter == 'T';
+				return exactChar == 'C' || exactChar == 'T';
 			break;
 			case 'K':
 			case 'k':
-			return graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'M':
 			case 'm':
-			return graphCharacter == 'C' || graphCharacter == 'A';
+				return exactChar == 'C' || exactChar == 'A';
 			break;
 			case 'S':
 			case 's':
-			return graphCharacter == 'C' || graphCharacter == 'G';
+				return exactChar == 'C' || exactChar == 'G';
 			break;
 			case 'W':
 			case 'w':
-			return graphCharacter == 'A' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'T';
 			break;
 			case 'B':
 			case 'b':
-			return graphCharacter == 'C' || graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'C' || exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'D':
 			case 'd':
-			return graphCharacter == 'A' || graphCharacter == 'G' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'G' || exactChar == 'T';
 			break;
 			case 'H':
 			case 'h':
-			return graphCharacter == 'A' || graphCharacter == 'C' || graphCharacter == 'T';
+				return exactChar == 'A' || exactChar == 'C' || exactChar == 'T';
 			break;
 			case 'V':
 			case 'v':
-			return graphCharacter == 'A' || graphCharacter == 'C' || graphCharacter == 'G';
+				return exactChar == 'A' || exactChar == 'C' || exactChar == 'G';
 			break;
 			default:
-			assert(false);
-			std::abort();
-			return false;
+				assert(false);
+				std::abort();
+				return false;
 			break;
 		}
 	}

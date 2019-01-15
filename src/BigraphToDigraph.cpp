@@ -9,6 +9,45 @@
 #include "ThreadReadAssertion.h"
 #include "stream.hpp"
 
+static std::vector<bool> getAllowedNucleotides()
+{
+	std::vector<bool> result;
+	result.resize(256, false);
+	result['a'] = true;
+	result['A'] = true;
+	result['c'] = true;
+	result['C'] = true;
+	result['g'] = true;
+	result['G'] = true;
+	result['t'] = true;
+	result['T'] = true;
+	result['y'] = true;
+	result['Y'] = true;
+	result['r'] = true;
+	result['R'] = true;
+	result['w'] = true;
+	result['W'] = true;
+	result['s'] = true;
+	result['S'] = true;
+	result['k'] = true;
+	result['K'] = true;
+	result['m'] = true;
+	result['M'] = true;
+	result['d'] = true;
+	result['D'] = true;
+	result['v'] = true;
+	result['V'] = true;
+	result['h'] = true;
+	result['H'] = true;
+	result['b'] = true;
+	result['B'] = true;
+	result['n'] = true;
+	result['N'] = true;
+	return result;
+}
+
+auto allowed = getAllowedNucleotides();
+
 DirectedGraph::Node::Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence, std::string name) :
 nodeId(nodeId),
 originalNodeId(originalNodeId),
@@ -92,21 +131,33 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdg
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight, overlap }, DirectedGraph::Edge { toLeft, fromLeft, overlap });
 }
 
-AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
+AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename, bool tryDAG)
 {
 	AlignmentGraph result;
 	{
-		std::vector<size_t> breakpoints;
-		breakpoints.push_back(0);
+		std::vector<size_t> breakpointsFw;
+		std::vector<size_t> breakpointsBw;
+		breakpointsFw.push_back(0);
+		breakpointsBw.push_back(0);
 		std::ifstream graphfile { filename, std::ios::in | std::ios::binary };
-		std::function<void(vg::Graph&)> lambda = [&result, &breakpoints](vg::Graph& g) {
+		std::function<void(vg::Graph&)> lambda = [&result, &breakpointsFw, &breakpointsBw](vg::Graph& g) {
 			for (int i = 0; i < g.node_size(); i++)
 			{
-				breakpoints.push_back(g.node(i).sequence().size());
+				for (size_t j = 0; j < g.node(i).sequence().size(); j++)
+				{
+					if (!allowed[g.node(i).sequence()[j]])
+					{
+						throw CommonUtils::InvalidGraphException("Invalid sequence character: " + g.node(i).sequence()[j]);
+					}
+				}
 				auto nodes = ConvertVGNodeToNodes(g.node(i));
-				result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpoints);
-				result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpoints);
-				breakpoints.pop_back();
+				assert(nodes.first.sequence.size() == nodes.second.sequence.size());
+				breakpointsFw.push_back(g.node(i).sequence().size());
+				breakpointsBw.push_back(g.node(i).sequence().size());
+				result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
+				result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpointsBw);
+				breakpointsFw.erase(breakpointsFw.begin()+1, breakpointsFw.end());
+				breakpointsBw.erase(breakpointsBw.begin()+1, breakpointsBw.end());
 			}
 		};
 		stream::for_each(graphfile, lambda);
@@ -123,22 +174,33 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 		};
 		stream::for_each(graphfile, lambda);
 	}
-	result.Finalize(64);
+	result.Finalize(64, tryDAG);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
+AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph, bool tryDAG)
 {
 	AlignmentGraph result;
-	std::vector<size_t> breakpoints;
-	breakpoints.push_back(0);
+	std::vector<size_t> breakpointsFw;
+	std::vector<size_t> breakpointsBw;
+	breakpointsFw.push_back(0);
+	breakpointsBw.push_back(0);
 	for (int i = 0; i < graph.node_size(); i++)
 	{
-		breakpoints.push_back(graph.node(i).sequence().size());
+		for (size_t j = 0; j < graph.node(i).sequence().size(); j++)
+		{
+			if (!allowed[graph.node(i).sequence()[j]])
+			{
+				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + graph.node(i).sequence()[j]);
+			}
+		}
 		auto nodes = ConvertVGNodeToNodes(graph.node(i));
-		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpoints);
-		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpoints);
-		breakpoints.pop_back();
+		breakpointsFw.push_back(graph.node(i).sequence().size());
+		breakpointsBw.push_back(graph.node(i).sequence().size());
+		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
+		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpointsBw);
+		breakpointsFw.erase(breakpointsFw.begin()+1, breakpointsFw.end());
+		breakpointsBw.erase(breakpointsBw.begin()+1, breakpointsBw.end());
 	}
 	for (int i = 0; i < graph.edge_size(); i++)
 	{
@@ -146,31 +208,42 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 		result.AddEdgeNodeId(edges.first.fromId, edges.first.toId, edges.first.overlap);
 		result.AddEdgeNodeId(edges.second.fromId, edges.second.toId, edges.second.overlap);
 	}
-	result.Finalize(64);
+	result.Finalize(64, tryDAG);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
+AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph, bool tryDAG)
 {
 	AlignmentGraph result;
 	std::unordered_map<int, std::vector<size_t>> breakpoints;
 	for (auto pair : graph.varyingOverlaps)
 	{
-		breakpoints[pair.first.second.id * 2].push_back(pair.second);
-		breakpoints[pair.first.first.id * 2 + 1].push_back(pair.second);
+		int to = pair.first.second.id * 2;
+		if (!pair.first.second.end) to += 1;
+		int from = pair.first.first.Reverse().id * 2;
+		if (!pair.first.first.Reverse().end) from += 1;
+		breakpoints[from].push_back(pair.second);
+		breakpoints[to].push_back(pair.second);
 	}
 	for (auto node : graph.nodes)
 	{
-		std::vector<size_t> breakpointsFw = breakpoints[node.first * 2];
-		breakpointsFw.push_back(0);
-		breakpointsFw.push_back(node.second.size());
-		std::sort(breakpointsFw.begin(), breakpointsFw.end());
-		std::vector<size_t> breakpointsBw = breakpoints[node.first * 2 + 1];
-		breakpointsBw.push_back(0);
-		breakpointsBw.push_back(node.second.size());
-		std::sort(breakpointsBw.begin(), breakpointsBw.end());
+		for (size_t j = 0; j < node.second.size(); j++)
+		{
+			if (!allowed[node.second[j]])
+			{
+				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + node.second[j]);
+			}
+		}
 		std::string name = graph.OriginalNodeName(node.first);
 		auto nodes = ConvertGFANodeToNodes(node.first, node.second, name);
+		std::vector<size_t> breakpointsFw = breakpoints[node.first * 2];
+		std::vector<size_t> breakpointsBw = breakpoints[node.first * 2 + 1];
+		breakpointsFw.push_back(0);
+		breakpointsFw.push_back(node.second.size());
+		breakpointsBw.push_back(0);
+		breakpointsBw.push_back(node.second.size());
+		std::sort(breakpointsFw.begin(), breakpointsFw.end());
+		std::sort(breakpointsBw.begin(), breakpointsBw.end());
 		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
 		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpointsBw);
 	}
@@ -188,6 +261,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
 		}
 	}
-	result.Finalize(64);
+	result.Finalize(64, tryDAG);
 	return result;
 }

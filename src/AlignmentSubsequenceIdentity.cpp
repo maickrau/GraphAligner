@@ -107,11 +107,27 @@ int main(int argc, char** argv)
 
 	std::vector<size_t> nodeLengths;
 	{
-		auto graph = GfaGraph::LoadFromFile(graphFile);
-		nodeLengths.resize(graph.nodes.size()+1, 0);
-		for (auto node : graph.nodes)
+		if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
-			nodeLengths[node.first] = node.second.size();
+			auto graph = GfaGraph::LoadFromFile(graphFile);
+			nodeLengths.resize(graph.nodes.size()+1, 0);
+			for (auto node : graph.nodes)
+			{
+				nodeLengths[node.first] = node.second.size();
+			}
+		}
+		else if (graphFile.substr(graphFile.size() - 3) == ".vg")
+		{
+			auto graph = CommonUtils::LoadVGGraph(graphFile);
+			nodeLengths.resize(graph.node_size()+1, 0);
+			for (int i = 0; i < graph.node_size(); i++)
+			{
+				nodeLengths[graph.node(i).id()] = graph.node(i).sequence().size();
+			}
+		}
+		else
+		{
+			assert(false);
 		}
 	}
 

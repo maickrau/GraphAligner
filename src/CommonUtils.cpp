@@ -3,6 +3,10 @@
 
 namespace CommonUtils
 {
+	InvalidGraphException::InvalidGraphException(const char* c) : std::runtime_error(c) 
+	{
+	}
+
 	void mergeGraphs(vg::Graph& graph, const vg::Graph& part)
 	{
 		for (int i = 0; i < part.node_size(); i++)
@@ -127,6 +131,7 @@ namespace CommonUtils
 				case 'H':
 				case 'h':
 				result += 'D';
+				break;
 				default:
 				assert(false);
 			}
