@@ -394,7 +394,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** seeder, bool loadS
 		}
 		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
-			auto graph = GfaGraph::LoadFromFile(graphFile, true);
+			auto graph = GfaGraph::LoadFromFile(graphFile, true, true);
 			if (loadSeeder)
 			{
 				std::cout << "Build seeder from the graph" << std::endl;
