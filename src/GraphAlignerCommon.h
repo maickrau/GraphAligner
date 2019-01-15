@@ -4,6 +4,7 @@
 #include <vector>
 #include "AlignmentGraph.h"
 #include "ArrayPriorityQueue.h"
+#include "ComponentPriorityQueue.h"
 #include "NodeSlice.h"
 #include "WordSlice.h"
 
@@ -49,6 +50,7 @@ public:
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
+		componentQueue(graph.ComponentSize()),
 		calculableQueue(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize()),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
@@ -67,10 +69,12 @@ public:
 		{
 			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
+			componentQueue.clear();
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
+		ComponentPriorityQueue<EdgeWithPriority> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority> calculableQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
@@ -81,14 +85,15 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
 		sloppyOptimizations(sloppyOptimizations),
-		lowMemory(lowMemory)
+		lowMemory(lowMemory),
+		forceGlobal(forceGlobal)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -98,6 +103,7 @@ public:
 		const bool quietMode;
 		const bool sloppyOptimizations;
 		const bool lowMemory;
+		const bool forceGlobal;
 	};
 	class OnewayTrace
 	{
@@ -148,6 +154,8 @@ public:
 			case 'a':
 				return exactChar == 'A';
 			break;
+			case 'u':
+			case 'U':
 			case 'T':
 			case 't':
 				return exactChar == 'T';

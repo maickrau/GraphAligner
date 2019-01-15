@@ -45,6 +45,10 @@ public:
 	{
 		return numItems;
 	}
+	void insert(size_t component, int score, const T& item)
+	{
+		assert(false);
+	}
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif

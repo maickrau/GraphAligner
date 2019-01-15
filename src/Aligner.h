@@ -3,18 +3,19 @@
 
 #include <string>
 #include <vector>
+#include "AlignmentGraph.h"
 #include "vg.pb.h"
 
 struct AlignerParams
 {
 	std::string graphFile;
-	std::string fastqFile;
+	std::vector<std::string> fastqFiles;
 	size_t numThreads;
 	size_t initialBandwidth;
 	size_t rampBandwidth;
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
-	std::string seedFile;
+	std::vector<std::string> seedFiles;
 	std::string outputAlignmentFile;
 	bool verboseMode;
 	bool tryAllSeeds;
@@ -24,8 +25,10 @@ struct AlignerParams
 	size_t memCount;
 	bool outputAllAlns;
 	std::string seederCachePrefix;
+	bool forceGlobal;
 };
 
 void alignReads(AlignerParams params);
+void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const AlignmentGraph& graph);
 
 #endif

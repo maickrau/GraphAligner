@@ -12,12 +12,17 @@ std::vector<vg::Alignment> pickPairs(const std::vector<vg::Alignment>& alns, con
 	for (auto& aln : alns)
 	{
 		assert(readLens.count(aln.name()) == 1);
-		if (aln.sequence().size() < minPartialLen) continue;
+		size_t alnlen = 0;
+		for (int i = 0; i < aln.path().mapping_size(); i++)
+		{
+			alnlen += aln.path().mapping(i).edit(0).to_length();
+		}
+		if (alnlen < minPartialLen) continue;
 		if (aln.query_position() == 0)
 		{
 			startsPerRead[aln.name()].push_back(&aln);
 		}
-		if (aln.query_position() + aln.sequence().size() == readLens.at(aln.name()))
+		if (aln.query_position() + alnlen == readLens.at(aln.name()))
 		{
 			endsPerRead[aln.name()].push_back(&aln);
 		}
@@ -28,10 +33,15 @@ std::vector<vg::Alignment> pickPairs(const std::vector<vg::Alignment>& alns, con
 		size_t currentPairNum = 0;
 		for (auto start : pair.second)
 		{
+			assert(start->query_position() == 0);
+			int startEnd = 0;
+			for (int i = 0; i < start->path().mapping_size(); i++)
+			{
+				startEnd += start->path().mapping(i).edit(0).to_length();
+			}
+			assert(startEnd >= minPartialLen);
 			for (auto end : endsPerRead[pair.first])
 			{
-				assert(start->query_position() == 0);
-				int startEnd = start->sequence().size();
 				int endStart = end->query_position();
 				if (abs(startEnd-endStart) > maxSplitDist) continue;
 				vg::Alignment left { *start };

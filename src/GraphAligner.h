@@ -50,6 +50,10 @@ public:
 		//failed alignment, don't output
 		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
 		if (trace.trace.size() == 0) return result;
+#ifndef NDEBUG
+		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
+#endif
+		fixForwardTraceSeqPos(trace.trace, 0);
 		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
 		alnItem.alignmentStart = trace.trace[0].first.seqPos;
 		alnItem.alignmentEnd = trace.trace.back().first.seqPos;
@@ -87,6 +91,7 @@ public:
 				if (found) continue;
 			}
 			logger << BufferedWriter::Flush;
+			result.seedsExtended += 1;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
 			result.alignments.push_back(item);
@@ -100,7 +105,7 @@ private:
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
-		return bvAligner.getBacktraceFullStart(sequence, reusableState);
+		return bvAligner.getBacktraceFullStart(sequence, params.forceGlobal, reusableState);
 	}
 
 	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -127,13 +132,13 @@ private:
 			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos));
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
 			assert(reversePos.first == backwardNodeId);
-			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, reusableState);
+			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, params.forceGlobal, reusableState);
 		}
 		if (seedHit.seqPos < sequence.size()-1)
 		{
 			auto forwardPart = sequence.substr(seedHit.seqPos+1);
 			size_t offset = seedHit.nodeOffset;
-			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, reusableState);
+			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, params.forceGlobal, reusableState);
 		}
 
 		if (!result.backward.failed())

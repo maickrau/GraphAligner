@@ -87,7 +87,7 @@ public:
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
 	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
 	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
-	void Finalize(int wordSize);
+	void Finalize(int wordSize, bool doComponents);
 	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
@@ -100,10 +100,12 @@ public:
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::string OriginalNodeName(int nodeId) const;
+	size_t ComponentSize() const;
 
 private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
+	void doComponentOrder();
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> originalNodeSize;
@@ -116,6 +118,7 @@ private:
 	std::vector<NodeChunkSequence> nodeSequences;
 	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
 	std::vector<bool> ambiguousNodes;
+	std::vector<size_t> componentNumber;
 	size_t firstAmbiguous;
 	bool finalized;
 

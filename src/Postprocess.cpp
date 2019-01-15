@@ -10,7 +10,6 @@
 #include "CommonUtils.h"
 
 std::atomic<bool> readingDone;
-std::atomic<bool> namingDone;
 std::atomic<bool> splittingDone;
 std::vector<vg::Alignment*> cleanup;
 
@@ -21,8 +20,6 @@ size_t readsWithAnAlnCount = 0;
 size_t bpInReads = 0;
 size_t bpInSelected = 0;
 size_t bpInFull = 0;
-size_t seedCount = 0;
-size_t readsWithSeedCount = 0;
 
 std::unordered_map<std::string, size_t> getReadLengths(std::string readFile)
 {
@@ -33,20 +30,6 @@ std::unordered_map<std::string, size_t> getReadLengths(std::string readFile)
 		result[read.seq_id] = read.sequence.size();
 	}
 	return result;
-}
-
-std::vector<std::string> getNodeNames(std::string mappingFile)
-{
-	std::vector<std::string> mapping;
-	mapping.push_back("");
-	std::ifstream file {mappingFile};
-	while (file.good())
-	{
-		std::string name;
-		getline(file, name);
-		if (file.good()) mapping.push_back(name);
-	}
-	return mapping;
 }
 
 void loadAlignments(std::string filename, moodycamel::ConcurrentQueue<vg::Alignment*>& output)
@@ -75,33 +58,7 @@ void loadAlignments(std::string filename, moodycamel::ConcurrentQueue<vg::Alignm
 	readingDone = true;
 }
 
-void addNames(moodycamel::ConcurrentQueue<vg::Alignment*>& input, const std::vector<std::string>& nodeNames, moodycamel::ConcurrentQueue<vg::Alignment*>& output)
-{
-	vg::Alignment* alns[100] {};
-	while (true)
-	{
-		size_t gotAlns = input.try_dequeue_bulk(alns, 100);
-		if (gotAlns == 0)
-		{
-			if (readingDone) break;
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			continue;
-		}
-		for (size_t i = 0; i < gotAlns; i++)
-		{
-			for (size_t j = 0; j < alns[i]->path().mapping_size(); j++)
-			{
-				auto pos = alns[i]->mutable_path()->mutable_mapping(j)->mutable_position();
-				pos->set_name(nodeNames[pos->node_id()]);
-			}
-		}
-		output.enqueue_bulk(alns, gotAlns);
-	}
-
-	namingDone = true;
-}
-
-void splitAlignmentsIntoSelectedAndFullLength(const std::unordered_map<std::string, size_t>& readLengths, moodycamel::ConcurrentQueue<vg::Alignment*>& inputAlns, moodycamel::ConcurrentQueue<vg::Alignment*>& outputAll, moodycamel::ConcurrentQueue<vg::Alignment*>& outputSelected, moodycamel::ConcurrentQueue<vg::Alignment*>& outputFullLength)
+void splitAlignmentsIntoSelectedAndFullLength(const std::unordered_map<std::string, size_t>& readLengths, moodycamel::ConcurrentQueue<vg::Alignment*>& inputAlns, moodycamel::ConcurrentQueue<vg::Alignment*>& outputSelected, moodycamel::ConcurrentQueue<vg::Alignment*>& outputFullLength)
 {
 	vg::Alignment* alns[100] {};
 
@@ -111,11 +68,10 @@ void splitAlignmentsIntoSelectedAndFullLength(const std::unordered_map<std::stri
 		size_t gotAlns = inputAlns.try_dequeue_bulk(alns, 100);
 		if (gotAlns == 0)
 		{
-			if (namingDone) break;
+			if (readingDone) break;
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			continue;
 		}
-		outputAll.enqueue_bulk(alns, gotAlns);
 		for (size_t i = 0; i < gotAlns; i++)
 		{
 			alnsPerRead[alns[i]->name()].push_back(alns[i]);
@@ -167,55 +123,30 @@ void writeAlignments(std::string filename, moodycamel::ConcurrentQueue<vg::Align
 	}
 }
 
-void countSeeds(std::string filename)
-{
-	std::unordered_set<std::string> readsWithSeed;
-	std::ifstream alnFile { filename, std::ios::in | std::ios::binary };
-	std::function<void(vg::Alignment&)> lambda = [&readsWithSeed, &seedCount](vg::Alignment& g) {
-		seedCount++;
-		readsWithSeed.insert(g.name());
-	};
-	stream::for_each(alnFile, lambda);
-	readsWithSeedCount = readsWithSeed.size();
-}
-
 int main(int argc, char** argv)
 {
 	std::string rawAlnFile { argv[1] };
 	std::string readsFile { argv[2] };
-	std::string nodeNamesFile { argv[3] };
-	std::string seedFile { argv[4] };
-	std::string outputAllAlnFile { argv[5] };
-	std::string outputSelectedAlnFile { argv[6] };
-	std::string outputFullLengthAlnFile { argv[7] };
-	std::string outputSummaryFile { argv[8] };
+	std::string outputSelectedAlnFile { argv[3] };
+	std::string outputFullLengthAlnFile { argv[4] };
+	std::string outputSummaryFile { argv[5] };
 
 	readingDone = false;
-	namingDone = false;
 	splittingDone = false;
 
 	auto readLengths = getReadLengths(readsFile);
-	auto nodeNames = getNodeNames(nodeNamesFile);
 
-	moodycamel::ConcurrentQueue<vg::Alignment*> readToNameAdding;
-	moodycamel::ConcurrentQueue<vg::Alignment*> nameAddingToSplitting;
-	moodycamel::ConcurrentQueue<vg::Alignment*> splitToAll;
+	moodycamel::ConcurrentQueue<vg::Alignment*> readToSplitting;
 	moodycamel::ConcurrentQueue<vg::Alignment*> splitToSelected;
 	moodycamel::ConcurrentQueue<vg::Alignment*> splitToFullLength;
 
-	std::thread readThread {[&rawAlnFile, &readToNameAdding](){loadAlignments(rawAlnFile, readToNameAdding);}};
-	std::thread addNamesThread {[&readToNameAdding, &nodeNames, &nameAddingToSplitting](){addNames(readToNameAdding, nodeNames, nameAddingToSplitting);}};
-	std::thread splitter {[&nameAddingToSplitting, &splitToAll, &splitToSelected, &splitToFullLength, &readLengths](){splitAlignmentsIntoSelectedAndFullLength(readLengths, nameAddingToSplitting, splitToAll, splitToSelected, splitToFullLength);}};
-	std::thread allWriter {[&splitToAll, &outputAllAlnFile](){writeAlignments(outputAllAlnFile, splitToAll);}};
+	std::thread readThread {[&rawAlnFile, &readToSplitting](){loadAlignments(rawAlnFile, readToSplitting);}};
+	std::thread splitter {[&readToSplitting, &splitToSelected, &splitToFullLength, &readLengths](){splitAlignmentsIntoSelectedAndFullLength(readLengths, readToSplitting, splitToSelected, splitToFullLength);}};
 	std::thread selectedWriter {[&splitToSelected, &outputSelectedAlnFile](){writeAlignments(outputSelectedAlnFile, splitToSelected);}};
 	std::thread fullLengthWriter {[&splitToFullLength, &outputFullLengthAlnFile](){writeAlignments(outputFullLengthAlnFile, splitToFullLength);}};
-	std::thread seedCounter {[&seedFile](){countSeeds(seedFile);}};
 
-	seedCounter.join();
 	readThread.join();
-	addNamesThread.join();
 	splitter.join();
-	allWriter.join();
 	selectedWriter.join();
 	fullLengthWriter.join();
 
@@ -231,9 +162,6 @@ int main(int argc, char** argv)
 
 	std::ofstream summary {outputSummaryFile};
 	summary << readLengths.size() << "\tnumber of reads" << std::endl;
-	summary << seedCount << "\tnumber of seeds" << std::endl;
-	summary << readsWithSeedCount << "\treads with a seed" << std::endl;
-	summary << allAlnsCount << "\tnumber of all alignments" << std::endl;
 	summary << selectedAlnCount << "\tnumber of selected alignments" << std::endl;
 	summary << fullLengthAlnCount << "\tnumber of full length alignments" << std::endl;
 	summary << readsWithAnAlnCount << "\treads with an alignment" << std::endl;

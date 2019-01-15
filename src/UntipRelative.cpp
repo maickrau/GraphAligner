@@ -69,6 +69,7 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 		else
 		{
 			auto node = componentNodes[i][0];
+			result[node] = nodeLengths[node];
 			for (auto neighbor : edges[node])
 			{
 				if (result[neighbor] == std::numeric_limits<size_t>::max())
@@ -76,7 +77,7 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 					result[node] = std::numeric_limits<size_t>::max();
 					break;
 				}
-				result[node] = std::max(result[node], result[neighbor] + nodeLengths[neighbor]);
+				result[node] = std::max(result[node], result[neighbor] + nodeLengths[node]);
 			}
 		}
 	}

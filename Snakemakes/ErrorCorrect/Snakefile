@@ -1,0 +1,130 @@
+configfile: "config.yaml"
+ALIGNERBINDIR = config["GraphAlignerBinDirectory"]
+BCALMPATH = config["BcalmPath"]
+BCALMCONVERTPATH = config["BcalmConvertPath"]
+LIGHTERPATH = config["LighterPath"]
+GENOMESIZE = config["GenomeSize"]
+SHORTREADCOVERAGE = config["ShortreadCoverage"]
+TMPDIR = config["TempDirectory"]
+OUTDIR = config["OutputDirectory"]
+SHORTREADDIR = config["ShortReadDirectory"]
+SHORTREADS = config["ShortReads"]
+LONGREADDIR = config["LongReadDirectory"]
+LONGREADS = config["LongReads"]
+SMALLK = config["SmallK"]
+BIGK = config["BigK"]
+ABUNDANCE = config["Abundance"]
+
+SHORTREADNAMES = [n.split('.')[0] for n in SHORTREADS]
+SHORTREADEXTENSIONS = ['.'.join(n.split('.')[1:]) for n in SHORTREADS]
+
+rule all:
+	input:
+		OUTDIR + "corrected.fa",
+		OUTDIR + "stats.txt"
+
+rule correct_short_reads:
+	input:
+		expand(SHORTREADDIR + "{name}.{ext}", zip, name=SHORTREADNAMES, ext=SHORTREADEXTENSIONS)
+	output:
+		temp(expand(TMPDIR + "{name}.cor.{ext}", zip, name=SHORTREADNAMES, ext=SHORTREADEXTENSIONS))
+	params:
+		files = lambda wildcards, input: ' '.join(["-r " + name for name in input]),
+		alpha = 7.0 / SHORTREADCOVERAGE
+	threads: 40
+	log:
+		stdout = TMPDIR + "lighter_stdout.txt",
+		stderr = TMPDIR + "lighter_stderr.txt"
+	shell:
+		"/usr/bin/time -v {LIGHTERPATH} -od {TMPDIR} -t {threads} -k {SMALLK} {GENOMESIZE} {params.alpha} {params.files} 1> {log.stdout} 2> {log.stderr}"
+
+rule read_names:
+	input: rules.correct_short_reads.output
+	output: temp("filenames")
+	shell: "ls -1 {input} > {output}"
+
+rule run_bcalm:
+	input: 
+		name = "filenames",
+		files = rules.correct_short_reads.output
+	output: temp("filenames.unitigs.fa")
+	shadow: "full"
+	log:
+		stdout = TMPDIR + "bcalm_stdout.txt",
+		stderr = TMPDIR + "bcalm_stderr.txt"
+	threads: 40
+	shell: "/usr/bin/time -v {BCALMPATH} -nb-cores {threads} -in {input.name} -kmer-size {BIGK} -abundance-min {ABUNDANCE} > {log.stdout} 2> {log.stderr}"
+
+rule convert_bcalm:
+	input: rules.run_bcalm.output
+	output: temp(TMPDIR + "graph-tip.gfa")
+	shell: "{BCALMCONVERTPATH} {input} {output} {BIGK}"
+
+rule untip_graph:
+	input: rules.convert_bcalm.output
+	output: temp(TMPDIR + "graph-untip.gfa")
+	shell: "{ALIGNERBINDIR}UntipRelative 10 1000 0.1 < {input} > {output}"
+
+rule reunitigify_graph:
+	input: rules.untip_graph.output
+	output: TMPDIR + "graph.gfa"
+	shell: "{ALIGNERBINDIR}UnitigifyDBG {input} {output}"
+
+rule align_reads:
+	input:
+		graph = TMPDIR + "graph.gfa",
+		reads = expand(LONGREADDIR + "{name}", name=LONGREADS)
+	params:
+		readconcat = lambda wildcards, input: ' '.join(input.reads)
+	output:
+		TMPDIR + "alns.gam"
+	log:
+		stdout = TMPDIR + "aligner_stdout.txt",
+		stderr = TMPDIR + "aligner_stderr.txt"
+	threads: 40
+	shell:
+		"/usr/bin/time -v {ALIGNERBINDIR}Aligner -g {input.graph} -a {output} -f {params.readconcat} --seeds-mxm-cache-prefix {TMPDIR}seedcache -t {threads} 1> {log.stdout} 2> {log.stderr}"
+
+rule extract_corrected:
+	input:
+		alignments = TMPDIR + "alns.gam",
+		graph = TMPDIR + "graph.gfa",
+		reads = expand(LONGREADDIR + "{name}", name=LONGREADS)
+	output:
+		OUTDIR + "corrected.fa"
+	params:
+		files = lambda wildcards, input: ' '.join(input.reads)
+	shell:
+		"{ALIGNERBINDIR}ExtractCorrectedReads {input.graph} {input.alignments} {params.files} > {output}"
+
+rule get_stats:
+	input:
+		aligner_stdout = TMPDIR + "aligner_stdout.txt",
+		aligner_stderr = TMPDIR + "aligner_stderr.txt",
+		bcalm_stdout = TMPDIR + "bcalm_stdout.txt",
+		bcalm_stderr = TMPDIR + "bcalm_stderr.txt",
+		lighter_stdout = TMPDIR + "lighter_stdout.txt",
+		lighter_stderr = TMPDIR + "lighter_stderr.txt"
+	output:
+		OUTDIR + "stats.txt"
+	run:
+		shell("grep 'Input reads' < {input.aligner_stdout} >> {output}")
+		shell("grep 'Reads with a seed' < {input.aligner_stdout} >> {output}")
+		shell("grep 'Reads with an alignment' < {input.aligner_stdout} >> {output}")
+		shell("grep 'Output alignments' < {input.aligner_stdout} >> {output}")
+		shell("grep 'Output end-to-end alignments' < {input.aligner_stdout} >> {output}")
+		shell("echo 'Lighter' >> {output}"),
+		shell("grep 'User time' < {input.lighter_stderr} >> {output}")
+		shell("grep 'System time' < {input.lighter_stderr} >> {output}")
+		shell("grep 'Elapsed (wall clock)' < {input.lighter_stderr} >> {output}")
+		shell("grep 'Maximum resident set size' < {input.lighter_stderr} >> {output}")
+		shell("echo 'BCalm' >> {output}"),
+		shell("grep 'User time' < {input.bcalm_stderr} >> {output}")
+		shell("grep 'System time' < {input.bcalm_stderr} >> {output}")
+		shell("grep 'Elapsed (wall clock)' < {input.bcalm_stderr} >> {output}")
+		shell("grep 'Maximum resident set size' < {input.bcalm_stderr} >> {output}")
+		shell("echo 'Aligner' >> {output}"),
+		shell("grep 'User time' < {input.aligner_stderr} >> {output}")
+		shell("grep 'System time' < {input.aligner_stderr} >> {output}")
+		shell("grep 'Elapsed (wall clock)' < {input.aligner_stderr} >> {output}")
+		shell("grep 'Maximum resident set size' < {input.aligner_stderr} >> {output}")

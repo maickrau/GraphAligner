@@ -35,7 +35,13 @@ namespace std
 	{
 		size_t operator()(const std::pair<NodePos, NodePos>& x) const
 		{
-			return hash<NodePos>()(x.first) ^ hash<NodePos>()(x.second);
+			// simple hashing with hash<NodePos>()(x.first) ^ hash<NodePos>()(x.second) collides each edge formed like (x -> x+1)
+			// instead: 
+			// https://stackoverflow.com/questions/682438/hash-function-providing-unique-uint-from-an-integer-coordinate-pair
+			// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
+			// and arbitrarily ignore directionality
+			size_t pairing = .5 * (x.first.id + x.second.id) * (x.first.id + x.second.id + 1) + x.second.id;
+			return hash<size_t>()(pairing);
 		}
 	};
 }
@@ -43,6 +49,7 @@ namespace std
 class GfaGraph
 {
 public:
+	GfaGraph();
 	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false);
 	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false);
 	void SaveToFile(std::string filename) const;
@@ -51,15 +58,15 @@ public:
 	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
 	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;
 	std::string OriginalNodeName(int nodeId) const;
+	void confirmDoublesidedEdges();
 	std::unordered_map<int, std::string> nodes;
 	std::unordered_map<NodePos, std::vector<NodePos>> edges;
 	std::unordered_map<std::pair<NodePos, NodePos>, size_t> varyingOverlaps;
 	size_t edgeOverlap;
-private:
-	void numberBackToIntegers();
 	std::unordered_map<int, std::string> tags;
 	std::unordered_map<int, std::string> originalNodeName;
-	GfaGraph();
+private:
+	void numberBackToIntegers();
 };
 
 #endif
