@@ -1,5 +1,4 @@
-CC=gcc
-GPP=g++
+GPP=x86_64-conda_cos6-linux-gnu-g++
 CPPFLAGS=-Wall -Wextra -std=c++14 -O3 -g -Iconcurrentqueue -Izstr/src `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash` `pkg-config --cflags mummer` -fopenmp -Wno-unused-parameter
 
 ODIR=obj

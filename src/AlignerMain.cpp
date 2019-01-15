@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fstream>
 #include <limits>
+#include <csignal>
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"

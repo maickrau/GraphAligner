@@ -1,7 +1,6 @@
 name: GraphAligner
 channels:
   - bioconda
-  - omgarcia
   - conda-forge
   - defaults
 dependencies:
@@ -16,6 +15,7 @@ dependencies:
   - ca-certificates=2018.4.16=0
   - docutils=0.14=py36_0
   - idna=2.7=py36_0
+  - isl=0.17.1=0
   - libgcc-ng=7.2.0=hdf63c60_3
   - libgfortran-ng=7.2.0=hdf63c60_3
   - libstdcxx-ng=7.2.0=hdf63c60_3
@@ -30,15 +30,22 @@ dependencies:
   - urllib3=1.23=py36_0
   - wheel=0.31.1=py36_0
   - bcrypt=3.1.4=py36h14c3975_0
+  - binutils_impl_linux-64=2.28.1=had2808c_3
+  - binutils_linux-64=7.2.0=had2808c_27
   - blas=1.0=mkl
   - boost=1.67.0=py36_4
   - bzip2=1.0.6=h14c3975_5
   - certifi=2018.4.16=py36_0
   - cffi=1.11.5=py36h9745a5d_0
   - chardet=3.0.4=py36_1
+  - cloog=0.18.0=0
   - cryptography=2.2.2=py36h14c3975_0
   - dropbox=8.9.0=py36_0
+  - gcc_impl_linux-64=7.2.0=habb00fd_3
+  - gcc_linux-64=7.2.0=h550dcbe_27
   - gmp=6.1.2=h6c8ec71_1
+  - gxx_impl_linux-64=7.2.0=hdf63c60_3
+  - gxx_linux-64=7.2.0=h550dcbe_27
   - icu=58.2=h9c2bf20_1
   - intel-openmp=2018.0.3=0
   - jemalloc=5.0.1=hf484d3e_1
@@ -76,7 +83,3 @@ dependencies:
   - xz=5.2.4=h14c3975_4
   - yaml=0.1.7=had09818_2
   - zlib=1.2.11=ha838bed_2
-  - cloog=0.18.0=0
-  - gcc-6=6.1.0=2
-  - isl=0.17.1=0
-
