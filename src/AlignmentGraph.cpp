@@ -575,6 +575,7 @@ void AlignmentGraph::doComponentOrder()
 				i += 1;
 				stack.push_back(v);
 				onStack[v] = true;
+				[[fallthrough]];
 			startloop:
 			case 1:
 				if (neighborI >= outNeighbors[v].size()) goto endloop;
