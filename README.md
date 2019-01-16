@@ -9,13 +9,13 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment.yml`
 - `source activate GraphAligner`
-- `make bin/Aligner`
+- `make bin/GraphAligner`
 
 ### Running
 
-Quickstart: `bin/Aligner -g graph_file -f read_file -a output_file.gam`
+Quickstart: `bin/GraphAligner -g graph_file -f read_file -a output_file.gam`
 
-See [Parameters](#parameters), the option `bin/Aligner --help` and the subsections below for more information and options
+See [Parameters](#parameters), the option `bin/GraphAligner --help` and the subsections below for more information and options
 
 #### File formats
 
