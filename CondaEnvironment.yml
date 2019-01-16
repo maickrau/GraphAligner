@@ -52,7 +52,7 @@ dependencies:
   - libboost=1.67.0=h46d08c1_4
   - libedit=3.1.20170329=h6b74fdf_2
   - libffi=3.2.1=hd88cf55_4
-  - libprotobuf=3.5.2=h6f1eeef_0
+  - libprotobuf=3.6.0=hdbcaa40_0
   - libsodium=1.0.16=h1bed415_0
   - mkl=2018.0.3=1
   - mkl_fft=1.0.4=py36h4414c95_1
@@ -65,7 +65,7 @@ dependencies:
   - pandas=0.23.3=py36h04863e7_0
   - perl=5.26.2=h14c3975_0
   - pkg-config=0.29.2=h1bed415_8
-  - protobuf=3.5.2=py36hf484d3e_1
+  - protobuf=3.6.0=py36hf484d3e_0
   - psutil=5.4.6=py36h14c3975_0
   - py-boost=1.67.0=py36h04863e7_4
   - pyasn1=0.4.4=py36_0

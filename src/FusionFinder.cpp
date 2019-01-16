@@ -421,8 +421,7 @@ void writeCorrected(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>,
 
 int main(int argc, char** argv)
 {
-	std::cerr << "Fusion finder ";
-	std::cerr << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
+	std::cerr << "Fusion finder " << VERSION << std::endl;
 
 	std::string graphFile { argv[1] };
 	std::string putativeFusionsFile { argv[2] };
