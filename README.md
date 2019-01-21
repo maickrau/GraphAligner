@@ -7,7 +7,7 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 Install via [bioconda](https://bioconda.github.io/):
 
 - Install miniconda https://conda.io/docs/user-guide/install/index.html
-- `conda install -c bioconda GraphAligner`
+- `conda install -c bioconda graphaligner`
 
 #### Compilation
 
