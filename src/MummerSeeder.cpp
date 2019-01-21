@@ -72,7 +72,6 @@ void MummerSeeder::initTree(const GfaGraph& graph)
 		seq += node.second;
 		seq += '`';
 	}
-	seq.pop_back();
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
@@ -91,7 +90,6 @@ void MummerSeeder::initTree(const vg::Graph& graph)
 		seq += graph.node(i).sequence();
 		seq += '`';
 	}
-	seq.pop_back();
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
@@ -237,7 +235,8 @@ void MummerSeeder::revcompInPlace(std::string& seq) const
 				seq[i] = 'c';
 				break;
 			default:
-				assert(false);
+				seq[i] = '$';
+				break;
 		}
 	}
 }
