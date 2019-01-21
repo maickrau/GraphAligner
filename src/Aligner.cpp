@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <thread>
 #include <concurrentqueue.h> //https://github.com/cameron314/concurrentqueue
+#include <google/protobuf/util/json_util.h>
 #include "Aligner.h"
 #include "CommonUtils.h"
 #include "vg.pb.h"
@@ -157,10 +158,12 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 	readStreamingFinished = true;
 }
 
-void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode)
+void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode, bool outputJSON)
 {
 	assertSetRead("Writer", "No seed");
-	std::ofstream outfile { filename, std::ios::binary | std::ios::out };
+	auto openmode = std::ios::out;
+	if (!outputJSON) openmode |= std::ios::binary;
+	std::ofstream outfile { filename, openmode };
 
 	bool wroteAny = false;
 
@@ -194,7 +197,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 		wroteAny = true;
 	}
 
-	if (!wroteAny)
+	if (!outputJSON && !wroteAny)
 	{
 		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
 		      new ::google::protobuf::io::OstreamOutputStream(&outfile);
@@ -303,13 +306,16 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		size_t timems = 0;
 		size_t totalcells = 0;
 		std::stringstream strstr;
-		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
-		      new ::google::protobuf::io::OstreamOutputStream(&strstr);
-		::google::protobuf::io::GzipOutputStream *gzip_out =
-		      new ::google::protobuf::io::GzipOutputStream(raw_out);
-		::google::protobuf::io::CodedOutputStream *coded_out =
-		      new ::google::protobuf::io::CodedOutputStream(gzip_out);
-		coded_out->WriteVarint64(alignments.alignments.size());
+		::google::protobuf::io::ZeroCopyOutputStream *raw_out;
+		::google::protobuf::io::GzipOutputStream *gzip_out;
+		::google::protobuf::io::CodedOutputStream *coded_out;
+		if (!params.outputJSON)
+		{
+			raw_out = new ::google::protobuf::io::OstreamOutputStream(&strstr);
+		    gzip_out = new ::google::protobuf::io::GzipOutputStream(raw_out);
+		    coded_out = new ::google::protobuf::io::CodedOutputStream(gzip_out);
+			coded_out->WriteVarint64(alignments.alignments.size());
+		}
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
 			try
@@ -334,14 +340,29 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 			timems += alignments.alignments[i].elapsedMilliseconds;
 			totalcells += alignments.alignments[i].cellsProcessed;
-			std::string s;
-			alignments.alignments[i].alignment->SerializeToString(&s);
-			coded_out->WriteVarint32(s.size());
-			coded_out->WriteRaw(s.data(), s.size());
+			if (params.outputJSON)
+			{
+				google::protobuf::util::JsonPrintOptions options;
+				options.preserve_proto_field_names = true;
+				std::string s;
+				google::protobuf::util::MessageToJsonString(*alignments.alignments[i].alignment, &s, options);
+				strstr << s;
+				strstr << '\n';
+			}
+			else
+			{
+				std::string s;
+				alignments.alignments[i].alignment->SerializeToString(&s);
+				coded_out->WriteVarint32(s.size());
+				coded_out->WriteRaw(s.data(), s.size());
+			}
 		}
-		delete coded_out;
-		delete gzip_out;
-		delete raw_out;
+		if (!params.outputJSON)
+		{
+			delete coded_out;
+			delete gzip_out;
+			delete raw_out;
+		}
 		std::string* writeAlns = new std::string { strstr.str() };
 		size_t waited = 0;
 		while (!alignmentsOut.try_enqueue(token, writeAlns) && !alignmentsOut.try_enqueue(writeAlns))
@@ -487,7 +508,7 @@ void alignReads(AlignerParams params)
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
 	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
-	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode); } };
+	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode, outputJSON=params.outputJSON]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode, outputJSON); } };
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
 		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputAlns, &tokens, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputAlns, tokens[i], deallocAlns, stats); });

@@ -13,13 +13,13 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 
 ### Running
 
-Quickstart: `bin/GraphAligner -g graph_file -f read_file -a output_file.gam`
+Quickstart: `bin/GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
 
 See [Parameters](#parameters), the option `bin/GraphAligner --help` and the subsections below for more information and options
 
 #### File formats
 
-The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
+The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [vg's alignment format](https://github.com/vgteam/vg/blob/master/src/vg.proto), either as a binary .gam or JSON depending on the file name. Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
 
 #### Seed hits
 

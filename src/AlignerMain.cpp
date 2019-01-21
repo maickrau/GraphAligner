@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
+		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam/.json)")
 	;
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
@@ -105,6 +105,7 @@ int main(int argc, char** argv)
 	params.seederCachePrefix = "";
 	params.outputAllAlns = false;
 	params.forceGlobal = false;
+	params.outputJSON = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -196,6 +197,11 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "run with option -h for help" << std::endl;
 		std::exit(1);
+	}
+
+	if (params.outputAlignmentFile.size() >= 5 && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) == ".json")
+	{
+		params.outputJSON = true;
 	}
 
 	omp_set_num_threads(params.numThreads);
