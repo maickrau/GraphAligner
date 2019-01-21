@@ -4,6 +4,15 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 
 ### Installation
 
+Install via [bioconda](https://bioconda.github.io/):
+
+- Install miniconda https://conda.io/docs/user-guide/install/index.html
+- `conda install -c bioconda GraphAligner`
+
+#### Compilation
+
+Bioconda is the recommended installation method. If you however want to compile the aligner yourself, run these:
+
 - Install miniconda https://conda.io/docs/user-guide/install/index.html
 - `git clone https://github.com/maickrau/GraphAligner.git`
 - `git submodule update --init --recursive`
@@ -13,9 +22,9 @@ Seed-and-extend program for aligning long error-prone reads to genome graphs. Fo
 
 ### Running
 
-Quickstart: `bin/GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
+Quickstart: `GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
 
-See [Parameters](#parameters), the option `bin/GraphAligner --help` and the subsections below for more information and options
+See [Parameters](#parameters), the option `GraphAligner --help` and the subsections below for more information and options
 
 #### File formats
 
