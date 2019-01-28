@@ -40,6 +40,7 @@ int main(int argc, char** argv)
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
 		("help,h", "help message")
+		("version", "print version")
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
@@ -85,6 +86,11 @@ int main(int argc, char** argv)
 		std::cerr << "defaults are --seeds-mum-count -1 --seeds-mxm-length 20" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
+		std::exit(0);
+	}
+	if (vm.count("version"))
+	{
+		std::cout << "Version " << VERSION << std::endl;
 		std::exit(0);
 	}
 
