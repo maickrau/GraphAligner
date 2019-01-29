@@ -77,6 +77,11 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 					result[node] = std::numeric_limits<size_t>::max();
 					break;
 				}
+				if (neighbor == node)
+				{
+					result[node] = std::numeric_limits<size_t>::max();
+					break;
+				}
 				result[node] = std::max(result[node], result[neighbor] + nodeLengths[node]);
 			}
 		}
