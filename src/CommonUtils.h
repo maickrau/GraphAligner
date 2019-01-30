@@ -2,6 +2,7 @@
 #define CommonUtils_h
 
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <vector>
 #include <sstream>

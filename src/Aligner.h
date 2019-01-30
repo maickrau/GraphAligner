@@ -28,6 +28,7 @@ struct AlignerParams
 	AlignmentSelection::SelectionMethod alignmentSelectionMethod;
 	double selectionECutoff;
 	bool forceGlobal;
+	bool outputJSON;
 };
 
 void alignReads(AlignerParams params);

@@ -4,6 +4,7 @@
 #include <tuple>
 #include "CommonUtils.h"
 #include "GfaGraph.h"
+#include "fastqloader.h"
 
 
 namespace std 
@@ -31,6 +32,7 @@ struct Node
 struct Alignment
 {
 	std::vector<Node> path;
+	std::vector<size_t> length;
 	std::string name;
 };
 
@@ -43,6 +45,7 @@ Alignment convertVGtoAlignment(const vg::Alignment& vgAln)
 		result.path.emplace_back();
 		result.path.back().nodeId = vgAln.path().mapping(i).position().node_id();
 		result.path.back().reverse = vgAln.path().mapping(i).position().is_reverse();
+		result.length.emplace_back(vgAln.path().mapping(i).edit(0).to_length());
 	}
 	return result;
 }
@@ -57,11 +60,13 @@ Alignment reverse(const Alignment& old)
 		result.path.back().nodeId = old.path[i].nodeId;
 		result.path.back().reverse = !old.path[i].reverse;
 	}
+	result.length = old.length;
 	std::reverse(result.path.begin(), result.path.end());
+	std::reverse(result.length.begin(), result.length.end());
 	return result;
 }
 
-double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, const std::vector<size_t>& nodeLengths)
+double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, const std::unordered_map<std::string, size_t>& readLengths)
 {
 	std::vector<std::vector<size_t>> matchLen;
 	matchLen.resize(read.path.size()+1);
@@ -69,6 +74,7 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 	{
 		matchLen[i].resize(transcript.path.size()+1, 0);
 	}
+	size_t maxMatch = 0;
 	for (size_t i = 0; i < read.path.size(); i++)
 	{
 		for (size_t j = 0; j < transcript.path.size(); j++)
@@ -76,58 +82,33 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 			matchLen[i+1][j+1] = std::max(matchLen[i+1][j], matchLen[i][j+1]);
 			if (read.path[i] == transcript.path[j])
 			{
-				matchLen[i+1][j+1] = std::max(matchLen[i+1][j+1], matchLen[i][j] + nodeLengths[read.path[i].nodeId]);
+				matchLen[i+1][j+1] = std::max(matchLen[i+1][j+1], matchLen[i][j] + std::min(read.length[i], transcript.length[j]));
 			}
 			else
 			{
 				matchLen[i+1][j+1] = std::max(matchLen[i+1][j+1], matchLen[i][j]);
 			}
+			maxMatch = std::max(maxMatch, matchLen[i+1][j+1]);
 		}
 	}
-	size_t maxMatch = 0;
-	for (size_t j = 0; j < transcript.path.size(); j++)
-	{
-		maxMatch = std::max(maxMatch, matchLen.back()[j+1]);
-	}
 	assert(maxMatch >= 0);
-	size_t readLen = 0;
-	for (size_t i = 0; i < read.path.size(); i++)
-	{
-		readLen += nodeLengths[read.path[i].nodeId];
-	}
-	assert(maxMatch <= readLen);
-	return (double)maxMatch / (double)readLen;
+	assert(readLengths.count(read.name) == 1);
+	assert(maxMatch <= readLengths.at(read.name));
+	return (double)maxMatch / (double)readLengths.at(read.name);
 }
 
 int main(int argc, char** argv)
 {
 	std::string transcriptFile { argv[1] };
-	std::string readFile { argv[2] };
-	std::string graphFile { argv[3] };
+	std::string readAlignmentFile { argv[2] };
+	std::string readFastaFile { argv[3] };
 
-	std::vector<size_t> nodeLengths;
+	std::unordered_map<std::string, size_t> readLengths;
 	{
-		if (graphFile.substr(graphFile.size() - 4) == ".gfa")
+		auto reads = loadFastqFromFile(readFastaFile);
+		for (auto read : reads)
 		{
-			auto graph = GfaGraph::LoadFromFile(graphFile);
-			nodeLengths.resize(graph.nodes.size()+1, 0);
-			for (auto node : graph.nodes)
-			{
-				nodeLengths[node.first] = node.second.size();
-			}
-		}
-		else if (graphFile.substr(graphFile.size() - 3) == ".vg")
-		{
-			auto graph = CommonUtils::LoadVGGraph(graphFile);
-			nodeLengths.resize(graph.node_size()+1, 0);
-			for (int i = 0; i < graph.node_size(); i++)
-			{
-				nodeLengths[graph.node(i).id()] = graph.node(i).sequence().size();
-			}
-		}
-		else
-		{
-			assert(false);
+			readLengths[read.seq_id] = read.sequence.size();
 		}
 	}
 
@@ -141,7 +122,7 @@ int main(int argc, char** argv)
 		}
 	}
 	{
-		auto vgreads = CommonUtils::LoadVGAlignments(readFile);
+		auto vgreads = CommonUtils::LoadVGAlignments(readAlignmentFile);
 		for (auto vg : vgreads)
 		{
 			reads.push_back(convertVGtoAlignment(vg));
@@ -170,8 +151,8 @@ int main(int argc, char** argv)
 		auto reverseread = reverse(read);
 		for (auto i : possibleTranscripts)
 		{
-			auto identityFw = getAlignmentIdentity(read, transcripts[i], nodeLengths);
-			auto identityBw = getAlignmentIdentity(reverseread, transcripts[i], nodeLengths);
+			auto identityFw = getAlignmentIdentity(read, transcripts[i], readLengths);
+			auto identityBw = getAlignmentIdentity(reverseread, transcripts[i], readLengths);
 			auto bigger = std::max(identityFw, identityBw);
 			if (bigger > 0 && (readTranscriptBestPair.count(std::make_pair(readi, i)) == 0 || readTranscriptBestPair[std::make_pair(readi, i)] < bigger))
 			{

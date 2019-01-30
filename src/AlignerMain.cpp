@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fstream>
 #include <limits>
+#include <csignal>
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
@@ -12,8 +13,8 @@ int main(int argc, char** argv)
 {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	std::cout << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
-	std::cerr << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
+	std::cout << "GraphAligner " << VERSION << std::endl;
+	std::cerr << "GraphAligner " << VERSION << std::endl;
 
 #ifndef NOBUILTINPOPCOUNT
 	if (__builtin_cpu_supports("popcnt") == 0)
@@ -34,11 +35,12 @@ int main(int argc, char** argv)
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam)")
+		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam/.json)")
 	;
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
 		("help,h", "help message")
+		("version", "print version")
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
@@ -99,6 +101,11 @@ int main(int argc, char** argv)
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
 	}
+	if (vm.count("version"))
+	{
+		std::cout << "Version " << VERSION << std::endl;
+		std::exit(0);
+	}
 
 	AlignerParams params;
 	params.graphFile = "";
@@ -118,6 +125,7 @@ int main(int argc, char** argv)
 	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
 	params.selectionECutoff = 0;
 	params.forceGlobal = false;
+	params.outputJSON = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -260,6 +268,11 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "run with option -h for help" << std::endl;
 		std::exit(1);
+	}
+
+	if (params.outputAlignmentFile.size() >= 5 && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) == ".json")
+	{
+		params.outputJSON = true;
 	}
 
 	omp_set_num_threads(params.numThreads);

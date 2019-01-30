@@ -135,12 +135,12 @@ GfaGraph getFusionGraph(std::string leftGene, std::string rightGene, const GfaGr
 void addBestAlnsOnePair(std::unordered_map<std::string, std::tuple<AlignmentResult, std::string, std::string>>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, double maxScoreFraction, int minFusionLen)
 {
 	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph, true);
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 35, true };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 1000, true };
 	for (auto read : reads)
 	{
 		try
 		{
-			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 35, 35, true, reusableState, true, true);
+			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
 			int leftAlnSize = 0;
@@ -175,17 +175,19 @@ void addBestAlnsOnePair(std::unordered_map<std::string, std::tuple<AlignmentResu
 	}
 }
 
-std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads)
+std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string, int>> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads)
 {
 	std::cerr << "get fusions" << std::endl;
 	std::vector<std::thread> threads;
 	size_t nextPair = 0;
 	std::mutex nextPairMutex;
 	std::vector<std::unordered_map<std::string, std::tuple<AlignmentResult, std::string, std::string>>> bestFusionAlnsPerThread;
+	std::unordered_map<std::string, std::unordered_set<size_t>> readsInNonfusionGraph;
+	std::mutex readsInNonfusionGraphMutex;
 	bestFusionAlnsPerThread.resize(numThreads);
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([&putativeFusions, &bestFusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &hasSeeds, &nextPairMutex]()
+		threads.emplace_back([&putativeFusions, &readsInNonfusionGraph, &readsInNonfusionGraphMutex, &bestFusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &hasSeeds, &nextPairMutex]()
 		{
 			while (true)
 			{
@@ -206,6 +208,11 @@ std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>
 				// readsHere.resize(final - readsHere.begin());
 				if (hasSeeds.count(putativeFusions[i].first) == 1) readsHere.insert(hasSeeds.at(putativeFusions[i].first).begin(), hasSeeds.at(putativeFusions[i].first).end());
 				if (hasSeeds.count(putativeFusions[i].second) == 1) readsHere.insert(hasSeeds.at(putativeFusions[i].second).begin(), hasSeeds.at(putativeFusions[i].second).end());
+				{
+					std::lock_guard<std::mutex> lock { readsInNonfusionGraphMutex };
+					readsInNonfusionGraph[putativeFusions[i].first].insert(readsHere.begin(), readsHere.end());
+					readsInNonfusionGraph[putativeFusions[i].second].insert(readsHere.begin(), readsHere.end());
+				}
 				std::vector<FastQ> reads;
 				for (auto index : readsHere)
 				{
@@ -237,13 +244,13 @@ std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>
 	std::cerr << "get nonfusions" << std::endl;
 	nextPair = 0;
 	std::vector<std::string> fusionGenes;
-	for (auto pair : hasSeeds)
+	for (auto pair : readsInNonfusionGraph)
 	{
 		fusionGenes.push_back(pair.first);
 	}
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([&fusionGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &hasSeeds, &nextPairMutex]()
+		threads.emplace_back([&fusionGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
 		{
 			while (true)
 			{
@@ -256,10 +263,9 @@ std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>
 					nextPair += 1;
 				}
 				auto nonfusiongraph = getNonfusionGraph(fusionGenes[i], graph, geneBelongers);
-				std::unordered_set<size_t> readsHere;
-				if (hasSeeds.count(fusionGenes[i]) == 1) readsHere.insert(hasSeeds.at(fusionGenes[i]).begin(), hasSeeds.at(fusionGenes[i]).end());
+				assert(readsInNonfusionGraph.count(fusionGenes[i]) == 1);
 				std::vector<FastQ> reads;
-				for (auto index : readsHere)
+				for (auto index : readsInNonfusionGraph.at(fusionGenes[i]))
 				{
 					reads.push_back(allReads[index]);
 				}
@@ -284,7 +290,7 @@ std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>
 		}
 	}
 	std::cerr << "filter fusion by nonfusion" << std::endl;
-	std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>> result;
+	std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string, int>> result;
 	for (auto aln : bestFusionAlns)
 	{
 		if (bestNonfusionAlns.count(aln.first) == 1)
@@ -293,13 +299,20 @@ std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>
 			{
 				continue;
 			}
+			else
+			{
+				result.emplace_back(std::get<0>(aln.second).alignments[0].alignment, std::get<1>(aln.second), std::get<2>(aln.second), std::get<0>(aln.second).alignments[0].alignment->score() - std::get<0>(bestNonfusionAlns.at(aln.first)).alignments[0].alignment->score());
+			}
 		}
-		result.emplace_back(std::get<0>(aln.second).alignments[0].alignment, std::get<1>(aln.second), std::get<2>(aln.second));
+		else
+		{
+			result.emplace_back(std::get<0>(aln.second).alignments[0].alignment, std::get<1>(aln.second), std::get<2>(aln.second), std::get<0>(aln.second).alignments[0].alignment->sequence().size() - std::get<0>(aln.second).alignments[0].alignment->score());
+		}
 	}
 	return result;
 }
 
-void writeFusions(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>>& result, std::string filename)
+void writeFusions(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string, int>>& result, std::string filename)
 {
 	std::ofstream file { filename };
 	for (auto pair : result)
@@ -339,7 +352,7 @@ void writeFusions(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>, s
 			rightReverse = !rightReverse;
 			std::swap(std::get<1>(pair), std::get<2>(pair));
 		}
-		file << fusionaln->name() << "\t" << ((double)fusionaln->score() / (double)fusionaln->sequence().size()) << "\t" << std::get<1>(pair) << "\t" << std::get<2>(pair) << "\t" << leftLen << "\t" << leftName << "\t" << (leftReverse ? "-" : "+") << "\t" << rightName << "\t" << (rightReverse ? "-" : "+") << "\t" << rightLen << std::endl;
+		file << fusionaln->name() << "\t" << ((double)fusionaln->score() / (double)fusionaln->sequence().size()) << "\t" << std::get<3>(pair) << "\t" << std::get<1>(pair) << "\t" << std::get<2>(pair) << "\t" << leftLen << "\t" << leftName << "\t" << (leftReverse ? "-" : "+") << "\t" << rightName << "\t" << (rightReverse ? "-" : "+") << "\t" << rightLen << std::endl;
 	}
 }
 
@@ -370,15 +383,9 @@ std::unordered_map<std::string, std::vector<size_t>> loadPartialToTranscripts(st
 	return result;
 }
 
-void printCorrected(std::ofstream& str, const GfaGraph& graph, const vg::Alignment& v)
+void printCorrected(std::ofstream& str, const std::unordered_map<std::string, std::string>& mapping, const GfaGraph& graph, const vg::Alignment& v)
 {
 	str << ">" << v.name() << std::endl;
-	std::unordered_map<std::string, std::string> mapping;
-	for (auto node : graph.nodes)
-	{
-		assert(graph.originalNodeName.count(node.first) == 1);
-		mapping[graph.originalNodeName.at(node.first)] = node.second;
-	}
 	for (int i = 0; i < v.path().mapping_size(); i++)
 	{
 		std::string sequence;
@@ -410,19 +417,24 @@ void printCorrected(std::ofstream& str, const GfaGraph& graph, const vg::Alignme
 	str << std::endl;
 }
 
-void writeCorrected(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string>>& result, const GfaGraph& graph, std::string filename)
+void writeCorrected(const std::vector<std::tuple<std::shared_ptr<vg::Alignment>, std::string, std::string, int>>& result, const GfaGraph& graph, std::string filename)
 {
 	std::ofstream file { filename };
+	std::unordered_map<std::string, std::string> mapping;
+	for (auto node : graph.nodes)
+	{
+		assert(graph.originalNodeName.count(node.first) == 1);
+		mapping[graph.originalNodeName.at(node.first)] = node.second;
+	}
 	for (auto aln : result)
 	{
-		printCorrected(file, graph, *std::get<0>(aln));
+		printCorrected(file, mapping, graph, *std::get<0>(aln));
 	}
 }
 
 int main(int argc, char** argv)
 {
-	std::cerr << "Fusion finder ";
-	std::cerr << "Branch " << GITBRANCH << " commit " << GITCOMMIT << " " << GITDATE << std::endl;
+	std::cerr << "Fusion finder " << VERSION << std::endl;
 
 	std::string graphFile { argv[1] };
 	std::string putativeFusionsFile { argv[2] };

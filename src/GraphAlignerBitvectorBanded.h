@@ -1433,7 +1433,7 @@ private:
 
 			cellsProcessed += newSlice.cellsProcessed;
 
-			if (newSlice.cellsProcessed > params.maxCellsPerSlice)
+			if (newSlice.cellsProcessed >= params.maxCellsPerSlice)
 			{
 				newSlice.scoresNotValid = true;
 			}

@@ -72,7 +72,6 @@ void MummerSeeder::initTree(const GfaGraph& graph)
 		seq += node.second;
 		seq += '`';
 	}
-	seq.pop_back();
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
@@ -91,7 +90,6 @@ void MummerSeeder::initTree(const vg::Graph& graph)
 		seq += graph.node(i).sequence();
 		seq += '`';
 	}
-	seq.pop_back();
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
@@ -103,6 +101,7 @@ void MummerSeeder::initTree(const vg::Graph& graph)
 
 size_t MummerSeeder::getNodeIndex(size_t indexPos) const
 {
+	assert(indexPos < nodePositions.back());
 	auto next = std::upper_bound(nodePositions.begin(), nodePositions.end(), indexPos);
 	assert(next != nodePositions.begin());
 	size_t index = (next - nodePositions.begin()) - 1;
@@ -184,6 +183,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 	result.reserve(fwmatches.size() + bwmatches.size());
 	for (auto match : fwmatches)
 	{
+		assert(match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];
@@ -193,6 +193,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 	}
 	for (auto match : bwmatches)
 	{
+		assert(match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];
@@ -237,7 +238,8 @@ void MummerSeeder::revcompInPlace(std::string& seq) const
 				seq[i] = 'c';
 				break;
 			default:
-				assert(false);
+				seq[i] = 'x';
+				break;
 		}
 	}
 }
