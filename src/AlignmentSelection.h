@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
+#include <functional>
 #include "vg.pb.h"
 
 namespace AlignmentSelection
@@ -17,8 +18,7 @@ namespace AlignmentSelection
 		ScheduleInverseEProduct,
 		ScheduleScore,
 		ScheduleLength,
-		All,
-		ECutoff
+		All
 	};
 	struct SelectionOptions
 	{
@@ -112,6 +112,10 @@ namespace AlignmentSelection
 	template <typename T, typename AlnGetter>
 	std::vector<T> SelectAlignments(std::vector<T> alignments, SelectionOptions options, AlnGetter alnGetter)
 	{
+		if (options.ECutoff != -1)
+		{
+			alignments = SelectECutoff(alignments, alnGetter, options.graphSize, options.readSize, options.ECutoff);
+		}
 		switch(options.method)
 		{
 			case GreedyLength:
@@ -120,8 +124,6 @@ namespace AlignmentSelection
 				return GreedySelectAlignments(alignments, alnGetter, alignmentScoreCompare);
 			case GreedyE:
 				return GreedySelectAlignments(alignments, alnGetter, std::bind(alignmentECompare, std::placeholders::_1, std::placeholders::_2, options.graphSize, options.readSize));
-			case ECutoff:
-				return SelectECutoff(alignments, alnGetter, options.graphSize, options.readSize, options.ECutoff);
 			case ScheduleInverseESum:
 				return ScheduleSelectAlignments(alignments, alnGetter, [options](const vg::Alignment* const aln) { return 1.0 / Evalue(options.graphSize, options.readSize, aln); });
 			case ScheduleInverseEProduct:

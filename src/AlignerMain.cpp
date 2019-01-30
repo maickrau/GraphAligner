@@ -48,7 +48,7 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description results("Outputted alignments");
 	results.add_options()
-		("E-cutoff", boost::program_options::value<double>(), "all alignments with E-value <= arg")
+		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg and then select")
 		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
 		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
 		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
@@ -123,7 +123,7 @@ int main(int argc, char** argv)
 	params.memCount = 0;
 	params.seederCachePrefix = "";
 	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
-	params.selectionECutoff = 0;
+	params.selectionECutoff = -1;
 	params.forceGlobal = false;
 	params.outputJSON = false;
 
@@ -170,9 +170,7 @@ int main(int argc, char** argv)
 	}
 	if (vm.count("E-cutoff"))
 	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ECutoff;
 		params.selectionECutoff = vm["E-cutoff"].as<double>();
-		resultSelectionMethods += 1;
 	}
 	if (vm.count("schedule-inverse-E-sum"))
 	{
