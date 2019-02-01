@@ -244,6 +244,7 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 	assert(nodeIDs.size() == nodeLength.size());
 	RenumberAmbiguousToEnd();
 	ambiguousNodes.clear();
+	findLinearizable();
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
 	std::cout << ambiguousNodeSequences.size() << " ambiguous split nodes" << std::endl;
@@ -276,6 +277,69 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 	{
 		std::cout << "use component ordering" << std::endl;
 		doComponentOrder();
+	}
+}
+
+void AlignmentGraph::findLinearizable()
+{
+	linearizable.resize(nodeLength.size(), false);
+	std::vector<bool> checked;
+	checked.resize(nodeLength.size(), false);
+	std::vector<size_t> stack;
+	for (size_t node = 0; node < nodeLength.size(); node++)
+	{
+		if (checked[node]) continue;
+		if (inNeighbors[node].size() != 1)
+		{
+			checked[node] = true;
+			continue;
+		}
+		checked[node] = true;
+		assert(inNeighbors[node].size() == 1);
+		stack.push_back(inNeighbors[node][0]);
+		while (stack.size() > 0)
+		{
+			assert(stack.size() < nodeLength.size());
+			if (stack.back() == node)
+			{
+				for (auto i : stack)
+				{
+					checked[i] = true;
+				}
+				stack.clear();
+				continue;
+			}
+			if (inNeighbors[stack.back()].size() != 1)
+			{
+				for (size_t i = 0; i < stack.size()-1; i++)
+				{
+					assert(inNeighbors[stack[i]].size() == 1);
+					checked[stack[i]] = true;
+					linearizable[stack[i]] = true;
+				}
+				linearizable[node] = true;
+				checked[node] = true;
+				checked[stack.back()] = true;
+				stack.clear();
+				continue;
+			}
+			assert(inNeighbors[stack.back()].size() == 1);
+			if (checked[stack.back()])
+			{
+				for (size_t i = 0; i < stack.size()-1; i++)
+				{
+					assert(inNeighbors[stack[i]].size() == 1);
+					checked[stack[i]] = true;
+					linearizable[stack[i]] = linearizable[stack.back()];
+				}
+				linearizable[node] = linearizable[stack.back()];
+				checked[node] = true;
+				stack.clear();
+				continue;
+			}
+			assert(inNeighbors[stack.back()].size() == 1);
+			stack.push_back(inNeighbors[stack.back()][0]);
+		}
 	}
 }
 

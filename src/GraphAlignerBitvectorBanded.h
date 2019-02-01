@@ -1029,8 +1029,8 @@ private:
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
-		LengthType currentMinimumNode = -1;
-		LengthType currentMinimumNodeOffset = -1;
+		LengthType currentMinimumNode = std::numeric_limits<LengthType>::max();
+		LengthType currentMinimumNodeOffset = std::numeric_limits<LengthType>::max();
 		size_t cellsProcessed = 0;
 #ifdef SLICEVERBOSE
 		size_t nodesProcessed = 0;
@@ -1062,10 +1062,10 @@ private:
 			{
 				assert(node.second.exists);
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.inNeighbors[node.first].size() == 1)
+				if (params.graph.linearizable[node.first] && params.graph.inNeighbors[node.first].size() == 1)
 				{
 					auto neighbor = params.graph.inNeighbors[node.first][0];
-				 	if (previousBand[params.graph.inNeighbors[node.first][0]] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore)
+				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
 				 	{
 				 		//linear area, no need to add the later node into the queue 
 				 		//because calculating the earlier node will guarantee that the later node will get added
