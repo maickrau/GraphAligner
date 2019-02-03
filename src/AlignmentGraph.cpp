@@ -299,7 +299,7 @@ void AlignmentGraph::findLinearizable()
 		stack.push_back(inNeighbors[node][0]);
 		while (stack.size() > 0)
 		{
-			assert(stack.size() < nodeLength.size());
+			assert(stack.size() <= nodeLength.size());
 			if (stack.back() == node)
 			{
 				for (auto i : stack)
