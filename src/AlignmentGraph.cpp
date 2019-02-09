@@ -286,6 +286,8 @@ void AlignmentGraph::findLinearizable()
 	std::vector<bool> checked;
 	checked.resize(nodeLength.size(), false);
 	std::vector<size_t> stack;
+	std::vector<bool> onStack;
+	onStack.resize(nodeLength.size(), false);
 	for (size_t node = 0; node < nodeLength.size(); node++)
 	{
 		if (checked[node]) continue;
@@ -296,19 +298,12 @@ void AlignmentGraph::findLinearizable()
 		}
 		checked[node] = true;
 		assert(inNeighbors[node].size() == 1);
-		stack.push_back(inNeighbors[node][0]);
-		while (stack.size() > 0)
+		assert(stack.size() == 0);
+		stack.push_back(node);
+		onStack[node] = true;
+		while (true)
 		{
 			assert(stack.size() <= nodeLength.size());
-			if (stack.back() == node)
-			{
-				for (auto i : stack)
-				{
-					checked[i] = true;
-				}
-				stack.clear();
-				continue;
-			}
 			if (inNeighbors[stack.back()].size() != 1)
 			{
 				for (size_t i = 0; i < stack.size()-1; i++)
@@ -316,12 +311,13 @@ void AlignmentGraph::findLinearizable()
 					assert(inNeighbors[stack[i]].size() == 1);
 					checked[stack[i]] = true;
 					linearizable[stack[i]] = true;
+					onStack[stack[i]] = false;
 				}
-				linearizable[node] = true;
-				checked[node] = true;
+				linearizable[stack.back()] = false;
 				checked[stack.back()] = true;
+				onStack[stack.back()] = false;
 				stack.clear();
-				continue;
+				break;
 			}
 			assert(inNeighbors[stack.back()].size() == 1);
 			if (checked[stack.back()])
@@ -330,15 +326,50 @@ void AlignmentGraph::findLinearizable()
 				{
 					assert(inNeighbors[stack[i]].size() == 1);
 					checked[stack[i]] = true;
-					linearizable[stack[i]] = linearizable[stack.back()];
+					linearizable[stack[i]] = true;
+					onStack[stack[i]] = false;
 				}
-				linearizable[node] = linearizable[stack.back()];
-				checked[node] = true;
+				linearizable[stack.back()] = false;
+				checked[stack.back()] = true;
+				onStack[stack.back()] = false;
 				stack.clear();
-				continue;
+				break;
 			}
 			assert(inNeighbors[stack.back()].size() == 1);
+			auto neighbor = inNeighbors[stack.back()][0];
+			if (neighbor == node)
+			{
+				for (size_t i = 0; i < stack.size(); i++)
+				{
+					checked[stack[i]] = true;
+					linearizable[stack[i]] = false;
+					onStack[stack[i]] = false;
+				}
+				stack.clear();
+				break;
+			}
+			if (onStack[neighbor])
+			{
+				assert(neighbor != node);
+				size_t i = stack.size();
+				for (; i > 0; i--)
+				{
+					if (stack[i] == neighbor) break;
+					checked[stack[i]] = true;
+					linearizable[stack[i]] = false;
+					onStack[stack[i]] = false;
+				}
+				for (size_t j = 0; j < i; j++)
+				{
+					checked[stack[j]] = true;
+					linearizable[stack[j]] = true;
+					onStack[stack[j]] = false;
+				}
+				stack.clear();
+				break;
+			}
 			stack.push_back(inNeighbors[stack.back()][0]);
+			onStack[stack.back()] = true;
 		}
 	}
 }

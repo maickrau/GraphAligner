@@ -1062,7 +1062,7 @@ private:
 			{
 				assert(node.second.exists);
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.linearizable[node.first] && params.graph.inNeighbors[node.first].size() == 1)
+				if (params.graph.linearizable[node.first])
 				{
 					auto neighbor = params.graph.inNeighbors[node.first][0];
 				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
