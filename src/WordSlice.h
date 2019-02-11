@@ -144,8 +144,8 @@ public:
 };
 
 //uncomment if there's an undefined reference with -O0. why?
-constexpr uint64_t WordConfiguration<uint64_t>::AllZeros;
-constexpr uint64_t WordConfiguration<uint64_t>::AllOnes;
+// constexpr uint64_t WordConfiguration<uint64_t>::AllZeros;
+// constexpr uint64_t WordConfiguration<uint64_t>::AllOnes;
 
 template <typename LengthType, typename ScoreType, typename Word>
 class WordSlice
