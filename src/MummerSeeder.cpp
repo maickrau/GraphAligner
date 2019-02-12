@@ -5,7 +5,7 @@
 #include "CommonUtils.h"
 #include "MummerSeeder.h"
 
-char lowercase(char c)
+char lowercaseRef(char c)
 {
 	switch(c)
 	{
@@ -26,6 +26,31 @@ char lowercase(char c)
 		default:
 		case '`':
 			return '`';
+	}
+	assert(false);
+	return std::numeric_limits<char>::max();
+}
+
+char lowercaseSeq(char c)
+{
+	switch(c)
+	{
+		case 'a':
+		case 'A':
+			return 'a';
+		case 'c':
+		case 'C':
+			return 'c';
+		case 'g':
+		case 'G':
+			return 'g';
+		case 'u':
+		case 'U':
+		case 't':
+		case 'T':
+			return 't';
+		default:
+			return 'x';
 	}
 	assert(false);
 	return std::numeric_limits<char>::max();
@@ -75,7 +100,7 @@ void MummerSeeder::initTree(const GfaGraph& graph)
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
-		seq[i] = lowercase(seq[i]);
+		seq[i] = lowercaseRef(seq[i]);
 	}
 	seq.shrink_to_fit();
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 0, true));
@@ -93,7 +118,7 @@ void MummerSeeder::initTree(const vg::Graph& graph)
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
-		seq[i] = lowercase(seq[i]);
+		seq[i] = lowercaseRef(seq[i]);
 	}
 	seq.shrink_to_fit();
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 0, true));
@@ -139,7 +164,7 @@ std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxC
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
-		sequence[i] = lowercase(sequence[i]);
+		sequence[i] = lowercaseSeq(sequence[i]);
 	}
 	assert(matcher != nullptr);
 	std::vector<mummer::mummer::match_t> MAMs;
@@ -160,7 +185,7 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
-		sequence[i] = lowercase(sequence[i]);
+		sequence[i] = lowercaseSeq(sequence[i]);
 	}
 	assert(matcher != nullptr);
 	std::vector<mummer::mummer::match_t> MEMs;
