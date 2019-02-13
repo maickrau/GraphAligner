@@ -1,6 +1,6 @@
 # GraphAligner
 
-Seed-and-extend program for aligning long error-prone reads to genome graphs. For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
+Seed-and-extend program for aligning reads to genome graphs. For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
 
 ### Installation
 
@@ -22,7 +22,9 @@ Bioconda is the recommended installation method. If you however want to compile 
 
 ### Running
 
-Quickstart: `GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
+Quickstart for PacBio/ONT: `GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
+
+For Illumina: `GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json --seeds-mem-count -1 --try-all-seeds --precise-clipping -b 5`
 
 See [Parameters](#parameters), the option `GraphAligner --help` and the subsections below for more information and options
 
@@ -53,6 +55,7 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
 - `--global-alignment` force the read to be aligned end-to-end. Normally the alignment is stopped if the score gets too poor. This forces the alignment to continue to the end of the read regardless of score. If you use this you should do some other filtering on the alignments to remove false alignments.
+- `--precise-clipping` clip the ends of the read more precisely. Recommended for Illumina reads
 
 Seeding:
 

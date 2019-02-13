@@ -46,7 +46,7 @@ int main(int argc, char** argv)
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
-		("exact-endpos", "clip the alignment ends exactly instead of +-30bp")
+		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -113,7 +113,7 @@ int main(int argc, char** argv)
 	params.outputAllAlns = false;
 	params.forceGlobal = false;
 	params.outputJSON = false;
-	params.exactEndPos = false;
+	params.preciseClipping = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -139,7 +139,7 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("global-alignment")) params.forceGlobal = true;
-	if (vm.count("exact-endpos")) params.exactEndPos = true;
+	if (vm.count("precise-clipping")) params.preciseClipping = true;
 
 	bool paramError = false;
 

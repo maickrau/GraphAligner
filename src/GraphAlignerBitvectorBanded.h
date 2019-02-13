@@ -133,7 +133,7 @@ public:
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
-		if (!params.exactEndPos && !forceGlobal) removeWronglyAlignedEnd(slice);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -143,7 +143,7 @@ public:
 		assert(slice.slices.back().minScore <= (ScoreType)sequence.size() + (ScoreType)WordConfiguration<Word>::WordSize * 2);
 
 		OnewayTrace result;
-		if (params.exactEndPos)
+		if (params.preciseClipping)
 		{
 			result = getReverseTraceFromTableExactEndPos(sequence, slice, reusableState);
 		}
@@ -195,14 +195,14 @@ public:
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
-		if (!params.exactEndPos && !forceGlobal) removeWronglyAlignedEnd(slice);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
 		OnewayTrace result;
-		if (params.exactEndPos)
+		if (params.preciseClipping)
 		{
 			result = getReverseTraceFromTableExactEndPos(alignableSequence, slice, reusableState);
 		}
@@ -774,7 +774,7 @@ private:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	template <bool ExactEndPos, typename NodeChunkType>
+	template <bool PreciseClipping, typename NodeChunkType>
 	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks) const
 	{
 		assert(incoming.size() > 0);
@@ -861,7 +861,7 @@ private:
 		result.minScore = ws.scoreEnd;
 		result.minScoreNode = i;
 		result.minScoreNodeOffset = 0;
-		if (ExactEndPos)
+		if (PreciseClipping)
 		{
 			result.maxExactEndposScore = ws.maxXScore();
 			result.maxExactEndposNode = i;
@@ -1038,7 +1038,7 @@ private:
 					result.minScore = ws.scoreEnd;
 					result.minScoreNodeOffset = pos;
 				}
-				if (ExactEndPos)
+				if (PreciseClipping)
 				{
 					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore());
 				}
@@ -1236,7 +1236,7 @@ private:
 			NodeCalculationResult nodeCalc;
 			if (i < params.graph.firstAmbiguous)
 			{
-				if (params.exactEndPos)
+				if (params.preciseClipping)
 				{
 					nodeCalc = calculateNode<true>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i));
 					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
@@ -1248,7 +1248,7 @@ private:
 			}
 			else
 			{
-				if (params.exactEndPos)
+				if (params.preciseClipping)
 				{
 					nodeCalc = calculateNode<true>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i));
 					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
@@ -1304,7 +1304,7 @@ private:
 				result.minScoreNode = nodeCalc.minScoreNode;
 				result.minScoreNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
-			if (params.exactEndPos && nodeCalc.maxExactEndposScore > result.maxExactEndposScore)
+			if (params.preciseClipping && nodeCalc.maxExactEndposScore > result.maxExactEndposScore)
 			{
 				result.maxExactEndposScore = nodeCalc.maxExactEndposScore;
 				result.maxExactEndposNode = nodeCalc.maxExactEndposNode;
@@ -1324,7 +1324,7 @@ private:
 
 		assert(result.minScoreNode != std::numeric_limits<LengthType>::max());
 
-		if (!params.exactEndPos && j + WordConfiguration<Word>::WordSize > sequence.size())
+		if (!params.preciseClipping && j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
 			flattenLastSliceEnd<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, result, j, sequence);
 		}
@@ -1437,11 +1437,11 @@ private:
 		slice.minScore = sliceResult.minScore;
 		slice.maxExactEndposScore = sliceResult.maxExactEndposScore + slice.j;
 		slice.maxExactEndposNode = sliceResult.maxExactEndposNode;
-		assert(!params.exactEndPos || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
-		assert(!params.exactEndPos || sliceResult.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
-		assert(!params.exactEndPos || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
-		assert(!params.exactEndPos || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
-		assert(!params.exactEndPos || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
 		assert(slice.minScore >= previousSlice.minScore);
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 		slice.bandwidth = bandwidth;

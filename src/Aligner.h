@@ -27,7 +27,7 @@ struct AlignerParams
 	std::string seederCachePrefix;
 	bool forceGlobal;
 	bool outputJSON;
-	bool exactEndPos;
+	bool preciseClipping;
 };
 
 void alignReads(AlignerParams params);
