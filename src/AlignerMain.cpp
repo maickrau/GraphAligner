@@ -46,7 +46,6 @@ int main(int argc, char** argv)
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
-		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -64,9 +63,13 @@ int main(int argc, char** argv)
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
+	boost::program_options::options_description hidden("hidden");
+	hidden.add_options()
+		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
+	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden);
 
 	boost::program_options::variables_map vm;
 	try
