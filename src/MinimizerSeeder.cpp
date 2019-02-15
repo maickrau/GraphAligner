@@ -53,13 +53,11 @@ void iterateMinimizers(const std::string& str, OrderF kmerOrder, size_t minimize
 	window.resize(windowSize - minimizerLength + 1);
 start:
 	while (offset < str.size() && !validChar[str[offset]]) offset++;
+	if (offset + minimizerLength > str.size()) return;
 	size_t kmer = 0;
-	size_t minOrder = kmerOrder(kmer);
-	size_t minPos = offset;
-	size_t minKmer = kmer;
-	size_t minWindowPos = 0;
-	for (size_t i = 0; i < minimizerLength && offset+i < str.size(); i++)
+	for (size_t i = 0; i < minimizerLength; i++)
 	{
+		assert(offset+i < str.size());
 		if (!validChar[str[offset+i]])
 		{
 			offset = offset+i;
@@ -68,11 +66,27 @@ start:
 		kmer <<= 2;
 		kmer |= charToInt(str[offset+i]);
 	}
+	size_t minOrder = kmerOrder(kmer);
+	size_t minPos = offset + minimizerLength - 1;
+	size_t minKmer = kmer;
+	size_t minWindowPos = minimizerLength % window.size();
 	window[minimizerLength % window.size()] = kmer;
 	for (size_t i = minimizerLength; i < windowSize && offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
+			if (minOrder != std::numeric_limits<size_t>::max())
+			{
+				for (size_t j = 0; j < window.size(); j++)
+				{
+					size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength - 1;
+					if (seqPos >= str.size()) continue;
+					if (kmerOrder(window[j]) == minOrder)
+					{
+						callback(seqPos, window[j]);
+					}
+				}
+			}
 			offset = offset+i;
 			goto start;
 		}
@@ -83,12 +97,23 @@ start:
 		if (kmerOrder(kmer) < minOrder)
 		{
 			minOrder = kmerOrder(kmer);
-			minPos = offset + i - minimizerLength + 1;
+			minPos = offset + i;
 			minKmer = kmer;
 			minWindowPos = i % window.size();
 		}
 	}
-	if (minOrder != std::numeric_limits<size_t>::max()) callback(minPos, minKmer);
+	if (minOrder != std::numeric_limits<size_t>::max())
+	{
+		for (size_t j = 0; j < window.size(); j++)
+		{
+			size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength - 1;
+			if (seqPos >= str.size()) continue;
+			if (kmerOrder(window[j]) == minOrder)
+			{
+				callback(seqPos, window[j]);
+			}
+		}
+	}
 	for (size_t i = windowSize; offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
@@ -122,7 +147,7 @@ start:
 				{
 					if (kmerOrder(window[j]) == minOrder)
 					{
-						callback(offset + i - ((i - j) % window.size()), minKmer);
+						callback(offset + i - ((i - j) % window.size()), window[j]);
 					}
 				}
 			}
@@ -130,7 +155,7 @@ start:
 		else if (kmerOrder(kmer) <= minOrder)
 		{
 			minOrder = kmerOrder(kmer);
-			minPos = offset + i - minimizerLength + 1;
+			minPos = offset + i;
 			minKmer = kmer;
 			minWindowPos = i % window.size();
 			if (minOrder != std::numeric_limits<size_t>::max()) callback(minPos, minKmer);
@@ -145,7 +170,7 @@ minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
 rd(),
-gen(rd()),
+gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
 	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
@@ -168,7 +193,7 @@ minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
 rd(),
-gen(rd()),
+gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
 	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
