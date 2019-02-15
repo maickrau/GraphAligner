@@ -1,6 +1,7 @@
 #ifndef MinimizerSeeder_h
 #define MinimizerSeeder_h
 
+#include <random>
 #include <vector>
 #include <string>
 #include "GfaGraph.h"
@@ -16,14 +17,18 @@ public:
 private:
 	SeedHit matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const;
 	void addMinimizers(const std::string& str, int nodeId);
-	void initOrder();
-	void initEmptyIndex();
+	size_t getOrder(size_t kmer) const;
+	size_t getOrAddOrder(size_t kmer);
 	void initMaxCount();
-	std::vector<std::vector<std::pair<int, size_t>>> minimizerIndex;
-	std::vector<size_t> kmerOrder;
+	void finalizeOrder();
+	std::unordered_map<size_t, std::vector<std::pair<int, size_t>>> minimizerIndex;
+	std::unordered_map<size_t, size_t> kmerOrder;
 	size_t minimizerLength;
 	size_t windowSize;
 	size_t maxCount;
+	std::random_device rd;
+	std::mt19937 gen;
+	std::uniform_int_distribution<size_t> dis;
 };
 
 #endif

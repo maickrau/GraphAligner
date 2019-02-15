@@ -50,7 +50,7 @@ int main(int argc, char** argv)
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
 		("seeds-minimizer-count", boost::program_options::value<size_t>(), "arg least common minimizers fully contained in a node (int) (-1 for all)")
-		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding, don't use numbers above 12 (int)")
+		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
@@ -200,6 +200,11 @@ int main(int argc, char** argv)
 	if (params.mxmLength < 2)
 	{
 		std::cerr << "mum/mem minimum length must be >= 2" << std::endl;
+		paramError = true;
+	}
+	if (params.minimizerLength >= sizeof(size_t)*8/2)
+	{
+		std::cerr << "Maximum minimizer length is " << (sizeof(size_t)*8/2)-1 << std::endl;
 		paramError = true;
 	}
 	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerCount != 0) ? 1 : 0);
