@@ -148,6 +148,8 @@ rd(),
 gen(rd()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
+	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
+	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	for (auto node : graph.nodes)
@@ -169,6 +171,8 @@ rd(),
 gen(rd()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
+	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
+	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	for (int i = 0; i < graph.node_size(); i++)
@@ -185,9 +189,9 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	std::vector<std::tuple<size_t, size_t, size_t>> matchIndices;
 	iterateMinimizers(sequence, [this](size_t kmer){ return getOrder(kmer); }, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
 	{
-		assert(minimizerIndex.count(kmer) == 1);
-		assert(minimizerIndex.at(kmer).size() >= 1);
-		matchIndices.emplace_back(pos, kmer, minimizerIndex.at(kmer).size());
+		auto found = minimizerIndex.find(kmer);
+		assert(found != minimizerIndex.end());
+		matchIndices.emplace_back(pos, kmer, found->second.size());
 	});
 	//prefer less common minimizers
 	std::sort(matchIndices.begin(), matchIndices.end(), [this](const std::tuple<size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t>& right)
@@ -197,7 +201,9 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	std::vector<SeedHit> result;
 	for (auto match : matchIndices)
 	{
-		for (auto index : minimizerIndex.at(std::get<1>(match)))
+		auto found = minimizerIndex.find(std::get<1>(match));
+		assert(found != minimizerIndex.end());
+		for (auto index : found->second)
 		{
 			if (result.size() >= maxCount) break;
 			result.push_back(matchToSeedHit(index.first, index.second, std::get<0>(match), std::get<2>(match)));
@@ -249,16 +255,15 @@ void MinimizerSeeder::initMaxCount()
 
 void MinimizerSeeder::finalizeOrder()
 {
-	std::unordered_set<size_t> removeKeys;
+	decltype(kmerOrder) newOrder;
+	newOrder.set_empty_key(std::numeric_limits<size_t>::max());
 	for (auto pair : kmerOrder)
 	{
-		if (minimizerIndex.count(pair.first) == 0 || minimizerIndex.at(pair.first).size() == 0)
+		auto found = minimizerIndex.find(pair.first);
+		if (found != minimizerIndex.end() && found->second.size() > 0)
 		{
-			removeKeys.insert(pair.first);
+			newOrder[pair.first] = pair.second;
 		}
 	}
-	for (auto key : removeKeys)
-	{
-		kmerOrder.erase(key);
-	}
+	std::swap(kmerOrder, newOrder);
 }

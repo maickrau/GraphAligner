@@ -21,8 +21,8 @@ private:
 	size_t getOrAddOrder(size_t kmer);
 	void initMaxCount();
 	void finalizeOrder();
-	std::unordered_map<size_t, std::vector<std::pair<int, size_t>>> minimizerIndex;
-	std::unordered_map<size_t, size_t> kmerOrder;
+	google::dense_hash_map<size_t, std::vector<std::pair<int, size_t>>> minimizerIndex;
+	google::dense_hash_map<size_t, size_t> kmerOrder;
 	size_t minimizerLength;
 	size_t windowSize;
 	size_t maxCount;
