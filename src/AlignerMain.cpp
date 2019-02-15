@@ -49,6 +49,9 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
+		("seeds-minimizer-count", boost::program_options::value<size_t>(), "arg least common minimizers fully contained in a node (int) (-1 for all)")
+		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding, don't use numbers above 12 (int)")
+		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
@@ -117,6 +120,9 @@ int main(int argc, char** argv)
 	params.forceGlobal = false;
 	params.outputJSON = false;
 	params.preciseClipping = false;
+	params.minimizerCount = 0;
+	params.minimizerLength = 12;
+	params.minimizerWindowSize = 101;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -124,6 +130,9 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
+	if (vm.count("seeds-minimizer-count")) params.minimizerCount = vm["seeds-minimizer-count"].as<size_t>();
+	if (vm.count("seeds-minimizer-length")) params.minimizerLength = vm["seeds-minimizer-length"].as<size_t>();
+	if (vm.count("seeds-minimizer-windowsize")) params.minimizerWindowSize = vm["seeds-minimizer-windowsize"].as<size_t>();
 	if (vm.count("seeds-file")) params.seedFiles = vm["seeds-file"].as<std::vector<std::string>>();
 	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<size_t>();
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
@@ -193,11 +202,12 @@ int main(int argc, char** argv)
 		std::cerr << "mum/mem minimum length must be >= 2" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerCount != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		//use MUMs as the default seeding method
 		params.mumCount = std::numeric_limits<size_t>::max();
+		params.mxmLength = 20;
 	}
 	if (pickedSeedingMethods > 1)
 	{

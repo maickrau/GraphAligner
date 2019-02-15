@@ -28,6 +28,9 @@ struct AlignerParams
 	bool forceGlobal;
 	bool outputJSON;
 	bool preciseClipping;
+	size_t minimizerCount;
+	size_t minimizerLength;
+	size_t minimizerWindowSize;
 };
 
 void alignReads(AlignerParams params);
