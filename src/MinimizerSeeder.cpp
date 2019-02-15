@@ -60,14 +60,22 @@ start:
 	size_t minWindowPos = 0;
 	for (size_t i = 0; i < minimizerLength && offset+i < str.size(); i++)
 	{
-		if (!validChar[str[offset+i]]) goto start;
+		if (!validChar[str[offset+i]])
+		{
+			offset = offset+i;
+			goto start;
+		}
 		kmer <<= 2;
 		kmer |= charToInt(str[offset+i]);
 	}
 	window[minimizerLength % window.size()] = kmer;
 	for (size_t i = minimizerLength; i < windowSize && offset+i < str.size(); i++)
 	{
-		if (!validChar[str[offset+i]]) goto start;
+		if (!validChar[str[offset+i]])
+		{
+			offset = offset+i;
+			goto start;
+		}
 		kmer <<= 2;
 		kmer &= mask;
 		kmer |= charToInt(str[offset+i]);
@@ -83,7 +91,11 @@ start:
 	if (minOrder != std::numeric_limits<size_t>::max()) callback(minPos, minKmer);
 	for (size_t i = windowSize; offset+i < str.size(); i++)
 	{
-		if (!validChar[str[offset+i]]) goto start;
+		if (!validChar[str[offset+i]])
+		{
+			offset = offset+i;
+			goto start;
+		}
 		kmer <<= 2;
 		kmer &= mask;
 		kmer |= charToInt(str[offset+i]);
