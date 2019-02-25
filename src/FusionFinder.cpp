@@ -13,6 +13,7 @@
 #include "fastqloader.h"
 #include "GraphAlignerWrapper.h"
 #include "ThreadReadAssertion.h"
+#include "MummerSeeder.h"
 
 struct FusionAlignment
 {
@@ -198,7 +199,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 	{
 		try
 		{
-			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true);
+			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true, false);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
 			int leftAlnSize = 0;
@@ -233,14 +234,13 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 	}
 }
 
-std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads)
+std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads, std::unordered_map<std::string, std::unordered_set<size_t>> readsInNonfusionGraph)
 {
 	std::cerr << "get fusions" << std::endl;
 	std::vector<std::thread> threads;
 	size_t nextPair = 0;
 	std::mutex nextPairMutex;
 	std::vector<std::unordered_map<std::string, FusionAlignment>> bestFusionAlnsPerThread;
-	std::unordered_map<std::string, std::unordered_set<size_t>> readsInNonfusionGraph;
 	std::mutex readsInNonfusionGraphMutex;
 	bestFusionAlnsPerThread.resize(numThreads);
 	for (size_t thread = 0; thread < numThreads; thread++)
@@ -468,6 +468,28 @@ void writeCorrected(const std::vector<FusionAlignment>& result, const GfaGraph& 
 	}
 }
 
+std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<FastQ>& reads)
+{
+	GfaGraph fakeGraph;
+	std::vector<std::string> nameMapping;
+	for (auto transcript : transcripts)
+	{
+		fakeGraph.nodes[nameMapping.size()] = transcript.sequence();
+		nameMapping.push_back(geneFromTranscript(transcript.name()));
+	}
+	auto seeder = MummerSeeder(fakeGraph, "");
+	std::unordered_map<std::string, std::unordered_set<size_t>> result;
+	for (size_t i = 0; i < reads.size(); i++)
+	{
+		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 20);
+		for (auto seed : seeds)
+		{
+			result[nameMapping[seed.nodeID]].insert(i);
+		}
+	}
+	return result;
+}
+
 int main(int argc, char** argv)
 {
 	std::cerr << "Fusion finder " << VERSION << std::endl;
@@ -497,8 +519,10 @@ int main(int argc, char** argv)
 	auto transcripts = CommonUtils::LoadVGAlignments(transcriptAlignmentFile);
 	std::cerr << "get gene belongers" << std::endl;
 	auto geneBelongers = getGeneBelongers(transcripts, graph);
+	std::cerr << "get extra gene-matches" << std::endl;
+	auto extraGeneMatches = getExtraGeneMatches(transcripts, reads);
 	std::cerr << "get alns" << std::endl;
-	auto bestAlns = getBestAlignments(putativeFusions, hasSeeds, graph, geneBelongers, reads, maxScoreFraction, minFusionLen, fusionPenalty, numThreads);
+	auto bestAlns = getBestAlignments(putativeFusions, hasSeeds, graph, geneBelongers, reads, maxScoreFraction, minFusionLen, fusionPenalty, numThreads, extraGeneMatches);
 	std::cerr << "write fusions" << std::endl;
 	writeFusions(bestAlns, resultFusionFile);
 	std::cerr << "write corrected reads" << std::endl;
