@@ -104,6 +104,7 @@ public:
 	size_t ComponentSize() const;
 
 private:
+	void findLinearizable();
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
@@ -116,6 +117,7 @@ private:
 	std::vector<std::vector<size_t>> inNeighbors;
 	std::vector<std::vector<size_t>> outNeighbors;
 	std::vector<bool> reverse;
+	std::vector<bool> linearizable;
 	std::vector<NodeChunkSequence> nodeSequences;
 	size_t bpSize;
 	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;

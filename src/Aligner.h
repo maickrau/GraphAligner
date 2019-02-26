@@ -29,6 +29,7 @@ struct AlignerParams
 	double selectionECutoff;
 	bool forceGlobal;
 	bool outputJSON;
+	bool preciseClipping;
 };
 
 void alignReads(AlignerParams params);

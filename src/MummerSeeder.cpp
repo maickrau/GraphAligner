@@ -5,7 +5,7 @@
 #include "CommonUtils.h"
 #include "MummerSeeder.h"
 
-char lowercase(char c)
+char lowercaseRef(char c)
 {
 	switch(c)
 	{
@@ -26,6 +26,31 @@ char lowercase(char c)
 		default:
 		case '`':
 			return '`';
+	}
+	assert(false);
+	return std::numeric_limits<char>::max();
+}
+
+char lowercaseSeq(char c)
+{
+	switch(c)
+	{
+		case 'a':
+		case 'A':
+			return 'a';
+		case 'c':
+		case 'C':
+			return 'c';
+		case 'g':
+		case 'G':
+			return 'g';
+		case 'u':
+		case 'U':
+		case 't':
+		case 'T':
+			return 't';
+		default:
+			return 'x';
 	}
 	assert(false);
 	return std::numeric_limits<char>::max();
@@ -75,7 +100,7 @@ void MummerSeeder::initTree(const GfaGraph& graph)
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
-		seq[i] = lowercase(seq[i]);
+		seq[i] = lowercaseRef(seq[i]);
 	}
 	seq.shrink_to_fit();
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 0, true));
@@ -93,7 +118,7 @@ void MummerSeeder::initTree(const vg::Graph& graph)
 	nodePositions.push_back(seq.size());
 	for (size_t i = 0; i < seq.size(); i++)
 	{
-		seq[i] = lowercase(seq[i]);
+		seq[i] = lowercaseRef(seq[i]);
 	}
 	seq.shrink_to_fit();
 	matcher = std::make_unique<mummer::mummer::sparseSA>(mummer::mummer::sparseSA::create_auto(seq.c_str(), seq.size(), 0, true));
@@ -135,24 +160,73 @@ void MummerSeeder::loadFrom(const std::string& prefix)
 	matcher->load(prefix + "_index");
 }
 
+struct MatchWithOrientation
+{
+	MatchWithOrientation(const mummer::mummer::match_t& match, bool reverse) :
+	match(match),
+	reverse(reverse)
+	{
+	}
+	mummer::mummer::match_t match;
+	bool reverse;
+	bool operator>(const MatchWithOrientation& other) const
+	{
+		return match.len > other.match.len;
+	}
+};
+
 std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxCount, size_t minLen) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
-		sequence[i] = lowercase(sequence[i]);
+		sequence[i] = lowercaseSeq(sequence[i]);
 	}
 	assert(matcher != nullptr);
-	std::vector<mummer::mummer::match_t> MAMs;
-	matcher->MAM(sequence, minLen, false, MAMs);
-	revcompInPlace(sequence);
-	std::vector<mummer::mummer::match_t> bwMAMs;
-	matcher->MAM(sequence, minLen, false, bwMAMs);
-	auto seeds = matchesToSeeds(sequence.size(), MAMs, bwMAMs);
-	std::sort(seeds.begin(), seeds.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
-	if (seeds.size() > maxCount)
+	std::priority_queue<MatchWithOrientation, std::vector<MatchWithOrientation>, std::greater<MatchWithOrientation>> matches;
+	matcher->findMAM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
 	{
-		seeds.erase(seeds.begin() + maxCount, seeds.end());
+		if (matches.size() < maxCount)
+		{
+			matches.emplace(match, false);
+			return;
+		}
+		if (matches.top().match.len < match.len)
+		{
+			matches.pop();
+			matches.emplace(match, false);
+		}
+	});
+	revcompInPlace(sequence);
+	matcher->findMAM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	{
+		if (matches.size() < maxCount)
+		{
+			matches.emplace(match, true);
+			return;
+		}
+		if (matches.top().match.len < match.len)
+		{
+			matches.pop();
+			matches.emplace(match, true);
+		}
+	});
+	std::vector<mummer::mummer::match_t> MAMs;
+	std::vector<mummer::mummer::match_t> bwMAMs;
+	while (matches.size() > 0)
+	{
+		if (matches.top().reverse)
+		{
+			bwMAMs.push_back(matches.top().match);
+		}
+		else
+		{
+			MAMs.push_back(matches.top().match);
+		}
+		matches.pop();
 	}
+	auto seeds = matchesToSeeds(sequence.size(), MAMs, bwMAMs);
+	assert(seeds.size() <= maxCount);
+	std::sort(seeds.begin(), seeds.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
 	return seeds;
 }
 
@@ -160,20 +234,54 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 {
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
-		sequence[i] = lowercase(sequence[i]);
+		sequence[i] = lowercaseSeq(sequence[i]);
 	}
 	assert(matcher != nullptr);
-	std::vector<mummer::mummer::match_t> MEMs;
-	matcher->MEM(sequence, minLen, false, MEMs);
-	revcompInPlace(sequence);
-	std::vector<mummer::mummer::match_t> bwMEMs;
-	matcher->MEM(sequence, minLen, false, bwMEMs);
-	auto seeds = matchesToSeeds(sequence.size(), MEMs, bwMEMs);
-	std::sort(seeds.begin(), seeds.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
-	if (seeds.size() > maxCount)
+	std::priority_queue<MatchWithOrientation, std::vector<MatchWithOrientation>, std::greater<MatchWithOrientation>> matches;
+	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
 	{
-		seeds.erase(seeds.begin() + maxCount, seeds.end());
+		if (matches.size() < maxCount)
+		{
+			matches.emplace(match, false);
+			return;
+		}
+		if (matches.top().match.len < match.len)
+		{
+			matches.pop();
+			matches.emplace(match, false);
+		}
+	});
+	revcompInPlace(sequence);
+	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	{
+		if (matches.size() < maxCount)
+		{
+			matches.emplace(match, true);
+			return;
+		}
+		if (matches.top().match.len < match.len)
+		{
+			matches.pop();
+			matches.emplace(match, true);
+		}
+	});
+	std::vector<mummer::mummer::match_t> MAMs;
+	std::vector<mummer::mummer::match_t> bwMAMs;
+	while (matches.size() > 0)
+	{
+		if (matches.top().reverse)
+		{
+			bwMAMs.push_back(matches.top().match);
+		}
+		else
+		{
+			MAMs.push_back(matches.top().match);
+		}
+		matches.pop();
 	}
+	auto seeds = matchesToSeeds(sequence.size(), MAMs, bwMAMs);
+	assert(seeds.size() <= maxCount);
+	std::sort(seeds.begin(), seeds.end(), [](const SeedHit& left, const SeedHit& right) { return left.matchLen > right.matchLen; });
 	return seeds;
 }
 

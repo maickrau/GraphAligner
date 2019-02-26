@@ -178,19 +178,8 @@ public:
 			if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
 			if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
 		}
-		if (j + WordConfiguration<Word>::WordSize > sequence.size())
-		{
-			Word mask = WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size());
-			assert((BA & mask) == 0);
-			assert((BT & mask) == 0);
-			assert((BC & mask) == 0);
-			assert((BG & mask) == 0);
-			BA |= mask;
-			BT |= mask;
-			BC |= mask;
-			BG |= mask;
-		}
-		assert((BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		assert((j + WordConfiguration<Word>::WordSize > sequence.size()) || (BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		assert((j + WordConfiguration<Word>::WordSize <= sequence.size()) || ((BA | BC | BT | BG) & (WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size()))) == WordConfiguration<Word>::AllZeros);
 		EqVector EqV {BA, BT, BC, BG};
 		return EqV;
 	}

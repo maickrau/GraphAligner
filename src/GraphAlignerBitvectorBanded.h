@@ -43,6 +43,8 @@ private:
 		minScore(std::numeric_limits<ScoreType>::max()),
 		minScoreNode(std::numeric_limits<LengthType>::max()),
 		minScoreNodeOffset(std::numeric_limits<LengthType>::max()),
+		maxExactEndposScore(std::numeric_limits<ScoreType>::min()),
+		maxExactEndposNode(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(),
 		scores(),
 		correctness(),
@@ -59,6 +61,8 @@ private:
 		minScore(std::numeric_limits<ScoreType>::max()),
 		minScoreNode(std::numeric_limits<LengthType>::max()),
 		minScoreNodeOffset(std::numeric_limits<LengthType>::max()),
+		maxExactEndposScore(std::numeric_limits<ScoreType>::min()),
+		maxExactEndposNode(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(vectorMap),
 		scores(),
 		correctness(),
@@ -74,6 +78,8 @@ private:
 		ScoreType minScore;
 		LengthType minScoreNode;
 		LengthType minScoreNodeOffset;
+		ScoreType maxExactEndposScore;
+		LengthType maxExactEndposNode;
 		NodeSlice<LengthType, ScoreType, Word, true> scoresVectorMap;
 		NodeSlice<LengthType, ScoreType, Word, false> scores;
 		AlignmentCorrectnessEstimationState correctness;
@@ -91,6 +97,8 @@ private:
 			result.minScore = minScore;
 			result.minScoreNode = minScoreNode;
 			result.minScoreNodeOffset = minScoreNodeOffset;
+			result.maxExactEndposNode = maxExactEndposNode;
+			result.maxExactEndposScore = maxExactEndposScore;
 			assert(scores.size() != 0);
 			result.scores = scores;
 			result.correctness = correctness;
@@ -125,7 +133,7 @@ public:
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
-		if (!forceGlobal) removeWronglyAlignedEnd(slice);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -135,8 +143,14 @@ public:
 		assert(slice.slices.back().minScore <= (ScoreType)sequence.size() + (ScoreType)WordConfiguration<Word>::WordSize * 2);
 
 		OnewayTrace result;
-
-		result = getReverseTraceFromTable(sequence, slice, reusableState);
+		if (params.preciseClipping)
+		{
+			result = getReverseTraceFromTableExactEndPos(sequence, slice, reusableState);
+		}
+		else
+		{
+			result = getReverseTraceFromTableStartLastRow(sequence, slice, reusableState);
+		}
 
 		return result;
 	}
@@ -181,13 +195,21 @@ public:
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
-		if (!forceGlobal) removeWronglyAlignedEnd(slice);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
-		auto result = getReverseTraceFromTable(alignableSequence, slice, reusableState);
+		OnewayTrace result;
+		if (params.preciseClipping)
+		{
+			result = getReverseTraceFromTableExactEndPos(alignableSequence, slice, reusableState);
+		}
+		else
+		{
+			result = getReverseTraceFromTableStartLastRow(alignableSequence, slice, reusableState);
+		}
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{
 			result.trace[i].first.seqPos += 1;
@@ -199,14 +221,82 @@ public:
 
 private:
 
-	OnewayTrace getReverseTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromTableExactEndPos(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
+	{
+		assert(slice.slices.size() > 1);
+		size_t bestIndex = 1;
+		assert(slice.slices[1].maxExactEndposScore != std::numeric_limits<ScoreType>::max());
+		for (size_t i = 1; i < slice.slices.size(); i++)
+		{
+			assert(slice.slices[i].maxExactEndposScore != std::numeric_limits<ScoreType>::max());
+			if (slice.slices[i].maxExactEndposScore > slice.slices[bestIndex].maxExactEndposScore)
+			{
+				bestIndex = i;
+			}
+		}
+		auto node = slice.slices[bestIndex].maxExactEndposNode;
+		auto score = slice.slices[bestIndex].maxExactEndposScore;
+		typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem previous;
+		if (slice.slices[bestIndex-1].scores.hasNode(node))
+		{
+			previous = slice.slices[bestIndex-1].scores.node(node);
+		}
+		else
+		{
+			for (size_t i = 0; i < previous.NUM_CHUNKS; i++)
+			{
+				previous.HP[i] = WordConfiguration<Word>::AllOnes;
+				previous.HN[i] = WordConfiguration<Word>::AllZeros;
+			}
+		}
+		auto nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence);
+		size_t nodeOffset = std::numeric_limits<size_t>::max();
+		size_t bvOffset = std::numeric_limits<size_t>::max();
+		for (size_t i = 0; i < nodeSlices.size(); i++)
+		{
+			auto maxScore = nodeSlices[i].maxXScore() + (ScoreType)slice.slices[bestIndex].j;
+			assert(maxScore <= score);
+			if (maxScore == score)
+			{
+				for (int off = WordConfiguration<Word>::WordSize-1; off >= 0; off--)
+				{
+					// if (slice.slices[bestIndex].j + off >= sequence.size()) continue;
+					auto scoreHere = nodeSlices[i].getXScore(off) + (ScoreType)slice.slices[bestIndex].j;
+					assert(scoreHere <= score);
+					if (scoreHere == score)
+					{
+						if (nodeOffset == std::numeric_limits<size_t>::max() || off > bvOffset)
+						{
+							nodeOffset = i;
+							bvOffset = off;
+						}
+					}
+				}
+			}
+		}
+		assert(nodeOffset != std::numeric_limits<size_t>::max());
+		assert(bvOffset != std::numeric_limits<size_t>::max());
+		assert(slice.slices[bestIndex].j + bvOffset < sequence.size());
+		ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
+		MatrixPosition startPos { node, nodeOffset, slice.slices[bestIndex].j + bvOffset };
+		return getReverseTraceFromTable(sequence, slice, reusableState, startPos, startScore);
+	}
+
+	OnewayTrace getReverseTraceFromTableStartLastRow(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
+	{
+		ScoreType startScore = slice.slices.back().minScore;
+		MatrixPosition startPos {slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1)};
+		return getReverseTraceFromTable(sequence, slice, reusableState, startPos, startScore);
+	}
+
+	OnewayTrace getReverseTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore) const
 	{
 		assert(slice.slices.size() > 0);
 		assert(slice.slices.back().minScoreNode != std::numeric_limits<LengthType>::max());
 		assert(slice.slices.back().minScoreNodeOffset != std::numeric_limits<LengthType>::max());
 		OnewayTrace result;
-		result.score = slice.slices.back().minScore;
-		result.trace.emplace_back(MatrixPosition {slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1)}, false);
+		result.score = startScore;
+		result.trace.emplace_back(startPos, false);
 		LengthType currentNode = std::numeric_limits<LengthType>::max();
 		size_t currentSlice = slice.slices.size();
 		std::vector<WordSlice> nodeSlices;
@@ -569,6 +659,8 @@ private:
 		ScoreType minScore;
 		LengthType minScoreNode;
 		LengthType minScoreNodeOffset;
+		LengthType maxExactEndposNode;
+		ScoreType maxExactEndposScore;
 		size_t cellsProcessed;
 #ifdef SLICEVERBOSE
 		size_t nodesProcessed;
@@ -682,7 +774,7 @@ private:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	template <typename NodeChunkType>
+	template <bool PreciseClipping, typename NodeChunkType>
 	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks) const
 	{
 		assert(incoming.size() > 0);
@@ -693,6 +785,8 @@ private:
 		result.minScore = std::numeric_limits<ScoreType>::max();
 		result.minScoreNode = std::numeric_limits<LengthType>::max();
 		result.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
+		result.maxExactEndposScore = std::numeric_limits<ScoreType>::min();
+		result.maxExactEndposNode = std::numeric_limits<LengthType>::max();
 		result.cellsProcessed = 0;
 		auto nodeLength = params.graph.NodeLength(i);
 
@@ -767,6 +861,11 @@ private:
 		result.minScore = ws.scoreEnd;
 		result.minScoreNode = i;
 		result.minScoreNodeOffset = 0;
+		if (PreciseClipping)
+		{
+			result.maxExactEndposScore = ws.maxXScore();
+			result.maxExactEndposNode = i;
+		}
 
 		if (slice.exists)
 		{
@@ -939,6 +1038,10 @@ private:
 					result.minScore = ws.scoreEnd;
 					result.minScoreNodeOffset = pos;
 				}
+				if (PreciseClipping)
+				{
+					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore());
+				}
 				charChunk >>= 2;
 				HP >>= 1;
 				HN >>= 1;
@@ -1028,12 +1131,15 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
-		ScoreType currentMinimumScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
-		LengthType currentMinimumNode = -1;
-		LengthType currentMinimumNodeOffset = -1;
-		size_t cellsProcessed = 0;
+		NodeCalculationResult result;
+		result.minScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
+		result.minScoreNode = std::numeric_limits<LengthType>::max();
+		result.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
+		result.maxExactEndposNode = std::numeric_limits<LengthType>::min();
+		result.maxExactEndposScore = std::numeric_limits<ScoreType>::min();
+		result.cellsProcessed = 0;
 #ifdef SLICEVERBOSE
-		size_t nodesProcessed = 0;
+		result.nodesProcessed = 0;
 #endif
 
 		EqVector EqV = BV::getEqVector(sequence, j);
@@ -1062,10 +1168,10 @@ private:
 			{
 				assert(node.second.exists);
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.inNeighbors[node.first].size() == 1)
+				if (params.graph.linearizable[node.first])
 				{
 					auto neighbor = params.graph.inNeighbors[node.first][0];
-				 	if (previousBand[params.graph.inNeighbors[node.first][0]] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore)
+				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
 				 	{
 				 		//linear area, no need to add the later node into the queue 
 				 		//because calculating the earlier node will guarantee that the later node will get added
@@ -1085,7 +1191,7 @@ private:
 		}
 		assert(calculableQueue.size() > 0);
 		
-		ScoreType currentMinScoreAtEndRow = currentMinimumScore;
+		ScoreType currentMinScoreAtEndRow = result.minScore;
 		while (calculableQueue.size() > 0)
 		{
 			auto pair = calculableQueue.top();
@@ -1130,11 +1236,27 @@ private:
 			NodeCalculationResult nodeCalc;
 			if (i < params.graph.firstAmbiguous)
 			{
-				nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i));
+				if (params.preciseClipping)
+				{
+					nodeCalc = calculateNode<true>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i));
+					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+				}
+				else
+				{
+					nodeCalc = calculateNode<false>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i));
+				}
 			}
 			else
 			{
-				nodeCalc = calculateNode(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i));
+				if (params.preciseClipping)
+				{
+					nodeCalc = calculateNode<true>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i));
+					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+				}
+				else
+				{
+					nodeCalc = calculateNode<false>(i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i));
+				}
 			}
 			calculableQueue.pop();
 			if (!std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
@@ -1176,36 +1298,33 @@ private:
 					}
 				}
 			}
-			if (nodeCalc.minScore < currentMinimumScore)
+			if (nodeCalc.minScore < result.minScore)
 			{
-				currentMinimumScore = nodeCalc.minScore;
-				currentMinimumNode = nodeCalc.minScoreNode;
-				currentMinimumNodeOffset = nodeCalc.minScoreNodeOffset;
+				result.minScore = nodeCalc.minScore;
+				result.minScoreNode = nodeCalc.minScoreNode;
+				result.minScoreNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
-			assert(currentMinimumScore == currentMinScoreAtEndRow);
-			cellsProcessed += nodeCalc.cellsProcessed;
+			if (params.preciseClipping && nodeCalc.maxExactEndposScore > result.maxExactEndposScore)
+			{
+				result.maxExactEndposScore = nodeCalc.maxExactEndposScore;
+				result.maxExactEndposNode = nodeCalc.maxExactEndposNode;
+			}
+			assert(result.minScore == currentMinScoreAtEndRow);
+			result.cellsProcessed += nodeCalc.cellsProcessed;
 			assert(nodeCalc.cellsProcessed > 0);
 #ifdef SLICEVERBOSE
-			nodesProcessed++;
+			result.nodesProcessed++;
 #endif
-			if (cellsProcessed > params.maxCellsPerSlice) break;
+			if (result.cellsProcessed > params.maxCellsPerSlice) break;
 		}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore);
 #endif
 
-		assert(currentMinimumNode != std::numeric_limits<LengthType>::max());
-		NodeCalculationResult result;
-		result.minScore = currentMinimumScore;
-		result.minScoreNode = currentMinimumNode;
-		result.minScoreNodeOffset = currentMinimumNodeOffset;
-		result.cellsProcessed = cellsProcessed;
-#ifdef SLICEVERBOSE
-		result.nodesProcessed = nodesProcessed;
-#endif
+		assert(result.minScoreNode != std::numeric_limits<LengthType>::max());
 
-		if (j + WordConfiguration<Word>::WordSize > sequence.size())
+		if (!params.preciseClipping && j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
 			flattenLastSliceEnd<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, result, j, sequence);
 		}
@@ -1316,6 +1435,13 @@ private:
 		slice.minScoreNode = sliceResult.minScoreNode;
 		slice.minScoreNodeOffset = sliceResult.minScoreNodeOffset;
 		slice.minScore = sliceResult.minScore;
+		slice.maxExactEndposScore = sliceResult.maxExactEndposScore + slice.j;
+		slice.maxExactEndposNode = sliceResult.maxExactEndposNode;
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
+		assert(!params.preciseClipping || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * 3);
 		assert(slice.minScore >= previousSlice.minScore);
 		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
 		slice.bandwidth = bandwidth;

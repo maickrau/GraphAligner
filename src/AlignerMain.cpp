@@ -74,9 +74,13 @@ int main(int argc, char** argv)
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
+	boost::program_options::options_description hidden("hidden");
+	hidden.add_options()
+		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
+	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(results);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(results).add(hidden);
 
 	boost::program_options::variables_map vm;
 	try
@@ -126,6 +130,7 @@ int main(int argc, char** argv)
 	params.selectionECutoff = -1;
 	params.forceGlobal = false;
 	params.outputJSON = false;
+	params.preciseClipping = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -196,6 +201,7 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("global-alignment")) params.forceGlobal = true;
+	if (vm.count("precise-clipping")) params.preciseClipping = true;
 
 	bool paramError = false;
 

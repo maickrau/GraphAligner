@@ -200,6 +200,20 @@ public:
 		return result;
 	}
 
+	ScoreType maxXScore() const
+	{
+		ScoreType result = maxXScoreLocalMinima();
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(result == maxXScoreCellByCell());
+#endif
+		return result;
+	}
+
+	ScoreType getXScore(int offset) const
+	{
+		return (offset+1) - getValue(offset) * 3;
+	}
+
 	ScoreType getScoreBeforeStart() const
 	{
 		return scoreEnd - WordConfiguration<Word>::popcount(VP) + WordConfiguration<Word>::popcount(VN);
@@ -220,6 +234,15 @@ public:
 private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
+	ScoreType maxXScoreCellByCell() const
+	{
+		ScoreType result = std::numeric_limits<ScoreType>::min();
+		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			result = std::max(result, getXScore(i));
+		}
+		return result;
+	}
 	ScoreType priorityScoreCellByCell(size_t j) const
 	{
 		ScoreType result = getScoreBeforeStart() - j / 2;
@@ -249,6 +272,31 @@ private:
 		return minScore;
 	}
 #endif
+
+	ScoreType maxXScoreLocalMinima() const
+	{
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word priorityCausedMinima = ~VP;
+		Word possibleLocalMinima = (VP & (priorityCausedMinima - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (priorityCausedMinima | ~(priorityCausedMinima - VP)) & ~VP;
+		ScoreType result = std::numeric_limits<ScoreType>::min();
+		possibleLocalMinima |= 1;
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			scoreHere *= -3;
+			scoreHere += (ScoreType)((WordConfiguration<Word>::popcount(currentMinimumMask)));
+			result = std::max(result, scoreHere);
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return result;
+	}
 
 	ScoreType priorityScoreLocalMinima(size_t j) const
 	{

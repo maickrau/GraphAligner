@@ -153,6 +153,13 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 		{
 			std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
 			std::swap(*ptr, read);
+			size_t slept = 0;
+			while (writequeue.size_approx() > 200)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				slept++;
+				if (slept > 100) break;
+			}
 			writequeue.enqueue(ptr);
 		});
 	}
@@ -274,11 +281,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.seedsFound += seeds.size();
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping);
 			}
 			else
 			{
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping);
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
