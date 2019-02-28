@@ -1131,6 +1131,18 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
+		double averageErrorRate = 0;
+		if (j > 0)
+		{
+			averageErrorRate = (double)previousMinScore / (double)j;
+		}
+		double priorityMismatchPenalty = WordConfiguration<Word>::WordSize;
+		if (averageErrorRate > 1.0/(double)WordConfiguration<Word>::WordSize)
+		{
+			priorityMismatchPenalty = 1.0 / averageErrorRate;
+		}
+		assert(priorityMismatchPenalty >= 0);
+		assert(priorityMismatchPenalty <= WordConfiguration<Word>::WordSize);
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		result.minScoreNode = std::numeric_limits<LengthType>::max();
@@ -1145,7 +1157,7 @@ private:
 		EqVector EqV = BV::getEqVector(sequence, j);
 
 		assert(previousSlice.size() > 0);
-		ScoreType zeroScore = previousMinScore - j / 2 - 32;
+		ScoreType zeroScore = previousMinScore*priorityMismatchPenalty - j - 64;
 		if (j == 0)
 		{
 			for (auto node : previousSlice)
@@ -1158,7 +1170,7 @@ private:
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 			}
 		}
@@ -1185,7 +1197,7 @@ private:
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 			}
 		}
@@ -1269,9 +1281,9 @@ private:
 #ifdef SLICEVERBOSE
 			volatile size_t firstslices = currentSlice.node(i).firstSlicesCalcedWhenCalced;
 			volatile size_t calcedslices = currentSlice.node(i).slicesCalcedWhenCalced;
-			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = cellsProcessed;
-			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < cellsProcessed);
-			currentSlice.node(i).slicesCalcedWhenCalced = cellsProcessed;
+			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = result.cellsProcessed;
+			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < result.cellsProcessed);
+			currentSlice.node(i).slicesCalcedWhenCalced = result.cellsProcessed;
 			assert(currentSlice.node(i).firstSlicesCalcedWhenCalced <= currentSlice.node(i).slicesCalcedWhenCalced);
 #endif
 			auto newEnd = thisNode.endSlice;
@@ -1291,7 +1303,8 @@ private:
 						}
 						else
 						{
-							ScoreType newEndPriorityScore = newEnd.getPriorityScore(j);
+							ScoreType newEndPriorityScore = newEnd.getChangedPriorityScore(oldEnd, j, priorityMismatchPenalty);
+							assert(newEndPriorityScore != std::numeric_limits<ScoreType>::max());
 							assert(newEndPriorityScore >= zeroScore);
 							calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 						}

@@ -191,6 +191,15 @@ public:
 		return result;
 	}
 
+	double getChangedPriorityScore(WordSlice oldSlice, size_t j, double priorityMismatchPenalty) const
+	{
+		double result = changedPriorityScoreLocalMinima(oldSlice, j, priorityMismatchPenalty);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(result == changedPriorityScoreCellByCell(oldSlice, j, priorityMismatchPenalty));
+#endif
+		return result;
+	}
+
 	ScoreType getMinScore() const
 	{
 		ScoreType result = minScoreLocalMinima();
@@ -240,6 +249,16 @@ private:
 		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
 		{
 			result = std::max(result, getXScore(i));
+		}
+		return result;
+	}
+	ScoreType changedPriorityScoreCellByCell(WordSlice other, size_t j, double priorityMismatchPenalty) const
+	{
+		ScoreType result = std::numeric_limits<ScoreType>::max();
+		if (getScoreBeforeStart() < other.getScoreBeforeStart()) result = getScoreBeforeStart()*priorityMismatchPenalty - (ScoreType)j + 1;
+		for (size_t i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		{
+			if (getValue(i) < other.getValue(i)) result = std::min(result, (ScoreType)(getValue(i)*priorityMismatchPenalty) - (ScoreType)j - (ScoreType)i);
 		}
 		return result;
 	}
@@ -293,6 +312,45 @@ private:
 			scoreHere *= -3;
 			scoreHere += (ScoreType)((WordConfiguration<Word>::popcount(currentMinimumMask)));
 			result = std::max(result, scoreHere);
+			possibleLocalMinima &= ~currentMinimumMask;
+		}
+		return result;
+	}
+
+	double changedPriorityScoreLocalMinima(WordSlice oldSlice, size_t j, double priorityMismatchPenalty) const
+	{
+		ScoreType otherScoreBeforeStart = oldSlice.getScoreBeforeStart();
+		ScoreType scoreBeforeStart = getScoreBeforeStart();
+		//rightmost VP between any VN's, aka one cell to the left of a minimum
+		Word priorityCausedMinima = ~VP;
+		Word possibleLocalMinima = (VP & (priorityCausedMinima - VP));
+		//shift right by one to get the minimum
+		possibleLocalMinima >>= 1;
+		//leftmost bit might be a minimum if there is no VP to its right
+		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (priorityCausedMinima | ~(priorityCausedMinima - VP)) & ~VP;
+		if (scoreEnd + WordConfiguration<Word>::popcount(VN) >= oldSlice.scoreEnd - WordConfiguration<Word>::popcount(oldSlice.VP))
+		{
+			auto masks = differenceMasks(VP, VN, oldSlice.VP, oldSlice.VN, otherScoreBeforeStart - scoreBeforeStart);
+			auto smaller = masks.first;
+			//corner cases
+			if (smaller != WordConfiguration<Word>::AllOnes)
+			{
+				possibleLocalMinima |= (~smaller) >> 1;
+				possibleLocalMinima |= (~smaller) << 1;
+				possibleLocalMinima |= 1;
+				possibleLocalMinima |= WordConfiguration<Word>::LastBit;
+				possibleLocalMinima &= smaller;
+			}
+		}
+		ScoreType result = (scoreBeforeStart < otherScoreBeforeStart) ? (scoreBeforeStart*priorityMismatchPenalty-j+1) : std::numeric_limits<ScoreType>::max();
+		while (possibleLocalMinima != 0)
+		{
+			//all cells from the right up to the first minimum are one
+			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			scoreHere *= priorityMismatchPenalty;
+			scoreHere -= (ScoreType)((j + WordConfiguration<Word>::popcount(currentMinimumMask))) - 1;
+			result = std::min(result, scoreHere);
 			possibleLocalMinima &= ~currentMinimumMask;
 		}
 		return result;

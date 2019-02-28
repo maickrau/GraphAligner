@@ -64,12 +64,12 @@ public:
 				evenNodesliceMap.resize(graph.NodeSize(), {});
 				oddNodesliceMap.resize(graph.NodeSize(), {});
 				denseComponentQueue.initialize(graph.ComponentSize());
-				denseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize());
+				denseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			}
 			else
 			{
 				sparseComponentQueue.initialize(graph.ComponentSize());
-				sparseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * 2 + 3 * maxBandwidth + 1, graph.NodeSize());
+				sparseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			}
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
