@@ -2,17 +2,37 @@
 #define ArrayPriorityQueue_h
 
 #include <queue>
+#include <sparsehash/sparse_hash_map>
 #include "ThreadReadAssertion.h"
 
-template <typename T>
+template <typename T, bool SparseStorage>
 class ArrayPriorityQueue
 {
 public:
+	constexpr bool IsComponentPriorityQueue() { return false; }
 	ArrayPriorityQueue(size_t maxPriority, size_t maxExtras) :
 	activeQueues(),
 	extras(),
 	queues(),
 	numItems(0)
+	{
+		initialize(maxPriority, maxExtras);
+	}
+	ArrayPriorityQueue() :
+	activeQueues(),
+	extras(),
+	queues(),
+	numItems(0)
+	{
+	}
+	template <bool Sparse = SparseStorage>
+	typename std::enable_if<Sparse>::type initialize(size_t maxPriority, size_t maxExtras)
+	{
+		extras.set_deleted_key(std::numeric_limits<size_t>::max());
+		queues.resize(maxPriority);
+	}
+	template <bool Sparse = SparseStorage>
+	typename std::enable_if<!Sparse>::type initialize(size_t maxPriority, size_t maxExtras)
 	{
 		extras.resize(maxExtras, std::vector<T>{});
 		queues.resize(maxPriority);
@@ -56,7 +76,7 @@ public:
 	{
 		assert(priority < queues.size());
 		queues[priority].push_back(item);
-		assert(getId(item) < extras.size());
+		assert(SparseStorage || getId(item) < extras.size());
 		extras[getId(item)].push_back(item);
 		if (queues[priority].size() == 1) activeQueues.emplace(priority);
 		numItems++;
@@ -74,29 +94,52 @@ public:
 			activeQueues.pop();
 		}
 		numItems = 0;
+		sparsify();
 	}
-	const std::vector<T>& getExtras(size_t index) const
+
+	template<bool Sparse = SparseStorage>
+	typename std::enable_if<Sparse>::type sparsify()
 	{
-		assert(index < extras.size());
-		return extras[index];
+		decltype(extras) empty;
+		std::swap(extras, empty);
+	}
+	template<bool Sparse = SparseStorage>
+	typename std::enable_if<!Sparse>::type sparsify()
+	{
+	}
+	const std::vector<T>& getExtras(size_t index)
+	{
+		assert(SparseStorage || index < extras.size());
+		return getVec(extras, index);
 	}
 	void removeExtras(size_t index)
 	{
-		assert(index < extras.size());
+		assert(SparseStorage || index < extras.size());
 		extras[index].clear();
 	}
 	size_t extraSize(size_t index) const
 	{
-		assert(index < extras.size());
-		return extras[index].size();
+		assert(SparseStorage || index < extras.size());
+		return getVec(extras, index).size();
 	}
 private:
+	const std::vector<T>& getVec(const std::vector<std::vector<T>>& list, size_t index) const
+	{
+		return list[index];
+	}
+	const std::vector<T>& getVec(const google::sparse_hash_map<size_t, std::vector<T>>& list, size_t index) const
+	{
+		static std::vector<T> empty;
+		auto found = list.find(index);
+		if (found == list.end()) return empty;
+		return found->second;
+	}
 	size_t getId(const T& item) const
 	{
 		return item.target;
 	}
 	std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>> activeQueues;
-	std::vector<std::vector<T>> extras;
+	typename std::conditional<SparseStorage, google::sparse_hash_map<size_t, std::vector<T>>, std::vector<std::vector<T>>>::type extras;
 	std::vector<std::vector<T>> queues;
 	size_t numItems;
 };
