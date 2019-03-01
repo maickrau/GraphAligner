@@ -2,7 +2,7 @@
 #define ArrayPriorityQueue_h
 
 #include <queue>
-#include <sparsehash/sparse_hash_map>
+#include <sparsehash/dense_hash_map>
 #include "ThreadReadAssertion.h"
 
 template <typename T, bool SparseStorage>
@@ -28,7 +28,8 @@ public:
 	template <bool Sparse = SparseStorage>
 	typename std::enable_if<Sparse>::type initialize(size_t maxPriority, size_t maxExtras)
 	{
-		extras.set_deleted_key(std::numeric_limits<size_t>::max());
+		extras.set_empty_key(std::numeric_limits<size_t>::max());
+		extras.set_deleted_key(std::numeric_limits<size_t>::max()-1);
 		queues.resize(maxPriority);
 	}
 	template <bool Sparse = SparseStorage>
@@ -102,6 +103,8 @@ public:
 	{
 		decltype(extras) empty;
 		std::swap(extras, empty);
+		extras.set_empty_key(std::numeric_limits<size_t>::max());
+		extras.set_deleted_key(std::numeric_limits<size_t>::max()-1);
 	}
 	template<bool Sparse = SparseStorage>
 	typename std::enable_if<!Sparse>::type sparsify()
@@ -127,7 +130,7 @@ private:
 	{
 		return list[index];
 	}
-	const std::vector<T>& getVec(const google::sparse_hash_map<size_t, std::vector<T>>& list, size_t index) const
+	const std::vector<T>& getVec(const google::dense_hash_map<size_t, std::vector<T>>& list, size_t index) const
 	{
 		static std::vector<T> empty;
 		auto found = list.find(index);
@@ -139,7 +142,7 @@ private:
 		return item.target;
 	}
 	std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>> activeQueues;
-	typename std::conditional<SparseStorage, google::sparse_hash_map<size_t, std::vector<T>>, std::vector<std::vector<T>>>::type extras;
+	typename std::conditional<SparseStorage, google::dense_hash_map<size_t, std::vector<T>>, std::vector<std::vector<T>>>::type extras;
 	std::vector<std::vector<T>> queues;
 	size_t numItems;
 };
