@@ -176,6 +176,13 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 		{
 			std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
 			std::swap(*ptr, read);
+			size_t slept = 0;
+			while (writequeue.size_approx() > 200)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				slept++;
+				if (slept > 100) break;
+			}
 			writequeue.enqueue(ptr);
 		});
 	}

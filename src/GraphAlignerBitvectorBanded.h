@@ -1131,6 +1131,18 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
 	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
+		double averageErrorRate = 0;
+		if (j > 0)
+		{
+			averageErrorRate = (double)previousMinScore / (double)j;
+		}
+		double priorityMismatchPenalty = WordConfiguration<Word>::WordSize;
+		if (averageErrorRate > 1.0/(double)WordConfiguration<Word>::WordSize)
+		{
+			priorityMismatchPenalty = 1.0 / averageErrorRate;
+		}
+		assert(priorityMismatchPenalty >= 0);
+		assert(priorityMismatchPenalty <= WordConfiguration<Word>::WordSize);
 		NodeCalculationResult result;
 		result.minScore = std::numeric_limits<ScoreType>::max() - bandwidth - 1;
 		result.minScoreNode = std::numeric_limits<LengthType>::max();
@@ -1145,20 +1157,20 @@ private:
 		EqVector EqV = BV::getEqVector(sequence, j);
 
 		assert(previousSlice.size() > 0);
-		ScoreType zeroScore = previousMinScore - j / 2 - 32;
+		ScoreType zeroScore = previousMinScore*priorityMismatchPenalty - j - 64;
 		if (j == 0)
 		{
 			for (auto node : previousSlice)
 			{
 				assert(node.second.minScore <= previousQuitScore);
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				if (std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
+				if (calculableQueue.IsComponentPriorityQueue())
 				{
 					calculableQueue.insert(params.graph.componentNumber[node.first], node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 			}
 		}
@@ -1179,13 +1191,13 @@ private:
 				 	}
 				}
 				WordSlice startSlice = getSourceSliceFromScore(node.second.startSlice.scoreEnd);
-				if (std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
+				if (calculableQueue.IsComponentPriorityQueue())
 				{
 					calculableQueue.insert(params.graph.componentNumber[node.first], node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore - j/2 - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 			}
 		}
@@ -1195,7 +1207,7 @@ private:
 		while (calculableQueue.size() > 0)
 		{
 			auto pair = calculableQueue.top();
-			if (!std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
+			if (!calculableQueue.IsComponentPriorityQueue())
 			{
 				if (pair.priority > currentMinScoreAtEndRow + bandwidth) break;
 			}
@@ -1259,7 +1271,7 @@ private:
 				}
 			}
 			calculableQueue.pop();
-			if (!std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
+			if (!calculableQueue.IsComponentPriorityQueue())
 			{
 				calculableQueue.removeExtras(i);
 			}
@@ -1269,9 +1281,9 @@ private:
 #ifdef SLICEVERBOSE
 			volatile size_t firstslices = currentSlice.node(i).firstSlicesCalcedWhenCalced;
 			volatile size_t calcedslices = currentSlice.node(i).slicesCalcedWhenCalced;
-			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = cellsProcessed;
-			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < cellsProcessed);
-			currentSlice.node(i).slicesCalcedWhenCalced = cellsProcessed;
+			if (currentSlice.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) currentSlice.node(i).firstSlicesCalcedWhenCalced = result.cellsProcessed;
+			if (currentSlice.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(currentSlice.node(i).slicesCalcedWhenCalced < result.cellsProcessed);
+			currentSlice.node(i).slicesCalcedWhenCalced = result.cellsProcessed;
 			assert(currentSlice.node(i).firstSlicesCalcedWhenCalced <= currentSlice.node(i).slicesCalcedWhenCalced);
 #endif
 			auto newEnd = thisNode.endSlice;
@@ -1285,13 +1297,14 @@ private:
 				{
 					for (auto neighbor : params.graph.outNeighbors[i])
 					{
-						if (std::is_same<decltype(calculableQueue), ComponentPriorityQueue<EdgeWithPriority>&>::value)
+						if (calculableQueue.IsComponentPriorityQueue())
 						{
 							calculableQueue.insert(params.graph.componentNumber[neighbor], newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 						}
 						else
 						{
-							ScoreType newEndPriorityScore = newEnd.getPriorityScore(j);
+							ScoreType newEndPriorityScore = newEnd.getChangedPriorityScore(oldEnd, j, priorityMismatchPenalty);
+							assert(newEndPriorityScore != std::numeric_limits<ScoreType>::max());
 							assert(newEndPriorityScore >= zeroScore);
 							calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 						}
@@ -1531,13 +1544,21 @@ private:
 			auto timeStart = std::chrono::system_clock::now();
 #endif
 			DPSlice newSlice;
-			if (reusableState.componentQueue.valid())
+			if (reusableState.sparseComponentQueue.valid())
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.sparseComponentQueue, bandwidth);
+			}
+			else if (reusableState.denseComponentQueue.valid())
+			{
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.denseComponentQueue, bandwidth);
+			}
+			else if (params.lowMemory)
+			{
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.sparseCalculableQueue, bandwidth);
 			}
 			else
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.denseCalculableQueue, bandwidth);
 			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
