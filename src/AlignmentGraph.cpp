@@ -565,7 +565,7 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 		else
 		{
 			assert(ambiguousCount < ambiguousNodes.size());
-			assert(ambiguousNodes.size()-1-ambiguousCount > nonAmbiguousCount);
+			assert(ambiguousNodes.size()-1-ambiguousCount >= nonAmbiguousCount);
 			renumbering.push_back(ambiguousNodes.size()-1-ambiguousCount);
 			ambiguousCount++;
 		}
