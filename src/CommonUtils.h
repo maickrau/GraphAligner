@@ -21,6 +21,7 @@ namespace CommonUtils
 		bool alignmentIncompatible(const vg::Alignment* const left, const vg::Alignment* const right);
 	}
 	vg::Graph LoadVGGraph(std::string filename);
+	char Complement(char original);
 	std::string ReverseComplement(std::string original);
 	vg::Alignment LoadVGAlignment(std::string filename);
 	std::vector<vg::Alignment> LoadVGAlignments(std::string filename);

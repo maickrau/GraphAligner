@@ -54,7 +54,7 @@ public:
 #ifndef NDEBUG
 		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
 #endif
-		fixForwardTraceSeqPos(trace.trace, 0);
+		fixForwardTraceSeqPos(trace.trace, 0, sequence);
 		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
 		alnItem.alignmentStart = trace.trace[0].DPposition.seqPos;
 		alnItem.alignmentEnd = trace.trace.back().DPposition.seqPos;
@@ -156,18 +156,22 @@ private:
 		return result;
 	}
 
-	void fixForwardTraceSeqPos(std::vector<TraceItem>& trace, LengthType start) const
+	void fixForwardTraceSeqPos(std::vector<TraceItem>& trace, LengthType start, const std::string& sequence) const
 	{
+		if (trace.size() == 0) return;
 		for (size_t i = 0; i < trace.size(); i++)
 		{
 			trace[i].DPposition.seqPos += start;
 			auto nodeIndex = trace[i].DPposition.node;
 			trace[i].DPposition.node = params.graph.nodeIDs[nodeIndex];
 			trace[i].DPposition.nodeOffset += params.graph.nodeOffset[nodeIndex];
+			assert(trace[i].DPposition.seqPos < sequence.size());
+			assert(i == 0 || trace[i].sequenceCharacter == sequence[trace[i].DPposition.seqPos]);
 		}
+		trace[0].sequenceCharacter = sequence[trace[0].DPposition.seqPos];
 	}
 
-	void fixReverseTraceSeqPosAndOrder(std::vector<TraceItem>& trace, LengthType end) const
+	void fixReverseTraceSeqPosAndOrder(std::vector<TraceItem>& trace, LengthType end, const std::string& sequence) const
 	{
 		if (trace.size() == 0) return;
 		std::reverse(trace.begin(), trace.end());
@@ -180,6 +184,9 @@ private:
 			assert(reversePos.second < params.graph.originalNodeSize.at(params.graph.nodeIDs[trace[i].DPposition.node]));
 			trace[i].DPposition.node = reversePos.first;
 			trace[i].DPposition.nodeOffset = reversePos.second;
+			assert(trace[i].DPposition.seqPos < sequence.size());
+			trace[i].sequenceCharacter = sequence[trace[i].DPposition.seqPos];
+			trace[i].graphCharacter = CommonUtils::Complement(trace[i].graphCharacter);
 		}
 		for (size_t i = 0; i < trace.size() - 1; i++)
 		{
@@ -199,8 +206,8 @@ private:
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);
 		if (trace.backward.trace.size() > 0) verifyTrace(trace.backward.trace, sequence, trace.backward.score);
 #endif
-		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos-1);
-		fixForwardTraceSeqPos(trace.forward.trace, seedHit.seqPos+1);
+		fixReverseTraceSeqPosAndOrder(trace.backward.trace, seedHit.seqPos-1, sequence);
+		fixForwardTraceSeqPos(trace.forward.trace, seedHit.seqPos+1, sequence);
 
 		//failed alignment, don't output
 		if (trace.forward.failed() && trace.backward.failed())

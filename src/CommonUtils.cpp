@@ -115,77 +115,67 @@ namespace CommonUtils
 		result.reserve(str.size());
 		for (int i = str.size()-1; i >= 0; i--)
 		{
-			switch (str[i])
-			{
-				case 'A':
-				case 'a':
-				result += 'T';
-				break;
-				case 'C':
-				case 'c':
-				result += 'G';
-				break;
-				case 'T':
-				case 't':
-				result += 'A';
-				break;
-				case 'G':
-				case 'g':
-				result += 'C';
-				break;
-				case 'N':
-				case 'n':
-				result += 'N';
-				break;
-				case 'U':
-				case 'u':
-				result += 'A';
-				break;
-				case 'R':
-				case 'r':
-				result += 'Y';
-				break;
-				case 'Y':
-				case 'y':
-				result += 'R';
-				break;
-				case 'K':
-				case 'k':
-				result += 'M';
-				break;
-				case 'M':
-				case 'm':
-				result += 'K';
-				break;
-				case 'S':
-				case 's':
-				result += 'S';
-				break;
-				case 'W':
-				case 'w':
-				result += 'W';
-				break;
-				case 'B':
-				case 'b':
-				result += 'V';
-				break;
-				case 'V':
-				case 'v':
-				result += 'B';
-				break;
-				case 'D':
-				case 'd':
-				result += 'H';
-				break;
-				case 'H':
-				case 'h':
-				result += 'D';
-				break;
-				default:
-				assert(false);
-			}
+			result += Complement(str[i]);
 		}
 		return result;
+	}
+
+	char Complement(char c)
+	{
+		switch (c)
+		{
+			case 'A':
+			case 'a':
+				return 'T';
+			case 'C':
+			case 'c':
+				return 'G';
+			case 'T':
+			case 't':
+				return 'A';
+			case 'G':
+			case 'g':
+				return 'C';
+			case 'N':
+			case 'n':
+				return 'N';
+			case 'U':
+			case 'u':
+				return 'A';
+			case 'R':
+			case 'r':
+				return 'Y';
+			case 'Y':
+			case 'y':
+				return 'R';
+			case 'K':
+			case 'k':
+				return 'M';
+			case 'M':
+			case 'm':
+				return 'K';
+			case 'S':
+			case 's':
+				return 'S';
+			case 'W':
+			case 'w':
+				return 'W';
+			case 'B':
+			case 'b':
+				return 'V';
+			case 'V':
+			case 'v':
+				return 'B';
+			case 'D':
+			case 'd':
+				return 'H';
+			case 'H':
+			case 'h':
+				return 'D';
+			default:
+				assert(false);
+				return 'N';
+	}
 	}
 
 }

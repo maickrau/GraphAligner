@@ -215,6 +215,7 @@ public:
 			result.trace[i].DPposition.seqPos += 1;
 		}
 		std::reverse(result.trace.begin(), result.trace.end());
+		result.trace[0].sequenceCharacter = originalSequence[0];
 		assert(result.trace[0].DPposition.seqPos == 0);
 		return result;
 	}

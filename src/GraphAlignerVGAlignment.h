@@ -56,6 +56,19 @@ public:
 		vgmapping->set_rank(rank);
 		auto edit = vgmapping->add_edit();
 		EditType currentEdit = Empty;
+		if (trace[0].sequenceCharacter == trace[0].graphCharacter)
+		{
+			currentEdit = Match;
+			edit->set_from_length(edit->from_length()+1);
+			edit->set_to_length(edit->to_length()+1);
+		}
+		else
+		{
+			currentEdit = Mismatch;
+			edit->set_from_length(edit->from_length()+1);
+			edit->set_to_length(edit->to_length()+1);
+			edit->set_sequence(std::string { sequence[0] });
+		}
 		position->set_node_id(currentPos.nodeId);
 		position->set_is_reverse(currentPos.reverse);
 		position->set_offset(currentPos.nodeOffset);
@@ -67,82 +80,76 @@ public:
 			newPos.reverse = (trace[pos].DPposition.node % 2) == 1;
 			newPos.nodeOffset = trace[pos].DPposition.nodeOffset;
 			newPos.seqPos = trace[pos].DPposition.seqPos;
-			if (!trace[pos-1].nodeSwitch || (newPos.nodeId == currentPos.nodeId && newPos.reverse == currentPos.reverse && newPos.nodeOffset > currentPos.nodeOffset))
-			{
-				assert(trace[pos-1].nodeSwitch || newPos.nodeId == currentPos.nodeId);
-				assert(trace[pos-1].nodeSwitch || newPos.reverse == currentPos.reverse);
-				if (trace[pos-1].DPposition.seqPos == trace[pos].DPposition.seqPos)
-				{
-					if (currentEdit == Empty) currentEdit = Deletion;
-					if (currentEdit != Deletion)
-					{
-						edit = vgmapping->add_edit();
-						currentEdit = Deletion;
-					}
-					edit->set_from_length(edit->from_length()+1);
-				}
-				else if (trace[pos-1].DPposition.nodeOffset == trace[pos].DPposition.nodeOffset)
-				{
-					if (currentEdit == Empty) currentEdit = Insertion;
-					if (currentEdit != Insertion)
-					{
-						edit = vgmapping->add_edit();
-						currentEdit = Insertion;
-					}
-					edit->set_to_length(edit->to_length()+1);
-					edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
-				}
-				else if (trace[pos].sequenceCharacter == trace[pos].graphCharacter)
-				{
-					if (currentEdit == Empty) currentEdit = Match;
-					if (currentEdit != Match)
-					{
-						edit = vgmapping->add_edit();
-						currentEdit = Match;
-					}
-					edit->set_from_length(edit->from_length()+1);
-					edit->set_to_length(edit->to_length()+1);
-				}
-				else
-				{
-					if (currentEdit == Empty) currentEdit = Mismatch;
-					if (currentEdit != Mismatch)
-					{
-						edit = vgmapping->add_edit();
-						currentEdit = Mismatch;
-					}
-					edit->set_from_length(edit->from_length()+1);
-					edit->set_to_length(edit->to_length()+1);
-					edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
-				}
-				continue;
-			}
+			bool insideNode = !trace[pos-1].nodeSwitch || (newPos.nodeId == currentPos.nodeId && newPos.reverse == currentPos.reverse && newPos.nodeOffset > currentPos.nodeOffset);
 
 			assert(newPos.seqPos >= currentPos.seqPos);
 
-			if (currentEdit == Empty)
+			if (!insideNode)
 			{
-				//todo fix
-				assert(false);
+				rank++;
+				currentPos = newPos;
+				vgmapping = path->add_mapping();
+				position = new vg::Position;
+				vgmapping->set_allocated_position(position);
+				vgmapping->set_rank(rank);
+				position->set_offset(currentPos.nodeOffset);
+				position->set_node_id(currentPos.nodeId);
+				position->set_is_reverse(currentPos.reverse);
+				edit = vgmapping->add_edit();
+				currentEdit = Empty;
 			}
 
-			rank++;
-			currentPos = newPos;
-			vgmapping = path->add_mapping();
-			position = new vg::Position;
-			vgmapping->set_allocated_position(position);
-			vgmapping->set_rank(rank);
-			position->set_offset(currentPos.nodeOffset);
-			position->set_node_id(currentPos.nodeId);
-			position->set_is_reverse(currentPos.reverse);
-			edit = vgmapping->add_edit();
-			currentEdit = Empty;
+			if (trace[pos-1].DPposition.seqPos == trace[pos].DPposition.seqPos)
+			{
+				if (currentEdit == Empty) currentEdit = Deletion;
+				if (currentEdit != Deletion)
+				{
+					edit = vgmapping->add_edit();
+					currentEdit = Deletion;
+				}
+				edit->set_from_length(edit->from_length()+1);
+			}
+			else if (insideNode && trace[pos-1].DPposition.nodeOffset == trace[pos].DPposition.nodeOffset)
+			{
+				if (currentEdit == Empty) currentEdit = Insertion;
+				if (currentEdit != Insertion)
+				{
+					edit = vgmapping->add_edit();
+					currentEdit = Insertion;
+				}
+				edit->set_to_length(edit->to_length()+1);
+				edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
+			}
+			else if (trace[pos].sequenceCharacter == trace[pos].graphCharacter)
+			{
+				if (currentEdit == Empty) currentEdit = Match;
+				if (currentEdit != Match)
+				{
+					edit = vgmapping->add_edit();
+					currentEdit = Match;
+				}
+				edit->set_from_length(edit->from_length()+1);
+				edit->set_to_length(edit->to_length()+1);
+			}
+			else
+			{
+				if (currentEdit == Empty) currentEdit = Mismatch;
+				if (currentEdit != Mismatch)
+				{
+					edit = vgmapping->add_edit();
+					currentEdit = Mismatch;
+				}
+				edit->set_from_length(edit->from_length()+1);
+				edit->set_to_length(edit->to_length()+1);
+				edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
+			}
+			if (insideNode)
+			{
+				assert(trace[pos-1].nodeSwitch || newPos.nodeId == currentPos.nodeId);
+				assert(trace[pos-1].nodeSwitch || newPos.reverse == currentPos.reverse);
+			}
 		}
-		if (currentEdit == Empty)
-		{
-			//todo fix
-			assert(false);
-		}
+		assert(currentEdit != Empty);
 		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
 		item.alignmentStart = trace[0].DPposition.seqPos;
 		item.alignmentEnd = trace.back().DPposition.seqPos;
