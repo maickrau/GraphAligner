@@ -120,6 +120,31 @@ public:
 		const bool forceGlobal;
 		const bool preciseClipping;
 	};
+	struct TraceItem
+	{
+		TraceItem() :
+		DPposition(),
+		nodeSwitch(false),
+		sequenceCharacter('-'),
+		graphCharacter('-')
+		{}
+		TraceItem(MatrixPosition DPposition, bool nodeSwitch, char sequenceCharacter, char graphCharacter) :
+		DPposition(DPposition),
+		nodeSwitch(nodeSwitch),
+		sequenceCharacter(sequenceCharacter),
+		graphCharacter(graphCharacter)
+		{}
+		TraceItem(MatrixPosition DPposition, bool nodeSwitch, const std::string& seq, const AlignmentGraph& graph) :
+		DPposition(DPposition),
+		nodeSwitch(nodeSwitch),
+		sequenceCharacter(seq[DPposition.seqPos]),
+		graphCharacter(graph.NodeSequences(DPposition.node, DPposition.nodeOffset))
+		{}
+		MatrixPosition DPposition;
+		bool nodeSwitch;
+		char sequenceCharacter;
+		char graphCharacter;
+	};
 	class OnewayTrace
 	{
 	public:
@@ -138,7 +163,7 @@ public:
 		{
 			return score == std::numeric_limits<ScoreType>::max();
 		}
-		std::vector<std::pair<MatrixPosition, bool>> trace;
+		std::vector<TraceItem> trace;
 		ScoreType score;
 	};
 	class Trace
