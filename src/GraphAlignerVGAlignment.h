@@ -72,6 +72,10 @@ public:
 		position->set_node_id(currentPos.nodeId);
 		position->set_is_reverse(currentPos.reverse);
 		position->set_offset(currentPos.nodeOffset);
+		size_t mismatches = 0;
+		size_t deletions = 0;
+		size_t insertions = 0;
+		size_t matches = 0;
 		for (size_t pos = 1; pos < trace.size(); pos++)
 		{
 			assert(trace[pos].DPposition.seqPos < sequence.size());
@@ -108,6 +112,7 @@ public:
 					currentEdit = Deletion;
 				}
 				edit->set_from_length(edit->from_length()+1);
+				deletions += 1;
 			}
 			else if (insideNode && trace[pos-1].DPposition.nodeOffset == trace[pos].DPposition.nodeOffset)
 			{
@@ -119,6 +124,7 @@ public:
 				}
 				edit->set_to_length(edit->to_length()+1);
 				edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
+				insertions += 1;
 			}
 			else if (trace[pos].sequenceCharacter == trace[pos].graphCharacter)
 			{
@@ -130,6 +136,7 @@ public:
 				}
 				edit->set_from_length(edit->from_length()+1);
 				edit->set_to_length(edit->to_length()+1);
+				matches += 1;
 			}
 			else
 			{
@@ -142,6 +149,7 @@ public:
 				edit->set_from_length(edit->from_length()+1);
 				edit->set_to_length(edit->to_length()+1);
 				edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
+				mismatches += 1;
 			}
 			if (insideNode)
 			{
@@ -149,6 +157,7 @@ public:
 				assert(trace[pos-1].nodeSwitch || newPos.reverse == currentPos.reverse);
 			}
 		}
+		result->set_identity((double)matches / (double)(matches + mismatches + insertions + deletions));
 		assert(currentEdit != Empty);
 		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
 		item.alignmentStart = trace[0].DPposition.seqPos;
