@@ -11,4 +11,6 @@ Running:
 
 - Edit the parameters in `config.yaml`
 - `snakemake all`
-- The corrected reads will be in the output folder in `corrected.fasta`
+- The corrected reads will be in the output folder:
+  - `corrected.fasta` has the reads with the aligned sequence replaced by the alignment path. Uppercase sequence are corrected and lowercase are uncorrected.
+  - `corrected_clipped.fasta` has the reads cut across non-corrected parts. All sequence is corrected and the read name contains the position in the original read.
