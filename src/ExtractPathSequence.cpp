@@ -11,7 +11,7 @@
 
 void printPath(const std::unordered_map<int, int>& ids, std::function<std::string(int)> seqGetter, const vg::Alignment& v)
 {
-	std::cout << ">" << v.name() << std::endl;
+	std::cout << ">" << v.name() << "_" << v.query_position() << "_" << (v.query_position() + v.sequence().size()) << std::endl;
 	for (int i = 0; i < v.path().mapping_size(); i++)
 	{
 		auto nodeid = v.path().mapping(i).position().node_id();
