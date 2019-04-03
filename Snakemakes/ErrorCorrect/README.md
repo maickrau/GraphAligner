@@ -5,7 +5,7 @@ Installation:
 - Install snakemake https://snakemake.readthedocs.io/en/stable/
 - Install lighter https://github.com/mourisl/Lighter
 - Install bcalm2 https://github.com/GATB/bcalm
-- Install the aligner and `make all`
+- Build the aligner with `make all`. Note that the pipeline uses scripts which are not included in the bioconda release so you have to compile it from source.
 
 Running:
 
