@@ -342,7 +342,7 @@ private:
 			assert(slice.slices[currentSlice].minScore < std::numeric_limits<ScoreType>::max() - (ScoreType)slice.slices[currentSlice].bandwidth);
 			if (result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().DPposition.nodeOffset == 0)
 			{
-				auto bt = pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
+				auto bt = pickBacktraceCorner(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid);
 				result.trace.emplace_back(bt.first, bt.second, sequence, params.graph);
 				checkBacktraceCircularity(result);
 				continue;
@@ -356,7 +356,7 @@ private:
 					result.trace.emplace_back(MatrixPosition {currentNode, 0, result.trace.back().DPposition.seqPos}, false, sequence, params.graph);
 					continue;
 				}
-				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
+				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid);
 				if (crossing.first.first != result.trace.back().DPposition) result.trace.emplace_back(crossing.first.first, crossing.first.second, sequence, params.graph);
 				assert(crossing.second.first != result.trace.back().DPposition);
 				result.trace.emplace_back(crossing.second.first, crossing.second.second, sequence, params.graph);
@@ -365,7 +365,7 @@ private:
 			if (result.trace.back().DPposition.nodeOffset == 0)
 			{
 				assert(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize != 0);
-				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid);
+				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid);
 				if (crossing.first.first != result.trace.back().DPposition) result.trace.emplace_back(crossing.first.first, crossing.first.second, sequence, params.graph);
 				assert(crossing.second.first != result.trace.back().DPposition);
 				result.trace.emplace_back(crossing.second.first, crossing.second.second, sequence, params.graph);
@@ -471,7 +471,7 @@ private:
 		return result;
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		assert(current.hasNode(node));
 		auto startSlice = current.node(node).startSlice;
@@ -482,7 +482,7 @@ private:
 		size_t offset = pos.seqPos % WordConfiguration<Word>::WordSize;
 		if (offset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid, previousQuitScore, previousScoresNotValid));
 		}
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
 		ScoreType scoreHere = startSlice.getValue(offset);
@@ -537,7 +537,7 @@ private:
 		return std::make_pair(std::make_pair(MatrixPosition {0, 0, 0}, false), std::make_pair(MatrixPosition {0, 0, 0}, false));
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		assert(pos.nodeOffset > 0);
 		assert(pos.nodeOffset < nodeScores.size());
@@ -547,7 +547,7 @@ private:
 		}
 		if (pos.nodeOffset == 0)
 		{
-			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid));
+			return std::make_pair(std::make_pair(pos, false), pickBacktraceCorner(current, previous, node, j, sequence, quitScore, scoresNotValid, previousQuitScore, previousScoresNotValid));
 		}
 		assert(previous.hasNode(node));
 		bool eq = Common::characterMatch(sequence[pos.seqPos], params.graph.NodeSequences(pos.node, pos.nodeOffset));
@@ -562,7 +562,7 @@ private:
 		ScoreType scoreUp = scoreDiagonal;
 		scoreUp += (previousNode.HP[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
 		scoreUp -= (previousNode.HN[(pos.nodeOffset) / WordConfiguration<Word>::WordSize] >> ((pos.nodeOffset) % WordConfiguration<Word>::WordSize)) & 1;
-		if (scoresNotValid || scoreHere > quitScore)
+		if (previousScoresNotValid || scoresNotValid || scoreHere > quitScore || scoreDiagonal > previousQuitScore || scoreUp > previousQuitScore)
 		{
 			//this location is out of the band so the usual horizontal and vertical score limits don't apply
 			//just pick the smallest scoring in-neighbor
@@ -582,7 +582,7 @@ private:
 		return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset - 1, pos.seqPos-1}, false));
 	}
 
-	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore, bool scoresNotValid) const
+	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
 		if (scoresNotValid || scoreHere > quitScore)
@@ -634,6 +634,8 @@ private:
 				return std::make_pair(MatrixPosition {node, 0, j-1 }, false);
 			}
 		}
+		MatrixPosition bestInvalidBacktrace { (size_t)-1, (size_t)-1, (size_t)-1 };
+		ScoreType bestInvalidBacktraceScore = scoreHere+1;
 		for (auto neighbor : params.graph.inNeighbors[node])
 		{
 			if (current.hasNode(neighbor))
@@ -646,12 +648,31 @@ private:
 			}
 			if (previous.hasNode(neighbor))
 			{
-				assert(previous.node(neighbor).endSlice.scoreEnd >= scoreHere-(eq?0:1));
-				if (previous.node(neighbor).endSlice.scoreEnd == scoreHere-(eq?0:1))
+				ScoreType cornerScore = previous.node(neighbor).endSlice.scoreEnd;
+				if (previousScoresNotValid || cornerScore > previousQuitScore)
 				{
-					return std::make_pair(MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, j-1 }, true);
+					//scores not valid, pick best
+					if (cornerScore < bestInvalidBacktraceScore)
+					{
+						bestInvalidBacktraceScore = cornerScore;
+						bestInvalidBacktrace = MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, j-1 };
+					}
+				}
+				else
+				{
+					assert(previous.node(neighbor).endSlice.scoreEnd >= scoreHere-(eq?0:1));
+					if (cornerScore == scoreHere-(eq?0:1))
+					{
+						return std::make_pair(MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, j-1 }, true);
+					}
 				}
 			}
+		}
+		//scores not valid, pick best
+		if (bestInvalidBacktraceScore < scoreHere+1)
+		{
+			assert(bestInvalidBacktrace.node != (size_t)-1 || bestInvalidBacktrace.nodeOffset != (size_t)-1 || bestInvalidBacktrace.seqPos != (size_t)-1);
+			return std::make_pair(bestInvalidBacktrace, true);
 		}
 		assert(false);
 		return std::make_pair(MatrixPosition {0, 0, 0}, false);
