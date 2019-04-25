@@ -74,7 +74,23 @@ void addPartial(const GfaGraph& g, const std::unordered_map<int, int>& ids, cons
 	addPartial(ids, partials, [&g](int id) {return g.nodes.at(id);}, v);
 }
 
-void mergePartials(const std::unordered_map<std::string, std::vector<PartialAlignment>>& partials, const std::vector<FastQ>& reads)
+size_t getLongestOverlap(const std::string& left, const std::string& right, size_t maxOverlap)
+{
+	if (left.size() < maxOverlap) maxOverlap = left.size();
+	if (right.size() < maxOverlap) maxOverlap = right.size();
+	for (size_t i = maxOverlap; i > 0; i--)
+	{
+		bool match = true;
+		for (size_t a = 0; a < i && match; a++)
+		{
+			if (left[left.size() - maxOverlap + a] != right[a]) match = false;
+		}
+		if (match) return i;
+	}
+	return 0;
+}
+
+void mergePartials(const std::unordered_map<std::string, std::vector<PartialAlignment>>& partials, const std::vector<FastQ>& reads, size_t maxOverlap)
 {
 	for (auto read : reads)
 	{
@@ -91,24 +107,19 @@ void mergePartials(const std::unordered_map<std::string, std::vector<PartialAlig
 			correctedSequence = tolower(read.sequence.substr(0, p[0].start));
 		}
 		assert(p.size() > 0);
-		for (size_t i = 0; i < p.size()-1; i++)
+		for (size_t i = 0; i < p.size(); i++)
 		{
-			assert(p[i+1].start > p[i].start);
-			if (p[i+1].start < p[i].end)
+			assert(i == 0 || p[i].start > p[i-1].start);
+			if (i > 0 && p[i].start < p[i-1].end)
 			{
-				size_t grab = (double)p[i].seq.size() * ((double)(p[i+1].start - p[i].start) / (double)(p[i].end - p[i].start));
-				correctedSequence += toupper(p[i].seq.substr(0, grab));
+				size_t overlap = getLongestOverlap(correctedSequence, p[i].seq, maxOverlap);
+				correctedSequence += toupper(p[i].seq.substr(overlap));
 			}
 			else
 			{
+				if (i > 0 && p[i].start > p[i-1].end) correctedSequence += tolower(read.sequence.substr(p[i-1].end, p[i].start - p[i-1].end));
 				correctedSequence += toupper(p[i].seq);
-				correctedSequence += tolower(read.sequence.substr(p[i].end, p[i+1].start - p[i].end));
 			}
-		}
-		correctedSequence += toupper(p.back().seq);
-		if (p.back().end < read.sequence.size())
-		{
-			correctedSequence += tolower(read.sequence.substr(p.back().end));
 		}
 		std::cout << ">" << read.seq_id << std::endl << correctedSequence << std::endl;
 	}
@@ -126,6 +137,8 @@ int main(int argc, char** argv)
 		auto extrareads = loadFastqFromFile(argv[i]);
 		reads.insert(reads.end(), extrareads.begin(), extrareads.end());
 	}
+
+	size_t maxOverlap = 0;
 
 	std::unordered_map<std::string, std::vector<PartialAlignment>> partials;
 	if (graphfilename.substr(graphfilename.size()-3) == ".vg")
@@ -147,6 +160,7 @@ int main(int argc, char** argv)
 	else if (graphfilename.substr(graphfilename.size() - 4) == ".gfa")
 	{
 		GfaGraph graph = GfaGraph::LoadFromFile(argv[1]);
+		maxOverlap = graph.edgeOverlap;
 		std::unordered_map<int, int> ids;
 		for (auto node : graph.nodes)
 		{
@@ -162,5 +176,5 @@ int main(int argc, char** argv)
 	}
 
 
-	mergePartials(partials, reads);
+	mergePartials(partials, reads, maxOverlap);
 }
