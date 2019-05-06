@@ -283,6 +283,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			}
 		}
 	}
+	if (result.edges.size() == 0) result.edgeOverlap = 0;
 	bool allIdsIntegers = true;
 	for (auto pair : nameMapping)
 	{
