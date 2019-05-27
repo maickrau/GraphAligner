@@ -177,7 +177,9 @@ start:
 }
 
 MinimizerSeeder::MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
-minimizerIndex(),
+locator(),
+starts(),
+positions(),
 minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
@@ -185,7 +187,7 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
+	locator.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	initMinimizers(graph, numThreads);
@@ -193,7 +195,9 @@ dis(0, std::numeric_limits<size_t>::max()-1)
 }
 
 MinimizerSeeder::MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
-minimizerIndex(),
+locator(),
+starts(),
+positions(),
 minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
@@ -201,7 +205,7 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
+	locator.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	initMinimizers(graph, numThreads);
@@ -239,22 +243,58 @@ void MinimizerSeeder::initMinimizers(const GfaGraph& graph, size_t numThreads)
 					resultPerThread[i].emplace_back(kmer, nodeId, pos);
 				});
 			}
+			std::sort(resultPerThread[i].begin(), resultPerThread[i].end(), [](const std::tuple<size_t, int, size_t>& left, const std::tuple<size_t, int, size_t>& right) { return std::get<0>(left) < std::get<0>(right); });
 		});
 	}
+
+	size_t totalSize = 0;
 
 	for (size_t i = 0; i < threads.size(); i++)
 	{
 		threads[i].join();
+		totalSize += resultPerThread[i].size();
 	}
 	threads.clear();
 
-	for (size_t i = 0; i < resultPerThread.size(); i++)
+	positions.reserve(totalSize);
+	std::vector<size_t> threadIndex;
+	threadIndex.resize(numThreads, 0);
+	size_t current = std::numeric_limits<size_t>::max();
+	for (size_t i = 0; i < numThreads; i++)
 	{
-		for (auto t : resultPerThread[i])
-		{
-			minimizerIndex[std::get<0>(t)].emplace_back(std::get<1>(t), std::get<2>(t));
-		}
+		if (resultPerThread[i].size() == 0) continue;
+		current = std::min(current, std::get<0>(resultPerThread[i][0]));
 	}
+	while (true)
+	{
+		size_t next = std::numeric_limits<size_t>::max();
+		size_t numFinished = 0;
+		starts.emplace_back(positions.size());
+		locator[current] = starts.size()-1;
+		for (size_t i = 0; i < numThreads; i++)
+		{
+			while (threadIndex[i] < resultPerThread[i].size() && std::get<0>(resultPerThread[i][threadIndex[i]]) == current)
+			{
+				positions.emplace_back(std::get<1>(resultPerThread[i][threadIndex[i]]), std::get<2>(resultPerThread[i][threadIndex[i]]));
+				threadIndex[i] += 1;
+			}
+			if (threadIndex[i] < resultPerThread[i].size())
+			{
+				assert(std::get<0>(resultPerThread[i][threadIndex[i]]) > current);
+				next = std::min(next, std::get<0>(resultPerThread[i][threadIndex[i]]));
+			}
+			else
+			{
+				numFinished += 1;
+			}
+		}
+		if (numFinished == numThreads) break;
+		assert(next > current);
+		current = next;
+	}
+	starts.emplace_back(positions.size());
+	assert(starts.size() == locator.size()+1);
+	assert(positions.size() == totalSize);
 }
 
 void MinimizerSeeder::initMinimizers(const vg::Graph& graph, size_t numThreads)
@@ -288,22 +328,58 @@ void MinimizerSeeder::initMinimizers(const vg::Graph& graph, size_t numThreads)
 					resultPerThread[i].emplace_back(kmer, nodeId, pos);
 				});
 			}
+			std::sort(resultPerThread[i].begin(), resultPerThread[i].end(), [](const std::tuple<size_t, int, size_t>& left, const std::tuple<size_t, int, size_t>& right) { return std::get<0>(left) < std::get<0>(right); });
 		});
 	}
+
+	size_t totalSize = 0;
 
 	for (size_t i = 0; i < threads.size(); i++)
 	{
 		threads[i].join();
+		totalSize += resultPerThread[i].size();
 	}
 	threads.clear();
-	
-	for (size_t i = 0; i < resultPerThread.size(); i++)
+
+	positions.reserve(totalSize);
+	std::vector<size_t> threadIndex;
+	threadIndex.resize(numThreads, 0);
+	size_t current = std::numeric_limits<size_t>::max();
+	for (size_t i = 0; i < numThreads; i++)
 	{
-		for (auto t : resultPerThread[i])
-		{
-			minimizerIndex[std::get<0>(t)].emplace_back(std::get<1>(t), std::get<2>(t));
-		}
+		if (resultPerThread[i].size() == 0) continue;
+		current = std::min(current, std::get<0>(resultPerThread[i][0]));
 	}
+	while (true)
+	{
+		size_t next = std::numeric_limits<size_t>::max();
+		size_t numFinished = 0;
+		starts.emplace_back(positions.size());
+		locator[current] = starts.size()-1;
+		for (size_t i = 0; i < numThreads; i++)
+		{
+			while (threadIndex[i] < resultPerThread[i].size() && std::get<0>(resultPerThread[i][threadIndex[i]]) == current)
+			{
+				positions.emplace_back(std::get<1>(resultPerThread[i][threadIndex[i]]), std::get<2>(resultPerThread[i][threadIndex[i]]));
+				threadIndex[i] += 1;
+			}
+			if (threadIndex[i] < resultPerThread[i].size())
+			{
+				assert(std::get<0>(resultPerThread[i][threadIndex[i]]) > current);
+				next = std::min(next, std::get<0>(resultPerThread[i][threadIndex[i]]));
+			}
+			else
+			{
+				numFinished += 1;
+			}
+		}
+		if (numFinished == numThreads) break;
+		assert(next > current);
+		current = next;
+	}
+	starts.emplace_back(positions.size());
+	assert(starts.size() == locator.size()+1);
+	assert(positions.size() == totalSize);
 }
 
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount) const
@@ -311,9 +387,9 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	std::vector<std::tuple<size_t, size_t, size_t>> matchIndices;
 	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
 	{
-		auto found = minimizerIndex.find(kmer);
-		if (found == minimizerIndex.end()) return;
-		matchIndices.emplace_back(pos, kmer, found->second.size());
+		auto found = locator.find(kmer);
+		if (found == locator.end()) return;
+		matchIndices.emplace_back(pos, kmer, starts[found->second+1] - starts[found->second]);
 	});
 	//prefer less common minimizers
 	std::sort(matchIndices.begin(), matchIndices.end(), [this](const std::tuple<size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t>& right)
@@ -323,12 +399,12 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	std::vector<SeedHit> result;
 	for (auto match : matchIndices)
 	{
-		auto found = minimizerIndex.find(std::get<1>(match));
-		assert(found != minimizerIndex.end());
-		for (auto index : found->second)
+		auto found = locator.find(std::get<1>(match));
+		assert(found != locator.end());
+		for (size_t i = starts[found->second]; i < starts[found->second+1]; i++)
 		{
 			if (result.size() >= maxCount) break;
-			result.push_back(matchToSeedHit(index.first, index.second, std::get<0>(match), std::get<2>(match)));
+			result.push_back(matchToSeedHit(positions[i].first, positions[i].second, std::get<0>(match), std::get<2>(match)));
 		}
 		if (result.size() >= maxCount) break;
 	}
@@ -344,9 +420,9 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 void MinimizerSeeder::initMaxCount()
 {
 	maxCount = 0;
-	for (auto pair : minimizerIndex)
+	for (size_t i = 0; i < starts.size()-1; i++)
 	{
-		maxCount = std::max(maxCount, pair.second.size());
+		maxCount = std::max(maxCount, starts[i+1] - starts[i]);
 	}
 	maxCount += 1;
 }
