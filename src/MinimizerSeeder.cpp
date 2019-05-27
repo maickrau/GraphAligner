@@ -1,3 +1,4 @@
+#include <thread>
 #include <cmath>
 #include "CommonUtils.h"
 #include "MinimizerSeeder.h"
@@ -38,10 +39,22 @@ std::vector<bool> getValidChars()
 	return result;
 }
 
+// https://naml.us/post/inverse-of-a-hash-function/
+uint64_t hash(uint64_t key) {
+	key = (~key) + (key << 21); // key = (key << 21) - key - 1;
+	key = key ^ (key >> 24);
+	key = (key + (key << 3)) + (key << 8); // key * 265
+	key = key ^ (key >> 14);
+	key = (key + (key << 2)) + (key << 4); // key * 21
+	key = key ^ (key >> 28);
+	key = key + (key << 31);
+	return key;
+}
+
 std::vector<bool> validChar = getValidChars();
 
-template <typename OrderF, typename CallbackF>
-void iterateMinimizers(const std::string& str, OrderF kmerOrder, size_t minimizerLength, size_t windowSize, CallbackF callback)
+template <typename CallbackF>
+void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
 {
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
@@ -66,11 +79,11 @@ start:
 		kmer <<= 2;
 		kmer |= charToInt(str[offset+i]);
 	}
-	size_t minOrder = kmerOrder(kmer);
+	size_t minOrder = hash(kmer);
 	size_t minPos = offset + minimizerLength - 1;
 	size_t minKmer = kmer;
 	size_t minWindowPos = minimizerLength % window.size();
-	window[minimizerLength % window.size()] = kmer;
+	window[(minimizerLength-1) % window.size()] = kmer;
 	for (size_t i = minimizerLength; i < windowSize && offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
@@ -79,9 +92,9 @@ start:
 			{
 				for (size_t j = 0; j < window.size(); j++)
 				{
-					size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength - 1;
+					size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
 					if (seqPos >= str.size()) continue;
-					if (kmerOrder(window[j]) == minOrder)
+					if (hash(window[j]) == minOrder)
 					{
 						callback(seqPos, window[j]);
 					}
@@ -94,9 +107,9 @@ start:
 		kmer &= mask;
 		kmer |= charToInt(str[offset+i]);
 		window[i % window.size()] = kmer;
-		if (kmerOrder(kmer) < minOrder)
+		if (hash(kmer) < minOrder)
 		{
-			minOrder = kmerOrder(kmer);
+			minOrder = hash(kmer);
 			minPos = offset + i;
 			minKmer = kmer;
 			minWindowPos = i % window.size();
@@ -106,9 +119,9 @@ start:
 	{
 		for (size_t j = 0; j < window.size(); j++)
 		{
-			size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength - 1;
+			size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
 			if (seqPos >= str.size()) continue;
-			if (kmerOrder(window[j]) == minOrder)
+			if (hash(window[j]) == minOrder)
 			{
 				callback(seqPos, window[j]);
 			}
@@ -127,15 +140,15 @@ start:
 		window[i % window.size()] = kmer;
 		if (minWindowPos == i % window.size())
 		{
-			minOrder = kmerOrder(window[0]);
+			minOrder = hash(window[0]);
 			minWindowPos = 0;
 			minPos = offset + i - (i % window.size());
 			minKmer = window[0];
 			for (size_t j = 1; j < window.size(); j++)
 			{
-				if (kmerOrder(window[j]) < minOrder)
+				if (hash(window[j]) < minOrder)
 				{
-					minOrder = kmerOrder(window[j]);
+					minOrder = hash(window[j]);
 					minWindowPos = j;
 					minPos = offset + i - ((i - j) % window.size());
 					minKmer = window[j];
@@ -145,16 +158,16 @@ start:
 			{
 				for (size_t j = 0; j < window.size(); j++)
 				{
-					if (kmerOrder(window[j]) == minOrder)
+					if (hash(window[j]) == minOrder)
 					{
 						callback(offset + i - ((i - j) % window.size()), window[j]);
 					}
 				}
 			}
 		}
-		else if (kmerOrder(kmer) <= minOrder)
+		else if (hash(kmer) <= minOrder)
 		{
-			minOrder = kmerOrder(kmer);
+			minOrder = hash(kmer);
 			minPos = offset + i;
 			minKmer = kmer;
 			minWindowPos = i % window.size();
@@ -163,9 +176,8 @@ start:
 	}
 }
 
-MinimizerSeeder::MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize) :
+MinimizerSeeder::MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
 minimizerIndex(),
-kmerOrder(),
 minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
@@ -173,22 +185,15 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
 	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
-	for (auto node : graph.nodes)
-	{
-		addMinimizers(node.second, node.first*2);
-		addMinimizers(CommonUtils::ReverseComplement(node.second), node.first*2+1);
-	}
-	finalizeOrder();
+	initMinimizers(graph, numThreads);
 	initMaxCount();
 }
 
-MinimizerSeeder::MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize) :
+MinimizerSeeder::MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
 minimizerIndex(),
-kmerOrder(),
 minimizerLength(minimizerLength),
 windowSize(windowSize),
 maxCount(0),
@@ -196,26 +201,118 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	kmerOrder.set_empty_key(std::numeric_limits<size_t>::max());
 	minimizerIndex.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
-	for (int i = 0; i < graph.node_size(); i++)
-	{
-		addMinimizers(graph.node(i).sequence(), graph.node(i).id()*2);
-		addMinimizers(CommonUtils::ReverseComplement(graph.node(i).sequence()), graph.node(i).id()*2+1);
-	}
-	finalizeOrder();
+	initMinimizers(graph, numThreads);
 	initMaxCount();
+}
+
+void MinimizerSeeder::initMinimizers(const GfaGraph& graph, size_t numThreads)
+{
+	auto nodeIter = graph.nodes.begin();
+	std::mutex nodeMutex;
+	std::vector<std::thread> threads;
+	std::vector<std::vector<std::tuple<size_t, int, size_t>>> resultPerThread;
+	resultPerThread.resize(numThreads);
+
+	for (size_t i = 0; i < numThreads; i++)
+	{
+		threads.emplace_back([this, &graph, &resultPerThread, i, &nodeMutex, &nodeIter](){
+			while (true)
+			{
+				auto iter = graph.nodes.end();
+				{
+					std::lock_guard<std::mutex> guard { nodeMutex };
+					iter = nodeIter;
+					if (nodeIter != graph.nodes.end()) ++nodeIter;
+				}
+				if (iter == graph.nodes.end()) break;
+				int nodeId = iter->first * 2;
+				iterateMinimizers(iter->second, minimizerLength, windowSize, [&resultPerThread, i, nodeId](size_t pos, size_t kmer)
+				{
+					resultPerThread[i].emplace_back(kmer, nodeId, pos);
+				});
+				nodeId = iter->first * 2 + 1;
+				iterateMinimizers(CommonUtils::ReverseComplement(iter->second), minimizerLength, windowSize, [&resultPerThread, i, nodeId](size_t pos, size_t kmer)
+				{
+					resultPerThread[i].emplace_back(kmer, nodeId, pos);
+				});
+			}
+		});
+	}
+
+	for (size_t i = 0; i < threads.size(); i++)
+	{
+		threads[i].join();
+	}
+	threads.clear();
+
+	for (size_t i = 0; i < resultPerThread.size(); i++)
+	{
+		for (auto t : resultPerThread[i])
+		{
+			minimizerIndex[std::get<0>(t)].emplace_back(std::get<1>(t), std::get<2>(t));
+		}
+	}
+}
+
+void MinimizerSeeder::initMinimizers(const vg::Graph& graph, size_t numThreads)
+{
+	int nodeI = 0;
+	std::mutex nodeMutex;
+	std::vector<std::thread> threads;
+	std::vector<std::vector<std::tuple<size_t, int, size_t>>> resultPerThread;
+	resultPerThread.resize(numThreads);
+
+	for (size_t i = 0; i < numThreads; i++)
+	{
+		threads.emplace_back([this, &graph, &resultPerThread, i, &nodeMutex, &nodeI](){
+			while (true)
+			{
+				auto index = graph.node_size();
+				{
+					std::lock_guard<std::mutex> guard { nodeMutex };
+					index = nodeI;
+					if (nodeI < graph.node_size()) ++nodeI;
+				}
+				if (index == graph.node_size()) break;
+				int nodeId = graph.node(index).id() * 2;
+				iterateMinimizers(graph.node(index).sequence(), minimizerLength, windowSize, [&resultPerThread, i, nodeId](size_t pos, size_t kmer)
+				{
+					resultPerThread[i].emplace_back(kmer, nodeId, pos);
+				});
+				nodeId = graph.node(index).id() * 2 + 1;
+				iterateMinimizers(CommonUtils::ReverseComplement(graph.node(index).sequence()), minimizerLength, windowSize, [&resultPerThread, i, nodeId](size_t pos, size_t kmer)
+				{
+					resultPerThread[i].emplace_back(kmer, nodeId, pos);
+				});
+			}
+		});
+	}
+
+	for (size_t i = 0; i < threads.size(); i++)
+	{
+		threads[i].join();
+	}
+	threads.clear();
+	
+	for (size_t i = 0; i < resultPerThread.size(); i++)
+	{
+		for (auto t : resultPerThread[i])
+		{
+			minimizerIndex[std::get<0>(t)].emplace_back(std::get<1>(t), std::get<2>(t));
+		}
+	}
 }
 
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount) const
 {
 	std::vector<std::tuple<size_t, size_t, size_t>> matchIndices;
-	iterateMinimizers(sequence, [this](size_t kmer){ return getOrder(kmer); }, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
+	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
 	{
 		auto found = minimizerIndex.find(kmer);
-		assert(found != minimizerIndex.end());
+		if (found == minimizerIndex.end()) return;
 		matchIndices.emplace_back(pos, kmer, found->second.size());
 	});
 	//prefer less common minimizers
@@ -244,30 +341,6 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 	return result;
 }
 
-void MinimizerSeeder::addMinimizers(const std::string& str, int nodeId)
-{
-	iterateMinimizers(str, [this](size_t kmer){ return getOrAddOrder(kmer); }, minimizerLength, windowSize, [this, nodeId](size_t pos, size_t kmer)
-	{
-		minimizerIndex[kmer].emplace_back(nodeId, pos);
-	});
-}
-
-size_t MinimizerSeeder::getOrAddOrder(size_t kmer)
-{
-	auto found = kmerOrder.find(kmer);
-	if (found != kmerOrder.end()) return found->second;
-	size_t result = dis(gen);
-	kmerOrder[kmer] = result;
-	return result;
-}
-
-size_t MinimizerSeeder::getOrder(size_t kmer) const
-{
-	auto found = kmerOrder.find(kmer);
-	if (found != kmerOrder.end()) return found->second;
-	return std::numeric_limits<size_t>::max();
-}
-
 void MinimizerSeeder::initMaxCount()
 {
 	maxCount = 0;
@@ -276,19 +349,4 @@ void MinimizerSeeder::initMaxCount()
 		maxCount = std::max(maxCount, pair.second.size());
 	}
 	maxCount += 1;
-}
-
-void MinimizerSeeder::finalizeOrder()
-{
-	decltype(kmerOrder) newOrder;
-	newOrder.set_empty_key(std::numeric_limits<size_t>::max());
-	for (auto pair : kmerOrder)
-	{
-		auto found = minimizerIndex.find(pair.first);
-		if (found != minimizerIndex.end() && found->second.size() > 0)
-		{
-			newOrder[pair.first] = pair.second;
-		}
-	}
-	std::swap(kmerOrder, newOrder);
 }

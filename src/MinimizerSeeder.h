@@ -11,18 +11,15 @@
 class MinimizerSeeder
 {
 public:
-	MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize);
-	MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize);
+	MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
+	MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
 	std::vector<SeedHit> getSeeds(const std::string& sequence, size_t maxCount) const;
 private:
+	void initMinimizers(const GfaGraph& graph, size_t numThreads);
+	void initMinimizers(const vg::Graph& graph, size_t numThreads);
 	SeedHit matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const;
-	void addMinimizers(const std::string& str, int nodeId);
-	size_t getOrder(size_t kmer) const;
-	size_t getOrAddOrder(size_t kmer);
 	void initMaxCount();
-	void finalizeOrder();
 	google::dense_hash_map<size_t, std::vector<std::pair<int, size_t>>> minimizerIndex;
-	google::dense_hash_map<size_t, size_t> kmerOrder;
 	size_t minimizerLength;
 	size_t windowSize;
 	size_t maxCount;

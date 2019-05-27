@@ -442,7 +442,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 				if (loadMinimizerSeeder)
 				{
 					std::cout << "Build minimizer seeder from the graph" << std::endl;
-					*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize);
+					*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
 				}
 				return DirectedGraph::BuildFromVG(graph, tryDAG);
 			}
@@ -462,7 +462,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 			if (loadMinimizerSeeder)
 			{
 				std::cout << "Build minimizer seeder from the graph" << std::endl;
-				*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize);
+				*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
 			}
 			return DirectedGraph::BuildFromGFA(graph, tryDAG);
 		}
