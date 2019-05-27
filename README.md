@@ -49,7 +49,7 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 - `-g` input graph. Format .gfa / .vg
 - `-f` input reads. Format .fasta / .fastq / .fasta.gz / .fastq.gz. You can input multiple files with `-f file1 -f file2 ...` or `-f file1 file2 ...`
 - `-t` number of aligner threads. The program also uses two IO threads in addition to these.
-- `-a` output file name. Format .gam
+- `-a` output file name. Format .gam or .json
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
 - `--global-alignment` force the read to be aligned end-to-end. Normally the alignment is stopped if the score gets too poor. This forces the alignment to continue to the end of the read regardless of score. If you use this you should do some other filtering on the alignments to remove false alignments.
@@ -70,7 +70,7 @@ Extension:
 - `-b` alignment bandwidth. Unlike in linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
 - `-B` ramp bandwidth. If a read cannot be aligned with the alignment bandwidth, switch to the ramp bandwidth at the problematic location. Values should be between 1-35.
 - `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
-- `--high-memory` high memory mode. Runs a bit faster but uses a lot more memory
+- `--high-memory` high memory mode. Runs a bit faster but uses a LOT more memory
 
 Suggested example parameters:
 - Variation graph: `-b 35 --try-all-seeds`

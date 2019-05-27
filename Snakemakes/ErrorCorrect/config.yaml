@@ -26,7 +26,7 @@ LighterPath: lighter/lighter
 
 ### Misc params. Defaults might work
 
-# k for error correcting the reads. Try between 10-20
+# k for error correcting the reads. Try between 10-30
 SmallK: 11
 # k for the de Bruijn graph. Try between ~1/2 and ~2/3 of short read length
 BigK: 61

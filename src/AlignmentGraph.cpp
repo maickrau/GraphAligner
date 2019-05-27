@@ -221,7 +221,6 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	size_t from = nodeLookup.at(node_id_from).back();
 	size_t to = std::numeric_limits<size_t>::max();
 	assert(nodeOffset[from] + nodeLength[from] == originalNodeSize[node_id_from]);
-	auto looked = nodeLookup[node_id_to];
 	for (auto node : nodeLookup[node_id_to])
 	{
 		if (nodeOffset[node] == startOffset)
@@ -278,6 +277,15 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 		std::cout << "use component ordering" << std::endl;
 		doComponentOrder();
 	}
+#ifndef NDEBUG
+	for (auto pair : nodeLookup)
+	{
+		for (size_t i = 1; i < pair.second.size(); i++)
+		{
+			assert(nodeOffset[pair.second[i-1]] < nodeOffset[pair.second[i]]);
+		}
+	}
+#endif
 }
 
 void AlignmentGraph::findLinearizable()
@@ -462,9 +470,14 @@ public:
 
 size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 {
-	auto nodes = nodeLookup.at(nodeId);
-	size_t index = 0;
-	while (index < nodes.size() && (nodeOffset[nodes[index]] > offset || nodeOffset[nodes[index]] + NodeLength(nodes[index]) <= offset)) index++;
+	const auto& nodes = nodeLookup.at(nodeId);
+	assert(nodes.size() > 0);
+	//guess the index
+	size_t index = nodes.size() * ((double)offset / (double)originalNodeSize.at(nodeId));
+	if (index >= nodes.size()) index = nodes.size()-1;
+	//go to the exact index
+	while (index < nodes.size()-1 && (nodeOffset[nodes[index]] + NodeLength(nodes[index]) <= offset)) index++;
+	while (index > 0 && (nodeOffset[nodes[index]] > offset)) index--;
 	assert(index != nodes.size());
 	size_t result = nodes[index];
 	assert(nodeOffset[result] <= offset);
@@ -475,7 +488,7 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t offset) const
 {
 	assert(nodeLookup.count(nodeId) == 1);
-	auto nodes = nodeLookup.at(nodeId);
+	const auto& nodes = nodeLookup.at(nodeId);
 	size_t originalSize = originalNodeSize.at(nodeId);
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
@@ -565,7 +578,7 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 		else
 		{
 			assert(ambiguousCount < ambiguousNodes.size());
-			assert(ambiguousNodes.size()-1-ambiguousCount > nonAmbiguousCount);
+			assert(ambiguousNodes.size()-1-ambiguousCount >= nonAmbiguousCount);
 			renumbering.push_back(ambiguousNodes.size()-1-ambiguousCount);
 			ambiguousCount++;
 		}
@@ -615,9 +628,12 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 	{
 		size_t foundSize = 0;
 		std::set<size_t> offsets;
+		size_t lastOffset = 0;
 		for (auto node : pair.second)
 		{
 			assert(offsets.count(nodeOffset[node]) == 0);
+			assert(offsets.size() == 0 || nodeOffset[node] > lastOffset);
+			lastOffset = nodeOffset[node];
 			offsets.insert(nodeOffset[node]);
 			assert(nodeIDs[node] == pair.first);
 			foundSize += nodeLength[node];

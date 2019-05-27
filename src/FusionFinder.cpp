@@ -411,9 +411,9 @@ void writeFusions(const std::vector<FusionAlignment>& result, std::string filena
 		}
 		for (int i = fusionIndex+1; i < fusionaln->path().mapping_size(); i++)
 		{
-			if (fusionaln->path().mapping(i).position().name() != leftName)
+			if (fusionaln->path().mapping(i).position().name() != rightName)
 			{
-				leftName = fusionaln->path().mapping(i).position().name();
+				rightName = fusionaln->path().mapping(i).position().name();
 				break;
 			}
 		}
