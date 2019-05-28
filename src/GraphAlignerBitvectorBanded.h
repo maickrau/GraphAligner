@@ -499,7 +499,7 @@ private:
 				if (current.hasNode(neighbor))
 				{
 					auto neighborSlice = current.node(neighbor).endSlice;
-					if (neighborSlice.getValue(offset-1) < smallestFound)
+					if (neighborSlice.getValue(offset-1) <= smallestFound)
 					{
 						smallestFound = neighborSlice.getValue(offset-1);
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, pos.seqPos-1 };
