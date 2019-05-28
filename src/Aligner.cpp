@@ -30,6 +30,7 @@ struct Seeder
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
 	size_t minimizerCount;
+	size_t minimizerChunkSize;
 	const MummerSeeder* mummerSeeder;
 	const MinimizerSeeder* minimizerSeeder;
 	const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds;
@@ -40,6 +41,7 @@ struct Seeder
 		minimizerLength(params.minimizerLength),
 		minimizerWindowSize(params.minimizerWindowSize),
 		minimizerCount(params.minimizerCount),
+		minimizerChunkSize(params.minimizerChunkSize),
 		mummerSeeder(mummerSeeder),
 		minimizerSeeder(minimizerSeeder),
 		fileSeeds(fileSeeds)
@@ -96,7 +98,7 @@ struct Seeder
 				return mummerSeeder->getMemSeeds(seq, memCount, mxmLength);
 			case Mode::Minimizer:
 				assert(minimizerSeeder != nullptr);
-				return minimizerSeeder->getSeeds(seq, minimizerCount);
+				return minimizerSeeder->getSeeds(seq, minimizerCount, minimizerChunkSize);
 			case Mode::None:
 				assert(false);
 		}
@@ -527,7 +529,7 @@ void alignReads(AlignerParams params)
 			std::cout << "MEM seeds, min length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
 			break;
 		case Seeder::Mode::Minimizer:
-			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", max count " << seeder.minimizerCount << std::endl;
+			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", per chunk count " << seeder.minimizerCount << ", chunk size " << seeder.minimizerChunkSize << std::endl;
 			break;
 		case Seeder::Mode::None:
 			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;

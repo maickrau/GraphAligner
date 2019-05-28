@@ -31,6 +31,7 @@ struct AlignerParams
 	size_t minimizerCount;
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
+	size_t minimizerChunkSize;
 };
 
 void alignReads(AlignerParams params);

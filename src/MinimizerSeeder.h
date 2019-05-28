@@ -13,7 +13,7 @@ class MinimizerSeeder
 public:
 	MinimizerSeeder(const GfaGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
 	MinimizerSeeder(const vg::Graph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
-	std::vector<SeedHit> getSeeds(const std::string& sequence, size_t maxCount) const;
+	std::vector<SeedHit> getSeeds(const std::string& sequence, size_t maxCount, size_t chunkSize) const;
 private:
 	void initMinimizers(const GfaGraph& graph, size_t numThreads);
 	void initMinimizers(const vg::Graph& graph, size_t numThreads);

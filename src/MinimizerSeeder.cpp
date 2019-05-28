@@ -382,31 +382,44 @@ void MinimizerSeeder::initMinimizers(const vg::Graph& graph, size_t numThreads)
 	assert(positions.size() == totalSize);
 }
 
-std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount) const
+std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount, size_t chunkSize) const
 {
-	std::vector<std::tuple<size_t, size_t, size_t>> matchIndices;
-	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
+	size_t numChunks = (sequence.size() + chunkSize - 1) / chunkSize;
+	size_t bpPerChunk = (sequence.size() + numChunks - 1) / numChunks;
+	std::vector<std::vector<std::tuple<size_t, size_t, size_t>>> matchIndices;
+	matchIndices.resize(numChunks);
+	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
 	{
 		auto found = locator.find(kmer);
 		if (found == locator.end()) return;
-		matchIndices.emplace_back(pos, kmer, starts[found->second+1] - starts[found->second]);
+		size_t chunk = pos / bpPerChunk;
+		assert(chunk < matchIndices.size());
+		matchIndices[chunk].emplace_back(pos, kmer, starts[found->second+1] - starts[found->second]);
 	});
 	//prefer less common minimizers
-	std::sort(matchIndices.begin(), matchIndices.end(), [this](const std::tuple<size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t>& right)
+	for (size_t i = 0; i < numChunks; i++)
 	{
-		return std::get<2>(left) < std::get<2>(right);
-	});
-	std::vector<SeedHit> result;
-	for (auto match : matchIndices)
-	{
-		auto found = locator.find(std::get<1>(match));
-		assert(found != locator.end());
-		for (size_t i = starts[found->second]; i < starts[found->second+1]; i++)
+		std::sort(matchIndices[i].begin(), matchIndices[i].end(), [this](const std::tuple<size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t>& right)
 		{
-			if (result.size() >= maxCount) break;
-			result.push_back(matchToSeedHit(positions[i].first, positions[i].second, std::get<0>(match), std::get<2>(match)));
+			return std::get<2>(left) < std::get<2>(right);
+		});
+	}
+	std::vector<SeedHit> result;
+	for (size_t i = 0; i < numChunks; i++)
+	{
+		size_t seedsHere = 0;
+		for (auto match : matchIndices[i])
+		{
+			auto found = locator.find(std::get<1>(match));
+			assert(found != locator.end());
+			for (size_t i = starts[found->second]; i < starts[found->second+1]; i++)
+			{
+				if (seedsHere >= maxCount) break;
+				result.push_back(matchToSeedHit(positions[i].first, positions[i].second, std::get<0>(match), std::get<2>(match)));
+				seedsHere += 1;
+			}
+			if (seedsHere >= maxCount) break;
 		}
-		if (result.size() >= maxCount) break;
 	}
 	return result;
 }
