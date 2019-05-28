@@ -604,7 +604,7 @@ private:
 				if (previous.hasNode(neighbor))
 				{
 					auto neighborSlice = previous.node(neighbor).endSlice;
-					if (neighborSlice.scoreEnd < smallestFound)
+					if (neighborSlice.scoreEnd <= smallestFound)
 					{
 						smallestFound = neighborSlice.scoreEnd;
 						smallestPos = MatrixPosition { neighbor, params.graph.NodeLength(neighbor)-1, j-1 };
