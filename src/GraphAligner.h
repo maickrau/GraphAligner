@@ -192,7 +192,7 @@ private:
 			trace[i].DPposition.node = params.graph.nodeIDs[nodeIndex];
 			trace[i].DPposition.nodeOffset += params.graph.nodeOffset[nodeIndex];
 			assert(trace[i].DPposition.seqPos < sequence.size());
-			assert(i == 0 || trace[i].sequenceCharacter == sequence[trace[i].DPposition.seqPos]);
+			assert(i == 0 || trace[i].DPposition.seqPos == trace[0].DPposition.seqPos || trace[i].sequenceCharacter == sequence[trace[i].DPposition.seqPos]);
 		}
 		trace[0].sequenceCharacter = sequence[trace[0].DPposition.seqPos];
 	}
