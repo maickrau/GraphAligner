@@ -213,6 +213,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 {
 	std::unordered_map<std::string, int> nameMapping;
 	GfaGraph result;
+	bool hasVaryingOverlaps = false;
 	while (file.good())
 	{
 		std::string line;
@@ -269,6 +270,10 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			assert(dummyc == 'M');
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
+			if (result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
+			{
+				hasVaryingOverlaps = true;
+			}
 			if (!allowVaryingOverlaps && result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
 			{
 				throw CommonUtils::InvalidGraphException { "Varying edge overlaps are not allowed" };
@@ -283,6 +288,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			}
 		}
 	}
+	if (hasVaryingOverlaps) result.edgeOverlap = 0;
 	if (result.edges.size() == 0) result.edgeOverlap = 0;
 	bool allIdsIntegers = true;
 	for (auto pair : nameMapping)

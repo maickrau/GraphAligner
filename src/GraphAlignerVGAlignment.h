@@ -34,8 +34,9 @@ class GraphAlignerVGAlignment
 	};
 public:
 
-	static AlignmentResult::AlignmentItem traceToAlignment(const Params& params, const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<TraceItem>& trace, size_t cellsProcessed, bool reverse)
+	static std::shared_ptr<vg::Alignment> traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<TraceItem>& trace, size_t cellsProcessed, bool reverse)
 	{
+		if (trace.size() == 0) return nullptr;
 		vg::Alignment* aln = new vg::Alignment;
 		std::shared_ptr<vg::Alignment> result { aln };
 		result->set_name(seq_id);
@@ -43,7 +44,6 @@ public:
 		result->set_sequence(sequence);
 		auto path = new vg::Path;
 		result->set_allocated_path(path);
-		if (trace.size() == 0) return emptyAlignment(0, cellsProcessed);
 		MergedNodePos currentPos;
 		currentPos.nodeId = trace[0].DPposition.node;
 		currentPos.reverse = (trace[0].DPposition.node % 2) == 1;
@@ -159,18 +159,7 @@ public:
 		}
 		result->set_identity((double)matches / (double)(matches + mismatches + insertions + deletions));
 		assert(currentEdit != Empty);
-		AlignmentResult::AlignmentItem item { result, cellsProcessed, std::numeric_limits<size_t>::max() };
-		item.alignmentStart = trace[0].DPposition.seqPos;
-		item.alignmentEnd = trace.back().DPposition.seqPos;
-		return item;
-	}
-
-	static AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed)
-	{
-		vg::Alignment* aln = new vg::Alignment;
-		std::shared_ptr<vg::Alignment> result { aln };
-		result->set_score(std::numeric_limits<decltype(result->score())>::max());
-		return AlignmentResult::AlignmentItem { result, cellsProcessed, elapsedMilliseconds };
+		return result;
 	}
 
 	static bool posEqual(const vg::Position& pos1, const vg::Position& pos2)

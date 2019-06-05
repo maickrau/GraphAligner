@@ -215,6 +215,7 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph, bool tryDAG)
 AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph, bool tryDAG)
 {
 	AlignmentGraph result;
+	result.DBGoverlap = graph.edgeOverlap;
 	std::unordered_map<int, std::vector<size_t>> breakpoints;
 	for (auto pair : graph.varyingOverlaps)
 	{

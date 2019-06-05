@@ -17,6 +17,8 @@ struct AlignerParams
 	size_t maxCellsPerSlice;
 	std::vector<std::string> seedFiles;
 	std::string outputAlignmentFile;
+	std::string outputCorrectedFile;
+	std::string outputCorrectedClippedFile;
 	bool verboseMode;
 	bool tryAllSeeds;
 	bool highMemory;
@@ -27,6 +29,8 @@ struct AlignerParams
 	std::string seederCachePrefix;
 	bool forceGlobal;
 	bool outputJSON;
+	bool compressCorrected;
+	bool compressClipped;
 	bool preciseClipping;
 };
 

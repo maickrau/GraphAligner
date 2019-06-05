@@ -15,6 +15,7 @@
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
 #include "MummerSeeder.h"
+#include "ReadCorrection.h"
 
 struct Seeder
 {
@@ -134,15 +135,6 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Al
 	}
 }
 
-void writeTrace(const std::vector<AlignmentResult::TraceItem>& trace, const std::string& filename)
-{
-	std::ofstream file { filename };
-	for (size_t i = 0; i < trace.size(); i++)
-	{
-		file << trace[i].nodeID << " " << trace[i].offset << " " << (trace[i].reverse ? 1 : 0) << " " << trace[i].readpos << " " << (int)trace[i].type << " " << trace[i].graphChar << " " << trace[i].readChar << std::endl;
-	}
-}
-
 void readFastqs(const std::vector<std::string>& filenames, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
 {
 	assertSetRead("Read streamer", "No seed");
@@ -165,11 +157,11 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 	readStreamingFinished = true;
 }
 
-void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode, bool outputJSON)
+void consumeBytesAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode, bool textMode)
 {
 	assertSetRead("Writer", "No seed");
 	auto openmode = std::ios::out;
-	if (!outputJSON) openmode |= std::ios::binary;
+	if (!textMode) openmode |= std::ios::binary;
 	std::ofstream outfile { filename, openmode };
 
 	bool wroteAny = false;
@@ -204,7 +196,7 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 		wroteAny = true;
 	}
 
-	if (!outputJSON && !wroteAny)
+	if (!textMode && !wroteAny)
 	{
 		::google::protobuf::io::ZeroCopyOutputStream *raw_out =
 		      new ::google::protobuf::io::OstreamOutputStream(&outfile);
@@ -221,8 +213,133 @@ void consumeVGsAndWrite(const std::string& filename, moodycamel::ConcurrentQueue
 	allWriteDone = true;
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
+void QueueInsertSlowly(moodycamel::ProducerToken& token, moodycamel::ConcurrentQueue<std::string*>& queue, std::string&& str)
 {
+	std::string* write = new std::string { std::move(str) };
+	size_t waited = 0;
+	while (!queue.try_enqueue(token, write) && !queue.try_enqueue(token, write))
+	{
+		if (queue.size_approx() < 100 && queue.enqueue(token, write)) break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		waited++;
+		if (waited >= 10)
+		{
+			if (queue.enqueue(token, write)) break;
+		}
+	}
+}
+
+void writeAlnsToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, const AlignmentResult& alignments)
+{
+	std::stringstream strstr;
+	::google::protobuf::io::ZeroCopyOutputStream *raw_out;
+	::google::protobuf::io::GzipOutputStream *gzip_out;
+	::google::protobuf::io::CodedOutputStream *coded_out;
+	if (!params.outputJSON)
+	{
+		raw_out = new ::google::protobuf::io::OstreamOutputStream(&strstr);
+	    gzip_out = new ::google::protobuf::io::GzipOutputStream(raw_out);
+	    coded_out = new ::google::protobuf::io::CodedOutputStream(gzip_out);
+		coded_out->WriteVarint64(alignments.alignments.size());
+	}
+	for (size_t i = 0; i < alignments.alignments.size(); i++)
+	{
+		assert(!alignments.alignments[i].alignmentFailed());
+		assert(alignments.alignments[i].alignment != nullptr);
+		if (!params.outputJSON)
+		{
+			std::string s;
+			alignments.alignments[i].alignment->SerializeToString(&s);
+			coded_out->WriteVarint32(s.size());
+			coded_out->WriteRaw(s.data(), s.size());
+		}
+		else
+		{
+			google::protobuf::util::JsonPrintOptions options;
+			options.preserve_proto_field_names = true;
+			std::string s;
+			google::protobuf::util::MessageToJsonString(*alignments.alignments[i].alignment, &s, options);
+			strstr << s;
+			strstr << '\n';
+		}
+	}
+	if (!params.outputJSON)
+	{
+		delete coded_out;
+		delete gzip_out;
+		delete raw_out;
+	}
+	QueueInsertSlowly(token, alignmentsOut, strstr.str());
+}
+
+void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
+{
+	std::stringstream strstr;
+	zstr::ostream *compressed;
+	if (params.compressCorrected)
+	{
+		compressed = new zstr::ostream(strstr);
+	}
+	std::vector<Correction> corrections;
+	for (size_t i = 0; i < alignments.alignments.size(); i++)
+	{
+		assert(!alignments.alignments[i].alignmentFailed());
+		assert(alignments.alignments[i].corrected.size() > 0);
+		corrections.emplace_back();
+		corrections.back().startIndex = alignments.alignments[i].alignmentStart;
+		corrections.back().endIndex = alignments.alignments[i].alignmentEnd;
+		corrections.back().corrected = alignments.alignments[i].corrected;
+	}
+	std::string corrected = getCorrected(original, corrections, maxOverlap);
+	if (params.compressCorrected)
+	{
+		(*compressed) << ">" << alignments.readName << std::endl;
+		(*compressed) << corrected << std::endl;
+		delete compressed;
+	}
+	else
+	{
+		strstr << ">" << alignments.readName << std::endl;
+		strstr << corrected << std::endl;
+	}
+	QueueInsertSlowly(token, correctedOut, strstr.str());
+}
+
+void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, const AlignmentResult& alignments)
+{
+	std::stringstream strstr;
+	zstr::ostream *compressed;
+	if (params.compressClipped)
+	{
+		compressed = new zstr::ostream(strstr);
+	}
+	for (size_t i = 0; i < alignments.alignments.size(); i++)
+	{
+		assert(!alignments.alignments[i].alignmentFailed());
+		assert(alignments.alignments[i].corrected.size() > 0);
+		if (params.compressClipped)
+		{
+			(*compressed) << ">" << alignments.readName << "_" << i << "_" << alignments.alignments[i].alignmentStart << "_" << alignments.alignments[i].alignmentEnd << std::endl;
+			(*compressed) << alignments.alignments[i].corrected << std::endl;
+		}
+		else
+		{
+			strstr << ">" << alignments.readName << "_" << i << "_" << alignments.alignments[i].alignmentStart << "_" << alignments.alignments[i].alignmentEnd << std::endl;
+			strstr << alignments.alignments[i].corrected << std::endl;
+		}
+	}
+	if (params.compressClipped)
+	{
+		delete compressed;
+	}
+	QueueInsertSlowly(token, correctedClippedOut, strstr.str());
+}
+
+void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
+{
+	moodycamel::ProducerToken alignmentToken { alignmentsOut };
+	moodycamel::ProducerToken correctedToken { correctedOut };
+	moodycamel::ProducerToken clippedToken { correctedClippedOut };
 	assertSetRead("Before any read", "No seed");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory };
 	BufferedWriter cerroutput;
@@ -302,6 +419,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		stats.seedsExtended += alignments.seedsExtended;
 		stats.readsWithAnAlignment += 1;
 
+		if (params.outputAlignmentFile != "" || !params.outputAllAlns)
+		{
+			for (size_t i = 0; i < alignments.alignments.size(); i++)
+			{
+				AddAlignment(fastq->seq_id, fastq->sequence, alignments.alignments[i]);
+				replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
+			}
+		}
+
 		if (!params.outputAllAlns)
 		{
 			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max(), [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
@@ -312,30 +438,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		std::string alignmentpositions;
 		size_t timems = 0;
 		size_t totalcells = 0;
-		std::stringstream strstr;
-		::google::protobuf::io::ZeroCopyOutputStream *raw_out;
-		::google::protobuf::io::GzipOutputStream *gzip_out;
-		::google::protobuf::io::CodedOutputStream *coded_out;
-		if (!params.outputJSON)
-		{
-			raw_out = new ::google::protobuf::io::OstreamOutputStream(&strstr);
-		    gzip_out = new ::google::protobuf::io::GzipOutputStream(raw_out);
-		    coded_out = new ::google::protobuf::io::CodedOutputStream(gzip_out);
-			coded_out->WriteVarint64(alignments.alignments.size());
-		}
+
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
-			try
-			{
-				assert(!alignments.alignments[i].alignmentFailed());
-				assert(alignments.alignments[i].alignment != nullptr);
-			}
-			catch (const ThreadReadAssertion::AssertionFailure& a)
-			{
-				reusableState.clear();
-				stats.assertionBroke = true;
-				continue;
-			}
 			stats.alignments += 1;
 			if (alignments.alignments[i].alignment->sequence().size() == fastq->sequence.size())
 			{
@@ -343,49 +448,30 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.bpInFullAlignments += alignments.alignments[i].alignment->sequence().size();
 			}
 			stats.bpInAlignments += alignments.alignments[i].alignment->sequence().size();
-			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
+			if (params.outputCorrectedFile != "" || params.outputCorrectedClippedFile != "") AddCorrected(alignments.alignments[i]);
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 			timems += alignments.alignments[i].elapsedMilliseconds;
 			totalcells += alignments.alignments[i].cellsProcessed;
-			if (params.outputJSON)
-			{
-				google::protobuf::util::JsonPrintOptions options;
-				options.preserve_proto_field_names = true;
-				std::string s;
-				google::protobuf::util::MessageToJsonString(*alignments.alignments[i].alignment, &s, options);
-				strstr << s;
-				strstr << '\n';
-			}
-			else
-			{
-				std::string s;
-				alignments.alignments[i].alignment->SerializeToString(&s);
-				coded_out->WriteVarint32(s.size());
-				coded_out->WriteRaw(s.data(), s.size());
-			}
 		}
-		if (!params.outputJSON)
-		{
-			delete coded_out;
-			delete gzip_out;
-			delete raw_out;
-		}
-		std::string* writeAlns = new std::string { strstr.str() };
-		size_t waited = 0;
-		while (!alignmentsOut.try_enqueue(token, writeAlns) && !alignmentsOut.try_enqueue(writeAlns))
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			waited++;
-			if (waited >= 1000)
-			{
-				if (alignmentsOut.size_approx() < 100 && alignmentsOut.enqueue(writeAlns)) break;
-			}
-		}
-		alignmentpositions.pop_back();
-		alignmentpositions.pop_back();
 
+		alignmentpositions.pop_back();
+		alignmentpositions.pop_back();
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << timems << "ms" << BufferedWriter::Flush;
 		coutoutput << "Read " << fastq->seq_id << " aligned by thread " << threadnum << " with positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
+
+		try
+		{
+			if (params.outputAlignmentFile != "") writeAlnsToQueue(alignmentToken, params, alignmentsOut, alignments);
+			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			if (params.outputCorrectedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
+		}
+		catch (const ThreadReadAssertion::AssertionFailure& a)
+		{
+			reusableState.clear();
+			stats.assertionBroke = true;
+			continue;
+		}
+
 	}
 	assertSetRead("After all reads", "No seed");
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
@@ -495,30 +581,35 @@ void alignReads(AlignerParams params)
 	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
 	std::cout << std::endl;
 
+	if (params.outputAlignmentFile != "") std::cout << "write alignments to " << params.outputAlignmentFile << std::endl;
+	if (params.outputCorrectedFile != "") std::cout << "write corrected reads to " << params.outputCorrectedFile << std::endl;
+	if (params.outputCorrectedClippedFile != "") std::cout << "write corrected & clipped reads to " << params.outputCorrectedClippedFile << std::endl;
+
 	std::vector<std::thread> threads;
 
 	assertSetRead("Running alignments", "No seed");
 
-	moodycamel::ConcurrentQueue<std::string*> outputAlns;
+	moodycamel::ConcurrentQueue<std::string*> outputAlns { 50, params.numThreads, params.numThreads };
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
+	moodycamel::ConcurrentQueue<std::string*> outputCorrected { 50, params.numThreads, params.numThreads };
+	moodycamel::ConcurrentQueue<std::string*> outputCorrectedClipped { 50, params.numThreads, params.numThreads };
 	moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>> readFastqsQueue;
 	std::atomic<bool> readStreamingFinished { false };
 	std::atomic<bool> allThreadsDone { false };
-	std::atomic<bool> allWriteDone { false };
-	std::vector<moodycamel::ProducerToken> tokens;
-	tokens.reserve(params.numThreads);
-	for (size_t i = 0; i < params.numThreads; i++)
-	{
-		tokens.emplace_back(outputAlns);
-	}
+	std::atomic<bool> alignmentWriteDone { false };
+	std::atomic<bool> correctedWriteDone { false };
+	std::atomic<bool> correctedClippedWriteDone { false };
 
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
 	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
-	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &allWriteDone, verboseMode=params.verboseMode, outputJSON=params.outputJSON]() { consumeVGsAndWrite(file, outputAlns, deallocAlns, allThreadsDone, allWriteDone, verboseMode, outputJSON); } };
+	std::thread writerThread { [file=params.outputAlignmentFile, &outputAlns, &deallocAlns, &allThreadsDone, &alignmentWriteDone, verboseMode=params.verboseMode, outputJSON=params.outputJSON]() { if (file != "") consumeBytesAndWrite(file, outputAlns, deallocAlns, allThreadsDone, alignmentWriteDone, verboseMode, outputJSON); else alignmentWriteDone = true; } };
+	std::thread correctedWriterThread { [file=params.outputCorrectedFile, &outputCorrected, &deallocAlns, &allThreadsDone, &correctedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressCorrected]() { if (file != "") consumeBytesAndWrite(file, outputCorrected, deallocAlns, allThreadsDone, correctedWriteDone, verboseMode, uncompressed); else correctedWriteDone = true; } };
+	std::thread correctedClippedWriterThread { [file=params.outputCorrectedClippedFile, &outputCorrectedClipped, &deallocAlns, &allThreadsDone, &correctedClippedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressClipped]() { if (file != "") consumeBytesAndWrite(file, outputCorrectedClipped, deallocAlns, allThreadsDone, correctedClippedWriteDone, verboseMode, uncompressed); else correctedClippedWriteDone = true; } };
+
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputAlns, &tokens, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputAlns, tokens[i], deallocAlns, stats); });
+		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputAlns, &outputCorrected, &outputCorrectedClipped, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputAlns, outputCorrected, outputCorrectedClipped, deallocAlns, stats); });
 	}
 
 	for (size_t i = 0; i < params.numThreads; i++)
@@ -530,6 +621,8 @@ void alignReads(AlignerParams params)
 	allThreadsDone = true;
 
 	writerThread.join();
+	correctedWriterThread.join();
+	correctedClippedWriterThread.join();
 	fastqThread.join();
 
 	if (mummerseeder != nullptr) delete mummerseeder;
@@ -546,8 +639,8 @@ void alignReads(AlignerParams params)
 	std::cout << "Seeds extended: " << stats.seedsExtended << std::endl;
 	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
-	std::cout << "Output alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
-	std::cout << "Output end-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
+	std::cout << "Alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
+	std::cout << "End-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
 	if (stats.assertionBroke)
 	{
 		std::cout << "Alignment broke with some reads. Look at stderr output." << std::endl;

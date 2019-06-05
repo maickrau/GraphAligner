@@ -101,6 +101,8 @@ public:
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::string OriginalNodeName(int nodeId) const;
 	size_t ComponentSize() const;
+	static AlignmentGraph DummyGraph();
+	size_t getDBGoverlap() const;
 
 private:
 	void findLinearizable();
@@ -122,6 +124,7 @@ private:
 	std::vector<bool> ambiguousNodes;
 	std::vector<size_t> componentNumber;
 	size_t firstAmbiguous;
+	size_t DBGoverlap;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>

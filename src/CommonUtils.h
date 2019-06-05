@@ -38,7 +38,7 @@ namespace CommonUtils
 			const vg::Alignment* const aln = f(alignments[i]);
 			if (!std::any_of(result.begin(), result.end(), [aln, f](const T& existing) { return inner::alignmentIncompatible(f(existing), aln); }))
 			{
-				result.push_back(alignments[i]);
+				result.emplace_back(std::move(alignments[i]));
 			}
 			if (result.size() == maxnum) break;
 		}

@@ -18,3 +18,17 @@ AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, seedHits, reusableState);
 }
+
+void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+{
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, 1, AlignmentGraph::DummyGraph(), 1, true, true, true, false, false};
+	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
+	aligner.AddAlignment(seq_id, sequence, alignment);
+}
+
+void AddCorrected(AlignmentResult::AlignmentItem& alignment)
+{
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, 1, AlignmentGraph::DummyGraph(), 1, true, true, true, false, false};
+	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
+	aligner.AddCorrected(alignment);
+}

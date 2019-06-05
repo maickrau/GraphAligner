@@ -43,6 +43,7 @@ public:
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
 		AlignmentResult result;
+		result.readName = seq_id;
 		auto timeStart = std::chrono::system_clock::now();
 		assert(params.graph.finalized);
 		auto trace = getBacktraceFullStart(sequence, reusableState);
@@ -55,13 +56,15 @@ public:
 		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
 #endif
 		fixForwardTraceSeqPos(trace.trace, 0, sequence);
-		auto alnItem = VGAlignment::traceToAlignment(params, seq_id, sequence, trace.score, trace.trace, 0, false);
-		alnItem.alignmentStart = trace.trace[0].DPposition.seqPos;
-		alnItem.alignmentEnd = trace.trace.back().DPposition.seqPos;
+
+		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
+
+		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
+		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
-		result.alignments.push_back(alnItem);
+		result.alignments.emplace_back(std::move(alnItem));
 		return result;
 	}
 
@@ -69,6 +72,7 @@ public:
 	{
 		assert(params.graph.finalized);
 		AlignmentResult result;
+		result.readName = seq_id;
 		assert(seedHits.size() > 0);
 		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t i = 0; i < seedHits.size(); i++)
@@ -79,7 +83,7 @@ public:
 			if (params.sloppyOptimizations)
 			{
 				bool found = false;
-				for (auto aln : result.alignments)
+				for (const auto& aln : result.alignments)
 				{
 					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
 					{
@@ -95,11 +99,33 @@ public:
 			result.seedsExtended += 1;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
-			result.alignments.push_back(item);
+			result.alignments.emplace_back(std::move(item));
 		}
 		assertSetRead(seq_id, "No seed");
 
 		return result;
+	}
+
+	void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+	{
+		assert(alignment.trace->trace.size() > 0);
+		auto vgAln = VGAlignment::traceToAlignment(seq_id, sequence, alignment.trace->score, alignment.trace->trace, 0, false);
+		alignment.alignment = vgAln;
+		alignment.alignment->set_sequence(sequence.substr(alignment.alignmentStart, alignment.alignmentEnd - alignment.alignmentStart));
+		alignment.alignment->set_query_position(alignment.alignmentStart);
+	}
+
+	void AddCorrected(AlignmentResult::AlignmentItem& alignment)
+	{
+		assert(alignment.trace != nullptr);
+		assert(alignment.trace->trace.size() > 0);
+		alignment.corrected.reserve(alignment.trace->trace.back().DPposition.seqPos - alignment.trace->trace[0].DPposition.seqPos);
+		alignment.corrected = alignment.trace->trace[0].graphCharacter;
+		for (size_t i = 1; i < alignment.trace->trace.size(); i++)
+		{
+			if (!alignment.trace->trace[i].nodeSwitch && alignment.trace->trace[i].DPposition.nodeOffset == alignment.trace->trace[i-1].DPposition.nodeOffset && alignment.trace->trace[i].DPposition.node == alignment.trace->trace[i-1].DPposition.node) continue;
+			alignment.corrected += alignment.trace->trace[i].graphCharacter;
+		}
 	}
 
 private:
@@ -212,16 +238,20 @@ private:
 		//failed alignment, don't output
 		if (trace.forward.failed() && trace.backward.failed())
 		{
-			return VGAlignment::emptyAlignment(0, 0);
+			return emptyAlignment(0, 0);
 		}
 
 		// auto traceVector = getTraceInfo(sequence, trace.backward.trace, trace.forward.trace);
 
-		auto mergedTrace = trace.backward;
-		if (trace.backward.failed()) mergedTrace.score = 0;
-
-		if (!trace.backward.failed() && !trace.forward.failed())
+		assert(trace.backward.trace.size() > 0 || trace.backward.failed());
+		auto mergedTrace = std::move(trace.backward);
+		if (mergedTrace.failed())
 		{
+			mergedTrace = std::move(trace.forward);
+		}
+		else if (!mergedTrace.failed() && !trace.forward.failed())
+		{
+			assert(mergedTrace.trace.size() > 0);
 			assert(mergedTrace.trace.back().DPposition == trace.forward.trace[0].DPposition);
 			mergedTrace.trace.pop_back();
 			mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
@@ -229,22 +259,20 @@ private:
 		}
 		else if (!trace.forward.failed())
 		{
+			assert(trace.forward.trace.size() > 0);
 			mergedTrace.trace.insert(mergedTrace.trace.end(), trace.forward.trace.begin(), trace.forward.trace.end());
 			mergedTrace.score += trace.forward.score;
 		}
 
-		auto result = VGAlignment::traceToAlignment(params, seq_id, sequence, mergedTrace.score, mergedTrace.trace, 0, false);
+		AlignmentResult::AlignmentItem result { std::move(mergedTrace), 0, std::numeric_limits<size_t>::max() };
 
-		assert(!result.alignmentFailed());
 		LengthType seqstart = 0;
 		LengthType seqend = 0;
-		assert(mergedTrace.trace.size() > 0);
-		seqstart = mergedTrace.trace[0].DPposition.seqPos;
-		seqend = mergedTrace.trace.back().DPposition.seqPos;
+		assert(result.trace->trace.size() > 0);
+		seqstart = result.trace->trace[0].DPposition.seqPos;
+		seqend = result.trace->trace.back().DPposition.seqPos;
 		assert(seqend < sequence.size());
-		result.alignment->set_sequence(sequence.substr(seqstart, seqend - seqstart + 1));
 		// result.trace = traceVector;
-		result.alignment->set_query_position(seqstart);
 		result.alignmentStart = seqstart;
 		result.alignmentEnd = seqend + 1;
 		auto timeEnd = std::chrono::system_clock::now();
@@ -253,24 +281,16 @@ private:
 		return result;
 	}
 
-	// void addAlignmentNodes(std::vector<std::tuple<size_t, size_t, size_t>>& tried, const AlignmentResult::AlignmentItem& trace) const
-	// {
-	// 	assert(trace.trace.size() > 0);
-	// 	LengthType currentNode = trace.trace[0].nodeID;
-	// 	size_t currentReadStart = trace.trace[0].readpos;
-	// 	for (size_t i = 1; i < trace.trace.size(); i++)
-	// 	{
-	// 		if (trace.trace[i].nodeID != currentNode)
-	// 		{
-	// 			tried.emplace_back(currentReadStart, trace.trace[i-1].readpos, currentNode);
-	// 			currentNode = trace.trace[i].nodeID;
-	// 			currentReadStart = trace.trace[i].readpos;
-	// 		}
-	// 	}
-	// }
+	static AlignmentResult::AlignmentItem emptyAlignment(size_t elapsedMilliseconds, size_t cellsProcessed)
+	{
+		AlignmentResult::AlignmentItem result;
+		result.cellsProcessed = cellsProcessed;
+		result.elapsedMilliseconds = elapsedMilliseconds;
+		return result;
+	}
 
 #ifndef NDEBUG
-	void verifyTrace(const std::vector<TraceItem>& trace, const std::string& sequence, volatile ScoreType score) const
+	void verifyTrace(const std::vector<TraceItem>& trace, const std::string& sequence, ScoreType score) const
 	{
 		size_t start = 0;
 		while (trace[start].DPposition.seqPos == (size_t)-1)

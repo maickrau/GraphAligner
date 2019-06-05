@@ -153,6 +153,11 @@ public:
 		score(0)
 		{
 		}
+		// force move semantics because copying is very slow and unnecessary
+		OnewayTrace(const OnewayTrace& other) = delete;
+		OnewayTrace(OnewayTrace&& other) = default;
+		OnewayTrace& operator=(const OnewayTrace& other) = delete;
+		OnewayTrace& operator=(OnewayTrace&& other) = default;
 		static OnewayTrace TraceFailed()
 		{
 			OnewayTrace result;
@@ -259,6 +264,54 @@ public:
 			break;
 		}
 	}
+};
+
+class AlignmentResult
+{
+public:
+	AlignmentResult() :
+		alignments(),
+		seedsExtended(0)
+	{}
+	class AlignmentItem
+	{
+	public:
+		AlignmentItem() :
+		corrected(),
+		alignment(),
+		trace(),
+		cellsProcessed(0),
+		elapsedMilliseconds(0),
+		alignmentStart(0),
+		alignmentEnd(0)
+		{}
+		AlignmentItem(GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace&& trace, size_t cellsProcessed, size_t ms) :
+		corrected(),
+		alignment(),
+		trace(),
+		cellsProcessed(cellsProcessed),
+		elapsedMilliseconds(ms),
+		alignmentStart(0),
+		alignmentEnd(0)
+		{
+			this->trace = std::make_shared<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace>();
+			*this->trace = std::move(trace);
+		}
+		bool alignmentFailed() const
+		{
+			return alignmentEnd == alignmentStart;
+		}
+		std::string corrected;
+		std::shared_ptr<vg::Alignment> alignment;
+		std::shared_ptr<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace> trace;
+		size_t cellsProcessed;
+		size_t elapsedMilliseconds;
+		size_t alignmentStart;
+		size_t alignmentEnd;
+	};
+	std::vector<AlignmentItem> alignments;
+	size_t seedsExtended;
+	std::string readName;
 };
 
 #endif

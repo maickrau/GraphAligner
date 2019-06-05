@@ -6,6 +6,13 @@
 #include "CommonUtils.h"
 #include "ThreadReadAssertion.h"
 
+AlignmentGraph dummy;
+
+AlignmentGraph AlignmentGraph::DummyGraph()
+{
+	return dummy;
+}
+
 AlignmentGraph::AlignmentGraph() :
 nodeLength(),
 nodeLookup(),
@@ -14,8 +21,14 @@ inNeighbors(),
 nodeSequences(),
 ambiguousNodeSequences(),
 firstAmbiguous(std::numeric_limits<size_t>::max()),
+DBGoverlap(0),
 finalized(false)
 {
+}
+
+size_t AlignmentGraph::getDBGoverlap() const
+{
+	return DBGoverlap;
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)

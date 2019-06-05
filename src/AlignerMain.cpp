@@ -36,6 +36,8 @@ int main(int argc, char** argv)
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
 		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam/.json)")
+		("corrected-out", boost::program_options::value<std::string>(), "output corrected reads file (.fa/.fa.gz)")
+		("corrected-clipped-out", boost::program_options::value<std::string>(), "output corrected clipped reads file (.fa/.fa.gz)")
 	;
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
@@ -101,6 +103,8 @@ int main(int argc, char** argv)
 	AlignerParams params;
 	params.graphFile = "";
 	params.outputAlignmentFile = "";
+	params.outputCorrectedFile = "";
+	params.outputCorrectedClippedFile = "";
 	params.numThreads = 1;
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
@@ -116,11 +120,15 @@ int main(int argc, char** argv)
 	params.outputAllAlns = false;
 	params.forceGlobal = false;
 	params.outputJSON = false;
+	params.compressCorrected = false;
+	params.compressClipped = false;
 	params.preciseClipping = false;
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
 	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
+	if (vm.count("corrected-out")) params.outputCorrectedFile = vm["corrected-out"].as<std::string>();
+	if (vm.count("corrected-clipped-out")) params.outputCorrectedClippedFile = vm["corrected-clipped-out"].as<std::string>();
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
@@ -156,9 +164,24 @@ int main(int argc, char** argv)
 		std::cerr << "read file must be given" << std::endl;
 		paramError = true;
 	}
-	if (params.outputAlignmentFile == "")
+	if (params.outputAlignmentFile == "" && params.outputCorrectedFile == "" && params.outputCorrectedClippedFile == "")
 	{
-		std::cerr << "alignments-out must be given" << std::endl;
+		std::cerr << "one of alignments-out, corrected-out or corrected-clipped-out must be given" << std::endl;
+		paramError = true;
+	}
+	if (params.outputAlignmentFile != "" && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-4) != ".gam" && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) != ".json")
+	{
+		std::cerr << "unknown output alignment format, must be either .gam or .json" << std::endl;
+		paramError = true;
+	}
+	if (params.outputCorrectedFile != "" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-3) != ".fa" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-6) != ".fasta" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-6) != ".fa.gz" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-9) != ".fasta.gz")
+	{
+		std::cerr << "unknown output corrected read format, must be .fa or .fa.gz" << std::endl;
+		paramError = true;
+	}
+	if (params.outputCorrectedClippedFile != "" && params.outputCorrectedClippedFile.substr(params.outputCorrectedClippedFile.size()-3) != ".fa" && params.outputCorrectedClippedFile.substr(params.outputCorrectedClippedFile.size()-6) != ".fasta" && params.outputCorrectedClippedFile.substr(params.outputCorrectedClippedFile.size()-6) != ".fa.gz" && params.outputCorrectedClippedFile.substr(params.outputCorrectedClippedFile.size()-9) != ".fasta.gz")
+	{
+		std::cerr << "unknown output corrected read format, must be .fa or .fa.gz" << std::endl;
 		paramError = true;
 	}
 	if (params.dynamicRowStart % 64 != 0)
@@ -214,6 +237,16 @@ int main(int argc, char** argv)
 	if (params.outputAlignmentFile.size() >= 5 && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) == ".json")
 	{
 		params.outputJSON = true;
+	}
+
+	if (params.outputCorrectedFile.size() >= 3 && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-3) == ".gz")
+	{
+		params.compressCorrected = true;
+	}
+
+	if (params.outputCorrectedClippedFile.size() >= 3 && params.outputCorrectedClippedFile.substr(params.outputCorrectedClippedFile.size()-3) == ".gz")
+	{
+		params.compressClipped = true;
 	}
 
 	omp_set_num_threads(params.numThreads);
