@@ -6,6 +6,7 @@
 #include "GfaGraph.h"
 #include "fastqloader.h"
 
+bool fakeLengths = false;
 
 namespace std 
 {
@@ -92,9 +93,18 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 		}
 	}
 	assert(maxMatch >= 0);
-	assert(readLengths.count(read.name) == 1);
-	assert(maxMatch <= readLengths.at(read.name));
-	return (double)maxMatch / (double)readLengths.at(read.name);
+	double length;
+	if (fakeLengths)
+	{
+		length = 1;
+	}
+	else
+	{
+		assert(readLengths.count(read.name) == 1);
+		assert(maxMatch <= readLengths.at(read.name));
+		length = (double)maxMatch / (double)readLengths.at(read.name);
+	}
+	return length;
 }
 
 int main(int argc, char** argv)
@@ -102,6 +112,8 @@ int main(int argc, char** argv)
 	std::string transcriptFile { argv[1] };
 	std::string readAlignmentFile { argv[2] };
 	std::string readFastaFile { argv[3] };
+
+	if (argc >= 5 && argv[4][0] == '1') fakeLengths = true;
 
 	std::unordered_map<std::string, size_t> readLengths;
 	{

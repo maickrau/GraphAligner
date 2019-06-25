@@ -200,6 +200,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 		try
 		{
 			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true, false);
+			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
 			int leftAlnSize = 0;
@@ -401,11 +402,14 @@ void writeFusions(const std::vector<FusionAlignment>& result, std::string filena
 		assert(fusionIndex < fusionaln->path().mapping_size() - 1);
 		std::string leftName = fusionaln->path().mapping(fusionIndex-1).position().name();
 		std::string rightName = fusionaln->path().mapping(fusionIndex+1).position().name();
+		bool leftReverse = fusionaln->path().mapping(fusionIndex-1).position().is_reverse();
+		bool rightReverse = fusionaln->path().mapping(fusionIndex+1).position().is_reverse();
 		for (int i = fusionIndex-1; i >= 0; i--)
 		{
 			if (fusionaln->path().mapping(i).position().name() != leftName)
 			{
 				leftName = fusionaln->path().mapping(i).position().name();
+				leftReverse = fusionaln->path().mapping(i).position().is_reverse();
 				break;
 			}
 		}
@@ -414,11 +418,10 @@ void writeFusions(const std::vector<FusionAlignment>& result, std::string filena
 			if (fusionaln->path().mapping(i).position().name() != rightName)
 			{
 				rightName = fusionaln->path().mapping(i).position().name();
+				rightReverse = fusionaln->path().mapping(i).position().is_reverse();
 				break;
 			}
 		}
-		bool leftReverse = fusionaln->path().mapping(fusionIndex-1).position().is_reverse();
-		bool rightReverse = fusionaln->path().mapping(fusionIndex+1).position().is_reverse();
 		if (fusionaln->path().mapping(fusionIndex).position().is_reverse())
 		{
 			std::swap(leftName, rightName);
