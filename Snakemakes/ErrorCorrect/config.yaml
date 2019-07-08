@@ -3,6 +3,8 @@ GenomeSize: 4600000
 ShortreadCoverage: 200
 
 ShortReadDirectory: shortreads/
+# NOTE: short read endings MUST be .fq or .fa instead of .fastq or .fasta
+# gzip is allowed
 ShortReads:
 - reads1.fq
 - reads2.fq.gz
@@ -18,17 +20,17 @@ OutputDirectory: output/
 # https://github.com/maickrau/GraphAligner
 GraphAlignerBinDirectory: ../../bin/
 # https://github.com/GATB/bcalm
-BcalmPath: bcalm/bin/bcalm
+BcalmPath: bcalm
 BcalmConvertPath: bcalm/scripts/convertToGFA.py
 # https://github.com/mourisl/Lighter
-LighterPath: lighter/lighter
+LighterPath: lighter
 
 
 ### Misc params. Defaults might work
 
 # k for error correcting the reads. Try between 10-30
-SmallK: 11
+SmallK: 23
 # k for the de Bruijn graph. Try between ~1/2 and ~2/3 of short read length
-BigK: 61
-# minimum k-mer abundance for the de Bruijn graph. Try around ~1/100 of short read coverage, but not below 2.
-Abundance: 2
+BigK: 63
+# minimum k-mer abundance for the de Bruijn graph. Try between 1/100 to 2/100 of short read coverage, but not below 2.
+Abundance: 3

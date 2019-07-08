@@ -73,35 +73,14 @@ rule align_reads:
 	params:
 		readconcat = lambda wildcards, input: ' '.join(input.reads)
 	output:
-		TMPDIR + "alns.gam"
+		corrected = OUTDIR + "corrected.fa",
+		clipped = OUTDIR + "corrected_clipped.fa"
 	log:
 		stdout = TMPDIR + "aligner_stdout.txt",
 		stderr = TMPDIR + "aligner_stderr.txt"
 	threads: 40
 	shell:
-		"/usr/bin/time -v {ALIGNERBINDIR}GraphAligner -g {input.graph} -a {output} -f {params.readconcat} --seeds-mxm-cache-prefix {TMPDIR}seedcache -t {threads} 1> {log.stdout} 2> {log.stderr}"
-
-rule extract_corrected:
-	input:
-		alignments = TMPDIR + "alns.gam",
-		graph = TMPDIR + "graph.gfa",
-		reads = expand(LONGREADDIR + "{name}", name=LONGREADS)
-	output:
-		OUTDIR + "corrected.fa"
-	params:
-		files = lambda wildcards, input: ' '.join(input.reads)
-	shell:
-		"{ALIGNERBINDIR}ExtractCorrectedReads {input.graph} {input.alignments} {params.files} > {output} 2> /dev/null"
-
-rule extract_clipped:
-	input:
-		alignments = TMPDIR + "alns.gam",
-		graph = TMPDIR + "graph.gfa",
-		reads = expand(LONGREADDIR + "{name}", name=LONGREADS)
-	output:
-		OUTDIR + "corrected_clipped.fa"
-	shell:
-		"{ALIGNERBINDIR}ExtractPathSequence {input.graph} {input.alignments} > {output} 2> /dev/null"
+		"/usr/bin/time -v {ALIGNERBINDIR}GraphAligner -g {input.graph} --corrected-out {output.corrected} --corrected-clipped-out {output.clipped} -f {params.readconcat} -t {threads} 1> {log.stdout} 2> {log.stderr}"
 
 rule get_stats:
 	input:
@@ -117,8 +96,8 @@ rule get_stats:
 		shell("grep 'Input reads' < {input.aligner_stdout} >> {output}")
 		shell("grep 'Reads with a seed' < {input.aligner_stdout} >> {output}")
 		shell("grep 'Reads with an alignment' < {input.aligner_stdout} >> {output}")
-		shell("grep 'Output alignments' < {input.aligner_stdout} >> {output}")
-		shell("grep 'Output end-to-end alignments' < {input.aligner_stdout} >> {output}")
+		shell("grep 'Alignments' < {input.aligner_stdout} >> {output}")
+		shell("grep 'End-to-end alignments' < {input.aligner_stdout} >> {output}")
 		shell("echo 'Lighter' >> {output}"),
 		shell("grep 'User time' < {input.lighter_stderr} >> {output}")
 		shell("grep 'System time' < {input.lighter_stderr} >> {output}")
