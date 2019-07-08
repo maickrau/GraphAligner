@@ -123,7 +123,7 @@ public:
 		alignment.corrected = alignment.trace->trace[0].graphCharacter;
 		for (size_t i = 1; i < alignment.trace->trace.size(); i++)
 		{
-			if (!alignment.trace->trace[i].nodeSwitch && alignment.trace->trace[i].DPposition.nodeOffset == alignment.trace->trace[i-1].DPposition.nodeOffset && alignment.trace->trace[i].DPposition.node == alignment.trace->trace[i-1].DPposition.node) continue;
+			if (!alignment.trace->trace[i-1].nodeSwitch && alignment.trace->trace[i].DPposition.nodeOffset == alignment.trace->trace[i-1].DPposition.nodeOffset && alignment.trace->trace[i].DPposition.node == alignment.trace->trace[i-1].DPposition.node) continue;
 			alignment.corrected += alignment.trace->trace[i].graphCharacter;
 		}
 	}
