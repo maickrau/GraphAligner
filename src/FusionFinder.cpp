@@ -191,12 +191,13 @@ std::string getCorrected(const vg::Alignment& aln, const GfaGraph& graph)
 	return result;
 }
 
-void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, double maxScoreFraction, int minFusionLen)
+void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen)
 {
 	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph, true);
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 1000, true };
-	for (auto read : reads)
+	for (auto readIndex : readIndices)
 	{
+		const auto& read = reads[readIndex];
 		try
 		{
 			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true, false);
@@ -273,12 +274,8 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 					readsInNonfusionGraph[putativeFusions[i].first].insert(readsHere.begin(), readsHere.end());
 					readsInNonfusionGraph[putativeFusions[i].second].insert(readsHere.begin(), readsHere.end());
 				}
-				std::vector<FastQ> reads;
-				for (auto index : readsHere)
-				{
-					reads.push_back(allReads[index]);
-				}
-				addBestAlnsOnePair(bestFusionAlnsPerThread[thread], putativeFusions[i].first, putativeFusions[i].second, fusiongraph, reads, maxScoreFraction, minFusionLen);
+				std::vector<size_t> readIndices { readsHere.begin(), readsHere.end() };
+				addBestAlnsOnePair(bestFusionAlnsPerThread[thread], putativeFusions[i].first, putativeFusions[i].second, fusiongraph, allReads, readIndices, maxScoreFraction, minFusionLen);
 			}
 		});
 	}
@@ -324,12 +321,8 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 				}
 				auto nonfusiongraph = getNonfusionGraph(fusionGenes[i], graph, geneBelongers);
 				assert(readsInNonfusionGraph.count(fusionGenes[i]) == 1);
-				std::vector<FastQ> reads;
-				for (auto index : readsInNonfusionGraph.at(fusionGenes[i]))
-				{
-					reads.push_back(allReads[index]);
-				}
-				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], fusionGenes[i], fusionGenes[i], nonfusiongraph, reads, 1, 0);
+				std::vector<size_t> readIndices { readsInNonfusionGraph.at(fusionGenes[i]).begin(), readsInNonfusionGraph.at(fusionGenes[i]).end() };
+				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], fusionGenes[i], fusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0);
 			}
 		});
 	}
