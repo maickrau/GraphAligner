@@ -194,13 +194,13 @@ std::string getCorrected(const vg::Alignment& aln, const GfaGraph& graph)
 void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen)
 {
 	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph, true);
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 1000, true };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 500, true };
 	for (auto readIndex : readIndices)
 	{
 		const auto& read = reads[readIndex];
 		try
 		{
-			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true, false);
+			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 500, 500, true, reusableState, true, true, false);
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
@@ -477,7 +477,7 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 	std::unordered_map<std::string, std::unordered_set<size_t>> result;
 	for (size_t i = 0; i < reads.size(); i++)
 	{
-		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 20);
+		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 25);
 		for (auto seed : seeds)
 		{
 			result[nameMapping[seed.nodeID]].insert(i);
