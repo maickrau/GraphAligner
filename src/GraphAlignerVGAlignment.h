@@ -56,11 +56,16 @@ public:
 		vgmapping->set_rank(rank);
 		auto edit = vgmapping->add_edit();
 		EditType currentEdit = Empty;
+		size_t mismatches = 0;
+		size_t deletions = 0;
+		size_t insertions = 0;
+		size_t matches = 0;
 		if (trace[0].sequenceCharacter == trace[0].graphCharacter)
 		{
 			currentEdit = Match;
 			edit->set_from_length(edit->from_length()+1);
 			edit->set_to_length(edit->to_length()+1);
+			matches += 1;
 		}
 		else
 		{
@@ -68,14 +73,11 @@ public:
 			edit->set_from_length(edit->from_length()+1);
 			edit->set_to_length(edit->to_length()+1);
 			edit->set_sequence(std::string { sequence[0] });
+			mismatches += 1;
 		}
 		position->set_node_id(currentPos.nodeId);
 		position->set_is_reverse(currentPos.reverse);
 		position->set_offset(currentPos.nodeOffset);
-		size_t mismatches = 0;
-		size_t deletions = 0;
-		size_t insertions = 0;
-		size_t matches = 0;
 		for (size_t pos = 1; pos < trace.size(); pos++)
 		{
 			assert(trace[pos].DPposition.seqPos < sequence.size());

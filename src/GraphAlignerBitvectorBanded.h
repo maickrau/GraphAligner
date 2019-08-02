@@ -357,7 +357,19 @@ private:
 					continue;
 				}
 				auto crossing = pickBacktraceVerticalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid);
+				assert(crossing.first.first.node == result.trace.back().DPposition.node);
+				assert(crossing.first.first.seqPos == result.trace.back().DPposition.seqPos);
+				assert(crossing.first.first.nodeOffset <= result.trace.back().DPposition.nodeOffset);
+				assert(!crossing.first.second);
+				if (crossing.first.first.nodeOffset != result.trace.back().DPposition.nodeOffset)
+				{
+					for (size_t nodeOffset = result.trace.back().DPposition.nodeOffset-1; nodeOffset != crossing.first.first.nodeOffset; nodeOffset--)
+					{
+						result.trace.emplace_back(MatrixPosition { crossing.first.first.node, nodeOffset, crossing.first.first.seqPos }, false, sequence, params.graph);
+					}
+				}
 				if (crossing.first.first != result.trace.back().DPposition) result.trace.emplace_back(crossing.first.first, crossing.first.second, sequence, params.graph);
+				assert(crossing.first.first == result.trace.back().DPposition);
 				assert(crossing.second.first != result.trace.back().DPposition);
 				result.trace.emplace_back(crossing.second.first, crossing.second.second, sequence, params.graph);
 				continue;
@@ -366,7 +378,19 @@ private:
 			{
 				assert(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize != 0);
 				auto crossing = pickBacktraceHorizontalCrossing(slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid);
+				assert(crossing.first.first.node == result.trace.back().DPposition.node);
+				assert(crossing.first.first.nodeOffset == result.trace.back().DPposition.nodeOffset);
+				assert(crossing.first.first.seqPos <= result.trace.back().DPposition.seqPos);
+				assert(!crossing.first.second);
+				if (crossing.first.first.seqPos != result.trace.back().DPposition.seqPos)
+				{
+					for (size_t seqPos = result.trace.back().DPposition.seqPos-1; seqPos != crossing.first.first.seqPos; seqPos--)
+					{
+						result.trace.emplace_back(MatrixPosition { crossing.first.first.node, crossing.first.first.nodeOffset, seqPos }, false, sequence, params.graph);
+					}
+				}
 				if (crossing.first.first != result.trace.back().DPposition) result.trace.emplace_back(crossing.first.first, crossing.first.second, sequence, params.graph);
+				assert(crossing.first.first == result.trace.back().DPposition);
 				assert(crossing.second.first != result.trace.back().DPposition);
 				result.trace.emplace_back(crossing.second.first, crossing.second.second, sequence, params.graph);
 				checkBacktraceCircularity(result);
