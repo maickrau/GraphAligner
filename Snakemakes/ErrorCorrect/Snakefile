@@ -58,13 +58,8 @@ rule run_bcalm:
 
 rule convert_bcalm:
 	input: rules.run_bcalm.output
-	output: temp(TMPDIR + "graph-tip.gfa")
+	output: temp(TMPDIR + "graph.gfa")
 	shell: "{BCALMCONVERTPATH} {input} {output} {BIGK}"
-
-rule untip_graph:
-	input: rules.convert_bcalm.output
-	output: TMPDIR + "graph.gfa"
-	shell: "{ALIGNERBINDIR}UntipRelative 10 1000 0.1 < {input} > {output}"
 
 rule align_reads:
 	input:
