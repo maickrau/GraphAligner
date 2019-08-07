@@ -60,7 +60,7 @@ public:
 		size_t deletions = 0;
 		size_t insertions = 0;
 		size_t matches = 0;
-		if (trace[0].sequenceCharacter == trace[0].graphCharacter)
+		if (Common::characterMatch(trace[0].sequenceCharacter, trace[0].graphCharacter))
 		{
 			currentEdit = Match;
 			edit->set_from_length(edit->from_length()+1);
@@ -128,7 +128,7 @@ public:
 				edit->set_sequence(edit->sequence() + trace[pos].sequenceCharacter);
 				insertions += 1;
 			}
-			else if (trace[pos].sequenceCharacter == trace[pos].graphCharacter)
+			else if (Common::characterMatch(trace[pos].sequenceCharacter, trace[pos].graphCharacter))
 			{
 				if (currentEdit == Empty) currentEdit = Match;
 				if (currentEdit != Match)
