@@ -18,7 +18,7 @@ TempDirectory: tmp/
 OutputDirectory: output/
 
 # https://github.com/maickrau/GraphAligner
-GraphAlignerBinDirectory: ../../bin/
+GraphAlignerPath: GraphAligner
 # https://github.com/GATB/bcalm
 BcalmPath: bcalm
 BcalmConvertPath: bcalm/scripts/convertToGFA.py

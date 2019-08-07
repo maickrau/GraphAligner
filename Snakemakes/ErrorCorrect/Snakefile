@@ -1,5 +1,5 @@
 configfile: "config.yaml"
-ALIGNERBINDIR = config["GraphAlignerBinDirectory"]
+GRAPHALIGNERPATH = config["GraphAlignerPath"]
 BCALMPATH = config["BcalmPath"]
 BCALMCONVERTPATH = config["BcalmConvertPath"]
 LIGHTERPATH = config["LighterPath"]
@@ -75,7 +75,7 @@ rule align_reads:
 		stderr = TMPDIR + "aligner_stderr.txt"
 	threads: 40
 	shell:
-		"/usr/bin/time -v {ALIGNERBINDIR}GraphAligner -g {input.graph} --corrected-out {output.corrected} --corrected-clipped-out {output.clipped} -f {params.readconcat} -t {threads} 1> {log.stdout} 2> {log.stderr}"
+		"/usr/bin/time -v {GRAPHALIGNERPATH} -g {input.graph} --corrected-out {output.corrected} --corrected-clipped-out {output.clipped} -f {params.readconcat} -t {threads} 1> {log.stdout} 2> {log.stderr}"
 
 rule get_stats:
 	input:
