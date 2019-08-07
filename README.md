@@ -1,19 +1,19 @@
 # GraphAligner
 
-Seed-and-extend program for aligning long error-prone reads to genome graphs. For a description of the bitvector alignment extension algorithm, see https://www.biorxiv.org/content/early/2018/05/15/323063
+Seed-and-extend program for aligning long error-prone reads to genome graphs. For a description of the bitvector alignment extension algorithm, see https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btz162/5372677
 
 ### Installation
 
 Install via [bioconda](https://bioconda.github.io/):
 
-- Install miniconda https://conda.io/docs/user-guide/install/index.html
+- Install miniconda https://conda.io/projects/conda/en/latest/user-guide/install/index.html
 - `conda install -c bioconda graphaligner`
 
 #### Compilation
 
 Bioconda is the recommended installation method. If you however want to compile the aligner yourself, run these:
 
-- Install miniconda https://conda.io/docs/user-guide/install/index.html
+- Install miniconda hhttps://conda.io/projects/conda/en/latest/user-guide/install/index.html
 - `git clone https://github.com/maickrau/GraphAligner.git`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment.yml`
