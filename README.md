@@ -28,13 +28,13 @@ See [Parameters](#parameters), the option `GraphAligner --help` and the subsecti
 
 #### File formats
 
-The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/vg/blob/master/src/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [vg's alignment format](https://github.com/vgteam/vg/blob/master/src/vg.proto), either as a binary .gam or JSON depending on the file name. Seeds can be inputed in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto).
+The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [vg's alignment format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto), either as a binary .gam or JSON depending on the file name. Custom seeds can be inputed in [.gam format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto).
 
 #### Seed hits
 
-The aligner has two built-in methods for finding seed hits: maximal unique matches (MUMs) (default) and maximal exact matches (MEMs). These modes use [MUMmer4](https://github.com/mummer4/mummer) to find matches between the read and nodes. Only matches entirely within a node are found. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to disk for reuse instead of rebuilding it each time.
+The aligner has three built-in methods for finding seed hits: minimizers, maximal unique matches (MUMs) (default) and maximal exact matches (MEMs). Only matches entirely within a node are found. Minimizers (default) are faster and MUM/MEMs can be more sensitive. MUM/MEM modes use [MUMmer4](https://github.com/mummer4/mummer) to find matches between the read and nodes. Use the parameter `--seeds-mum-count n` to use the `n` longest MUMs as seeds (or -1 for all MUMs), and `--seeds-mem-count n` for the `n` longest MEMs (or -1 for all MEMs). Use `--seeds-mxm-length n` to only use matches at least `n` characters long. If you are aligning multiple files to the same graph, use `--seeds-mxm-cache-prefix file_name_prefix` to store the MUM/MEM index to disk for reuse instead of rebuilding it each time.
 
-Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/vg/blob/master/src/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, `name` the name of the read and `query_position` the position in the forward strand of the read. Match length (`path.mapping[0].edit[0].from_length`) is only used to order the seeds, with longer matches tried before shorter matches.
+Alternatively you can use any method to find seed hits and then import the seeds in [.gam format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto) with the parameter `-s seedfile.gam`. The seeds must be passed as an alignment message, with `path.mapping[0].position` describing the position in the graph, `name` the name of the read and `query_position` the position in the forward strand of the read. Match length (`path.mapping[0].edit[0].from_length`) is only used to order the seeds, with longer matches tried before shorter matches.
 
 Alternatively you can use the parameter `--seeds-first-full-rows` to use the dynamic programming alignment algorithm on the entire first row instead of using seeded alignment. This is very slow except on tiny graphs, and not recommended.
 
@@ -57,6 +57,10 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 Seeding:
 
 - `-s` External seeds. Load seeds from a .gam file. You can input multiple files with `-s file1 -s file2 ...` or `-s file1 file2 ...`
+- `--seeds-minimizer-chunksize` Minimizer seeds are grouped into chunks based on their position in the read. Chunk size in base pairs
+- `--seeds-minimizer-count` Minimizer seeds. Use the n least common minimizers from each chunk in the read. -1 for all minimizers
+- `--seeds-minimizer-length` k-mer size for minimizer seeds
+- `--seeds-minimizer-windowsize` Window size for minimizer seeds
 - `--seeds-mum-count` MUM seeds. Use the n longest maximal unique matches. -1 for all MUMs
 - `--seeds-mem-count` MEM seeds. Use the n longest maximal exact matches. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n
