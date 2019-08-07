@@ -21,6 +21,7 @@ OutputDirectory: output/
 GraphAlignerPath: GraphAligner
 # https://github.com/GATB/bcalm
 BcalmPath: bcalm
+# https://github.com/GATB/bcalm/blob/master/scripts/convertToGFA.py
 BcalmConvertPath: bcalm/scripts/convertToGFA.py
 # https://github.com/mourisl/Lighter
 LighterPath: lighter
