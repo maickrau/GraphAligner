@@ -13,7 +13,7 @@ Install via [bioconda](https://bioconda.github.io/):
 
 Bioconda is the recommended installation method. If you however want to compile the aligner yourself, run these:
 
-- Install miniconda hhttps://conda.io/projects/conda/en/latest/user-guide/install/index.html
+- Install miniconda https://conda.io/projects/conda/en/latest/user-guide/install/index.html
 - `git clone https://github.com/maickrau/GraphAligner.git`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment.yml`
