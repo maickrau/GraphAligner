@@ -298,7 +298,7 @@ void writeAlnsToQueue(moodycamel::ProducerToken& token, const AlignerParams& par
 	QueueInsertSlowly(token, alignmentsOut, strstr.str());
 }
 
-void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
+void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
 	zstr::ostream *compressed;
@@ -319,13 +319,13 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 	std::string corrected = getCorrected(original, corrections, maxOverlap);
 	if (params.compressCorrected)
 	{
-		(*compressed) << ">" << alignments.readName << std::endl;
+		(*compressed) << ">" << readName << std::endl;
 		(*compressed) << corrected << std::endl;
 		delete compressed;
 	}
 	else
 	{
-		strstr << ">" << alignments.readName << std::endl;
+		strstr << ">" << readName << std::endl;
 		strstr << corrected << std::endl;
 	}
 	QueueInsertSlowly(token, correctedOut, strstr.str());
@@ -413,6 +413,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
 					continue;
 				}
 				stats.seedsFound += seeds.size();
@@ -439,6 +440,16 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+			try
+			{
+				if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			}
+			catch (const ThreadReadAssertion::AssertionFailure& a)
+			{
+				reusableState.clear();
+				stats.assertionBroke = true;
+				continue;
+			}
 			continue;
 		}
 
@@ -488,7 +499,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		try
 		{
 			if (params.outputAlignmentFile != "") writeAlnsToQueue(alignmentToken, params, alignmentsOut, alignments);
-			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
 			if (params.outputCorrectedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
