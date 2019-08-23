@@ -56,7 +56,7 @@ $(BINDIR)/UntipRelative: $(SRCDIR)/UntipRelative.cpp $(ODIR)/CommonUtils.o $(ODI
 $(BINDIR)/PickAdjacentAlnPairs: $(SRCDIR)/PickAdjacentAlnPairs.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/ExtractCorrectedReads: $(SRCDIR)/ExtractCorrectedReads.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
+$(BINDIR)/ExtractCorrectedReads: $(SRCDIR)/ExtractCorrectedReads.cpp $(ODIR)/ReadCorrection.o $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
 all: $(BINDIR)/GraphAligner $(BINDIR)/ExtractPathSequence $(BINDIR)/SelectLongestAlignment $(BINDIR)/AlignmentSubsequenceIdentity $(BINDIR)/PickAdjacentAlnPairs $(BINDIR)/ExtractCorrectedReads $(BINDIR)/UntipRelative

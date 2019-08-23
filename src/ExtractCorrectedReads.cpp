@@ -11,11 +11,13 @@
 #include "fastqloader.h"
 #include "ReadCorrection.h"
 
+std::string toLower(std::string seq);
+
 void addPartial(const std::unordered_map<int, int>& ids, std::unordered_map<std::string, std::vector<Correction>>& partials, std::function<std::string(int)> seqGetter, const vg::Alignment& v)
 {
 	Correction result;
-	result.start = v.query_position();
-	result.end = v.query_position() + v.sequence().size();
+	result.startIndex = v.query_position();
+	result.endIndex = v.query_position() + v.sequence().size();
 	result.corrected = "";
 	for (int i = 0; i < v.path().mapping_size(); i++)
 	{
@@ -40,12 +42,12 @@ void addPartial(const std::unordered_map<int, int>& ids, std::unordered_map<std:
 	partials[v.name()].push_back(result);
 }
 
-void addPartial(const vg::Graph& g, const std::unordered_map<int, int>& ids, const vg::Alignment& v, std::unordered_map<std::string, std::vector<PartialAlignment>>& partials)
+void addPartial(const vg::Graph& g, const std::unordered_map<int, int>& ids, const vg::Alignment& v, std::unordered_map<std::string, std::vector<Correction>>& partials)
 {
 	addPartial(ids, partials, [&g](int id) {return g.node(id).sequence();}, v);
 }
 
-void addPartial(const GfaGraph& g, const std::unordered_map<int, int>& ids, const vg::Alignment& v, std::unordered_map<std::string, std::vector<PartialAlignment>>& partials)
+void addPartial(const GfaGraph& g, const std::unordered_map<int, int>& ids, const vg::Alignment& v, std::unordered_map<std::string, std::vector<Correction>>& partials)
 {
 	addPartial(ids, partials, [&g](int id) {return g.nodes.at(id);}, v);
 }
@@ -56,11 +58,11 @@ void mergePartials(const std::unordered_map<std::string, std::vector<Correction>
 	{
 		if (partials.count(read.seq_id) == 0)
 		{
-			std::cout << ">" << read.seq_id << std::endl << tolower(read.sequence) << std::endl;
+			std::cout << ">" << read.seq_id << std::endl << toLower(read.sequence) << std::endl;
 			continue;
 		}
 		auto p = partials.at(read.seq_id);
-		std::sort(p.begin(), p.end(), [](const Correction& left, const Correction& right) { return left.start < right.start; });
+		std::sort(p.begin(), p.end(), [](const Correction& left, const Correction& right) { return left.startIndex < right.startIndex; });
 		auto corrected = getCorrected(read.sequence, p, maxOverlap);
 		std::cout << ">" << read.seq_id << std::endl << corrected << std::endl;
 	}
@@ -81,7 +83,7 @@ int main(int argc, char** argv)
 
 	size_t maxOverlap = 0;
 
-	std::unordered_map<std::string, std::vector<PartialAlignment>> partials;
+	std::unordered_map<std::string, std::vector<Correction>> partials;
 	if (graphfilename.substr(graphfilename.size()-3) == ".vg")
 	{
 		vg::Graph graph = CommonUtils::LoadVGGraph(argv[1]);
