@@ -93,7 +93,7 @@ int main(int argc, char** argv)
 	if (vm.count("help"))
 	{
 		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-mum-count -1 --seeds-mxm-length 20" << std::endl << std::endl;
+		std::cerr << "defaults are --seeds-minimizer-count 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-minimizer-chunksize 100" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
