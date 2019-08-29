@@ -500,7 +500,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			if (params.outputAlignmentFile != "") writeAlnsToQueue(alignmentToken, params, alignmentsOut, alignments);
 			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
-			if (params.outputCorrectedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
+			if (params.outputCorrectedClippedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
 		{
