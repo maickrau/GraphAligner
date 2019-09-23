@@ -4,3 +4,6 @@
 [submodule "concurrentqueue"]
 	path = concurrentqueue
 	url = https://github.com/cameron314/concurrentqueue
+[submodule "parallel-hashmap"]
+	path = parallel-hashmap
+	url = https://github.com/greg7mdp/parallel-hashmap.git

@@ -187,7 +187,6 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	locator.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	initMinimizers(graph, numThreads);
@@ -205,7 +204,6 @@ rd(),
 gen((size_t)rd() ^ (size_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()),
 dis(0, std::numeric_limits<size_t>::max()-1)
 {
-	locator.set_empty_key(std::numeric_limits<size_t>::max());
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	initMinimizers(graph, numThreads);
@@ -295,6 +293,9 @@ void MinimizerSeeder::initMinimizers(const GfaGraph& graph, size_t numThreads)
 	starts.emplace_back(positions.size());
 	assert(starts.size() == locator.size()+1);
 	assert(positions.size() == totalSize);
+	std::cerr << "locator: " << locator.size() << " " << locator.capacity() << std::endl;
+	std::cerr << "starts: " << starts.size() << " " << starts.capacity() << std::endl;
+	std::cerr << "positions: " << positions.size() << " " << positions.capacity() << std::endl;
 }
 
 void MinimizerSeeder::initMinimizers(const vg::Graph& graph, size_t numThreads)
