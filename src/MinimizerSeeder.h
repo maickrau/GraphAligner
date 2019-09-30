@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 #include <string>
+#include <sdsl/int_vector.hpp>
 #include <MinimalHashmap.h>
 #include "AlignmentGraph.h"
 #include "GraphAlignerWrapper.h"
@@ -20,7 +21,7 @@ private:
 	const AlignmentGraph& graph;
 	MinimalHashmap<size_t, size_t> locator;
 	std::vector<size_t> starts;
-	std::vector<std::pair<int, size_t>> positions;
+	sdsl::int_vector<0> positions;
 	size_t minimizerLength;
 	size_t windowSize;
 	size_t maxCount;

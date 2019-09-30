@@ -141,12 +141,6 @@ private:
 		assert(seedHit.seqPos < sequence.size());
 		int forwardNodeId;
 		int backwardNodeId;
-		if (seedHit.splitNodeId != -1)
-		{
-			seedHit.reverse = params.graph.reverse[seedHit.splitNodeId];
-			seedHit.nodeID = params.graph.nodeIDs[seedHit.splitNodeId]/2;
-			seedHit.nodeOffset = seedHit.nodeOffset + params.graph.nodeOffset[seedHit.splitNodeId];
-		}
 		if (seedHit.reverse)
 		{
 			forwardNodeId = seedHit.nodeID * 2 + 1;

@@ -193,10 +193,11 @@ maxCount(0)
 
 void MinimizerSeeder::initMinimizers(size_t numThreads)
 {
+	positions.width(log2(graph.nodeIDs.size())+7);
 	auto nodeIter = graph.nodeLookup.begin();
 	std::mutex nodeMutex;
 	std::vector<std::thread> threads;
-	std::vector<std::vector<std::tuple<size_t, int, char>>> resultPerThread;
+	std::vector<std::vector<std::tuple<size_t, size_t, char>>> resultPerThread;
 	resultPerThread.resize(numThreads);
 
 	for (size_t i = 0; i < numThreads; i++)
@@ -241,7 +242,8 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	}
 	threads.clear();
 
-	positions.reserve(totalSize);
+	positions.resize(totalSize);
+	size_t posi = 0;
 	std::vector<size_t> threadIndex;
 	threadIndex.resize(numThreads, 0);
 	size_t current = std::numeric_limits<size_t>::max();
@@ -256,14 +258,20 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	{
 		size_t next = std::numeric_limits<size_t>::max();
 		size_t numFinished = 0;
-		starts.emplace_back(positions.size());
+		starts.emplace_back(posi);
 		locatorKeys.emplace_back(current);
 		locatorValues.emplace_back(starts.size()-1);
 		for (size_t i = 0; i < numThreads; i++)
 		{
 			while (threadIndex[i] < resultPerThread[i].size() && std::get<0>(resultPerThread[i][threadIndex[i]]) == current)
 			{
-				positions.emplace_back(std::get<1>(resultPerThread[i][threadIndex[i]]), std::get<2>(resultPerThread[i][threadIndex[i]]));
+				size_t mergedPos;
+				mergedPos = std::get<1>(resultPerThread[i][threadIndex[i]]) * 64;
+				assert(std::get<2>(resultPerThread[i][threadIndex[i]]) >= 0);
+				assert(std::get<2>(resultPerThread[i][threadIndex[i]]) < 64);
+				mergedPos += std::get<2>(resultPerThread[i][threadIndex[i]]);
+				positions[posi] = mergedPos;
+				posi += 1;
 				threadIndex[i] += 1;
 			}
 			if (threadIndex[i] < resultPerThread[i].size())
@@ -281,6 +289,7 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		current = next;
 	}
 	locator.build(locatorKeys, locatorValues, numThreads);
+	assert(posi == positions.size());
 	starts.emplace_back(positions.size());
 	assert(starts.size() == locator.size()+1);
 	assert(positions.size() == totalSize);
@@ -321,7 +330,8 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 			for (size_t i = starts[found]; i < starts[found+1]; i++)
 			{
 				if (seedsHere >= maxCount) break;
-				result.push_back(matchToSeedHit(positions[i].first, positions[i].second, std::get<0>(match), std::get<2>(match)));
+				volatile size_t mergepos = positions[i];
+				result.push_back(matchToSeedHit((size_t)(mergepos / 64), mergepos % 64, std::get<0>(match), std::get<2>(match)));
 				seedsHere += 1;
 			}
 			if (seedsHere >= maxCount) break;
@@ -332,8 +342,10 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 
 SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const
 {
-	SeedHit result { 0, nodeOffset, seqPos, maxCount - count, 0 };
-	result.splitNodeId = nodeId;
+	assert(nodeId < graph.nodeIDs.size());
+	assert(nodeId < graph.nodeOffset.size());
+	assert(nodeId < graph.reverse.size());
+	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, maxCount - count, graph.reverse[nodeId] };
 	return result;
 }
 

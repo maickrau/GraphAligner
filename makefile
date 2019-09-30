@@ -5,7 +5,7 @@ ODIR=obj
 BINDIR=bin
 SRCDIR=src
 
-LIBS=-lm -lz -lboost_serialization -lboost_program_options `pkg-config --libs mummer`  `pkg-config --libs protobuf`
+LIBS=-lm -lz -lboost_serialization -lboost_program_options `pkg-config --libs mummer`  `pkg-config --libs protobuf` -lsdsl
 JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
 
 _DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h MummerSeeder.h ReadCorrection.h MinimizerSeeder.h

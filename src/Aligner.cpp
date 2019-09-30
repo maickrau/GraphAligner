@@ -514,10 +514,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, MinimizerSeeder** minimizerSeeder, const AlignerParams& params)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const AlignerParams& params)
 {
 	bool loadMxmSeeder = params.mumCount > 0 || params.memCount > 0;
-	bool loadMinimizerSeeder = params.minimizerCount > 0;
 	bool tryDAG = params.maxCellsPerSlice == std::numeric_limits<size_t>::max();
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -530,7 +529,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 	{
 		if (graphFile.substr(graphFile.size()-3) == ".vg")
 		{
-			if (loadMxmSeeder || loadMinimizerSeeder)
+			if (loadMxmSeeder)
 			{
 				auto graph = CommonUtils::LoadVGGraph(graphFile);
 				if (loadMxmSeeder)
@@ -540,11 +539,6 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 				}
 				std::cout << "Build alignment graph" << std::endl;
 				auto result = DirectedGraph::BuildFromVG(graph, tryDAG);
-				if (loadMinimizerSeeder)
-				{
-					std::cout << "Build minimizer seeder from the graph" << std::endl;
-					*minimizerSeeder = new MinimizerSeeder(result, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
-				}
 				return result;
 			}
 			else
@@ -562,11 +556,6 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 			}
 			std::cout << "Build alignment graph" << std::endl;
 			auto result = DirectedGraph::BuildFromGFA(graph, tryDAG);
-			if (loadMinimizerSeeder)
-			{
-				std::cout << "Build minimizer seeder from the graph" << std::endl;
-				*minimizerSeeder = new MinimizerSeeder(result, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
-			}
 			return result;
 		}
 		else
@@ -590,8 +579,14 @@ void alignReads(AlignerParams params)
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params);
+	bool loadMinimizerSeeder = params.minimizerCount > 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, &minimizerseeder, params);
+	if (loadMinimizerSeeder)
+	{
+		std::cout << "Build minimizer seeder from the graph" << std::endl;
+		minimizerseeder = new MinimizerSeeder(alignmentGraph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
+	}
 
 	if (params.seedFiles.size() > 0)
 	{
