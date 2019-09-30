@@ -7,3 +7,6 @@
 [submodule "parallel-hashmap"]
 	path = parallel-hashmap
 	url = https://github.com/greg7mdp/parallel-hashmap.git
+[submodule "BBHash"]
+	path = BBHash
+	url = git@github.com:maickrau/BBHash.git

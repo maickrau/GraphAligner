@@ -538,12 +538,14 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 					std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
 					*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 				}
+				std::cout << "Build alignment graph" << std::endl;
+				auto result = DirectedGraph::BuildFromVG(graph, tryDAG);
 				if (loadMinimizerSeeder)
 				{
 					std::cout << "Build minimizer seeder from the graph" << std::endl;
-					*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
+					*minimizerSeeder = new MinimizerSeeder(result, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
 				}
-				return DirectedGraph::BuildFromVG(graph, tryDAG);
+				return result;
 			}
 			else
 			{
@@ -558,12 +560,14 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
 				*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 			}
+			std::cout << "Build alignment graph" << std::endl;
+			auto result = DirectedGraph::BuildFromGFA(graph, tryDAG);
 			if (loadMinimizerSeeder)
 			{
 				std::cout << "Build minimizer seeder from the graph" << std::endl;
-				*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
+				*minimizerSeeder = new MinimizerSeeder(result, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
 			}
-			return DirectedGraph::BuildFromGFA(graph, tryDAG);
+			return result;
 		}
 		else
 		{

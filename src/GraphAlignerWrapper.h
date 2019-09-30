@@ -13,6 +13,7 @@ class SeedHit
 public:
 	SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, bool reverse) :
 	nodeID(nodeID),
+	splitNodeId(-1),
 	nodeOffset(nodeOffset),
 	seqPos(seqPos),
 	matchLen(matchLen),
@@ -20,6 +21,7 @@ public:
 	{
 	}
 	int nodeID;
+	size_t splitNodeId;
 	size_t nodeOffset;
 	size_t seqPos;
 	size_t matchLen;
