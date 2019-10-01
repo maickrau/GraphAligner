@@ -193,16 +193,23 @@ maxCount(0)
 
 void MinimizerSeeder::initMinimizers(size_t numThreads)
 {
-	positions.width(log2(graph.nodeIDs.size())+7);
+	size_t positionSize = log2(graph.nodeIDs.size()) + 1;
+	positions.width(positionSize+6);
 	auto nodeIter = graph.nodeLookup.begin();
 	std::mutex nodeMutex;
 	std::vector<std::thread> threads;
-	std::vector<std::vector<std::tuple<size_t, size_t, char>>> resultPerThread;
+	std::vector<sdsl::int_vector<0>> resultPerThread;
 	resultPerThread.resize(numThreads);
+	for (size_t i = 0; i < numThreads; i++)
+	{
+		resultPerThread[i].width(2 * minimizerLength + positionSize + 1);
+	}
 
 	for (size_t i = 0; i < numThreads; i++)
 	{
-		threads.emplace_back([this, &resultPerThread, i, &nodeMutex, &nodeIter](){
+		threads.emplace_back([this, &resultPerThread, i, &nodeMutex, &nodeIter, positionSize](){
+			size_t vecPos = 0;
+			resultPerThread[i].resize(10);
 			while (true)
 			{
 				auto iter = graph.nodeLookup.end();
@@ -221,15 +228,22 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 					size_t nodeidHere = graph.GetUnitigNode(nodeId, i);
 					sequence[i] = graph.NodeSequences(nodeidHere, i - graph.nodeOffset[nodeidHere]);
 				}
-				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &resultPerThread, i, nodeId](size_t pos, size_t kmer)
+				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &resultPerThread, &vecPos, positionSize, i, nodeId](size_t pos, size_t kmer)
 				{
 					size_t splitNode = graph.GetUnitigNode(nodeId, pos);
 					size_t remainingOffset = pos - graph.nodeOffset[splitNode];
 					assert(remainingOffset < 64);
-					resultPerThread[i].emplace_back(kmer, splitNode, remainingOffset);
+					unsigned __int128 storeThis = kmer;
+					storeThis <<= positionSize;
+					storeThis += splitNode;
+					storeThis <<= 6;
+					storeThis += remainingOffset;
+					if (vecPos == resultPerThread[i].size()) resultPerThread[i].resize(resultPerThread[i].size() * 2);
+					resultPerThread[i][vecPos] = storeThis;
+					vecPos += 1;
 				});
 			}
-			std::sort(resultPerThread[i].begin(), resultPerThread[i].end(), [](const std::tuple<size_t, int, size_t>& left, const std::tuple<size_t, int, size_t>& right) { return std::get<0>(left) < std::get<0>(right); });
+			std::sort(resultPerThread[i].begin(), resultPerThread[i].end(), [positionSize](unsigned __int128 left, unsigned __int128 right) { return left < right; });
 		});
 	}
 
@@ -250,7 +264,7 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	for (size_t i = 0; i < numThreads; i++)
 	{
 		if (resultPerThread[i].size() == 0) continue;
-		current = std::min(current, std::get<0>(resultPerThread[i][0]));
+		current = std::min(current, (resultPerThread[i][0] >> (positionSize + 6)));
 	}
 	std::vector<size_t> locatorKeys;
 	std::vector<size_t> locatorValues;
@@ -263,21 +277,19 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		locatorValues.emplace_back(starts.size()-1);
 		for (size_t i = 0; i < numThreads; i++)
 		{
-			while (threadIndex[i] < resultPerThread[i].size() && std::get<0>(resultPerThread[i][threadIndex[i]]) == current)
+			while (threadIndex[i] < resultPerThread[i].size() && (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) == current)
 			{
-				size_t mergedPos;
-				mergedPos = std::get<1>(resultPerThread[i][threadIndex[i]]) * 64;
-				assert(std::get<2>(resultPerThread[i][threadIndex[i]]) >= 0);
-				assert(std::get<2>(resultPerThread[i][threadIndex[i]]) < 64);
-				mergedPos += std::get<2>(resultPerThread[i][threadIndex[i]]);
-				positions[posi] = mergedPos;
+				unsigned __int128 mergedPos = resultPerThread[i][threadIndex[i]];
+				unsigned __int128 insert = mergedPos & ~(-1 << (positionSize + 6));
+				assert(insert < (unsigned __int128)(1 << (positionSize + 6)));
+				positions[posi] = insert;
 				posi += 1;
 				threadIndex[i] += 1;
 			}
 			if (threadIndex[i] < resultPerThread[i].size())
 			{
-				assert(std::get<0>(resultPerThread[i][threadIndex[i]]) > current);
-				next = std::min(next, std::get<0>(resultPerThread[i][threadIndex[i]]));
+				assert((resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) > current);
+				next = std::min(next, (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)));
 			}
 			else
 			{
