@@ -191,9 +191,49 @@ maxCount(0)
 	initMaxCount();
 }
 
+template <typename F>
+void iteratePerThreads(const std::vector<sdsl::int_vector<0>>& resultPerThread, size_t positionSize, F callback)
+{
+	size_t numThreads = resultPerThread.size();
+	size_t current = std::numeric_limits<size_t>::max();
+	std::vector<size_t> threadIndex;
+	threadIndex.resize(numThreads, 0);
+	for (size_t i = 0; i < numThreads; i++)
+	{
+		if (resultPerThread[i].size() == 0) continue;
+		current = std::min(current, (resultPerThread[i][0] >> (positionSize + 6)));
+	}
+	while (true)
+	{
+		size_t next = std::numeric_limits<size_t>::max();
+		size_t numFinished = 0;
+		for (size_t i = 0; i < numThreads; i++)
+		{
+			while (threadIndex[i] < resultPerThread[i].size() && (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) == current)
+			{
+				callback(resultPerThread[i][threadIndex[i]]);
+				threadIndex[i] += 1;
+			}
+			if (threadIndex[i] < resultPerThread[i].size())
+			{
+				assert((resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) > current);
+				next = std::min(next, (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)));
+			}
+			else
+			{
+				numFinished += 1;
+			}
+		}
+		if (numFinished == numThreads) break;
+		assert(next > current);
+		current = next;
+	}
+}
+
 void MinimizerSeeder::initMinimizers(size_t numThreads)
 {
 	size_t positionSize = log2(graph.nodeIDs.size()) + 1;
+	assert(minimizerLength * 2 + positionSize + 6 < 128);
 	positions.width(positionSize+6);
 	auto nodeIter = graph.nodeLookup.begin();
 	std::mutex nodeMutex;
@@ -256,60 +296,61 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	}
 	threads.clear();
 
-	positions.resize(totalSize);
-	size_t posi = 0;
-	std::vector<size_t> threadIndex;
-	threadIndex.resize(numThreads, 0);
 	size_t current = std::numeric_limits<size_t>::max();
-	for (size_t i = 0; i < numThreads; i++)
-	{
-		if (resultPerThread[i].size() == 0) continue;
-		current = std::min(current, (resultPerThread[i][0] >> (positionSize + 6)));
-	}
 	std::vector<size_t> locatorKeys;
-	std::vector<size_t> locatorValues;
-	size_t startPos = 0;
-	while (true)
+	iteratePerThreads(resultPerThread, positionSize, [&current, positionSize, &locatorKeys](unsigned __int128 value)
 	{
-		size_t next = std::numeric_limits<size_t>::max();
-		size_t numFinished = 0;
-		locatorKeys.emplace_back(current);
-		locatorValues.emplace_back(startPos);
-		startPos += 1;
-		for (size_t i = 0; i < numThreads; i++)
+		size_t kmer = value >> (positionSize + 6);
+		if (kmer == current)
 		{
-			while (threadIndex[i] < resultPerThread[i].size() && (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) == current)
-			{
-				unsigned __int128 mergedPos = resultPerThread[i][threadIndex[i]];
-				unsigned __int128 insert = mergedPos & ~(-1 << (positionSize + 6));
-				assert(insert < (unsigned __int128)(1 << (positionSize + 6)));
-				positions[posi] = insert;
-				posi += 1;
-				threadIndex[i] += 1;
-			}
-			if (threadIndex[i] < resultPerThread[i].size())
-			{
-				assert((resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) > current);
-				next = std::min(next, (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)));
-			}
-			else
-			{
-				numFinished += 1;
-			}
+			return;
 		}
-		if (numFinished == numThreads) break;
-		assert(next > current);
-		current = next;
-	}
-	locator.build(locatorKeys, locatorValues, numThreads);
-	starts.resize(positions.size());
-	sdsl::util::set_to_value(starts, 0);
-	for (auto val : locatorValues)
+		current = kmer;
+		locatorKeys.push_back(current);
+	});
+	locator.build(numThreads, locatorKeys);
 	{
-		starts[val] = 1;
+		decltype(locatorKeys) tmp;
+		std::swap(tmp, locatorKeys);
 	}
+	sdsl::int_vector<0> counts;
+	counts.width(log2(totalSize) + 1);
+	counts.resize(locator.size());
+	kmerCheck.width(minimizerLength * 2);
+	kmerCheck.resize(locator.size());
+	sdsl::util::set_to_value(counts, 0);
+	iteratePerThreads(resultPerThread, positionSize, [this, &counts, positionSize](unsigned __int128 value)
+	{
+		size_t kmer = value >> (positionSize + 6);
+		size_t index = locator.lookup(kmer);
+		counts[index] += 1;
+		kmerCheck[index] = kmer;
+	});
+	starts.resize(totalSize);
+	sdsl::util::set_to_value(starts, 0);
+	starts[0] = 1;
+	starts[counts[0]] = 1;
+	for (size_t i = 1; i < counts.size()-1; i++)
+	{
+		counts[i] += counts[i-1];
+		starts[counts[i]] = 1;
+	}
+	if (counts.size() >= 2) counts[counts.size()-1] += counts[counts.size()-2];
+	assert(counts[counts.size()-1] == totalSize);
+	positions.resize(totalSize);
+	iteratePerThreads(resultPerThread, positionSize, [this, &counts, positionSize](unsigned __int128 value)
+	{
+		size_t kmer = value >> (positionSize + 6);
+		size_t index = locator.lookup(kmer);
+		assert(counts[index] > 0);
+		counts[index] -= 1;
+		size_t pos = counts[index];
+		unsigned __int128 insert = value & ~(-1 << (positionSize + 6));
+		assert(insert < (unsigned __int128)(1 << (positionSize + 6)));
+		positions[pos] = insert;
+	});
+
 	sdsl::util::init_support(startSelector, &starts);
-	assert(posi == positions.size());
 	assert(positions.size() == totalSize);
 	std::cerr << "locator: " << locator.size() << std::endl;
 	std::cerr << "starts: " << starts.size() << " " << starts.capacity() << std::endl;
@@ -324,11 +365,12 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	matchIndices.resize(numChunks);
 	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
 	{
-		if (!locator.contains(kmer)) return;
-		auto found = locator[kmer];
+		auto index = locator.lookup(kmer);
+		if (index == ULLONG_MAX) return;
+		if (kmerCheck[index] != kmer) return;
 		size_t chunk = pos / bpPerChunk;
 		assert(chunk < matchIndices.size());
-		matchIndices[chunk].emplace_back(pos, kmer, getStart(found+1) - getStart(found));
+		matchIndices[chunk].emplace_back(pos, kmer, getStart(index+1) - getStart(index));
 	});
 	//prefer less common minimizers
 	for (size_t i = 0; i < numChunks; i++)
@@ -344,7 +386,7 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		size_t seedsHere = 0;
 		for (auto match : matchIndices[i])
 		{
-			auto found = locator[std::get<1>(match)];
+			auto found = locator.lookup(std::get<1>(match));
 			size_t end = getStart(found+1);
 			for (size_t i = getStart(found); i < end; i++)
 			{

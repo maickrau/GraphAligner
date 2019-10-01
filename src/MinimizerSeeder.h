@@ -6,7 +6,7 @@
 #include <string>
 #include <sdsl/int_vector.hpp>
 #include <sdsl/select_support_mcl.hpp>
-#include <MinimalHashmap.h>
+#include <ParallelBB.h>
 #include "AlignmentGraph.h"
 #include "GraphAlignerWrapper.h"
 
@@ -21,7 +21,8 @@ private:
 	SeedHit matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const;
 	void initMaxCount();
 	const AlignmentGraph& graph;
-	MinimalHashmap<size_t, size_t> locator;
+	ParallelBB<size_t> locator;
+	sdsl::int_vector<0> kmerCheck;
 	sdsl::bit_vector starts;
 	sdsl::bit_vector::select_1_type startSelector;
 	sdsl::int_vector<0> positions;
