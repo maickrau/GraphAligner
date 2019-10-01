@@ -268,13 +268,14 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	}
 	std::vector<size_t> locatorKeys;
 	std::vector<size_t> locatorValues;
+	size_t startPos = 0;
 	while (true)
 	{
 		size_t next = std::numeric_limits<size_t>::max();
 		size_t numFinished = 0;
-		starts.emplace_back(posi);
 		locatorKeys.emplace_back(current);
-		locatorValues.emplace_back(starts.size()-1);
+		locatorValues.emplace_back(startPos);
+		startPos += 1;
 		for (size_t i = 0; i < numThreads; i++)
 		{
 			while (threadIndex[i] < resultPerThread[i].size() && (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) == current)
@@ -301,9 +302,14 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		current = next;
 	}
 	locator.build(locatorKeys, locatorValues, numThreads);
+	starts.resize(positions.size());
+	sdsl::util::set_to_value(starts, 0);
+	for (auto val : locatorValues)
+	{
+		starts[val] = 1;
+	}
+	sdsl::util::init_support(startSelector, &starts);
 	assert(posi == positions.size());
-	starts.emplace_back(positions.size());
-	assert(starts.size() == locator.size()+1);
 	assert(positions.size() == totalSize);
 	std::cerr << "locator: " << locator.size() << std::endl;
 	std::cerr << "starts: " << starts.size() << " " << starts.capacity() << std::endl;
@@ -322,7 +328,7 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		auto found = locator[kmer];
 		size_t chunk = pos / bpPerChunk;
 		assert(chunk < matchIndices.size());
-		matchIndices[chunk].emplace_back(pos, kmer, starts[found+1] - starts[found]);
+		matchIndices[chunk].emplace_back(pos, kmer, getStart(found+1) - getStart(found));
 	});
 	//prefer less common minimizers
 	for (size_t i = 0; i < numChunks; i++)
@@ -339,7 +345,8 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		for (auto match : matchIndices[i])
 		{
 			auto found = locator[std::get<1>(match)];
-			for (size_t i = starts[found]; i < starts[found+1]; i++)
+			size_t end = getStart(found+1);
+			for (size_t i = getStart(found); i < end; i++)
 			{
 				if (seedsHere >= maxCount) break;
 				volatile size_t mergepos = positions[i];
@@ -364,9 +371,14 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 void MinimizerSeeder::initMaxCount()
 {
 	maxCount = 0;
-	for (size_t i = 0; i < starts.size()-1; i++)
+	for (size_t i = 0; i < locator.size()-1; i++)
 	{
-		maxCount = std::max(maxCount, starts[i+1] - starts[i]);
+		maxCount = std::max(maxCount, getStart(i+1) - getStart(i));
 	}
 	maxCount += 1;
+}
+
+size_t MinimizerSeeder::getStart(size_t index) const
+{
+	return startSelector(index+1);
 }
