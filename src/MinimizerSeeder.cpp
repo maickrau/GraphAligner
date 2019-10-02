@@ -190,71 +190,37 @@ maxCount(0)
 	initMaxCount();
 }
 
-template <typename F>
-void iteratePerThreads(const std::vector<sdsl::int_vector<0>>& resultPerThread, size_t positionSize, F callback)
-{
-	size_t numThreads = resultPerThread.size();
-	size_t current = std::numeric_limits<size_t>::max();
-	std::vector<size_t> threadIndex;
-	threadIndex.resize(numThreads, 0);
-	for (size_t i = 0; i < numThreads; i++)
-	{
-		if (resultPerThread[i].size() == 0) continue;
-		current = std::min(current, (resultPerThread[i][0] >> (positionSize + 6)));
-	}
-	while (true)
-	{
-		size_t next = std::numeric_limits<size_t>::max();
-		size_t numFinished = 0;
-		for (size_t i = 0; i < numThreads; i++)
-		{
-			while (threadIndex[i] < resultPerThread[i].size() && (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) == current)
-			{
-				callback(resultPerThread[i][threadIndex[i]]);
-				threadIndex[i] += 1;
-			}
-			if (threadIndex[i] < resultPerThread[i].size())
-			{
-				assert((resultPerThread[i][threadIndex[i]] >> (positionSize + 6)) > current);
-				next = std::min(next, (resultPerThread[i][threadIndex[i]] >> (positionSize + 6)));
-			}
-			else
-			{
-				numFinished += 1;
-			}
-		}
-		if (numFinished == numThreads) break;
-		assert(next > current);
-		current = next;
-	}
-}
-
 void MinimizerSeeder::initMinimizers(size_t numThreads)
 {
 	size_t positionSize = log2(graph.nodeIDs.size()) + 1;
-	assert(minimizerLength * 2 + positionSize + 6 < 128);
+	assert(positionSize + 6 < 64);
+	assert(minimizerLength * 2 < 64);
 	auto nodeIter = graph.nodeLookup.begin();
 	std::mutex nodeMutex;
 	std::vector<std::thread> threads;
-	std::vector<sdsl::int_vector<0>> resultPerThread;
-	std::vector<moodycamel::ConcurrentQueue<unsigned __int128>> positionDistributor;
-	resultPerThread.resize(numThreads);
+	std::vector<sdsl::int_vector<0>> kmerPerBucket;
+	std::vector<sdsl::int_vector<0>> positionPerBucket;
+	std::vector<moodycamel::ConcurrentQueue<std::pair<uint64_t, uint64_t>>> positionDistributor;
+	kmerPerBucket.resize(numThreads);
+	positionPerBucket.resize(numThreads);
 	positionDistributor.resize(numThreads);
 	buckets.resize(numThreads);
 	std::atomic<size_t> threadsDone;
 	threadsDone = 0;
 	for (size_t i = 0; i < numThreads; i++)
 	{
-		resultPerThread[i].width(2 * minimizerLength + positionSize + 6);
+		kmerPerBucket[i].width(minimizerLength * 2);
+		positionPerBucket[i].width(positionSize + 6);
 		buckets[i].positions.width(positionSize + 6);
 	}
 
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([this, &positionDistributor, &threadsDone, &resultPerThread, thread, numThreads, &nodeMutex, &nodeIter, positionSize](){
+		threads.emplace_back([this, &positionDistributor, &threadsDone, &kmerPerBucket, &positionPerBucket, thread, numThreads, &nodeMutex, &nodeIter, positionSize](){
 			size_t vecPos = 0;
-			resultPerThread[thread].resize(10);
-			unsigned __int128 readThis;
+			kmerPerBucket[thread].resize(10);
+			positionPerBucket[thread].resize(10);
+			std::pair<uint64_t, uint64_t> readThis;
 			while (true)
 			{
 				auto iter = graph.nodeLookup.end();
@@ -273,28 +239,33 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 					size_t nodeidHere = graph.GetUnitigNode(nodeId, pos);
 					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.nodeOffset[nodeidHere]);
 				}
-				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &positionDistributor, &resultPerThread, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
+				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
 				{
 					size_t splitNode = graph.GetUnitigNode(nodeId, pos);
+					assert(splitNode < (size_t)1 << positionSize);
 					size_t remainingOffset = pos - graph.nodeOffset[splitNode];
 					assert(remainingOffset < 64);
-					unsigned __int128 readThis;
+					std::pair<uint64_t, uint64_t> readThis;
 					while (positionDistributor[thread].try_dequeue(readThis))
 					{
-						size_t kmer = readThis >> (positionSize + 6);
-						assert(getBucket(kmer) == thread);
-						if (vecPos == resultPerThread[thread].size()) resultPerThread[thread].resize(resultPerThread[thread].size() * 2);
-						resultPerThread[thread][vecPos] = readThis;
-						assert((unsigned __int128)resultPerThread[thread][vecPos] == readThis);
-						assert(getBucket((unsigned __int128)resultPerThread[thread][vecPos] >> (positionSize + 6)) == thread);
+						assert(readThis.first < ((uint64_t)1) << (kmerPerBucket[thread].width()));
+						assert(readThis.second < ((uint64_t)1) << (positionPerBucket[thread].width()));
+						assert(getBucket(readThis.first) == thread);
+						if (vecPos == kmerPerBucket[thread].size())
+						{
+							kmerPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+							positionPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+						}
+						kmerPerBucket[thread][vecPos] = readThis.first;
+						positionPerBucket[thread][vecPos] = readThis.second;
 						vecPos += 1;
 					}
-					unsigned __int128 storeThis = kmer;
+					std::pair<uint64_t, uint64_t> storeThis;
+					storeThis.first = kmer;
 					size_t bucket = getBucket(kmer);
-					storeThis <<= positionSize;
-					storeThis += splitNode;
-					storeThis <<= 6;
-					storeThis += remainingOffset;
+					storeThis.second = splitNode;
+					storeThis.second <<= 6;
+					storeThis.second += remainingOffset;
 					positionDistributor[bucket].enqueue(storeThis);
 				});
 			}
@@ -304,84 +275,91 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				while (positionDistributor[thread].try_dequeue(readThis))
 				{
-					size_t kmer = readThis >> (positionSize + 6);
-					assert(getBucket(kmer) == thread);
-					if (vecPos == resultPerThread[thread].size()) resultPerThread[thread].resize(resultPerThread[thread].size() * 2);
-					resultPerThread[thread][vecPos] = readThis;
-					assert((unsigned __int128)resultPerThread[thread][vecPos] == readThis);
-					assert(getBucket((unsigned __int128)resultPerThread[thread][vecPos] >> (positionSize + 6)) == thread);
+					assert(readThis.first < ((uint64_t)1) << (kmerPerBucket[thread].width()));
+					assert(readThis.second < ((uint64_t)1) << (positionPerBucket[thread].width()));
+					assert(getBucket(readThis.first) == thread);
+					if (vecPos == kmerPerBucket[thread].size())
+					{
+						kmerPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+						positionPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+					}
+					kmerPerBucket[thread][vecPos] = readThis.first;
+					positionPerBucket[thread][vecPos] = readThis.second;
 					vecPos += 1;
 				}
 			}
 			while (positionDistributor[thread].try_dequeue(readThis))
 			{
-				size_t kmer = readThis >> (positionSize + 6);
-				assert(getBucket(kmer) == thread);
-				if (vecPos == resultPerThread[thread].size()) resultPerThread[thread].resize(resultPerThread[thread].size() * 2);
-				resultPerThread[thread][vecPos] = readThis;
-				assert((unsigned __int128)resultPerThread[thread][vecPos] == readThis);
-				assert(getBucket((unsigned __int128)resultPerThread[thread][vecPos] >> (positionSize + 6)) == thread);
+				assert(readThis.first < ((uint64_t)1) << (kmerPerBucket[thread].width()));
+				assert(readThis.second < ((uint64_t)1) << (positionPerBucket[thread].width()));
+				assert(getBucket(readThis.first) == thread);
+				if (vecPos == kmerPerBucket[thread].size())
+				{
+					kmerPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+					positionPerBucket[thread].resize(kmerPerBucket[thread].size() * 2);
+				}
+				kmerPerBucket[thread][vecPos] = readThis.first;
+				positionPerBucket[thread][vecPos] = readThis.second;
 				vecPos += 1;
 			}
-			resultPerThread[thread].resize(vecPos);
-			std::sort(resultPerThread[thread].begin(), resultPerThread[thread].end(), [positionSize](unsigned __int128 left, unsigned __int128 right) { return left < right; });
-			size_t current = std::numeric_limits<size_t>::max();
-			std::vector<size_t> locatorKeys;
-			for (unsigned __int128 value : resultPerThread[thread])
+			kmerPerBucket[thread].resize(vecPos);
+			positionPerBucket[thread].resize(vecPos);
 			{
-				size_t kmer = value >> (positionSize + 6);
-				assert(getBucket(kmer) == thread);
-				if (kmer == current)
+				std::vector<uint64_t> locatorKeys;
 				{
-					continue;
+					decltype(kmerPerBucket[thread]) sortedKmers { kmerPerBucket[thread] };
+					std::sort(sortedKmers.begin(), sortedKmers.end(), [positionSize](uint64_t left, uint64_t right) { return left < right; });
+					size_t current = std::numeric_limits<size_t>::max();
+					for (uint64_t kmer : sortedKmers)
+					{
+						assert(getBucket(kmer) == thread);
+						if (kmer == current)
+						{
+							continue;
+						}
+						current = kmer;
+						locatorKeys.push_back(current);
+					}
 				}
-				current = kmer;
-				locatorKeys.push_back(current);
-			}
-			buckets[thread].locator = new boomphf::mphf<size_t,KmerBucket::hasher_t>(locatorKeys.size(), locatorKeys, 1, 2, true, false);
-			{
-				decltype(locatorKeys) tmp;
-				std::swap(tmp, locatorKeys);
+				buckets[thread].locator = new boomphf::mphf<uint64_t,KmerBucket::hasher_t>(locatorKeys.size(), locatorKeys, 1, 2, true, false);
 			}
 			sdsl::int_vector<0> counts;
-			counts.width(log2(resultPerThread[thread].size()) + 1);
+			counts.width(log2(kmerPerBucket[thread].size()) + 1);
 			counts.resize(buckets[thread].locator->nbKeys());
 			buckets[thread].kmerCheck.width(minimizerLength * 2);
 			buckets[thread].kmerCheck.resize(buckets[thread].locator->nbKeys());
 			sdsl::util::set_to_value(counts, 0);
-			for (unsigned __int128 value : resultPerThread[thread])
+			for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
 			{
-				size_t kmer = value >> (positionSize + 6);
+				uint64_t kmer = kmerPerBucket[thread][i];
 				size_t index = buckets[thread].locator->lookup(kmer);
 				counts[index] += 1;
 				buckets[thread].kmerCheck[index] = kmer;
 			}
-			buckets[thread].starts.resize(resultPerThread[thread].size());
+			buckets[thread].starts.resize(kmerPerBucket[thread].size()+1);
 			sdsl::util::set_to_value(buckets[thread].starts, 0);
 			buckets[thread].starts[0] = 1;
 			buckets[thread].starts[counts[0]] = 1;
-			for (size_t i = 1; i < counts.size()-1; i++)
+			for (size_t i = 1; i < counts.size(); i++)
 			{
 				counts[i] += counts[i-1];
 				buckets[thread].starts[counts[i]] = 1;
 			}
-			if (counts.size() >= 2) counts[counts.size()-1] += counts[counts.size()-2];
-			assert(counts[counts.size()-1] == resultPerThread[thread].size());
-			buckets[thread].positions.resize(resultPerThread[thread].size());
-			for (auto value : resultPerThread[thread])
+			assert(counts[counts.size()-1] == kmerPerBucket[thread].size());
+			assert(buckets[thread].starts[kmerPerBucket[thread].size()]);
+			buckets[thread].positions.resize(kmerPerBucket[thread].size());
+			for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
 			{
-				size_t kmer = value >> (positionSize + 6);
+				size_t kmer = kmerPerBucket[thread][i];
 				size_t index = buckets[thread].locator->lookup(kmer);
 				assert(counts[index] > 0);
 				counts[index] -= 1;
 				size_t pos = counts[index];
-				unsigned __int128 insert = value & ~(-1 << (positionSize + 6));
-				assert(insert < (unsigned __int128)(1 << (positionSize + 6)));
+				uint64_t insert = positionPerBucket[thread][i];
 				buckets[thread].positions[pos] = insert;
 			};
 
 			sdsl::util::init_support(buckets[thread].startSelector, &buckets[thread].starts);
-			assert(buckets[thread].positions.size() == resultPerThread[thread].size());
 		});
 	}
 

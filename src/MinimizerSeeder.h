@@ -21,8 +21,8 @@ class MinimizerSeeder
 		~KmerBucket();
 		KmerBucket& operator=(const KmerBucket& other) = delete;
 		KmerBucket& operator=(KmerBucket&& other) = default;
-		typedef boomphf::SingleHashFunctor<size_t> hasher_t;
-		typedef boomphf::mphf<size_t, hasher_t> boophf_t;
+		typedef boomphf::SingleHashFunctor<uint64_t> hasher_t;
+		typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
 		boophf_t* locator;
 		sdsl::int_vector<0> kmerCheck;
 		sdsl::bit_vector starts;
