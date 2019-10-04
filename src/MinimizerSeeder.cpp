@@ -307,7 +307,8 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 			{
 				std::vector<uint64_t> locatorKeys;
 				{
-					decltype(kmerPerBucket[thread]) sortedKmers { kmerPerBucket[thread] };
+					sdsl::int_vector<0> sortedKmers;
+					sortedKmers = kmerPerBucket[thread];
 					std::sort(sortedKmers.begin(), sortedKmers.end(), [positionSize](uint64_t left, uint64_t right) { return left < right; });
 					size_t current = std::numeric_limits<size_t>::max();
 					for (uint64_t kmer : sortedKmers)
@@ -409,7 +410,9 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 			{
 				if (seedsHere >= maxCount) break;
 				size_t mergepos = buckets[bucket].positions[i];
-				result.push_back(matchToSeedHit((size_t)(mergepos / 64), mergepos % 64, std::get<0>(match), std::get<2>(match)));
+				size_t nodeId = mergepos >> 6;
+				size_t offset = mergepos & 63;
+				result.push_back(matchToSeedHit(nodeId, offset, std::get<0>(match), std::get<2>(match)));
 				seedsHere += 1;
 			}
 			if (seedsHere >= maxCount) break;
