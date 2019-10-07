@@ -67,7 +67,7 @@ Seeding:
 - `--seeds-mxm-cache-prefix` MUM/MEM file cache prefix. Store the MUM/MEM index into disk for reuse. Recommended unless you are sure you won't align to the same graph multiple times
 - `--seeds-first-full-rows` Don't use seeds. Instead use the DP alignment on the first row. The runtime depends on the size of the graph so this is very slow. Not recommended
 
-Default uses all MUMs of length 20bp or longer
+Defaults are `--seeds-minimizer-count 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-minimizer-chunksize 100`
 
 Extension:
 
@@ -76,8 +76,4 @@ Extension:
 - `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
 - `--high-memory` high memory mode. Runs a bit faster but uses a LOT more memory
 
-Suggested example parameters:
-- Variation graph: `-b 35 --try-all-seeds`
-- RNA splice graph: `-b 35 --try-all-seeds`
-- Human de Bruijn graph: `-b 5 -B 10 -C 1000`
-- Bacterial de Bruijn graph: `-b 10 -B 20 --try-all-seeds`
+Defaults are `-b 5 -B 10 -C 10000`
