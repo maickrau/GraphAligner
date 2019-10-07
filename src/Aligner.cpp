@@ -298,7 +298,7 @@ void writeAlnsToQueue(moodycamel::ProducerToken& token, const AlignerParams& par
 	QueueInsertSlowly(token, alignmentsOut, strstr.str());
 }
 
-void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
+void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
 	zstr::ostream *compressed;
@@ -319,13 +319,13 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 	std::string corrected = getCorrected(original, corrections, maxOverlap);
 	if (params.compressCorrected)
 	{
-		(*compressed) << ">" << alignments.readName << std::endl;
+		(*compressed) << ">" << readName << std::endl;
 		(*compressed) << corrected << std::endl;
 		delete compressed;
 	}
 	else
 	{
-		strstr << ">" << alignments.readName << std::endl;
+		strstr << ">" << readName << std::endl;
 		strstr << corrected << std::endl;
 	}
 	QueueInsertSlowly(token, correctedOut, strstr.str());
@@ -413,6 +413,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
 					continue;
 				}
 				stats.seedsFound += seeds.size();
@@ -439,6 +440,16 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+			try
+			{
+				if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			}
+			catch (const ThreadReadAssertion::AssertionFailure& a)
+			{
+				reusableState.clear();
+				stats.assertionBroke = true;
+				continue;
+			}
 			continue;
 		}
 
@@ -488,8 +499,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		try
 		{
 			if (params.outputAlignmentFile != "") writeAlnsToQueue(alignmentToken, params, alignmentsOut, alignments);
-			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
-			if (params.outputCorrectedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
+			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			if (params.outputCorrectedClippedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
 		{
@@ -503,10 +514,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, MinimizerSeeder** minimizerSeeder, const AlignerParams& params)
+AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const AlignerParams& params)
 {
 	bool loadMxmSeeder = params.mumCount > 0 || params.memCount > 0;
-	bool loadMinimizerSeeder = params.minimizerCount > 0;
 	bool tryDAG = params.maxCellsPerSlice == std::numeric_limits<size_t>::max();
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
@@ -519,7 +529,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 	{
 		if (graphFile.substr(graphFile.size()-3) == ".vg")
 		{
-			if (loadMxmSeeder || loadMinimizerSeeder)
+			if (loadMxmSeeder)
 			{
 				auto graph = CommonUtils::LoadVGGraph(graphFile);
 				if (loadMxmSeeder)
@@ -527,12 +537,9 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 					std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
 					*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 				}
-				if (loadMinimizerSeeder)
-				{
-					std::cout << "Build minimizer seeder from the graph" << std::endl;
-					*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
-				}
-				return DirectedGraph::BuildFromVG(graph, tryDAG);
+				std::cout << "Build alignment graph" << std::endl;
+				auto result = DirectedGraph::BuildFromVG(graph, tryDAG);
+				return result;
 			}
 			else
 			{
@@ -547,12 +554,9 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, Minimiz
 				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
 				*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 			}
-			if (loadMinimizerSeeder)
-			{
-				std::cout << "Build minimizer seeder from the graph" << std::endl;
-				*minimizerSeeder = new MinimizerSeeder(graph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
-			}
-			return DirectedGraph::BuildFromGFA(graph, tryDAG);
+			std::cout << "Build alignment graph" << std::endl;
+			auto result = DirectedGraph::BuildFromGFA(graph, tryDAG);
+			return result;
 		}
 		else
 		{
@@ -575,8 +579,14 @@ void alignReads(AlignerParams params)
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
+	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params);
+	bool loadMinimizerSeeder = params.minimizerCount > 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, &minimizerseeder, params);
+	if (loadMinimizerSeeder)
+	{
+		std::cout << "Build minimizer seeder from the graph" << std::endl;
+		minimizerseeder = new MinimizerSeeder(alignmentGraph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
+	}
 
 	if (params.seedFiles.size() > 0)
 	{

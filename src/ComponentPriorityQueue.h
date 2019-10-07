@@ -2,7 +2,7 @@
 #define ComponentPriorityQueue_h
 
 #include <queue>
-#include <sparsehash/dense_hash_map>
+#include <phmap.h>
 #include "ThreadReadAssertion.h"
 
 template <typename T, bool SparseStorage>
@@ -35,8 +35,6 @@ public:
 	template <bool Sparse = SparseStorage>
 	typename std::enable_if<Sparse>::type initialize(size_t maxNode)
 	{
-		extras.set_empty_key(std::numeric_limits<size_t>::max());
-		extras.set_deleted_key(std::numeric_limits<size_t>::max()-1);
 		active.resize(maxNode, false);
 	}
 	template <bool Sparse = SparseStorage>
@@ -112,8 +110,6 @@ public:
 	{
 		decltype(extras) empty;
 		std::swap(extras, empty);
-		extras.set_empty_key(std::numeric_limits<size_t>::max());
-		extras.set_deleted_key(std::numeric_limits<size_t>::max()-1);
 	}
 	template<bool Sparse = SparseStorage>
 	typename std::enable_if<!Sparse>::type sparsify()
@@ -143,7 +139,7 @@ private:
 	{
 		return list[index];
 	}
-	const std::vector<T>& getVec(const google::dense_hash_map<size_t, std::vector<T>>& list, size_t index) const
+	const std::vector<T>& getVec(const phmap::flat_hash_map<size_t, std::vector<T>>& list, size_t index) const
 	{
 		static std::vector<T> empty;
 		auto found = list.find(index);
@@ -156,7 +152,7 @@ private:
 	}
 	std::priority_queue<PrioritizedItem, std::vector<PrioritizedItem>, std::greater<PrioritizedItem>> activeQueues;
 	std::vector<bool> active;
-	typename std::conditional<SparseStorage, google::dense_hash_map<size_t, std::vector<T>>, std::vector<std::vector<T>>>::type extras;
+	typename std::conditional<SparseStorage, phmap::flat_hash_map<size_t, std::vector<T>>, std::vector<std::vector<T>>>::type extras;
 };
 
 #endif

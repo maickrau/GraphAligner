@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <type_traits>
-#include <sparsehash/dense_hash_map>
+#include <phmap.h>
 #include "AlignmentGraph.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
@@ -51,7 +51,7 @@ class NodeSlice
 {
 public:
 	using NodeSliceMapItem = NodeSliceMapItemStruct<LengthType, ScoreType, Word>;
-	using MapType = google::dense_hash_map<size_t, NodeSliceMapItem>;
+	using MapType = phmap::flat_hash_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
 	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, MapItem>>
 	{
@@ -202,8 +202,7 @@ public:
 	{
 		assert(nodes == nullptr);
 		nodes = std::make_shared<MapType>();
-		nodes->set_empty_key(-1);
-		nodes->resize(size);
+		nodes->reserve(size);
 	}
 	template <bool HasVectorMap = UseVectorMap>
 	typename std::enable_if<HasVectorMap, NodeSlice<LengthType, ScoreType, Word, false>>::type getMapSlice() const
@@ -324,7 +323,6 @@ public:
 			if (item.second.exists) newActiveMapItems.push_back(item);
 		}
 		nodes = std::make_shared<MapType>();
-		nodes->set_empty_key(-1);
 		nodes->resize(newActiveMapItems.size());
 		for (auto item : newActiveMapItems)
 		{

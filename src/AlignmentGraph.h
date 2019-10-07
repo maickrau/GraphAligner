@@ -134,6 +134,7 @@ private:
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
 	friend class DirectedGraph;
+	friend class MinimizerSeeder;
 };
 
 

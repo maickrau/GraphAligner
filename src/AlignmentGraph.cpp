@@ -493,6 +493,7 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 	while (index > 0 && (nodeOffset[nodes[index]] > offset)) index--;
 	assert(index != nodes.size());
 	size_t result = nodes[index];
+	assert(nodeIDs[result] == nodeId);
 	assert(nodeOffset[result] <= offset);
 	assert(nodeOffset[result] + NodeLength(result) > offset);
 	return result;
