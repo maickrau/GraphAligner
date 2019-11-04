@@ -9,4 +9,4 @@
 	url = https://github.com/greg7mdp/parallel-hashmap.git
 [submodule "BBHash"]
 	path = BBHash
-	url = git@github.com:maickrau/BBHash.git
+	url = https://github.com/maickrau/BBHash.git
