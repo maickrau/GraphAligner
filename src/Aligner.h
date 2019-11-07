@@ -18,6 +18,7 @@ struct AlignerParams
 	std::vector<std::string> seedFiles;
 	std::string outputGAMFile;
 	std::string outputJSONFile;
+	std::string outputGAFFile;
 	std::string outputCorrectedFile;
 	std::string outputCorrectedClippedFile;
 	bool verboseMode;

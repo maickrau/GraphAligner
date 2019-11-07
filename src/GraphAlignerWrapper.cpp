@@ -26,6 +26,13 @@ void AddAlignment(const std::string& seq_id, const std::string& sequence, Alignm
 	aligner.AddAlignment(seq_id, sequence, alignment);
 }
 
+void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+{
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, 1, graph, 1, true, true, true, false, false};
+	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
+	aligner.AddGAFLine(seq_id, sequence, alignment);
+}
+
 void AddCorrected(AlignmentResult::AlignmentItem& alignment)
 {
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, 1, AlignmentGraph::DummyGraph(), 1, true, true, true, false, false};

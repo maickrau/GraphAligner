@@ -302,6 +302,7 @@ public:
 			return alignmentEnd == alignmentStart;
 		}
 		std::string corrected;
+		std::string GAFline;
 		std::shared_ptr<vg::Alignment> alignment;
 		std::shared_ptr<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace> trace;
 		size_t cellsProcessed;

@@ -12,6 +12,7 @@
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerCommon.h"
 #include "GraphAlignerVGAlignment.h"
+#include "GraphAlignerGAFAlignment.h"
 #include "GraphAlignerBitvectorBanded.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
@@ -19,6 +20,7 @@ class GraphAligner
 {
 private:
 	using VGAlignment = GraphAlignerVGAlignment<LengthType, ScoreType, Word>;
+	using GAFAlignment = GraphAlignerGAFAlignment<LengthType, ScoreType, Word>;
 	using BitvectorAligner = GraphAlignerBitvectorBanded<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
@@ -113,6 +115,12 @@ public:
 		alignment.alignment = vgAln;
 		alignment.alignment->set_sequence(sequence.substr(alignment.alignmentStart, alignment.alignmentEnd - alignment.alignmentStart));
 		alignment.alignment->set_query_position(alignment.alignmentStart);
+	}
+
+	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+	{
+		assert(alignment.trace->trace.size() > 0);
+		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, params);
 	}
 
 	void AddCorrected(AlignmentResult::AlignmentItem& alignment)

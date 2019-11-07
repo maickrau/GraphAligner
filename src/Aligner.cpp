@@ -294,6 +294,19 @@ void writeJSONToQueue(moodycamel::ProducerToken& token, const AlignerParams& par
 	QueueInsertSlowly(token, alignmentsOut, strstr.str());
 }
 
+void writeGAFToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, moodycamel::ConcurrentQueue<std::string*>& alignmentsOut, const AlignmentResult& alignments)
+{
+	std::stringstream strstr;
+	for (size_t i = 0; i < alignments.alignments.size(); i++)
+	{
+		assert(!alignments.alignments[i].alignmentFailed());
+		assert(alignments.alignments[i].alignment != nullptr);
+		strstr << alignments.alignments[i].GAFline;
+		strstr << '\n';
+	}
+	QueueInsertSlowly(token, alignmentsOut, strstr.str());
+}
+
 void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
@@ -357,10 +370,11 @@ void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const Aligne
 	QueueInsertSlowly(token, correctedClippedOut, strstr.str());
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& GAFOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	moodycamel::ProducerToken GAMToken { GAMOut };
 	moodycamel::ProducerToken JSONToken { JSONOut };
+	moodycamel::ProducerToken GAFToken { GAFOut };
 	moodycamel::ProducerToken correctedToken { correctedOut };
 	moodycamel::ProducerToken clippedToken { correctedClippedOut };
 	assertSetRead("Before any read", "No seed");
@@ -461,6 +475,13 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
 			}
 		}
+		if (params.outputGAFFile != "")
+		{
+			for (size_t i = 0; i < alignments.alignments.size(); i++)
+			{
+				AddGAFLine(alignmentGraph, fastq->seq_id, fastq->sequence, alignments.alignments[i]);
+			}
+		}
 
 		if (!params.outputAllAlns)
 		{
@@ -497,6 +518,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			if (params.outputGAMFile != "") writeGAMToQueue(GAMToken, params, GAMOut, alignments);
 			if (params.outputJSONFile != "") writeJSONToQueue(JSONToken, params, JSONOut, alignments);
+			if (params.outputGAFFile != "") writeGAFToQueue(GAFToken, params, GAFOut, alignments);
 			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
 			if (params.outputCorrectedClippedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
 		}
@@ -637,6 +659,7 @@ void alignReads(AlignerParams params)
 
 	if (params.outputGAMFile != "") std::cout << "write alignments to " << params.outputGAMFile << std::endl;
 	if (params.outputJSONFile != "") std::cout << "write alignments to " << params.outputJSONFile << std::endl;
+	if (params.outputGAFFile != "") std::cout << "write alignments to " << params.outputGAFFile << std::endl;
 	if (params.outputCorrectedFile != "") std::cout << "write corrected reads to " << params.outputCorrectedFile << std::endl;
 	if (params.outputCorrectedClippedFile != "") std::cout << "write corrected & clipped reads to " << params.outputCorrectedClippedFile << std::endl;
 
@@ -645,6 +668,7 @@ void alignReads(AlignerParams params)
 	assertSetRead("Running alignments", "No seed");
 
 	moodycamel::ConcurrentQueue<std::string*> outputGAM { 50, params.numThreads, params.numThreads };
+	moodycamel::ConcurrentQueue<std::string*> outputGAF { 50, params.numThreads, params.numThreads };
 	moodycamel::ConcurrentQueue<std::string*> outputJSON { 50, params.numThreads, params.numThreads };
 	moodycamel::ConcurrentQueue<std::string*> deallocAlns;
 	moodycamel::ConcurrentQueue<std::string*> outputCorrected { 50, params.numThreads, params.numThreads };
@@ -653,6 +677,7 @@ void alignReads(AlignerParams params)
 	std::atomic<bool> readStreamingFinished { false };
 	std::atomic<bool> allThreadsDone { false };
 	std::atomic<bool> GAMWriteDone { false };
+	std::atomic<bool> GAFWriteDone { false };
 	std::atomic<bool> JSONWriteDone { false };
 	std::atomic<bool> correctedWriteDone { false };
 	std::atomic<bool> correctedClippedWriteDone { false };
@@ -661,13 +686,14 @@ void alignReads(AlignerParams params)
 	AlignmentStats stats;
 	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
 	std::thread GAMwriterThread { [file=params.outputGAMFile, &outputGAM, &deallocAlns, &allThreadsDone, &GAMWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputGAM, deallocAlns, allThreadsDone, GAMWriteDone, verboseMode, false); else GAMWriteDone = true; } };
+	std::thread GAFwriterThread { [file=params.outputGAFFile, &outputGAF, &deallocAlns, &allThreadsDone, &GAFWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputGAF, deallocAlns, allThreadsDone, GAFWriteDone, verboseMode, false); else GAFWriteDone = true; } };
 	std::thread JSONwriterThread { [file=params.outputJSONFile, &outputJSON, &deallocAlns, &allThreadsDone, &JSONWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputJSON, deallocAlns, allThreadsDone, JSONWriteDone, verboseMode, true); else JSONWriteDone = true; } };
 	std::thread correctedWriterThread { [file=params.outputCorrectedFile, &outputCorrected, &deallocAlns, &allThreadsDone, &correctedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressCorrected]() { if (file != "") consumeBytesAndWrite(file, outputCorrected, deallocAlns, allThreadsDone, correctedWriteDone, verboseMode, uncompressed); else correctedWriteDone = true; } };
 	std::thread correctedClippedWriterThread { [file=params.outputCorrectedClippedFile, &outputCorrectedClipped, &deallocAlns, &allThreadsDone, &correctedClippedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressClipped]() { if (file != "") consumeBytesAndWrite(file, outputCorrectedClipped, deallocAlns, allThreadsDone, correctedClippedWriteDone, verboseMode, uncompressed); else correctedClippedWriteDone = true; } };
 
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputGAM, &outputJSON, &outputCorrected, &outputCorrectedClipped, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputGAM, outputJSON, outputCorrected, outputCorrectedClipped, deallocAlns, stats); });
+		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputGAM, &outputJSON, &outputGAF, &outputCorrected, &outputCorrectedClipped, &deallocAlns, &stats]() { runComponentMappings(alignmentGraph, readFastqsQueue, readStreamingFinished, i, seeder, params, outputGAM, outputJSON, outputGAF, outputCorrected, outputCorrectedClipped, deallocAlns, stats); });
 	}
 
 	for (size_t i = 0; i < params.numThreads; i++)
@@ -679,6 +705,7 @@ void alignReads(AlignerParams params)
 	allThreadsDone = true;
 
 	GAMwriterThread.join();
+	GAFwriterThread.join();
 	JSONwriterThread.join();
 	correctedWriterThread.join();
 	correctedClippedWriterThread.join();

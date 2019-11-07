@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("alignments-out,a", boost::program_options::value<std::vector<std::string>>(), "output alignment file (.gam/.json)")
+		("alignments-out,a", boost::program_options::value<std::vector<std::string>>(), "output alignment file (.gaf/.gam/.json)")
 		("corrected-out", boost::program_options::value<std::string>(), "output corrected reads file (.fa/.fa.gz)")
 		("corrected-clipped-out", boost::program_options::value<std::string>(), "output corrected clipped reads file (.fa/.fa.gz)")
 	;
@@ -108,6 +108,7 @@ int main(int argc, char** argv)
 	params.graphFile = "";
 	params.outputGAMFile = "";
 	params.outputJSONFile = "";
+	params.outputGAFFile = "";
 	params.outputCorrectedFile = "";
 	params.outputCorrectedClippedFile = "";
 	params.numThreads = 1;
@@ -193,9 +194,13 @@ int main(int argc, char** argv)
 		{
 			params.outputJSONFile = file;
 		}
+		else if (file.substr(file.size()-4) == ".gaf")
+		{
+			params.outputGAFFile = file;
+		}
 		else
 		{
-			std::cerr << "unknown output alignment format (" << file << "), must be either .gam or .json" << std::endl;
+			std::cerr << "unknown output alignment format (" << file << "), must be either .gaf, .gam or .json" << std::endl;
 			paramError = true;
 		}
 	}
