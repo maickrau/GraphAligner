@@ -89,10 +89,12 @@ public:
 
 			if (!insideNode)
 			{
+				size_t skippedBefore = params.graph.originalNodeSize.at(currentPos.nodeId) - 1 - trace[pos-1].DPposition.nodeOffset;
 				currentPos = newPos;
 				nodePath += posToString(currentPos, params);
 				assert(trace[pos].DPposition.nodeOffset < params.graph.originalNodeSize.at(currentPos.nodeId));
-				nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId) - trace[pos].DPposition.nodeOffset;
+				size_t skippedAfter = trace[pos].DPposition.nodeOffset;
+				nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId) - (skippedBefore + skippedAfter);
 			}
 
 			if (trace[pos-1].DPposition.seqPos == trace[pos].DPposition.seqPos)
