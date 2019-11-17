@@ -15,6 +15,7 @@ Bioconda is the recommended installation method. If you however want to compile 
 
 - Install miniconda https://conda.io/projects/conda/en/latest/user-guide/install/index.html
 - `git clone https://github.com/maickrau/GraphAligner.git`
+- `cd GraphAligner`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment.yml`
 - `source activate GraphAligner`
