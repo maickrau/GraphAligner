@@ -132,6 +132,8 @@ private:
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerVGAlignment;
 	template <typename LengthType, typename ScoreType, typename Word>
+	friend class GraphAlignerGAFAlignment;
+	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorBanded;
 	friend class DirectedGraph;
 	friend class MinimizerSeeder;

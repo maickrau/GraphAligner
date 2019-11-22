@@ -16,7 +16,9 @@ struct AlignerParams
 	int dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::vector<std::string> seedFiles;
-	std::string outputAlignmentFile;
+	std::string outputGAMFile;
+	std::string outputJSONFile;
+	std::string outputGAFFile;
 	std::string outputCorrectedFile;
 	std::string outputCorrectedClippedFile;
 	bool verboseMode;
@@ -28,7 +30,6 @@ struct AlignerParams
 	bool outputAllAlns;
 	std::string seederCachePrefix;
 	bool forceGlobal;
-	bool outputJSON;
 	bool compressCorrected;
 	bool compressClipped;
 	bool preciseClipping;

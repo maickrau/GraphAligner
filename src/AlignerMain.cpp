@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 	mandatory.add_options()
 		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
 		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("alignments-out,a", boost::program_options::value<std::string>(), "output alignment file (.gam/.json)")
+		("alignments-out,a", boost::program_options::value<std::vector<std::string>>(), "output alignment file (.gaf/.gam/.json)")
 		("corrected-out", boost::program_options::value<std::string>(), "output corrected reads file (.fa/.fa.gz)")
 		("corrected-clipped-out", boost::program_options::value<std::string>(), "output corrected clipped reads file (.fa/.fa.gz)")
 	;
@@ -106,7 +106,9 @@ int main(int argc, char** argv)
 
 	AlignerParams params;
 	params.graphFile = "";
-	params.outputAlignmentFile = "";
+	params.outputGAMFile = "";
+	params.outputJSONFile = "";
+	params.outputGAFFile = "";
 	params.outputCorrectedFile = "";
 	params.outputCorrectedClippedFile = "";
 	params.numThreads = 1;
@@ -123,7 +125,6 @@ int main(int argc, char** argv)
 	params.seederCachePrefix = "";
 	params.outputAllAlns = false;
 	params.forceGlobal = false;
-	params.outputJSON = false;
 	params.compressCorrected = false;
 	params.compressClipped = false;
 	params.preciseClipping = false;
@@ -132,9 +133,11 @@ int main(int argc, char** argv)
 	params.minimizerWindowSize = 30;
 	params.minimizerChunkSize = 100;
 
+	std::vector<std::string> outputAlns;
+
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
-	if (vm.count("alignments-out")) params.outputAlignmentFile = vm["alignments-out"].as<std::string>();
+	if (vm.count("alignments-out")) outputAlns = vm["alignments-out"].as<std::vector<std::string>>();
 	if (vm.count("corrected-out")) params.outputCorrectedFile = vm["corrected-out"].as<std::string>();
 	if (vm.count("corrected-clipped-out")) params.outputCorrectedClippedFile = vm["corrected-clipped-out"].as<std::string>();
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
@@ -176,15 +179,30 @@ int main(int argc, char** argv)
 		std::cerr << "read file must be given" << std::endl;
 		paramError = true;
 	}
-	if (params.outputAlignmentFile == "" && params.outputCorrectedFile == "" && params.outputCorrectedClippedFile == "")
+	if (outputAlns.size() == 0 && params.outputCorrectedFile == "" && params.outputCorrectedClippedFile == "")
 	{
 		std::cerr << "one of alignments-out, corrected-out or corrected-clipped-out must be given" << std::endl;
 		paramError = true;
 	}
-	if (params.outputAlignmentFile != "" && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-4) != ".gam" && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) != ".json")
+	for (std::string file : outputAlns)
 	{
-		std::cerr << "unknown output alignment format, must be either .gam or .json" << std::endl;
-		paramError = true;
+		if (file.substr(file.size()-4) == ".gam")
+		{
+			params.outputGAMFile = file;
+		}
+		else if (file.substr(file.size()-5) == ".json")
+		{
+			params.outputJSONFile = file;
+		}
+		else if (file.substr(file.size()-4) == ".gaf")
+		{
+			params.outputGAFFile = file;
+		}
+		else
+		{
+			std::cerr << "unknown output alignment format (" << file << "), must be either .gaf, .gam or .json" << std::endl;
+			paramError = true;
+		}
 	}
 	if (params.outputCorrectedFile != "" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-3) != ".fa" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-6) != ".fasta" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-6) != ".fa.gz" && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-9) != ".fasta.gz")
 	{
@@ -252,11 +270,6 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "run with option -h for help" << std::endl;
 		std::exit(1);
-	}
-
-	if (params.outputAlignmentFile.size() >= 5 && params.outputAlignmentFile.substr(params.outputAlignmentFile.size()-5) == ".json")
-	{
-		params.outputJSON = true;
 	}
 
 	if (params.outputCorrectedFile.size() >= 3 && params.outputCorrectedFile.substr(params.outputCorrectedFile.size()-3) == ".gz")
