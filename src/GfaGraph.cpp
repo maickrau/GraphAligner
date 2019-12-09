@@ -232,6 +232,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			sstr >> idstr;
 			int id = getNameId(nameMapping, idstr);
 			sstr >> seq;
+			if (seq == "*") throw CommonUtils::InvalidGraphException { std::string { "Nodes without sequence (*) are not currently supported (nodeid " + idstr + ")" } };
 			assert(seq.size() >= 1);
 			std::string tags;
 			while (sstr.good())

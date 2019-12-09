@@ -13,6 +13,7 @@ namespace CommonUtils
 	struct InvalidGraphException : std::runtime_error
 	{
 		InvalidGraphException(const char* c);
+		InvalidGraphException(std::string c);
 	};
 	namespace inner
 	{

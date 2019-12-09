@@ -7,6 +7,10 @@ namespace CommonUtils
 	{
 	}
 
+	InvalidGraphException::InvalidGraphException(std::string c) : std::runtime_error(c) 
+	{
+	}
+
 	namespace inner
 	{
 		//an overlap which is larger than the fraction cutoff of the smaller alignment means the alignments are incompatible
