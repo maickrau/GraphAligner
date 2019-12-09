@@ -340,27 +340,30 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 			buckets[thread].starts.resize(kmerPerBucket[thread].size()+1);
 			sdsl::util::set_to_value(buckets[thread].starts, 0);
 			buckets[thread].starts[0] = 1;
-			buckets[thread].starts[counts[0]] = 1;
-			for (size_t i = 1; i < counts.size(); i++)
+			if (counts.size() > 0)
 			{
-				counts[i] += counts[i-1];
-				buckets[thread].starts[counts[i]] = 1;
-			}
-			assert(counts[counts.size()-1] == kmerPerBucket[thread].size());
-			assert(buckets[thread].starts[kmerPerBucket[thread].size()]);
-			buckets[thread].positions.resize(kmerPerBucket[thread].size());
-			for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
-			{
-				size_t kmer = kmerPerBucket[thread][i];
-				size_t index = buckets[thread].locator->lookup(kmer);
-				assert(counts[index] > 0);
-				counts[index] -= 1;
-				size_t pos = counts[index];
-				uint64_t insert = positionPerBucket[thread][i];
-				buckets[thread].positions[pos] = insert;
-			};
+				buckets[thread].starts[counts[0]] = 1;
+				for (size_t i = 1; i < counts.size(); i++)
+				{
+					counts[i] += counts[i-1];
+					buckets[thread].starts[counts[i]] = 1;
+				}
+				assert(counts[counts.size()-1] == kmerPerBucket[thread].size());
+				assert(buckets[thread].starts[kmerPerBucket[thread].size()]);
+				buckets[thread].positions.resize(kmerPerBucket[thread].size());
+				for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
+				{
+					size_t kmer = kmerPerBucket[thread][i];
+					size_t index = buckets[thread].locator->lookup(kmer);
+					assert(counts[index] > 0);
+					counts[index] -= 1;
+					size_t pos = counts[index];
+					uint64_t insert = positionPerBucket[thread][i];
+					buckets[thread].positions[pos] = insert;
+				};
 
-			sdsl::util::init_support(buckets[thread].startSelector, &buckets[thread].starts);
+				sdsl::util::init_support(buckets[thread].startSelector, &buckets[thread].starts);
+			}
 		});
 	}
 
@@ -484,6 +487,7 @@ void MinimizerSeeder::initMaxCount()
 	maxCount = 0;
 	for (size_t bucket = 0; bucket < buckets.size(); bucket++)
 	{
+		if (buckets[bucket].locator->nbKeys() == 0) continue;
 		for (size_t i = 0; i < buckets[bucket].locator->nbKeys()-1; i++)
 		{
 			maxCount = std::max(maxCount, getStart(bucket, i+1) - getStart(bucket, i));
