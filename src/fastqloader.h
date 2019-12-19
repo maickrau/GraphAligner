@@ -90,17 +90,17 @@ public:
 	{
 		bool gzipped = false;
 		std::string originalFilename = filename;
-		if (filename.substr(filename.size()-3) == ".gz")
+		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".gz")
 		{
 			gzipped = true;
 			filename = filename.substr(0, filename.size()-3);
 		}
 		bool fastq = false;
 		bool fasta = false;
-		if (filename.substr(filename.size()-6) == ".fastq") fastq = true;
-		if (filename.substr(filename.size()-3) == ".fq") fastq = true;
-		if (filename.substr(filename.size()-6) == ".fasta") fasta = true;
-		if (filename.substr(filename.size()-3) == ".fa") fasta = true;
+		if (filename.size() > 6 && filename.substr(filename.size()-6) == ".fastq") fastq = true;
+		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".fq") fastq = true;
+		if (filename.size() > 6 && filename.substr(filename.size()-6) == ".fasta") fasta = true;
+		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".fa") fasta = true;
 		if (fasta)
 		{
 			if (gzipped)
