@@ -55,7 +55,7 @@ uint64_t hash(uint64_t key) {
 std::vector<bool> validChar = getValidChars();
 
 template <typename CallbackF>
-void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
+void iterateMinimizersReal(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
 {
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
@@ -65,9 +65,11 @@ void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t wi
 	size_t offset = 0;
 	std::vector<size_t> window;
 	window.resize(windowSize - minimizerLength + 1);
+	std::vector<size_t> windowSeqpos;
 start:
 	while (offset < str.size() && !validChar[str[offset]]) offset++;
 	if (offset + minimizerLength > str.size()) return;
+	windowSeqpos.resize(windowSize - minimizerLength + 1, std::numeric_limits<size_t>::max());
 	size_t kmer = 0;
 	for (size_t i = 0; i < minimizerLength; i++)
 	{
@@ -81,24 +83,20 @@ start:
 		kmer |= charToInt(str[offset+i]);
 	}
 	size_t minOrder = hash(kmer);
-	size_t minPos = offset + minimizerLength - 1;
-	size_t minKmer = kmer;
-	size_t minWindowPos = minimizerLength % window.size();
 	window[(minimizerLength-1) % window.size()] = kmer;
-	for (size_t i = minimizerLength; i < windowSize && offset+i < str.size(); i++)
+	windowSeqpos[(minimizerLength-1) % window.size()] = offset + minimizerLength - 1;
+	for (size_t i = minimizerLength; i < minimizerLength + window.size() - 1 && offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
-			if (minOrder != std::numeric_limits<size_t>::max())
+			assert(minOrder != std::numeric_limits<size_t>::max());
+			for (size_t j = 0; j < window.size(); j++)
 			{
-				for (size_t j = 0; j < window.size(); j++)
+				if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
+				assert(windowSeqpos[j] < str.size());
+				if (hash(window[j]) == minOrder)
 				{
-					size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
-					if (seqPos >= str.size()) continue;
-					if (hash(window[j]) == minOrder)
-					{
-						callback(seqPos, window[j]);
-					}
+					callback(windowSeqpos[j], window[j]);
 				}
 			}
 			offset = offset+i;
@@ -108,27 +106,35 @@ start:
 		kmer &= mask;
 		kmer |= charToInt(str[offset+i]);
 		window[i % window.size()] = kmer;
-		if (hash(kmer) < minOrder)
-		{
-			minOrder = hash(kmer);
-			minPos = offset + i;
-			minKmer = kmer;
-			minWindowPos = i % window.size();
-		}
+		assert(windowSeqpos[i % window.size()] == std::numeric_limits<size_t>::max());
+		windowSeqpos[i % window.size()] = offset+i;
+		minOrder = std::min(minOrder, hash(kmer));
 	}
-	if (minOrder != std::numeric_limits<size_t>::max())
+	assert(minOrder != std::numeric_limits<size_t>::max());
+	if (str.size() - offset < windowSize)
 	{
 		for (size_t j = 0; j < window.size(); j++)
 		{
-			size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
-			if (seqPos >= str.size()) continue;
+			if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
+			assert(windowSeqpos[j] < str.size());
+			assert(hash(window[j]) >= minOrder);
 			if (hash(window[j]) == minOrder)
 			{
-				callback(seqPos, window[j]);
+				callback(windowSeqpos[j], window[j]);
 			}
 		}
+		return;
 	}
-	for (size_t i = windowSize; offset+i < str.size(); i++)
+	for (size_t j = 0; j < window.size(); j++)
+	{
+		assert(windowSeqpos[j] < str.size());
+		assert(hash(window[j]) >= minOrder);
+		if (hash(window[j]) == minOrder)
+		{
+			callback(windowSeqpos[j], window[j]);
+		}
+	}
+	for (size_t i = minimizerLength + window.size() - 1; offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
@@ -138,44 +144,130 @@ start:
 		kmer <<= 2;
 		kmer &= mask;
 		kmer |= charToInt(str[offset+i]);
+		bool overwroteMin = false;
+		if (hash(window[i % window.size()]) == minOrder) overwroteMin = true;
 		window[i % window.size()] = kmer;
-		if (minWindowPos == i % window.size())
+		windowSeqpos[i % window.size()] = offset+i;
+		if (overwroteMin)
 		{
+			size_t oldMinOrder = minOrder;
 			minOrder = hash(window[0]);
-			minWindowPos = 0;
-			minPos = offset + i - (i % window.size());
-			minKmer = window[0];
 			for (size_t j = 1; j < window.size(); j++)
 			{
-				if (hash(window[j]) < minOrder)
-				{
-					minOrder = hash(window[j]);
-					minWindowPos = j;
-					minPos = offset + i - ((i - j) % window.size());
-					minKmer = window[j];
-				}
+				minOrder = std::min(minOrder, hash(window[j]));
 			}
-			if (minOrder != std::numeric_limits<size_t>::max())
+			if (minOrder > oldMinOrder)
 			{
 				for (size_t j = 0; j < window.size(); j++)
 				{
-					if (hash(window[j]) == minOrder)
-					{
-						callback(offset + i - ((i - j) % window.size()), window[j]);
-					}
+					if (i % window.size() == j) continue;
+					assert(hash(window[j]) >= minOrder);
+					if (hash(window[j]) == minOrder) callback(windowSeqpos[j], window[j]);
 				}
 			}
 		}
-		else if (hash(kmer) <= minOrder)
+		else
 		{
-			minOrder = hash(kmer);
-			minPos = offset + i;
-			minKmer = kmer;
-			minWindowPos = i % window.size();
-			if (minOrder != std::numeric_limits<size_t>::max()) callback(minPos, minKmer);
+			minOrder = std::min(minOrder, hash(kmer));
 		}
+		if (hash(kmer) == minOrder) callback(offset+i, kmer);
 	}
 }
+
+#ifndef EXTRACORRECTNESSASSERTIONS
+
+template <typename CallbackF>
+void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
+{
+	iterateMinimizersReal(str, minimizerLength, windowSize, callback);
+}
+
+#else
+
+template <typename CallbackF>
+void iterateMinimizersSimple(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
+{
+	if (str.size() <= windowSize)
+	{
+		size_t windowMinimum = std::numeric_limits<size_t>::max();
+		for (size_t i = minimizerLength-1; i < str.size(); i++)
+		{
+			size_t kmer = 0;
+			for (size_t j = i + 1 - minimizerLength; j <= i; j++)
+			{
+				kmer <<= 2;
+				kmer |= charToInt(str[j]);
+			}
+			windowMinimum = std::min(windowMinimum, hash(kmer));
+		}
+		for (size_t i = minimizerLength-1; i < str.size(); i++)
+		{
+			size_t kmer = 0;
+			for (size_t j = i + 1 - minimizerLength; j <= i; j++)
+			{
+				kmer <<= 2;
+				kmer |= charToInt(str[j]);
+			}
+			if (hash(kmer) == windowMinimum) callback(i, kmer);
+		}
+		return;
+	}
+	std::vector<bool> isMinimizer;
+	isMinimizer.resize(str.size(), false);
+	std::vector<size_t> kmer;
+	std::vector<size_t> kmerHash;
+	kmer.resize(str.size(), 0);
+	kmerHash.resize(str.size(), std::numeric_limits<size_t>::max());
+	for (size_t i = minimizerLength-1; i < str.size(); i++)
+	{
+		kmer[i] = 0;
+		for (size_t j = i + 1 - minimizerLength; j <= i; j++)
+		{
+			kmer[i] <<= 2;
+			kmer[i] |= charToInt(str[j]);
+		}
+		kmerHash[i] = hash(kmer[i]);
+	}
+	for (size_t i = windowSize-1; i < str.size(); i++)
+	{
+		size_t windowMinimum = kmerHash[i];
+		for (size_t j = i + minimizerLength - windowSize; j <= i; j++)
+		{
+			windowMinimum = std::min(windowMinimum, kmerHash[j]);
+		}
+		for (size_t j = i + minimizerLength - windowSize; j <= i; j++)
+		{
+			if (kmerHash[j] == windowMinimum)
+			{
+				isMinimizer[j] = true;
+			}
+		}
+	}
+	for (size_t i = 0; i < str.size(); i++)
+	{
+		if (!isMinimizer[i]) continue;
+		callback(i, kmer[i]);
+	}
+}
+
+template <typename CallbackF>
+void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
+{
+	std::vector<std::pair<size_t, size_t>> simpleMinimizers;
+	std::vector<std::pair<size_t, size_t>> otherMinimizers;
+	iterateMinimizersSimple(str, minimizerLength, windowSize, [&simpleMinimizers](size_t pos, size_t kmer) { simpleMinimizers.emplace_back(pos, kmer); });
+	iterateMinimizersReal(str, minimizerLength, windowSize, [&otherMinimizers](size_t pos, size_t kmer) { otherMinimizers.emplace_back(pos, kmer); });
+	std::sort(otherMinimizers.begin(), otherMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
+	std::sort(simpleMinimizers.begin(), simpleMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
+	assert(simpleMinimizers.size() == otherMinimizers.size());
+	for (size_t i = 0; i < simpleMinimizers.size(); i++)
+	{
+		assert(simpleMinimizers[i] == otherMinimizers[i]);
+		callback(simpleMinimizers[i].first, simpleMinimizers[i].second);
+	}
+}
+
+#endif
 
 MinimizerSeeder::MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
 graph(graph),

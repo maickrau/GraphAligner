@@ -1733,7 +1733,8 @@ private:
 		assert(result.slices.size() <= numSlices + 1);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-		assert(reusableState.calculableQueue.size() == 0);
+		assert(reusableState.sparseCalculableQueue.size() == 0);
+		assert(reusableState.denseCalculableQueue.size() == 0);
 		for (size_t i = 0; i < reusableState.currentBand.size(); i++)
 		{
 			assert(!reusableState.currentBand[i]);
