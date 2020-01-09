@@ -826,10 +826,10 @@ private:
 		return result;
 	}
 
+	template <bool PreciseClipping, typename NodeChunkType>
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	template <bool PreciseClipping, typename NodeChunkType>
 	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks) const
 	{
 		assert(incoming.size() > 0);
