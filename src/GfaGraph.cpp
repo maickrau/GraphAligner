@@ -268,7 +268,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 			sstr >> overlap;
 			char dummyc;
 			sstr >> dummyc;
-			assert(dummyc == 'M');
+			assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
 			if (result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
