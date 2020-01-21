@@ -158,7 +158,11 @@ public:
 		nodePathEnd = nodePathLen - (params.graph.originalNodeSize.at(trace.back().DPposition.node) - 1 - trace.back().DPposition.nodeOffset);
 
 		std::stringstream sstr;
-		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality << "\t" << "cg:Z:" << cigar;
+		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality;
+		sstr << "\t" << "NM:i:" << (mismatches + deletions + insertions);
+		sstr << "\t" << "dv:f:" << 1.0-((double)matches / (double)(matches + mismatches + deletions + insertions));
+		sstr << "\t" << "id:f:" << ((double)matches / (double)(matches + mismatches + deletions + insertions));
+		sstr << "\t" << "cg:Z:" << cigar;
 		return sstr.str();
 	}
 
