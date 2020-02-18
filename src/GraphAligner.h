@@ -174,14 +174,16 @@ private:
 				partialGoodnessSum[i] = partialGoodnessSum[i-1] + seedHits[pair.second[i-1].first].matchLen;
 			}
 			size_t startpos = 0;
-			size_t endpos = 1;
+			size_t endpos = 0;
 			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
 			{
-				while (endpos < partialGoodnessSum.size()-1 && pair.second[endpos+1].second <= pair.second[i-1].second + 100) endpos += 1;
-				while (startpos < partialGoodnessSum.size()-1 && pair.second[startpos+1].second < pair.second[i-1].second - 100) startpos += 1;
-				assert(endpos > startpos);
-				assert(partialGoodnessSum[endpos] > partialGoodnessSum[startpos]);
-				seedGoodness[pair.second[i-1].first] = partialGoodnessSum[endpos] - partialGoodnessSum[startpos];
+				while (endpos < pair.second.size()-1 && pair.second[endpos+1].second <= pair.second[i-1].second + 100) endpos += 1;
+				while (startpos < pair.second.size()-1 && pair.second[startpos].second < pair.second[i-1].second - 100) startpos += 1;
+				assert(endpos >= startpos);
+				assert(endpos >= i-1);
+				assert(startpos <= i-1);
+				assert(partialGoodnessSum[endpos+1] > partialGoodnessSum[startpos]);
+				seedGoodness[pair.second[i-1].first] = partialGoodnessSum[endpos+1] - partialGoodnessSum[startpos];
 			}
 		}
 		std::vector<size_t> order;
