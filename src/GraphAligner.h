@@ -76,11 +76,13 @@ public:
 		AlignmentResult result;
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
+		auto order = orderSeedsByChaining(seedHits);
 		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
-		for (size_t i = 0; i < seedHits.size(); i++)
+		for (size_t orderI = 0; orderI < seedHits.size(); orderI++)
 		{
+			size_t i = order[orderI];
 			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen) + "," + std::to_string(seedHits[i].nodeOffset);
-			logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << seedInfo;
+			logger << seq_id << " seed " << orderI << "/" << seedHits.size() << " " << seedInfo;
 			assertSetRead(seq_id, seedInfo);
 			if (params.sloppyOptimizations)
 			{
@@ -137,6 +139,62 @@ public:
 	}
 
 private:
+
+	std::vector<size_t> orderSeedsByChaining(const std::vector<SeedHit>& seedHits) const
+	{
+		std::unordered_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
+		for (size_t i = 0; i < seedHits.size(); i++)
+		{
+			int forwardNodeId;
+			if (seedHits[i].reverse)
+			{
+				forwardNodeId = seedHits[i].nodeID * 2 + 1;
+			}
+			else
+			{
+				forwardNodeId = seedHits[i].nodeID * 2;
+			}
+			size_t nodeIndex = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
+			assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[nodeIndex]);
+			size_t realOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[nodeIndex];
+			assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
+			seedPoses[params.graph.chainNumber[nodeIndex]].emplace_back(i, params.graph.chainApproxPos[nodeIndex] + realOffset - seedHits[i].seqPos);
+		}
+		std::vector<size_t> seedGoodness;
+		seedGoodness.resize(seedHits.size(), std::numeric_limits<size_t>::max());
+		for (auto& pair : seedPoses)
+		{
+			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
+			std::vector<size_t> partialGoodnessSum;
+			partialGoodnessSum.resize(pair.second.size()+1);
+			partialGoodnessSum[0] = 0;
+			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
+			{
+				assert(pair.second[i-1].second >= 100);
+				partialGoodnessSum[i] = partialGoodnessSum[i-1] + seedHits[pair.second[i-1].first].matchLen;
+			}
+			size_t startpos = 0;
+			size_t endpos = 1;
+			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
+			{
+				while (endpos < partialGoodnessSum.size()-1 && pair.second[endpos+1].second <= pair.second[i-1].second + 100) endpos += 1;
+				while (startpos < partialGoodnessSum.size()-1 && pair.second[startpos+1].second < pair.second[i-1].second - 100) startpos += 1;
+				assert(endpos > startpos);
+				assert(partialGoodnessSum[endpos] > partialGoodnessSum[startpos]);
+				seedGoodness[pair.second[i-1].first] = partialGoodnessSum[endpos] - partialGoodnessSum[startpos];
+			}
+		}
+		std::vector<size_t> order;
+		order.resize(seedGoodness.size());
+		for (size_t i = 0; i < seedGoodness.size(); i++)
+		{
+			assert(seedGoodness[i] != std::numeric_limits<size_t>::max());
+			order[i] = i;
+		}
+		std::sort(order.begin(), order.end(), [&seedGoodness](size_t left, size_t right) { return seedGoodness[left] < seedGoodness[right]; });
+		std::reverse(order.begin(), order.end());
+		return order;
+	}
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{

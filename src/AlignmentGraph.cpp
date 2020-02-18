@@ -257,6 +257,7 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 	RenumberAmbiguousToEnd();
 	ambiguousNodes.clear();
 	findLinearizable();
+	findChains();
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
 	std::cout << ambiguousNodeSequences.size() << " ambiguous split nodes" << std::endl;
@@ -299,6 +300,176 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 		}
 	}
 #endif
+}
+
+std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std::vector<bool>& ignorableTip)
+{
+	std::vector<size_t> S;
+	S.push_back(start);
+	std::unordered_set<size_t> visited;
+	std::unordered_set<size_t> seen;
+	seen.insert(start);
+	while (S.size() > 0)
+	{
+		const size_t v = S.back();
+		S.pop_back();
+		assert(seen.count(v) == 1);
+		seen.erase(v);
+		assert(visited.count(v) == 0);
+		visited.insert(v);
+		if (outNeighbors[v].size() == 0) return std::make_pair(false, 0);
+		for (const size_t u : outNeighbors[v])
+		{
+			if (u == v) return std::make_pair(false, 0);
+			if (u == start) return std::make_pair(false, 0);
+			assert(visited.count(u) == 0);
+			seen.insert(u);
+			bool hasNonvisitedParent = false;
+			for (const size_t w : inNeighbors[u])
+			{
+				if (!ignorableTip[w] && visited.count(w) == 0)
+				{
+					hasNonvisitedParent = true;
+					break;
+				}
+			}
+			if (!hasNonvisitedParent) S.push_back(u);
+		}
+		if (S.size() == 1 && seen.size() == 1 && seen.count(S[0]) == 1)
+		{
+			const size_t t = S.back();
+			for (const size_t u : outNeighbors[t])
+			{
+				if (u == start) return std::make_pair(false, 0);
+			}
+			return std::make_pair(true, t);
+		}
+	}
+	return std::make_pair(false, 0);
+}
+
+size_t find(std::vector<size_t>& parent, size_t item)
+{
+	if (parent[item] == item) return item;
+	std::vector<size_t> stack;
+	stack.push_back(item);
+	while (parent[stack.back()] != stack.back()) stack.push_back(parent[stack.back()]);
+	for (size_t i : stack) parent[i] = stack.back();
+	return stack.back();
+}
+
+void merge(std::vector<size_t>& parent, std::vector<size_t>& rank, size_t left, size_t right)
+{
+	left = find(parent, left);
+	right = find(parent, right);
+	if (rank[left] < rank[right])
+	{
+		std::swap(left, right);
+	}
+	parent[right] = left;
+	if (rank[left] == rank[right]) rank[left] += 1;
+}
+
+void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank)
+{
+	bool hasBubble;
+	size_t bubbleEnd;
+	std::tie(hasBubble, bubbleEnd) = findBubble(start, ignorableTip);
+	if (!hasBubble) return;
+	std::unordered_set<size_t> visited;
+	std::vector<size_t> stack;
+	stack.push_back(start);
+	visited.insert(start);
+	merge(chainNumber, rank, start, bubbleEnd);
+	while (stack.size() > 0)
+	{
+		const size_t top = stack.back();
+		stack.pop_back();
+		if (visited.count(top) == 1) continue;
+		visited.insert(top);
+		merge(chainNumber, rank, start, top);
+		for (const auto neighbor : outNeighbors[top])
+		{
+			if (visited.count(neighbor) == 1) continue;
+			if (neighbor == bubbleEnd) continue;
+			stack.push_back(neighbor);
+		}
+	}
+}
+
+void AlignmentGraph::fixChainApproxPos(const size_t start)
+{
+	assert(chainApproxPos[start] == std::numeric_limits<size_t>::max());
+	assert(std::numeric_limits<size_t>::max() / SPLIT_NODE_SIZE > nodeLength.size());
+	assert(std::numeric_limits<size_t>::max() > nodeLength.size() * SPLIT_NODE_SIZE * 2);
+	std::vector<std::pair<size_t, size_t>> stack;
+	size_t chain = chainNumber[start];
+	stack.emplace_back(start, nodeLength.size() * SPLIT_NODE_SIZE);
+	while (stack.size() > 0)
+	{
+		size_t v;
+		size_t dist;
+		std::tie(v, dist) = stack.back();
+		stack.pop_back();
+		if (chainApproxPos[v] != std::numeric_limits<size_t>::max()) continue;
+		chainApproxPos[v] = dist;
+		for (const size_t u : outNeighbors[v])
+		{
+			if (chainNumber[u] != chain) continue;
+			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
+			assert(std::numeric_limits<size_t>::max() - nodeLength[v] > dist);
+			stack.emplace_back(u, dist + nodeLength[v]);
+		}
+		for (const size_t u : inNeighbors[v])
+		{
+			if (chainNumber[u] != chain) continue;
+			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
+			assert(dist > nodeLength[v]);
+			stack.emplace_back(u, dist - nodeLength[v]);
+		}
+	}
+}
+
+void AlignmentGraph::findChains()
+{
+	chainNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	for (size_t i = 0; i < chainNumber.size(); i++)
+	{
+		chainNumber[i] = i;
+	}
+	std::vector<bool> ignorableTip;
+	ignorableTip.resize(nodeLength.size(), false);
+	std::vector<size_t> rank;
+	rank.resize(nodeLength.size(), 0);
+	for (const auto& pair : nodeLookup)
+	{
+		assert(pair.second.size() > 0);
+		if (inNeighbors[pair.second[0]].size() == 0) ignorableTip[pair.second[0]] = true;
+		for (size_t i = 1; i < pair.second.size() && ignorableTip[pair.second[i-1]]; i++)
+		{
+			merge(chainNumber, rank, pair.second[0], pair.second[i]);
+			if (inNeighbors[pair.second[i]].size() == 1) ignorableTip[pair.second[i]] = true;
+		}
+	}
+	for (const auto& pair : nodeLookup)
+	{
+		chainBubble(pair.second.back(), ignorableTip, rank);
+	}
+	{
+		std::vector<size_t> tmp;
+		std::vector<bool> tmp2;
+		std::swap(rank, tmp);
+		std::swap(ignorableTip, tmp2);
+	}
+	for (size_t i = 0; i < chainNumber.size(); i++)
+	{
+		find(chainNumber, i);
+	}
+	chainApproxPos.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	for (size_t i = 0; i < chainNumber.size(); i++)
+	{
+		if (chainApproxPos[i] == std::numeric_limits<size_t>::max()) fixChainApproxPos(i);
+	}
 }
 
 void AlignmentGraph::findLinearizable()

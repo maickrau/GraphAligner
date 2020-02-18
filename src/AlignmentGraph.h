@@ -105,6 +105,10 @@ public:
 	size_t getDBGoverlap() const;
 
 private:
+	void fixChainApproxPos(const size_t start);
+	std::pair<bool, size_t> findBubble(const size_t start, const std::vector<bool>& ignorableTip);
+	void chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank);
+	void findChains();
 	void findLinearizable();
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
@@ -123,6 +127,8 @@ private:
 	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
 	std::vector<bool> ambiguousNodes;
 	std::vector<size_t> componentNumber;
+	std::vector<size_t> chainNumber;
+	std::vector<size_t> chainApproxPos;
 	size_t firstAmbiguous;
 	size_t DBGoverlap;
 	bool finalized;
