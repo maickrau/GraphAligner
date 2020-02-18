@@ -1,3 +1,4 @@
+#include <queue>
 #include <thread>
 #include <cmath>
 #include <concurrentqueue.h>
@@ -60,117 +61,75 @@ void iterateMinimizersReal(const std::string& str, size_t minimizerLength, size_
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	if (str.size() < minimizerLength) return;
-	size_t mask = ~(0xFFFFFFFFFFFFFFFF << (minimizerLength * 2));
+	const size_t realWindow = windowSize - minimizerLength + 1;
+	const size_t mask = ~(0xFFFFFFFFFFFFFFFF << (minimizerLength * 2));
 	assert(mask == pow(4, minimizerLength)-1);
 	size_t offset = 0;
-	std::vector<size_t> window;
-	window.resize(windowSize - minimizerLength + 1);
-	std::vector<size_t> windowSeqpos;
+	std::deque<std::tuple<size_t, size_t, size_t>> window;
 start:
 	while (offset < str.size() && !validChar[str[offset]]) offset++;
-	if (offset + minimizerLength > str.size()) return;
-	windowSeqpos.resize(windowSize - minimizerLength + 1, std::numeric_limits<size_t>::max());
+	if (offset + windowSize > str.size()) return;
 	size_t kmer = 0;
 	for (size_t i = 0; i < minimizerLength; i++)
 	{
-		assert(offset+i < str.size());
 		if (!validChar[str[offset+i]])
 		{
-			offset = offset+i;
+			offset += i;
 			goto start;
 		}
 		kmer <<= 2;
 		kmer |= charToInt(str[offset+i]);
 	}
-	size_t minOrder = hash(kmer);
-	window[(minimizerLength-1) % window.size()] = kmer;
-	windowSeqpos[(minimizerLength-1) % window.size()] = offset + minimizerLength - 1;
-	for (size_t i = minimizerLength; i < minimizerLength + window.size() - 1 && offset+i < str.size(); i++)
+	window.clear();
+	window.emplace_back(offset+minimizerLength-1, kmer, hash(kmer));
+	for (size_t i = minimizerLength; i < minimizerLength + realWindow; i++)
 	{
-		if (!validChar[str[offset+i]])
+		if (!validChar[str[offset + i]])
 		{
-			assert(minOrder != std::numeric_limits<size_t>::max());
-			for (size_t j = 0; j < window.size(); j++)
-			{
-				if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
-				assert(windowSeqpos[j] < str.size());
-				if (hash(window[j]) == minOrder)
-				{
-					callback(windowSeqpos[j], window[j]);
-				}
-			}
-			offset = offset+i;
+			offset += i;
 			goto start;
 		}
 		kmer <<= 2;
 		kmer &= mask;
-		kmer |= charToInt(str[offset+i]);
-		window[i % window.size()] = kmer;
-		assert(windowSeqpos[i % window.size()] == std::numeric_limits<size_t>::max());
-		windowSeqpos[i % window.size()] = offset+i;
-		minOrder = std::min(minOrder, hash(kmer));
+		kmer |= charToInt(str[offset + i]);
+		auto hashed = hash(kmer);
+		while (!window.empty() && std::get<2>(window.back()) > hashed) window.pop_back();
+		window.emplace_back(offset+i, kmer, hashed);
 	}
-	assert(minOrder != std::numeric_limits<size_t>::max());
-	if (str.size() - offset < windowSize)
+	auto iter = window.begin();
+	while (iter != window.end() && std::get<2>(*iter) == std::get<2>(window.front()))
 	{
-		for (size_t j = 0; j < window.size(); j++)
-		{
-			if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
-			assert(windowSeqpos[j] < str.size());
-			assert(hash(window[j]) >= minOrder);
-			if (hash(window[j]) == minOrder)
-			{
-				callback(windowSeqpos[j], window[j]);
-			}
-		}
-		return;
+		callback(std::get<0>(*iter), std::get<1>(*iter));
+		++iter;
 	}
-	for (size_t j = 0; j < window.size(); j++)
-	{
-		assert(windowSeqpos[j] < str.size());
-		assert(hash(window[j]) >= minOrder);
-		if (hash(window[j]) == minOrder)
-		{
-			callback(windowSeqpos[j], window[j]);
-		}
-	}
-	for (size_t i = minimizerLength + window.size() - 1; offset+i < str.size(); i++)
+	for (size_t i = minimizerLength + realWindow; offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
-			offset = offset+i;
+			offset += i;
 			goto start;
 		}
 		kmer <<= 2;
 		kmer &= mask;
-		kmer |= charToInt(str[offset+i]);
-		bool overwroteMin = false;
-		if (hash(window[i % window.size()]) == minOrder) overwroteMin = true;
-		window[i % window.size()] = kmer;
-		windowSeqpos[i % window.size()] = offset+i;
-		if (overwroteMin)
+		kmer |= charToInt(str[offset + i]);
+		auto hashed = hash(kmer);
+		size_t oldMinimum = std::get<2>(window.front());
+		while (!window.empty() && std::get<0>(window.front()) <= offset + i - realWindow) window.pop_front();
+		while (!window.empty() && std::get<2>(window.back()) > hashed) window.pop_back();
+		window.emplace_back(offset+i, kmer, hashed);
+		if (std::get<2>(window.front()) != oldMinimum)
 		{
-			size_t oldMinOrder = minOrder;
-			minOrder = hash(window[0]);
-			for (size_t j = 1; j < window.size(); j++)
+			auto iter = window.begin();
+			while (iter != window.end() && std::get<2>(*iter) == std::get<2>(window.front()))
 			{
-				minOrder = std::min(minOrder, hash(window[j]));
-			}
-			if (minOrder > oldMinOrder)
-			{
-				for (size_t j = 0; j < window.size(); j++)
-				{
-					if (i % window.size() == j) continue;
-					assert(hash(window[j]) >= minOrder);
-					if (hash(window[j]) == minOrder) callback(windowSeqpos[j], window[j]);
-				}
+				callback(std::get<0>(*iter), std::get<1>(*iter));
+				++iter;
 			}
 		}
-		else
+		else if (std::get<2>(window.back()) == std::get<2>(window.front()))
 		{
-			minOrder = std::min(minOrder, hash(kmer));
+			callback(std::get<0>(window.back()), std::get<1>(window.back()));
 		}
-		if (hash(kmer) == minOrder) callback(offset+i, kmer);
 	}
 }
 
