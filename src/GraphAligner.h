@@ -166,22 +166,29 @@ private:
 		{
 			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
 			std::vector<size_t> partialGoodnessSum;
-			partialGoodnessSum.resize(pair.second.size()+1);
-			partialGoodnessSum[0] = 0;
-			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
+			partialGoodnessSum.resize(pair.second.size());
+			for (size_t i = 0; i < partialGoodnessSum.size(); i++)
 			{
-				assert(pair.second[i-1].second >= 100);
-				partialGoodnessSum[i] = partialGoodnessSum[i-1] + seedHits[pair.second[i-1].first].matchLen;
+				partialGoodnessSum[i] = seedHits[pair.second[i].first].matchLen;
 			}
-			size_t startpos = 0;
-			size_t endpos = 1;
 			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
 			{
-				while (endpos < partialGoodnessSum.size()-1 && pair.second[endpos+1].second <= pair.second[i-1].second + 100) endpos += 1;
-				while (startpos < partialGoodnessSum.size()-1 && pair.second[startpos+1].second < pair.second[i-1].second - 100) startpos += 1;
-				assert(endpos > startpos);
-				assert(partialGoodnessSum[endpos] > partialGoodnessSum[startpos]);
-				seedGoodness[pair.second[i-1].first] = partialGoodnessSum[endpos] - partialGoodnessSum[startpos];
+				if (pair.second[i].second <= pair.second[i-1].second + 100)
+				{
+					partialGoodnessSum[i] += partialGoodnessSum[i-1];
+				}
+			}
+			for (size_t i = partialGoodnessSum.size()-1; i > 0; i--)
+			{
+				if (pair.second[i-1].second >= pair.second[i].second + 100)
+				{
+					assert(partialGoodnessSum[i] >= partialGoodnessSum[i-1]);
+					partialGoodnessSum[i-1] = partialGoodnessSum[i];
+				}
+			}
+			for (size_t i = 0; i < partialGoodnessSum.size(); i++)
+			{
+				seedGoodness[pair.second[i].first] = partialGoodnessSum[i] + seedHits[pair.second[i].first].matchLen;
 			}
 		}
 		std::vector<size_t> order;
