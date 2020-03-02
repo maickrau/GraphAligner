@@ -173,10 +173,31 @@ public:
 		for (int i = 0; i < WordConfiguration<Word>::WordSize && j+i < sequence.size(); i++)
 		{
 			Word mask = ((Word)1) << i;
-			if (Common::characterMatch(sequence[j+i], 'A')) BA |= mask;
-			if (Common::characterMatch(sequence[j+i], 'C')) BC |= mask;
-			if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
-			if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
+			switch(sequence[j+i])
+			{
+				case 'a':
+				case 'A':
+					BA |= mask;
+					break;
+				case 'c':
+				case 'C':
+					BC |= mask;
+					break;
+				case 'g':
+				case 'G':
+					BG |= mask;
+					break;
+				case 't':
+				case 'T':
+					BT |= mask;
+					break;
+				default:
+					if (Common::characterMatch(sequence[j+i], 'A')) BA |= mask;
+					if (Common::characterMatch(sequence[j+i], 'C')) BC |= mask;
+					if (Common::characterMatch(sequence[j+i], 'T')) BT |= mask;
+					if (Common::characterMatch(sequence[j+i], 'G')) BG |= mask;
+					break;
+			}
 		}
 		assert((j + WordConfiguration<Word>::WordSize > sequence.size()) || (BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
 		assert((j + WordConfiguration<Word>::WordSize <= sequence.size()) || ((BA | BC | BT | BG) & (WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size()))) == WordConfiguration<Word>::AllZeros);

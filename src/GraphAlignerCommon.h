@@ -182,6 +182,22 @@ public:
 #endif
 	static bool characterMatch(char sequenceCharacter, char graphCharacter)
 	{
+		if (sequenceCharacter == graphCharacter) return true;
+		switch(sequenceCharacter)
+		{
+			case 'a':
+			case 'A':
+				return ambiguousMatch(graphCharacter, 'A');
+			case 'c':
+			case 'C':
+				return ambiguousMatch(graphCharacter, 'C');
+			case 'g':
+			case 'G':
+				return ambiguousMatch(graphCharacter, 'G');
+			case 't':
+			case 'T':
+				return ambiguousMatch(graphCharacter, 'T');
+		}
 		return (ambiguousMatch(sequenceCharacter, 'A') && ambiguousMatch(graphCharacter, 'A'))
 		|| (ambiguousMatch(sequenceCharacter, 'C') && ambiguousMatch(graphCharacter, 'C'))
 		|| (ambiguousMatch(sequenceCharacter, 'G') && ambiguousMatch(graphCharacter, 'G'))

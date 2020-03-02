@@ -4,12 +4,16 @@
 
 namespace ThreadReadAssertion
 {
-	thread_local std::string currentSeed;
+	thread_local int currentnodeID;
+	thread_local bool currentreverse;
+	thread_local size_t currentseqPos;
+	thread_local size_t currentmatchLen;
+	thread_local size_t currentnodeOffset;
 	thread_local std::string currentRead;
 	void signal(int signal)
 	{
 		std::stringstream msg;
-		msg << "Signal " << signal << ". Read: " << currentRead << ". Seed: " << currentSeed;
+		msg << "Signal " << signal << ". Read: " << currentRead << ". Seed: " << assertGetSeedInfo();
 		std::cerr << msg.str() << std::endl;
 		std::abort();
 	}
@@ -17,15 +21,23 @@ namespace ThreadReadAssertion
 	{
 		currentRead = readName;
 	}
-	void setSeed(const std::string& seedName)
+	void setSeed(int nodeID, bool reverse, size_t seqPos, size_t matchLen, size_t nodeOffset)
 	{
-		currentSeed = seedName;
+		currentnodeID = nodeID;
+		currentreverse = reverse;
+		currentseqPos = seqPos;
+		currentmatchLen = matchLen;
+		currentnodeOffset = nodeOffset;
 	}
 	void assertFailed(const char* expression, const char* file, int line)
 	{
 		std::stringstream msg;
-		msg << file << ":" << line << ": Assertion '" << expression << "' failed. Read: " << currentRead << ". Seed: " << currentSeed;
+		msg << file << ":" << line << ": Assertion '" << expression << "' failed. Read: " << currentRead << ". Seed: " << assertGetSeedInfo();
 		std::cerr << msg.str() << std::endl;
 		throw AssertionFailure {};
 	}	
+	std::string assertGetSeedInfo()
+	{
+		return std::to_string(currentnodeID) + (currentreverse ? "-" : "+") + "," + std::to_string(currentseqPos) + "," + std::to_string(currentmatchLen) + "," + std::to_string(currentnodeOffset);
+	}
 }

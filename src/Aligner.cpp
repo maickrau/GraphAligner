@@ -163,7 +163,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Al
 
 void readFastqs(const std::vector<std::string>& filenames, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& writequeue, std::atomic<bool>& readStreamingFinished)
 {
-	assertSetRead("Read streamer", "No seed");
+	assertSetNoRead("Read streamer");
 	for (auto filename : filenames)
 	{
 		FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
@@ -185,7 +185,7 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 
 void consumeBytesAndWrite(const std::string& filename, moodycamel::ConcurrentQueue<std::string*>& writequeue, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, std::atomic<bool>& allThreadsDone, std::atomic<bool>& allWriteDone, bool verboseMode, bool textMode)
 {
-	assertSetRead("Writer", "No seed");
+	assertSetNoRead("Writer");
 	auto openmode = std::ios::out;
 	if (!textMode) openmode |= std::ios::binary;
 	std::ofstream outfile { filename, openmode };
@@ -377,7 +377,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	moodycamel::ProducerToken GAFToken { GAFOut };
 	moodycamel::ProducerToken correctedToken { correctedOut };
 	moodycamel::ProducerToken clippedToken { correctedClippedOut };
-	assertSetRead("Before any read", "No seed");
+	assertSetNoRead("Before any read");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory };
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
@@ -401,7 +401,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 		if (fastq == nullptr) break;
-		assertSetRead(fastq->seq_id, "No seed");
+		assertSetNoRead(fastq->seq_id);
 		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 		stats.reads += 1;
 		stats.bpInReads += fastq->sequence.size();
@@ -530,7 +530,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		}
 
 	}
-	assertSetRead("After all reads", "No seed");
+	assertSetNoRead("After all reads");
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
@@ -594,7 +594,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 
 void alignReads(AlignerParams params)
 {
-	assertSetRead("Preprocessing", "No seed");
+	assertSetNoRead("Preprocessing");
 
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
@@ -665,7 +665,7 @@ void alignReads(AlignerParams params)
 
 	std::vector<std::thread> threads;
 
-	assertSetRead("Running alignments", "No seed");
+	assertSetNoRead("Running alignments");
 
 	moodycamel::ConcurrentQueue<std::string*> outputGAM { 50, params.numThreads, params.numThreads };
 	moodycamel::ConcurrentQueue<std::string*> outputGAF { 50, params.numThreads, params.numThreads };
@@ -700,7 +700,7 @@ void alignReads(AlignerParams params)
 	{
 		threads[i].join();
 	}
-	assertSetRead("Postprocessing", "No seed");
+	assertSetNoRead("Postprocessing");
 
 	allThreadsDone = true;
 

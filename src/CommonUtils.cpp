@@ -199,3 +199,7 @@ void BufferedWriter::flush()
 	(*stream) << stringstream.str();
 	stringstream.str("");
 }
+bool BufferedWriter::inputDiscarded() const
+{
+	return stream == nullptr;
+}

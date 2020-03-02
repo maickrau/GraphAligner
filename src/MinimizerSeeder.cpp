@@ -54,6 +54,7 @@ uint64_t hash(uint64_t key) {
 
 std::vector<bool> validChar = getValidChars();
 
+
 template <typename CallbackF>
 void iterateMinimizersReal(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
 {
@@ -65,11 +66,9 @@ void iterateMinimizersReal(const std::string& str, size_t minimizerLength, size_
 	size_t offset = 0;
 	std::vector<size_t> window;
 	window.resize(windowSize - minimizerLength + 1);
-	std::vector<size_t> windowSeqpos;
 start:
 	while (offset < str.size() && !validChar[str[offset]]) offset++;
 	if (offset + minimizerLength > str.size()) return;
-	windowSeqpos.resize(windowSize - minimizerLength + 1, std::numeric_limits<size_t>::max());
 	size_t kmer = 0;
 	for (size_t i = 0; i < minimizerLength; i++)
 	{
@@ -83,94 +82,99 @@ start:
 		kmer |= charToInt(str[offset+i]);
 	}
 	size_t minOrder = hash(kmer);
+	size_t minPos = offset + minimizerLength - 1;
+	size_t minKmer = kmer;
+	size_t minWindowPos = minimizerLength % window.size();
 	window[(minimizerLength-1) % window.size()] = kmer;
-	windowSeqpos[(minimizerLength-1) % window.size()] = offset + minimizerLength - 1;
-	for (size_t i = minimizerLength; i < minimizerLength + window.size() - 1 && offset+i < str.size(); i++)
+	for (size_t i = minimizerLength; i < windowSize && offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
-			assert(minOrder != std::numeric_limits<size_t>::max());
-			for (size_t j = 0; j < window.size(); j++)
-			{
-				if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
-				assert(windowSeqpos[j] < str.size());
-				if (hash(window[j]) == minOrder)
-				{
-					callback(windowSeqpos[j], window[j]);
-				}
-			}
-			offset = offset+i;
-			goto start;
-		}
-		kmer <<= 2;
-		kmer &= mask;
-		kmer |= charToInt(str[offset+i]);
-		window[i % window.size()] = kmer;
-		assert(windowSeqpos[i % window.size()] == std::numeric_limits<size_t>::max());
-		windowSeqpos[i % window.size()] = offset+i;
-		minOrder = std::min(minOrder, hash(kmer));
-	}
-	assert(minOrder != std::numeric_limits<size_t>::max());
-	if (str.size() - offset < windowSize)
-	{
-		for (size_t j = 0; j < window.size(); j++)
-		{
-			if (windowSeqpos[j] == std::numeric_limits<size_t>::max()) continue;
-			assert(windowSeqpos[j] < str.size());
-			assert(hash(window[j]) >= minOrder);
-			if (hash(window[j]) == minOrder)
-			{
-				callback(windowSeqpos[j], window[j]);
-			}
-		}
-		return;
-	}
-	for (size_t j = 0; j < window.size(); j++)
-	{
-		assert(windowSeqpos[j] < str.size());
-		assert(hash(window[j]) >= minOrder);
-		if (hash(window[j]) == minOrder)
-		{
-			callback(windowSeqpos[j], window[j]);
-		}
-	}
-	for (size_t i = minimizerLength + window.size() - 1; offset+i < str.size(); i++)
-	{
-		if (!validChar[str[offset+i]])
-		{
-			offset = offset+i;
-			goto start;
-		}
-		kmer <<= 2;
-		kmer &= mask;
-		kmer |= charToInt(str[offset+i]);
-		bool overwroteMin = false;
-		if (hash(window[i % window.size()]) == minOrder) overwroteMin = true;
-		window[i % window.size()] = kmer;
-		windowSeqpos[i % window.size()] = offset+i;
-		if (overwroteMin)
-		{
-			size_t oldMinOrder = minOrder;
-			minOrder = hash(window[0]);
-			for (size_t j = 1; j < window.size(); j++)
-			{
-				minOrder = std::min(minOrder, hash(window[j]));
-			}
-			if (minOrder > oldMinOrder)
+			if (minOrder != std::numeric_limits<size_t>::max())
 			{
 				for (size_t j = 0; j < window.size(); j++)
 				{
-					if (i % window.size() == j) continue;
-					assert(hash(window[j]) >= minOrder);
-					if (hash(window[j]) == minOrder) callback(windowSeqpos[j], window[j]);
+					size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
+					if (seqPos >= str.size()) continue;
+					if (hash(window[j]) == minOrder)
+					{
+						callback(seqPos, window[j]);
+					}
+				}
+			}
+			offset = offset+i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer &= mask;
+		kmer |= charToInt(str[offset+i]);
+		window[i % window.size()] = kmer;
+		if (hash(kmer) < minOrder)
+		{
+			minOrder = hash(kmer);
+			minPos = offset + i;
+			minKmer = kmer;
+			minWindowPos = i % window.size();
+		}
+	}
+	if (minOrder != std::numeric_limits<size_t>::max())
+	{
+		for (size_t j = 0; j < window.size(); j++)
+		{
+			size_t seqPos = ((j + window.size() - minimizerLength) % window.size()) + offset + minimizerLength;
+			if (seqPos >= str.size()) continue;
+			if (hash(window[j]) == minOrder)
+			{
+				callback(seqPos, window[j]);
+			}
+		}
+	}
+	for (size_t i = windowSize; offset+i < str.size(); i++)
+	{
+		if (!validChar[str[offset+i]])
+		{
+			offset = offset+i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer &= mask;
+		kmer |= charToInt(str[offset+i]);
+		window[i % window.size()] = kmer;
+		if (minWindowPos == i % window.size())
+		{
+			minOrder = hash(window[0]);
+			minWindowPos = 0;
+			minPos = offset + i - (i % window.size());
+			minKmer = window[0];
+			for (size_t j = 1; j < window.size(); j++)
+			{
+				if (hash(window[j]) < minOrder)
+				{
+					minOrder = hash(window[j]);
+					minWindowPos = j;
+					minPos = offset + i - ((i - j) % window.size());
+					minKmer = window[j];
+				}
+			}
+			if (minOrder != std::numeric_limits<size_t>::max())
+			{
+				for (size_t j = 0; j < window.size(); j++)
+				{
+					if (hash(window[j]) == minOrder)
+					{
+						callback(offset + i - ((i - j) % window.size()), window[j]);
+					}
 				}
 			}
 		}
-		else
+		else if (hash(kmer) <= minOrder)
 		{
-			minOrder = std::min(minOrder, hash(kmer));
+			minOrder = hash(kmer);
+			minPos = offset + i;
+			minKmer = kmer;
+			minWindowPos = i % window.size();
+			if (minOrder != std::numeric_limits<size_t>::max()) callback(minPos, minKmer);
 		}
-		if (hash(kmer) == minOrder) callback(offset+i, kmer);
 	}
 }
 

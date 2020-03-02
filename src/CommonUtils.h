@@ -68,6 +68,7 @@ public:
 	}
 	BufferedWriter& operator<<(FlushClass f);
 	void flush();
+	bool inputDiscarded() const;
 	static FlushClass Flush;
 private:
 	std::ostream* stream;

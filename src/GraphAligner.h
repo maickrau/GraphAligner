@@ -81,9 +81,8 @@ public:
 		for (size_t orderI = 0; orderI < seedHits.size(); orderI++)
 		{
 			size_t i = order[orderI];
-			std::string seedInfo = std::to_string(seedHits[i].nodeID) + (seedHits[i].reverse ? "-" : "+") + "," + std::to_string(seedHits[i].seqPos) + "," + std::to_string(seedHits[i].matchLen) + "," + std::to_string(seedHits[i].nodeOffset);
-			logger << seq_id << " seed " << orderI << "/" << seedHits.size() << " " << seedInfo;
-			assertSetRead(seq_id, seedInfo);
+			assertSetRead(seq_id, seedHits[i].nodeID, seedHits[i].reverse, seedHits[i].seqPos, seedHits[i].matchLen, seedHits[i].nodeOffset);
+			if (!logger.inputDiscarded()) logger << seq_id << " seed " << orderI << "/" << seedHits.size() << " " << ThreadReadAssertion::assertGetSeedInfo();
 			if (params.sloppyOptimizations)
 			{
 				bool found = false;
@@ -105,7 +104,7 @@ public:
 			if (item.alignmentFailed()) continue;
 			result.alignments.emplace_back(std::move(item));
 		}
-		assertSetRead(seq_id, "No seed");
+		assertSetNoRead(seq_id);
 
 		return result;
 	}
@@ -142,7 +141,7 @@ private:
 
 	std::vector<size_t> orderSeedsByChaining(const std::vector<SeedHit>& seedHits) const
 	{
-		std::unordered_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
+		phmap::flat_hash_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			int forwardNodeId;
@@ -165,30 +164,26 @@ private:
 		for (auto& pair : seedPoses)
 		{
 			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
-			std::vector<size_t> partialGoodnessSum;
-			partialGoodnessSum.resize(pair.second.size());
-			for (size_t i = 0; i < partialGoodnessSum.size(); i++)
+			seedGoodness[pair.second[0].first] = seedHits[pair.second[0].first].matchLen;
+			for (size_t i = 1; i < pair.second.size(); i++)
 			{
-				partialGoodnessSum[i] = seedHits[pair.second[i].first].matchLen;
-			}
-			for (size_t i = 1; i < partialGoodnessSum.size(); i++)
-			{
+				seedGoodness[pair.second[i].first] = seedHits[pair.second[i].first].matchLen;
 				if (pair.second[i].second <= pair.second[i-1].second + 100)
 				{
-					partialGoodnessSum[i] += partialGoodnessSum[i-1];
+					seedGoodness[pair.second[i].first] += seedGoodness[pair.second[i-1].first];
 				}
 			}
-			for (size_t i = partialGoodnessSum.size()-1; i > 0; i--)
+			for (size_t i = pair.second.size()-1; i > 0; i--)
 			{
 				if (pair.second[i-1].second >= pair.second[i].second + 100)
 				{
-					assert(partialGoodnessSum[i] >= partialGoodnessSum[i-1]);
-					partialGoodnessSum[i-1] = partialGoodnessSum[i];
+					assert(seedGoodness[pair.second[i].first] >= seedGoodness[pair.second[i-1].first]);
+					seedGoodness[pair.second[i-1].first] = seedGoodness[pair.second[i].first];
 				}
 			}
-			for (size_t i = 0; i < partialGoodnessSum.size(); i++)
+			for (size_t i = 0; i < pair.second.size(); i++)
 			{
-				seedGoodness[pair.second[i].first] = partialGoodnessSum[i] + seedHits[pair.second[i].first].matchLen;
+				seedGoodness[pair.second[i].first] = seedGoodness[pair.second[i].first] + seedHits[pair.second[i].first].matchLen;
 			}
 		}
 		std::vector<size_t> order;
