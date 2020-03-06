@@ -76,7 +76,9 @@ public:
 		AlignmentResult result;
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
-		auto order = orderSeedsByChaining(seedHits);
+		std::vector<size_t> order;
+		std::vector<size_t> seedGoodness;
+		std::tie(order, seedGoodness) = orderSeedsByChaining(seedHits);
 		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t orderI = 0; orderI < seedHits.size(); orderI++)
 		{
@@ -88,7 +90,7 @@ public:
 				bool found = false;
 				for (const auto& aln : result.alignments)
 				{
-					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos)
+					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos && aln.seedGoodness > seedGoodness[i])
 					{
 						logger << " skipped";
 						logger << BufferedWriter::Flush;
@@ -102,6 +104,7 @@ public:
 			result.seedsExtended += 1;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
+			item.seedGoodness = seedGoodness[i];
 			result.alignments.emplace_back(std::move(item));
 		}
 		assertSetNoRead(seq_id);
@@ -139,7 +142,7 @@ public:
 
 private:
 
-	std::vector<size_t> orderSeedsByChaining(const std::vector<SeedHit>& seedHits) const
+	std::pair<std::vector<size_t>, std::vector<size_t>> orderSeedsByChaining(const std::vector<SeedHit>& seedHits) const
 	{
 		phmap::flat_hash_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
 		for (size_t i = 0; i < seedHits.size(); i++)
@@ -195,7 +198,7 @@ private:
 		}
 		std::sort(order.begin(), order.end(), [&seedGoodness](size_t left, size_t right) { return seedGoodness[left] < seedGoodness[right]; });
 		std::reverse(order.begin(), order.end());
-		return order;
+		return std::make_pair(order, seedGoodness);
 	}
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
