@@ -37,13 +37,13 @@ public:
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;
-		std::string cigar;
+		std::stringstream cigar;
 		std::string readName = seq_id;
 		size_t readLen = sequence.size();
 		size_t readStart = trace[0].DPposition.seqPos;
 		size_t readEnd = trace.back().DPposition.seqPos+1;
 		bool strand = true;
-		std::string nodePath;
+		std::stringstream nodePath;
 		size_t nodePathLen = 0;
 		size_t nodePathStart = trace[0].DPposition.nodeOffset;
 		size_t nodePathEnd = 0;
@@ -73,7 +73,7 @@ public:
 			editLength = 1;
 			mismatches += 1;
 		}
-		nodePath += posToString(currentPos, params);
+		addPosToString(nodePath, currentPos, params);
 		nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId);
 		for (size_t pos = 1; pos < trace.size(); pos++)
 		{
@@ -91,7 +91,7 @@ public:
 			{
 				size_t skippedBefore = params.graph.originalNodeSize.at(currentPos.nodeId) - 1 - trace[pos-1].DPposition.nodeOffset;
 				currentPos = newPos;
-				nodePath += posToString(currentPos, params);
+				addPosToString(nodePath, currentPos, params);
 				assert(trace[pos].DPposition.nodeOffset < params.graph.originalNodeSize.at(currentPos.nodeId));
 				size_t skippedAfter = trace[pos].DPposition.nodeOffset;
 				nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId) - (skippedBefore + skippedAfter);
@@ -102,7 +102,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Deletion;
 				if (currentEdit != Deletion)
 				{
-					cigar += cigarItem(editLength, currentEdit);
+					addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Deletion;
 					editLength = 0;
 				}
@@ -114,7 +114,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Insertion;
 				if (currentEdit != Insertion)
 				{
-					cigar += cigarItem(editLength, currentEdit);
+					addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Insertion;
 					editLength = 0;
 				}
@@ -126,7 +126,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Match;
 				if (currentEdit != Match)
 				{
-					cigar += cigarItem(editLength, currentEdit);
+					addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Match;
 					editLength = 0;
 				}
@@ -138,7 +138,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Mismatch;
 				if (currentEdit != Mismatch)
 				{
-					cigar += cigarItem(editLength, currentEdit);
+					addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Mismatch;
 					editLength = 0;
 				}
@@ -153,61 +153,64 @@ public:
 		}
 
 		assert(matches + mismatches + deletions + insertions == trace.size());
-		cigar += cigarItem(editLength, currentEdit);
+		addCigarItem(cigar, editLength, currentEdit);
 
 		nodePathEnd = nodePathLen - (params.graph.originalNodeSize.at(trace.back().DPposition.node) - 1 - trace.back().DPposition.nodeOffset);
 
 		std::stringstream sstr;
-		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality;
+		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath.str() << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality;
 		sstr << "\t" << "NM:i:" << (mismatches + deletions + insertions);
 		sstr << "\t" << "dv:f:" << 1.0-((double)matches / (double)(matches + mismatches + deletions + insertions));
 		sstr << "\t" << "id:f:" << ((double)matches / (double)(matches + mismatches + deletions + insertions));
-		sstr << "\t" << "cg:Z:" << cigar;
+		sstr << "\t" << "cg:Z:" << cigar.str();
 		return sstr.str();
 	}
 
 private:
 
-	static std::string posToString(MergedNodePos pos, const Params& params)
+	static void addPosToString(std::stringstream& str, MergedNodePos pos, const Params& params)
 	{
-		std::string result;
 		if (pos.reverse)
 		{
-			result += "<";
+			str << "<";
 		}
 		else
 		{
-			result += ">";
+			str << ">";
 		}
 		std::string nodeName = params.graph.originalNodeName.at(pos.nodeId);
-		if (nodeName == "") nodeName = std::to_string(pos.nodeId/2);
-		result += nodeName;
-		return result;
+		if (nodeName == "")
+		{
+			str << pos.nodeId/2;
+		}
+		else
+		{
+			str << nodeName;
+		}
 	}
 
-	static std::string cigarItem(size_t editLength, EditType type)
+	static void addCigarItem(std::stringstream& str, size_t editLength, EditType type)
 	{
-		if (editLength == 0) return "";
-		std::string result = std::to_string(editLength);
+		if (editLength == 0) return;
+		str << editLength;
 		switch(type)
 		{
 			case Match:
-				result += "M";
+				str << "M";
 				break;
 			case Mismatch:
-				result += "M";
+				str << "M";
 				break;
 			case Insertion:
-				result += "I";
+				str << "I";
 				break;
 			case Deletion:
-				result += "D";
+				str << "D";
 				break;
 			case Empty:
 			default:
-				return "";
+				return;
 		}
-		return result;
 	}
 };
 
