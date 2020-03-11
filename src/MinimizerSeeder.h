@@ -25,8 +25,7 @@ class MinimizerSeeder
 		typedef boomphf::mphf<uint64_t, hasher_t> boophf_t;
 		boophf_t* locator;
 		sdsl::int_vector<0> kmerCheck;
-		sdsl::bit_vector starts;
-		sdsl::bit_vector::select_1_type startSelector;
+		sdsl::int_vector<0> startPos;
 		sdsl::int_vector<0> positions;
 	};
 public:

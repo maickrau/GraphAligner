@@ -376,45 +376,36 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 				}
 				buckets[thread].locator = new boomphf::mphf<uint64_t,KmerBucket::hasher_t>(locatorKeys.size(), locatorKeys, 1, 2, true, false);
 			}
-			sdsl::int_vector<0> counts;
-			counts.width(log2(kmerPerBucket[thread].size()) + 1);
-			counts.resize(buckets[thread].locator->nbKeys());
+			buckets[thread].startPos.width(log2(kmerPerBucket[thread].size())+1);
+			buckets[thread].startPos.resize(buckets[thread].locator->nbKeys() + 1);
 			buckets[thread].kmerCheck.width(minimizerLength * 2);
 			buckets[thread].kmerCheck.resize(buckets[thread].locator->nbKeys());
-			sdsl::util::set_to_value(counts, 0);
+			sdsl::util::set_to_value(buckets[thread].startPos, 0);
 			for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
 			{
 				uint64_t kmer = kmerPerBucket[thread][i];
 				size_t index = buckets[thread].locator->lookup(kmer);
-				counts[index] += 1;
+				buckets[thread].startPos[index] += 1;
 				buckets[thread].kmerCheck[index] = kmer;
 			}
-			buckets[thread].starts.resize(kmerPerBucket[thread].size()+1);
-			sdsl::util::set_to_value(buckets[thread].starts, 0);
-			buckets[thread].starts[0] = 1;
-			if (counts.size() > 0)
+			if (buckets[thread].startPos.size() > 0)
 			{
-				buckets[thread].starts[counts[0]] = 1;
-				for (size_t i = 1; i < counts.size(); i++)
+				for (size_t i = 1; i < buckets[thread].startPos.size(); i++)
 				{
-					counts[i] += counts[i-1];
-					buckets[thread].starts[counts[i]] = 1;
+					buckets[thread].startPos[i] += buckets[thread].startPos[i-1];
 				}
-				assert(counts[counts.size()-1] == kmerPerBucket[thread].size());
-				assert(buckets[thread].starts[kmerPerBucket[thread].size()]);
+				assert(buckets[thread].startPos[buckets[thread].startPos.size()-1] == kmerPerBucket[thread].size());
 				buckets[thread].positions.resize(kmerPerBucket[thread].size());
 				for (size_t i = 0; i < kmerPerBucket[thread].size(); i++)
 				{
 					size_t kmer = kmerPerBucket[thread][i];
 					size_t index = buckets[thread].locator->lookup(kmer);
-					assert(counts[index] > 0);
-					counts[index] -= 1;
-					size_t pos = counts[index];
+					assert(buckets[thread].startPos[index] > 0);
+					buckets[thread].startPos[index] -= 1;
+					size_t pos = buckets[thread].startPos[index];
 					uint64_t insert = positionPerBucket[thread][i];
 					buckets[thread].positions[pos] = insert;
 				};
-
-				sdsl::util::init_support(buckets[thread].startSelector, &buckets[thread].starts);
 			}
 		});
 	}
@@ -508,7 +499,7 @@ void MinimizerSeeder::initMaxCount()
 
 size_t MinimizerSeeder::getStart(size_t bucket, size_t index) const
 {
-	return buckets[bucket].startSelector(index+1);
+	return buckets[bucket].startPos[index];
 }
 
 size_t MinimizerSeeder::getBucket(size_t hash) const
