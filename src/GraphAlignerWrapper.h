@@ -16,7 +16,9 @@ public:
 	nodeOffset(nodeOffset),
 	seqPos(seqPos),
 	matchLen(matchLen),
-	reverse(reverse)
+	reverse(reverse),
+	alignmentGraphNodeId(std::numeric_limits<size_t>::max()),
+	alignmentGraphNodeOffset(std::numeric_limits<size_t>::max())
 	{
 	}
 	int nodeID;
@@ -24,6 +26,8 @@ public:
 	size_t seqPos;
 	size_t matchLen;
 	bool reverse;
+	size_t alignmentGraphNodeId;
+	size_t alignmentGraphNodeOffset;
 };
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool forceGlobal, bool preciseClipping);

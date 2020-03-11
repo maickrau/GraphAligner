@@ -432,17 +432,11 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	size_t bpPerChunk = (sequence.size() + numChunks - 1) / numChunks;
 	std::vector<std::vector<std::tuple<size_t, size_t, size_t, size_t>>> matchIndices;
 	matchIndices.resize(numChunks);
-	size_t lastChainNodeId = 0;
-	size_t lastChainNodeOffset = 0;
-	size_t lastChainReadPos = 0;
-	size_t lastChainCount = 0;
-	size_t lastChainKmer = 0;
-	size_t lastChainChunk = 0;
-	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices, bpPerChunk, &lastChainNodeId, &lastChainNodeOffset, &lastChainReadPos, &lastChainCount, &lastChainKmer, &lastChainChunk](size_t pos, size_t kmer)
+	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
 	{
-		volatile size_t bucket = getBucket(kmer);
+		size_t bucket = getBucket(kmer);
 		assert(bucket < buckets.size());
-		volatile size_t index = buckets[bucket].locator->lookup(kmer);
+		size_t index = buckets[bucket].locator->lookup(kmer);
 		if (index == ULLONG_MAX) return;
 		assert(index < buckets[bucket].kmerCheck.size());
 		if (buckets[bucket].kmerCheck[(size_t)index] != kmer) return;
@@ -450,76 +444,38 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		assert(chunk < matchIndices.size());
 		bool canChain = false;
 		size_t count = getStart(bucket, index+1) - getStart(bucket, index);
-		if (count > 1)
-		{
-			if (lastChainCount > 0) matchIndices[lastChainChunk].emplace_back(lastChainReadPos, lastChainKmer, 1, lastChainCount);
-			matchIndices[chunk].emplace_back(pos, kmer, count, 1);
-			lastChainCount = 0;
-			return;
-		}
-		size_t splitpos = buckets[bucket].positions[getStart(bucket, index)];
-		size_t splitNodeId = pos >> 6;
-		size_t splitOffset = pos & 63;
-		size_t nodeOffset = graph.nodeOffset[splitNodeId] + splitOffset;
-		size_t nodeId = graph.nodeIDs[splitNodeId];
-		do
-		{
-			// unique
-			if (count != 1) break;
-			// right orientation in read
-			if (pos <= lastChainReadPos) break;
-			// same node
-			if (nodeId != lastChainNodeId) break;
-			// right orientation in graph
-			if (nodeOffset <= lastChainNodeOffset) break;
-			// if the kmer overlaps with the last one, the offsets have to match
-			if ((nodeOffset - lastChainNodeOffset < minimizerLength || (pos - lastChainReadPos < minimizerLength)) && nodeOffset - lastChainNodeOffset != pos - lastChainReadPos) break;
-			// if it doesn't overlap the offsets have to be within 50bp arbitrarily
-			int readDiff = pos - lastChainReadPos;
-			int nodeDiff = nodeOffset - lastChainNodeOffset;
-			if ((nodeOffset - lastChainNodeOffset >= minimizerLength && (pos - lastChainReadPos >= minimizerLength)) && (readDiff - nodeDiff > 50 || readDiff - nodeDiff < -50)) break;
-			canChain = true;
-		} while (false);
-		if (!canChain)
-		{
-			if (lastChainCount > 0) matchIndices[lastChainChunk].emplace_back(lastChainReadPos, lastChainKmer, 1, lastChainCount);
-			lastChainCount = 0;
-		}
-		lastChainNodeId = nodeId;
-		lastChainNodeOffset = nodeOffset;
-		lastChainReadPos = pos;
-		lastChainCount += 1;
-		lastChainChunk = chunk;
-		lastChainKmer = kmer;
+		matchIndices[chunk].emplace_back(pos, kmer, count, 1);
 	});
-	if (lastChainCount > 0) matchIndices[lastChainChunk].emplace_back(lastChainReadPos, lastChainKmer, 1, lastChainCount);
-	//prefer longer chains first, less common minimizers second
+	//prefer less common minimizers
 	for (size_t i = 0; i < numChunks; i++)
 	{
 		std::sort(matchIndices[i].begin(), matchIndices[i].end(), [this](const std::tuple<size_t, size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t, size_t>& right)
 		{
-			return std::get<3>(left) < std::get<3>(right) || (std::get<3>(left) == std::get<3>(right) && std::get<2>(left) < std::get<2>(right));
+			return std::get<2>(left) < std::get<2>(right);
 		});
 	}
 	std::vector<SeedHit> result;
 	for (size_t i = 0; i < numChunks; i++)
 	{
 		size_t seedsHere = 0;
+		size_t allowedCount = 0;
 		for (auto match : matchIndices[i])
 		{
 			size_t bucket = getBucket(std::get<1>(match));
 			auto found = buckets[bucket].locator->lookup(std::get<1>(match));
 			size_t end = getStart(bucket, found+1);
-			for (size_t i = getStart(bucket, found); i < end; i++)
+			size_t start = getStart(bucket, found);
+			assert(end - start >= allowedCount);
+			if (seedsHere >= maxCount && end - start > allowedCount) break;
+			allowedCount = end - start;
+			for (size_t i = start; i < end; i++)
 			{
-				if (seedsHere >= maxCount) break;
 				size_t mergepos = buckets[bucket].positions[i];
 				size_t nodeId = mergepos >> 6;
 				size_t offset = mergepos & 63;
 				result.push_back(matchToSeedHit(nodeId, offset, std::get<0>(match), std::get<2>(match)));
-				seedsHere += 1;
 			}
-			if (seedsHere >= maxCount) break;
+			seedsHere += end - start;
 		}
 	}
 	return result;
@@ -531,6 +487,8 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 	assert(nodeId < graph.nodeOffset.size());
 	assert(nodeId < graph.reverse.size());
 	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, maxCount - count, graph.reverse[nodeId] };
+	result.alignmentGraphNodeId = nodeId;
+	result.alignmentGraphNodeOffset = nodeOffset;
 	return result;
 }
 

@@ -156,10 +156,20 @@ private:
 			{
 				forwardNodeId = seedHits[i].nodeID * 2;
 			}
-			size_t nodeIndex = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
-			assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[nodeIndex]);
-			size_t realOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[nodeIndex];
-			assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
+			size_t nodeIndex, realOffset;
+			if (seedHits[i].alignmentGraphNodeId == std::numeric_limits<size_t>::max())
+			{
+				nodeIndex = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
+				assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[nodeIndex]);
+				realOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[nodeIndex];
+				assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
+			}
+			else
+			{
+				nodeIndex = seedHits[i].alignmentGraphNodeId;
+				realOffset = seedHits[i].alignmentGraphNodeOffset;
+				assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
+			}
 			seedPoses[params.graph.chainNumber[nodeIndex]].emplace_back(i, params.graph.chainApproxPos[nodeIndex] + realOffset - seedHits[i].seqPos);
 		}
 		std::vector<size_t> seedGoodness;
