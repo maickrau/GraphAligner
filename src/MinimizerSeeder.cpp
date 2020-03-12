@@ -57,6 +57,43 @@ std::vector<bool> validChar = getValidChars();
 
 
 template <typename CallbackF>
+void iterateKmers(const std::string& str, size_t kmerLength, CallbackF callback)
+{
+	assert(kmerLength * 2 <= sizeof(size_t) * 8);
+	if (str.size() < kmerLength) return;
+	const size_t mask = ~(0xFFFFFFFFFFFFFFFF << (kmerLength * 2));
+	assert(mask == pow(4, kmerLength)-1);
+	size_t offset = 0;
+start:
+	while (offset < str.size() && !validChar[str[offset]]) offset++;
+	if (offset + kmerLength > str.size()) return;
+	size_t kmer = 0;
+	for (size_t i = 0; i < kmerLength; i++)
+	{
+		if (!validChar[str[offset+i]])
+		{
+			offset += i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer |= charToInt(str[offset+i]);
+	}
+	callback(offset + kmerLength-1, kmer);
+	for (size_t i = kmerLength; offset+i < str.size(); i++)
+	{
+		if (!validChar[str[offset+i]])
+		{
+			offset += i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer &= mask;
+		kmer |= charToInt(str[offset + i]);
+		callback(offset + i, kmer);
+	}
+}
+
+template <typename CallbackF>
 void iterateMinimizersReal(const std::string& str, size_t minimizerLength, size_t windowSize, CallbackF callback)
 {
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
@@ -423,7 +460,7 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 	size_t bpPerChunk = (sequence.size() + numChunks - 1) / numChunks;
 	std::vector<std::vector<std::tuple<size_t, size_t, size_t, size_t>>> matchIndices;
 	matchIndices.resize(numChunks);
-	iterateMinimizers(sequence, minimizerLength, windowSize, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
+	iterateKmers(sequence, minimizerLength, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
 	{
 		size_t bucket = getBucket(kmer);
 		assert(bucket < buckets.size());
