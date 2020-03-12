@@ -51,10 +51,9 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
-		("seeds-minimizer-count", boost::program_options::value<size_t>(), "arg least common minimizers per chunk fully contained in a node (int) (-1 for all)")
 		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
-		("seeds-minimizer-chunksize", boost::program_options::value<size_t>(), "chunk size for minimizer seeding (int)")
+		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (sequence size * density) least common minimizers (double)")
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
@@ -93,7 +92,7 @@ int main(int argc, char** argv)
 	if (vm.count("help"))
 	{
 		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-minimizer-count 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-minimizer-chunksize 100" << std::endl << std::endl;
+		std::cerr << "defaults are --seeds-minimizer-density 3 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 30" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
@@ -128,10 +127,9 @@ int main(int argc, char** argv)
 	params.compressCorrected = false;
 	params.compressClipped = false;
 	params.preciseClipping = false;
-	params.minimizerCount = 0;
-	params.minimizerLength = 19;
-	params.minimizerWindowSize = 30;
-	params.minimizerChunkSize = 100;
+	params.minimizerSeedDensity = 0;
+	params.minimizerLength = 15;
+	params.minimizerWindowSize = 20;
 
 	std::vector<std::string> outputAlns;
 
@@ -143,10 +141,9 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
-	if (vm.count("seeds-minimizer-count")) params.minimizerCount = vm["seeds-minimizer-count"].as<size_t>();
+	if (vm.count("seeds-minimizer-density")) params.minimizerSeedDensity = vm["seeds-minimizer-density"].as<double>();
 	if (vm.count("seeds-minimizer-length")) params.minimizerLength = vm["seeds-minimizer-length"].as<size_t>();
 	if (vm.count("seeds-minimizer-windowsize")) params.minimizerWindowSize = vm["seeds-minimizer-windowsize"].as<size_t>();
-	if (vm.count("seeds-minimizer-chunksize")) params.minimizerChunkSize = vm["seeds-minimizer-chunksize"].as<size_t>();
 	if (vm.count("seeds-file")) params.seedFiles = vm["seeds-file"].as<std::vector<std::string>>();
 	if (vm.count("seeds-mxm-length")) params.mxmLength = vm["seeds-mxm-length"].as<size_t>();
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
@@ -251,14 +248,13 @@ int main(int argc, char** argv)
 		std::cerr << "Maximum minimizer length is " << (sizeof(size_t)*8/2)-1 << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerCount != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		//use minimizers as the default seeding method
-		params.minimizerCount = 5;
-		params.minimizerLength = 19;
-		params.minimizerWindowSize = 30;
-		params.minimizerChunkSize = 100;
+		params.minimizerSeedDensity = 3;
+		params.minimizerLength = 15;
+		params.minimizerWindowSize = 20;
 	}
 	if (pickedSeedingMethods > 1)
 	{

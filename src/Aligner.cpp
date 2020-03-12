@@ -30,8 +30,7 @@ struct Seeder
 	size_t mxmLength;
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
-	size_t minimizerCount;
-	size_t minimizerChunkSize;
+	double minimizerSeedDensity;
 	const MummerSeeder* mummerSeeder;
 	const MinimizerSeeder* minimizerSeeder;
 	const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds;
@@ -41,8 +40,7 @@ struct Seeder
 		mxmLength(params.mxmLength),
 		minimizerLength(params.minimizerLength),
 		minimizerWindowSize(params.minimizerWindowSize),
-		minimizerCount(params.minimizerCount),
-		minimizerChunkSize(params.minimizerChunkSize),
+		minimizerSeedDensity(params.minimizerSeedDensity),
 		mummerSeeder(mummerSeeder),
 		minimizerSeeder(minimizerSeeder),
 		fileSeeds(fileSeeds)
@@ -54,7 +52,7 @@ struct Seeder
 			assert(mummerSeeder == nullptr);
 			assert(mumCount == 0);
 			assert(memCount == 0);
-			assert(minimizerCount == 0);
+			assert(minimizerSeedDensity == 0);
 			mode = Mode::File;
 		}
 		if (minimizerSeeder != nullptr)
@@ -62,7 +60,7 @@ struct Seeder
 			assert(mummerSeeder == nullptr);
 			assert(mumCount == 0);
 			assert(memCount == 0);
-			assert(minimizerCount != 0);
+			assert(minimizerSeedDensity != 0);
 			mode = Mode::Minimizer;
 		}
 		if (mummerSeeder != nullptr)
@@ -70,7 +68,7 @@ struct Seeder
 			assert(minimizerSeeder == nullptr);
 			assert(fileSeeds == nullptr);
 			assert(mumCount != 0 || memCount != 0);
-			assert(minimizerCount == 0);
+			assert(minimizerSeedDensity == 0);
 			if (mumCount != 0)
 			{
 				mode = Mode::Mum;
@@ -99,7 +97,7 @@ struct Seeder
 				return mummerSeeder->getMemSeeds(seq, memCount, mxmLength);
 			case Mode::Minimizer:
 				assert(minimizerSeeder != nullptr);
-				return minimizerSeeder->getSeeds(seq, minimizerCount, minimizerChunkSize);
+				return minimizerSeeder->getSeeds(seq, minimizerSeedDensity);
 			case Mode::None:
 				assert(false);
 		}
@@ -600,7 +598,7 @@ void alignReads(AlignerParams params)
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
 	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params);
-	bool loadMinimizerSeeder = params.minimizerCount > 0;
+	bool loadMinimizerSeeder = params.minimizerSeedDensity > 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
 	if (loadMinimizerSeeder)
 	{
@@ -645,7 +643,7 @@ void alignReads(AlignerParams params)
 			std::cout << "MEM seeds, min length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
 			break;
 		case Seeder::Mode::Minimizer:
-			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", per chunk count " << seeder.minimizerCount << ", chunk size " << seeder.minimizerChunkSize << std::endl;
+			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", density " << seeder.minimizerSeedDensity << std::endl;
 			break;
 		case Seeder::Mode::None:
 			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;

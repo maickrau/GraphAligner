@@ -33,10 +33,9 @@ struct AlignerParams
 	bool compressCorrected;
 	bool compressClipped;
 	bool preciseClipping;
-	size_t minimizerCount;
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
-	size_t minimizerChunkSize;
+	double minimizerSeedDensity;
 };
 
 void alignReads(AlignerParams params);

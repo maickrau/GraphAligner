@@ -482,14 +482,10 @@ void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<st
 	}
 }
 
-std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount, size_t chunkSize) const
+std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, double density) const
 {
-	size_t numChunks = (sequence.size() + chunkSize - 1) / chunkSize;
-	size_t bpPerChunk = (sequence.size() + numChunks - 1) / numChunks;
 	std::vector<std::tuple<size_t, size_t, size_t, size_t>> matchIndices;
-	size_t lastChunk = 0;
-	std::vector<SeedHit> result;
-	iterateKmers(sequence, minimizerLength, [this, &matchIndices, bpPerChunk, maxCount, &lastChunk, &result](size_t pos, size_t kmer)
+	iterateKmers(sequence, minimizerLength, [this, &matchIndices](size_t pos, size_t kmer)
 	{
 		size_t bucket = getBucket(kmer);
 		assert(bucket < buckets.size());
@@ -497,19 +493,13 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		if (index == ULLONG_MAX) return;
 		assert(index < buckets[bucket].kmerCheck.size());
 		if (buckets[bucket].kmerCheck[(size_t)index] != kmer) return;
-		size_t chunk = pos / bpPerChunk;
-		if (chunk != lastChunk)
-		{
-			addMinimizers(result, matchIndices, maxCount);
-			matchIndices.clear();
-			lastChunk = chunk;
-		}
 		size_t start = getStart(bucket, index);
 		size_t end = getStart(bucket, index+1);
 		size_t count = end - start;
 		matchIndices.emplace_back(pos, bucket, start, count);
 	});
-	addMinimizers(result, matchIndices, maxCount);
+	std::vector<SeedHit> result;
+	addMinimizers(result, matchIndices, sequence.size() * density);
 	return result;
 }
 

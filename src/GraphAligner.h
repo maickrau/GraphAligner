@@ -183,7 +183,7 @@ private:
 			}
 			for (size_t i = pair.second.size()-1; i > 0; i--)
 			{
-				if (pair.second[i-1].second >= pair.second[i].second + 100)
+				if (pair.second[i-1].second >= pair.second[i].second - 100)
 				{
 					assert(seedHits[pair.second[i].first].seedGoodness >= seedHits[pair.second[i-1].first].seedGoodness);
 					seedHits[pair.second[i-1].first].seedGoodness = seedHits[pair.second[i].first].seedGoodness;
