@@ -32,6 +32,7 @@ public:
 	MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
 	std::vector<SeedHit> getSeeds(const std::string& sequence, size_t maxCount, size_t chunkSize) const;
 private:
+	void addMinimizers(std::vector<SeedHit>& result, std::vector<std::tuple<size_t, size_t, size_t, size_t>>& matchIndices, size_t maxCount) const;
 	size_t getStart(size_t bucket, size_t index) const;
 	size_t getBucket(size_t hash) const;
 	SeedHit matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const;

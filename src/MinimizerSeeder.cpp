@@ -454,13 +454,42 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	threads.clear();
 }
 
+void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<std::tuple<size_t, size_t, size_t, size_t>>& matchIndices, size_t maxCount) const
+{
+	//prefer less common minimizers
+	std::sort(matchIndices.begin(), matchIndices.end(), [this](const std::tuple<size_t, size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t, size_t>& right)
+	{
+		return std::get<3>(left) < std::get<3>(right);
+	});
+	size_t seedsHere = 0;
+	size_t allowedCount = 0;
+	for (auto match : matchIndices)
+	{
+		size_t bucket = std::get<1>(match);
+		size_t start = std::get<2>(match);
+		size_t end = start + std::get<3>(match);
+		assert(end - start >= allowedCount);
+		if (seedsHere >= maxCount && end - start > allowedCount) break;
+		allowedCount = end - start;
+		for (size_t i = start; i < end; i++)
+		{
+			size_t mergepos = buckets[bucket].positions[i];
+			size_t nodeId = mergepos >> 6;
+			size_t offset = mergepos & 63;
+			result.push_back(matchToSeedHit(nodeId, offset, std::get<0>(match), std::get<3>(match)));
+		}
+		seedsHere += end - start;
+	}
+}
+
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size_t maxCount, size_t chunkSize) const
 {
 	size_t numChunks = (sequence.size() + chunkSize - 1) / chunkSize;
 	size_t bpPerChunk = (sequence.size() + numChunks - 1) / numChunks;
-	std::vector<std::vector<std::tuple<size_t, size_t, size_t, size_t>>> matchIndices;
-	matchIndices.resize(numChunks);
-	iterateKmers(sequence, minimizerLength, [this, &matchIndices, bpPerChunk](size_t pos, size_t kmer)
+	std::vector<std::tuple<size_t, size_t, size_t, size_t>> matchIndices;
+	size_t lastChunk = 0;
+	std::vector<SeedHit> result;
+	iterateKmers(sequence, minimizerLength, [this, &matchIndices, bpPerChunk, maxCount, &lastChunk, &result](size_t pos, size_t kmer)
 	{
 		size_t bucket = getBucket(kmer);
 		assert(bucket < buckets.size());
@@ -469,43 +498,18 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, size
 		assert(index < buckets[bucket].kmerCheck.size());
 		if (buckets[bucket].kmerCheck[(size_t)index] != kmer) return;
 		size_t chunk = pos / bpPerChunk;
-		assert(chunk < matchIndices.size());
-		bool canChain = false;
-		size_t count = getStart(bucket, index+1) - getStart(bucket, index);
-		matchIndices[chunk].emplace_back(pos, kmer, count, 1);
-	});
-	//prefer less common minimizers
-	for (size_t i = 0; i < numChunks; i++)
-	{
-		std::sort(matchIndices[i].begin(), matchIndices[i].end(), [this](const std::tuple<size_t, size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t, size_t>& right)
+		if (chunk != lastChunk)
 		{
-			return std::get<2>(left) < std::get<2>(right);
-		});
-	}
-	std::vector<SeedHit> result;
-	for (size_t i = 0; i < numChunks; i++)
-	{
-		size_t seedsHere = 0;
-		size_t allowedCount = 0;
-		for (auto match : matchIndices[i])
-		{
-			size_t bucket = getBucket(std::get<1>(match));
-			auto found = buckets[bucket].locator->lookup(std::get<1>(match));
-			size_t end = getStart(bucket, found+1);
-			size_t start = getStart(bucket, found);
-			assert(end - start >= allowedCount);
-			if (seedsHere >= maxCount && end - start > allowedCount) break;
-			allowedCount = end - start;
-			for (size_t i = start; i < end; i++)
-			{
-				size_t mergepos = buckets[bucket].positions[i];
-				size_t nodeId = mergepos >> 6;
-				size_t offset = mergepos & 63;
-				result.push_back(matchToSeedHit(nodeId, offset, std::get<0>(match), std::get<2>(match)));
-			}
-			seedsHere += end - start;
+			addMinimizers(result, matchIndices, maxCount);
+			matchIndices.clear();
+			lastChunk = chunk;
 		}
-	}
+		size_t start = getStart(bucket, index);
+		size_t end = getStart(bucket, index+1);
+		size_t count = end - start;
+		matchIndices.emplace_back(pos, bucket, start, count);
+	});
+	addMinimizers(result, matchIndices, maxCount);
 	return result;
 }
 
