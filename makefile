@@ -6,7 +6,7 @@ BINDIR=bin
 SRCDIR=src
 
 LIBS=-lm -lz -lboost_serialization -lboost_program_options `pkg-config --libs mummer`  `pkg-config --libs protobuf` -lsdsl
-JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -Wl,-Bstatic -ljemalloc -Wl,-Bdynamic `jemalloc-config --libs`
+LTCMALLOCFLAGS = -ltcmalloc
 
 _DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h AlignmentCorrectnessEstimation.h MummerSeeder.h ReadCorrection.h MinimizerSeeder.h
 DEPS = $(patsubst %, $(SRCDIR)/%, $(_DEPS))
@@ -14,7 +14,7 @@ DEPS = $(patsubst %, $(SRCDIR)/%, $(_DEPS))
 _OBJ = Aligner.o vg.pb.o fastqloader.o BigraphToDigraph.o ThreadReadAssertion.o AlignmentGraph.o CommonUtils.o GraphAlignerWrapper.o GfaGraph.o AlignmentCorrectnessEstimation.o MummerSeeder.o ReadCorrection.o MinimizerSeeder.o
 OBJ = $(patsubst %, $(ODIR)/%, $(_OBJ))
 
-LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ $(JEMALLOCFLAGS) `pkg-config --libs libdivsufsort` `pkg-config --libs libdivsufsort64`
+LINKFLAGS = $(CPPFLAGS) -Wl,-Bstatic $(LIBS) -Wl,-Bdynamic -Wl,--as-needed -lpthread -pthread -static-libstdc++ `pkg-config --libs libdivsufsort` `pkg-config --libs libdivsufsort64` $(LTCMALLOCFLAGS)
 
 VERSION := Branch $(shell git rev-parse --abbrev-ref HEAD) commit $(shell git rev-parse HEAD) $(shell git show -s --format=%ci)
 
