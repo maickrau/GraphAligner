@@ -392,7 +392,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			delete dealloc;
 		}
 		std::shared_ptr<FastQ> fastq = nullptr;
-		while (!readFastqsQueue.try_dequeue(fastq))
+		while (fastq == nullptr && !readFastqsQueue.try_dequeue(fastq))
 		{
 			bool tryBreaking = readStreamingFinished;
 			if (!readFastqsQueue.try_dequeue(fastq) && tryBreaking) break;

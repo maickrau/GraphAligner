@@ -42,7 +42,7 @@ rule correct_short_reads:
 rule read_names:
 	input: rules.correct_short_reads.output
 	output: temp("filenames")
-	shell: "ls -1 {input} > {output}"
+	shell: "readlink -f {input} > {output}"
 
 rule run_bcalm:
 	input: 
