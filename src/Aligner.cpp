@@ -406,6 +406,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		AlignmentResult alignments;
 
+		size_t alntimems = 0;
+		size_t clustertimems = 0;
 		try
 		{
 			if (seeder.mode != Seeder::Mode::None)
@@ -428,11 +430,22 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.seedsFound += seeds.size();
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping);
+				auto clusterTimeStart = std::chrono::system_clock::now();
+				OrderSeeds(alignmentGraph, seeds);
+				auto clusterTimeEnd = std::chrono::system_clock::now();
+				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
+				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
+				auto alntimeStart = std::chrono::system_clock::now();
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize);
+				auto alntimeEnd = std::chrono::system_clock::now();
+				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
 			else
 			{
+				auto alntimeStart = std::chrono::system_clock::now();
 				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping);
+				auto alntimeEnd = std::chrono::system_clock::now();
+				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -481,6 +494,12 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			}
 		}
 
+		size_t totalcells = 0;
+		for (size_t i = 0; i < alignments.alignments.size(); i++)
+		{
+			totalcells += alignments.alignments[i].cellsProcessed;
+		}
+
 		if (!params.outputAllAlns)
 		{
 			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max(), [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
@@ -489,8 +508,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 
 		std::string alignmentpositions;
-		size_t timems = 0;
-		size_t totalcells = 0;
 
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
@@ -503,13 +520,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			stats.bpInAlignments += alignments.alignments[i].alignment->sequence().size();
 			if (params.outputCorrectedFile != "" || params.outputCorrectedClippedFile != "") AddCorrected(alignments.alignments[i]);
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
-			timems += alignments.alignments[i].elapsedMilliseconds;
-			totalcells += alignments.alignments[i].cellsProcessed;
 		}
 
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
-		coutoutput << "Read " << fastq->seq_id << " alignment took " << timems << "ms" << BufferedWriter::Flush;
+		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
 		coutoutput << "Read " << fastq->seq_id << " aligned by thread " << threadnum << " with positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
 		try
@@ -649,6 +664,7 @@ void alignReads(AlignerParams params)
 			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
 			break;
 	}
+	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;
 
 	std::cout << "Initial bandwidth " << params.initialBandwidth;
 	if (params.rampBandwidth > 0) std::cout << ", ramp bandwidth " << params.rampBandwidth;

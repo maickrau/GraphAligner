@@ -70,18 +70,22 @@ public:
 		return result;
 	}
 
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
 		AlignmentResult result;
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
-		orderSeedsByChaining(seedHits);
-		// std::vector<std::tuple<size_t, size_t, size_t>> triedAlignmentNodes;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			assertSetRead(seq_id, seedHits[i].nodeID, seedHits[i].reverse, seedHits[i].seqPos, seedHits[i].matchLen, seedHits[i].nodeOffset);
 			if (!logger.inputDiscarded()) logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << ThreadReadAssertion::assertGetSeedInfo();
+			if (seedHits[i].seedClusterSize < params.minSeedClusterSize)
+			{
+				logger << " skipped (cluster size)";
+				logger << BufferedWriter::Flush;
+				continue;
+			}
 			if (params.sloppyOptimizations)
 			{
 				bool found = false;
@@ -89,7 +93,7 @@ public:
 				{
 					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos && aln.seedGoodness > seedHits[i].seedGoodness)
 					{
-						logger << " skipped";
+						logger << " skipped (overlap)";
 						logger << BufferedWriter::Flush;
 						found = true;
 						break;
@@ -109,7 +113,7 @@ public:
 		return result;
 	}
 
-	void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+	void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment) const
 	{
 		assert(alignment.trace->trace.size() > 0);
 		auto vgAln = VGAlignment::traceToAlignment(seq_id, sequence, alignment.trace->score, alignment.trace->trace, 0, false);
@@ -118,13 +122,13 @@ public:
 		alignment.alignment->set_query_position(alignment.alignmentStart);
 	}
 
-	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
+	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment) const
 	{
 		assert(alignment.trace->trace.size() > 0);
 		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, params);
 	}
 
-	void AddCorrected(AlignmentResult::AlignmentItem& alignment)
+	void AddCorrected(AlignmentResult::AlignmentItem& alignment) const
 	{
 		assert(alignment.trace != nullptr);
 		assert(alignment.trace->trace.size() > 0);
@@ -136,8 +140,6 @@ public:
 			alignment.corrected += alignment.trace->trace[i].graphCharacter;
 		}
 	}
-
-private:
 
 	void orderSeedsByChaining(std::vector<SeedHit>& seedHits) const
 	{
@@ -173,12 +175,15 @@ private:
 		{
 			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
 			seedHits[pair.second[0].first].seedGoodness = seedHits[pair.second[0].first].matchLen;
+			seedHits[pair.second[0].first].seedClusterSize = 1;
 			for (size_t i = 1; i < pair.second.size(); i++)
 			{
 				seedHits[pair.second[i].first].seedGoodness = seedHits[pair.second[i].first].matchLen;
+				seedHits[pair.second[i].first].seedClusterSize = 1;
 				if (pair.second[i].second <= pair.second[i-1].second + 100)
 				{
 					seedHits[pair.second[i].first].seedGoodness += seedHits[pair.second[i-1].first].seedGoodness;
+					seedHits[pair.second[i].first].seedClusterSize += seedHits[pair.second[i-1].first].seedClusterSize;
 				}
 			}
 			for (size_t i = pair.second.size()-1; i > 0; i--)
@@ -187,6 +192,7 @@ private:
 				{
 					assert(seedHits[pair.second[i].first].seedGoodness >= seedHits[pair.second[i-1].first].seedGoodness);
 					seedHits[pair.second[i-1].first].seedGoodness = seedHits[pair.second[i].first].seedGoodness;
+					seedHits[pair.second[i-1].first].seedClusterSize = seedHits[pair.second[i].first].seedClusterSize;
 				}
 			}
 		}
@@ -197,6 +203,8 @@ private:
 		std::sort(seedHits.begin(), seedHits.end(), [](const SeedHit& left, const SeedHit& right) { return left.seedGoodness < right.seedGoodness; });
 		std::reverse(seedHits.begin(), seedHits.end());
 	}
+
+private:
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{

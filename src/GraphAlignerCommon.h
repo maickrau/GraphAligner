@@ -98,7 +98,7 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping, size_t minSeedClusterSize) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
@@ -107,7 +107,8 @@ public:
 		sloppyOptimizations(sloppyOptimizations),
 		lowMemory(lowMemory),
 		forceGlobal(forceGlobal),
-		preciseClipping(preciseClipping)
+		preciseClipping(preciseClipping),
+		minSeedClusterSize(minSeedClusterSize)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -119,6 +120,7 @@ public:
 		const bool lowMemory;
 		const bool forceGlobal;
 		const bool preciseClipping;
+		const size_t minSeedClusterSize;
 	};
 	struct TraceItem
 	{

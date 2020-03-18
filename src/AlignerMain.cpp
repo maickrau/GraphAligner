@@ -51,6 +51,7 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
+		("seeds-clustersize", boost::program_options::value<size_t>(), "discard seed clusters with fewer than arg seeds (int)")
 		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
 		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (sequence size * density) least common minimizers (double)")
@@ -92,7 +93,7 @@ int main(int argc, char** argv)
 	if (vm.count("help"))
 	{
 		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-minimizer-density 3 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 30" << std::endl << std::endl;
+		std::cerr << "defaults are --seeds-minimizer-density 3 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 20 --seeds-clustersize 3" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
@@ -130,6 +131,7 @@ int main(int argc, char** argv)
 	params.minimizerSeedDensity = 0;
 	params.minimizerLength = 15;
 	params.minimizerWindowSize = 20;
+	params.seedClusterMinSize = 1;
 
 	std::vector<std::string> outputAlns;
 
@@ -141,6 +143,7 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
+	if (vm.count("seeds-clustersize")) params.seedClusterMinSize = vm["seeds-clustersize"].as<size_t>();
 	if (vm.count("seeds-minimizer-density")) params.minimizerSeedDensity = vm["seeds-minimizer-density"].as<double>();
 	if (vm.count("seeds-minimizer-length")) params.minimizerLength = vm["seeds-minimizer-length"].as<size_t>();
 	if (vm.count("seeds-minimizer-windowsize")) params.minimizerWindowSize = vm["seeds-minimizer-windowsize"].as<size_t>();
@@ -255,6 +258,7 @@ int main(int argc, char** argv)
 		params.minimizerSeedDensity = 3;
 		params.minimizerLength = 15;
 		params.minimizerWindowSize = 20;
+		if (!vm.count("seeds-clustersize")) params.seedClusterMinSize = 3;
 	}
 	if (pickedSeedingMethods > 1)
 	{
