@@ -457,6 +457,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
+
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
 		{
@@ -524,7 +526,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		alignmentpositions.pop_back();
 		alignmentpositions.pop_back();
-		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
 		coutoutput << "Read " << fastq->seq_id << " aligned by thread " << threadnum << " with positions: " << alignmentpositions << " (read " << fastq->sequence.size() << "bp)" << BufferedWriter::Flush;
 
 		try
