@@ -619,7 +619,7 @@ void alignReads(AlignerParams params)
 	if (loadMinimizerSeeder)
 	{
 		std::cout << "Build minimizer seeder from the graph" << std::endl;
-		minimizerseeder = new MinimizerSeeder(alignmentGraph, params.minimizerLength, params.minimizerWindowSize, params.numThreads);
+		minimizerseeder = new MinimizerSeeder(alignmentGraph, params.minimizerLength, params.minimizerWindowSize, params.numThreads, 1.0 - params.minimizerDiscardMostNumerousFraction);
 	}
 
 	if (params.seedFiles.size() > 0)

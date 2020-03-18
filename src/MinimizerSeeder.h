@@ -29,7 +29,7 @@ class MinimizerSeeder
 		sdsl::int_vector<0> positions;
 	};
 public:
-	MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads);
+	MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads, double keepLeastFrequentFraction);
 	std::vector<SeedHit> getSeeds(const std::string& sequence, double density) const;
 private:
 	void addMinimizers(std::vector<SeedHit>& result, std::vector<std::tuple<size_t, size_t, size_t, size_t>>& matchIndices, size_t maxCount) const;
@@ -37,7 +37,7 @@ private:
 	size_t getBucket(size_t hash) const;
 	SeedHit matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const;
 	void initMinimizers(size_t numThreads);
-	void initMaxCount();
+	void initMaxCount(double keepLeastFrequentFraction);
 	const AlignmentGraph& graph;
 	std::vector<KmerBucket> buckets;
 	size_t minimizerLength;

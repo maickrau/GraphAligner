@@ -37,6 +37,7 @@ struct AlignerParams
 	size_t minimizerWindowSize;
 	double minimizerSeedDensity;
 	size_t seedClusterMinSize;
+	double minimizerDiscardMostNumerousFraction;
 };
 
 void alignReads(AlignerParams params);

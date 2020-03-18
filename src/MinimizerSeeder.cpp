@@ -57,8 +57,9 @@ std::vector<bool> validChar = getValidChars();
 
 
 template <typename CallbackF>
-void iterateKmers(const std::string& str, size_t kmerLength, CallbackF callback)
+void iterateKmers(const std::string& str, size_t kmerLength, size_t windowSize, CallbackF callback)
 {
+	const size_t realWindow = windowSize - kmerLength + 1;
 	assert(kmerLength * 2 <= sizeof(size_t) * 8);
 	if (str.size() < kmerLength) return;
 	const size_t mask = ~(0xFFFFFFFFFFFFFFFF << (kmerLength * 2));
@@ -79,6 +80,8 @@ start:
 		kmer |= charToInt(str[offset+i]);
 	}
 	callback(offset + kmerLength-1, kmer);
+	size_t lastKmer = kmer;
+	size_t lastPos = offset + kmerLength-1;
 	for (size_t i = kmerLength; offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
@@ -89,7 +92,12 @@ start:
 		kmer <<= 2;
 		kmer &= mask;
 		kmer |= charToInt(str[offset + i]);
-		callback(offset + i, kmer);
+		if (lastKmer != kmer || lastPos <= offset + i - realWindow)
+		{
+			callback(offset + i, kmer);
+			lastKmer = kmer;
+			lastPos = offset + i;
+		}
 	}
 }
 
@@ -275,7 +283,7 @@ void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t wi
 
 #endif
 
-MinimizerSeeder::MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads) :
+MinimizerSeeder::MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads, double keepLeastFrequentFraction) :
 graph(graph),
 buckets(),
 minimizerLength(minimizerLength),
@@ -285,7 +293,7 @@ maxCount(0)
 	assert(minimizerLength * 2 <= sizeof(size_t) * 8);
 	assert(minimizerLength <= windowSize);
 	initMinimizers(numThreads);
-	initMaxCount();
+	initMaxCount(keepLeastFrequentFraction);
 }
 
 void MinimizerSeeder::initMinimizers(size_t numThreads)
@@ -494,7 +502,7 @@ void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<st
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, double density) const
 {
 	std::vector<std::tuple<size_t, size_t, size_t, size_t>> matchIndices;
-	iterateKmers(sequence, minimizerLength, [this, &matchIndices](size_t pos, size_t kmer)
+	iterateKmers(sequence, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
 	{
 		size_t bucket = getBucket(kmer);
 		assert(bucket < buckets.size());
@@ -505,6 +513,7 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, doub
 		size_t start = getStart(bucket, index);
 		size_t end = getStart(bucket, index+1);
 		size_t count = end - start;
+		if (count >= maxCount) return;
 		matchIndices.emplace_back(pos, bucket, start, count);
 	});
 	std::vector<SeedHit> result;
@@ -523,17 +532,20 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 	return result;
 }
 
-void MinimizerSeeder::initMaxCount()
+void MinimizerSeeder::initMaxCount(double keepLeastFrequentFraction)
 {
 	maxCount = 0;
+	std::vector<size_t> counts;
 	for (size_t bucket = 0; bucket < buckets.size(); bucket++)
 	{
 		if (buckets[bucket].locator->nbKeys() == 0) continue;
 		for (size_t i = 0; i < buckets[bucket].locator->nbKeys()-1; i++)
 		{
-			maxCount = std::max(maxCount, getStart(bucket, i+1) - getStart(bucket, i));
+			counts.push_back(getStart(bucket, i+1) - getStart(bucket, i));
 		}
 	}
+	std::sort(counts.begin(), counts.end());
+	maxCount = counts[counts.size() * keepLeastFrequentFraction];
 	maxCount += 1;
 }
 
