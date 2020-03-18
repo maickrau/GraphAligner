@@ -152,7 +152,16 @@ start:
 		kmer |= charToInt(str[offset + i]);
 		auto hashed = hash(kmer);
 		size_t oldMinimum = std::get<2>(window.front());
-		while (!window.empty() && std::get<0>(window.front()) <= offset + i - realWindow) window.pop_front();
+		bool frontPopped = false;
+		while (!window.empty() && std::get<0>(window.front()) <= offset + i - realWindow)
+		{
+			frontPopped = true;
+			window.pop_front();
+		}
+		if (frontPopped)
+		{
+			while (window.size() >= 2 && std::get<2>(window.front()) == std::get<2>(*(window.begin()+1))) window.pop_front();
+		}
 		while (!window.empty() && std::get<2>(window.back()) > hashed) window.pop_back();
 		window.emplace_back(offset+i, kmer, hashed);
 		if (std::get<2>(window.front()) != oldMinimum)
