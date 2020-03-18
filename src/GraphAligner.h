@@ -107,6 +107,14 @@ public:
 			if (item.alignmentFailed()) continue;
 			item.seedGoodness = seedHits[i].seedGoodness;
 			result.alignments.emplace_back(std::move(item));
+			if (params.sloppyOptimizations)
+			{
+				if (result.alignments.back().alignmentStart == 0 && result.alignments.back().alignmentEnd == sequence.size())
+				{
+					logger << "Read " << seq_id << " aligned end-to-end, skip rest of the seeds";
+					break;
+				}
+			}
 		}
 		assertSetNoRead(seq_id);
 
