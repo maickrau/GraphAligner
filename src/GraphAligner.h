@@ -197,27 +197,26 @@ public:
 		}
 		for (auto& pair : seedPoses)
 		{
-			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
-			seedHits[pair.second[0].first].seedGoodness = seedHits[pair.second[0].first].matchLen;
-			seedHits[pair.second[0].first].seedClusterSize = 1;
-			for (size_t i = 1; i < pair.second.size(); i++)
+			std::sort(pair.second.begin(), pair.second.end(), [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
+			for (size_t i = 0; i < pair.second.size(); i++)
 			{
-				seedHits[pair.second[i].first].seedGoodness = seedHits[pair.second[i].first].matchLen;
-				seedHits[pair.second[i].first].seedClusterSize = 1;
-				if (pair.second[i].second <= pair.second[i-1].second + 100)
+				size_t start = 0;
+				size_t bestChainScore = 0;
+				size_t bestClusterSize = 0;
+				if (i > 50) start = i - 50;
+				for (size_t j = start; j < i; j++)
 				{
-					seedHits[pair.second[i].first].seedGoodness += seedHits[pair.second[i-1].first].seedGoodness;
-					seedHits[pair.second[i].first].seedClusterSize += seedHits[pair.second[i-1].first].seedClusterSize;
+					if (pair.second[i].second < pair.second[j].second-100) continue;
+					if (pair.second[i].second > pair.second[j].second+100) continue;
+					if (seedHits[pair.second[i].first].seqPos == seedHits[pair.second[j].first].seqPos) break;
+					if (seedHits[pair.second[j].first].seedGoodness > bestChainScore)
+					{
+						bestChainScore = seedHits[pair.second[j].first].seedGoodness;
+						bestClusterSize = seedHits[pair.second[j].first].seedClusterSize;
+					}
 				}
-			}
-			for (size_t i = pair.second.size()-1; i > 0; i--)
-			{
-				if (pair.second[i-1].second >= pair.second[i].second - 100)
-				{
-					assert(seedHits[pair.second[i].first].seedGoodness >= seedHits[pair.second[i-1].first].seedGoodness);
-					seedHits[pair.second[i-1].first].seedGoodness = seedHits[pair.second[i].first].seedGoodness;
-					seedHits[pair.second[i-1].first].seedClusterSize = seedHits[pair.second[i].first].seedClusterSize;
-				}
+				seedHits[pair.second[i].first].seedGoodness = seedHits[pair.second[i].first].matchLen + bestChainScore;
+				seedHits[pair.second[i].first].seedClusterSize = bestClusterSize+1;
 			}
 		}
 		for (size_t i = 0; i < seedHits.size(); i++)

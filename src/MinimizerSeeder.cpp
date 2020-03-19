@@ -480,14 +480,27 @@ void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<st
 	});
 	size_t seedsHere = 0;
 	size_t allowedCount = 0;
+	for (size_t i = 0; i < matchIndices.size(); i++)
+	{
+		if (seedsHere >= maxCount && std::get<3>(matchIndices[i]) > allowedCount)
+		{
+			matchIndices.erase(matchIndices.begin()+i, matchIndices.end());
+			break;
+		}
+		seedsHere += std::get<3>(matchIndices[i]);
+		allowedCount = std::get<3>(matchIndices[i]);
+	}
+	result.reserve(seedsHere);
+	//according to read position
+	std::sort(matchIndices.begin(), matchIndices.end(), [this](const std::tuple<size_t, size_t, size_t, size_t>& left, const std::tuple<size_t, size_t, size_t, size_t>& right)
+	{
+		return std::get<0>(left) < std::get<0>(right);
+	});
 	for (auto match : matchIndices)
 	{
 		size_t bucket = std::get<1>(match);
 		size_t start = std::get<2>(match);
 		size_t end = start + std::get<3>(match);
-		assert(end - start >= allowedCount);
-		if (seedsHere >= maxCount && end - start > allowedCount) break;
-		allowedCount = end - start;
 		for (size_t i = start; i < end; i++)
 		{
 			size_t mergepos = buckets[bucket].positions[i];
@@ -495,8 +508,8 @@ void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<st
 			size_t offset = mergepos & 63;
 			result.push_back(matchToSeedHit(nodeId, offset, std::get<0>(match), std::get<3>(match)));
 		}
-		seedsHere += end - start;
 	}
+	assert(result.size() == seedsHere);
 }
 
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, double density) const
