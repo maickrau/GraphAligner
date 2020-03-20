@@ -131,9 +131,9 @@ int main(int argc, char** argv)
 	params.preciseClipping = false;
 	params.minimizerSeedDensity = 0;
 	params.minimizerLength = 15;
-	params.minimizerWindowSize = 20;
+	params.minimizerWindowSize = 25;
 	params.seedClusterMinSize = 1;
-	params.minimizerDiscardMostNumerousFraction = 0.0002;
+	params.minimizerDiscardMostNumerousFraction = 0.001;
 
 	std::vector<std::string> outputAlns;
 
@@ -265,7 +265,7 @@ int main(int argc, char** argv)
 		//use minimizers as the default seeding method
 		params.minimizerSeedDensity = 3;
 		params.minimizerLength = 15;
-		params.minimizerWindowSize = 20;
+		params.minimizerWindowSize = 25;
 	}
 	if (pickedSeedingMethods > 1)
 	{
