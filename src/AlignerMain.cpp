@@ -52,9 +52,10 @@ int main(int argc, char** argv)
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
 		("seeds-clustersize", boost::program_options::value<size_t>(), "discard seed clusters with fewer than arg seeds (int)")
+		("seeds-extend-density", boost::program_options::value<double>(), "extend up to approximately the best (arg * sequence length) seeds (double)")
 		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
-		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (sequence size * density) least common minimizers (double)")
+		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (arg * sequence length) least common minimizers (double)")
 		("seeds-minimizer-ignore-frequent", boost::program_options::value<double>(), "ignore arg most frequent fraction of minimizers (double)")
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
@@ -94,7 +95,7 @@ int main(int argc, char** argv)
 	if (vm.count("help"))
 	{
 		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-minimizer-density 3 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 20 --seeds-clustersize 3" << std::endl << std::endl;
+		std::cerr << "defaults are --seeds-minimizer-density 10 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 25 --seeds-clustersize 1 --seeds-extend-density 0.002" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
@@ -134,6 +135,7 @@ int main(int argc, char** argv)
 	params.minimizerWindowSize = 25;
 	params.seedClusterMinSize = 1;
 	params.minimizerDiscardMostNumerousFraction = 0.001;
+	params.seedExtendDensity = 0.002;
 
 	std::vector<std::string> outputAlns;
 
@@ -263,7 +265,7 @@ int main(int argc, char** argv)
 	if (pickedSeedingMethods == 0)
 	{
 		//use minimizers as the default seeding method
-		params.minimizerSeedDensity = 3;
+		params.minimizerSeedDensity = 10;
 		params.minimizerLength = 15;
 		params.minimizerWindowSize = 25;
 	}

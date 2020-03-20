@@ -77,11 +77,18 @@ public:
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
 		size_t seedScoreForEndToEndAln = 0;
+		size_t extendSeeds = params.seedExtendDensity * sequence.size() + 1;
+		size_t worstExtendedSeedScore = 0;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			if (params.sloppyOptimizations && seedHits[i].seedGoodness < seedScoreForEndToEndAln)
 			{
 				logger << "Read " << seq_id << " aligned end-to-end, skip rest of the seeds" << BufferedWriter::Flush;
+				break;
+			}
+			if (result.seedsExtended >= extendSeeds && seedHits[i].seedGoodness < worstExtendedSeedScore)
+			{
+				logger << "Read " << seq_id << " enough seeds extended, skip rest" << BufferedWriter::Flush;
 				break;
 			}
 			assertSetRead(seq_id, seedHits[i].nodeID, seedHits[i].reverse, seedHits[i].seqPos, seedHits[i].matchLen, seedHits[i].nodeOffset);
@@ -108,6 +115,7 @@ public:
 				if (found) continue;
 			}
 			logger << BufferedWriter::Flush;
+			worstExtendedSeedScore = seedHits[i].seedGoodness;
 			result.seedsExtended += 1;
 			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
@@ -198,25 +206,66 @@ public:
 		for (auto& pair : seedPoses)
 		{
 			std::sort(pair.second.begin(), pair.second.end(), [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
+			std::vector<size_t> chainFrom;
+			std::vector<bool> chainEnd;
+			chainFrom.resize(pair.second.size(), std::numeric_limits<size_t>::max());
+			chainEnd.resize(pair.second.size(), true);
 			for (size_t i = 0; i < pair.second.size(); i++)
 			{
 				size_t start = 0;
 				size_t bestChainScore = 0;
 				size_t bestClusterSize = 0;
+				size_t bestPredecessor = i;
 				if (i > 50) start = i - 50;
+				size_t chainPosI = params.graph.chainApproxPos[seedHits[pair.second[i].first].alignmentGraphNodeId] + seedHits[pair.second[i].first].alignmentGraphNodeOffset;
 				for (size_t j = start; j < i; j++)
 				{
 					if (pair.second[i].second < pair.second[j].second-100) continue;
 					if (pair.second[i].second > pair.second[j].second+100) continue;
+					size_t chainPosJ = params.graph.chainApproxPos[seedHits[pair.second[j].first].alignmentGraphNodeId] + seedHits[pair.second[j].first].alignmentGraphNodeOffset;
+					if (chainPosI <= chainPosJ) continue;
 					if (seedHits[pair.second[i].first].seqPos == seedHits[pair.second[j].first].seqPos) break;
 					if (seedHits[pair.second[j].first].seedGoodness > bestChainScore)
 					{
 						bestChainScore = seedHits[pair.second[j].first].seedGoodness;
 						bestClusterSize = seedHits[pair.second[j].first].seedClusterSize;
+						bestPredecessor = j;
 					}
 				}
+				if (bestPredecessor != i) chainEnd[bestPredecessor] = false;
+				chainFrom[i] = bestPredecessor;
 				seedHits[pair.second[i].first].seedGoodness = seedHits[pair.second[i].first].matchLen + bestChainScore;
 				seedHits[pair.second[i].first].seedClusterSize = bestClusterSize+1;
+			}
+			for (size_t i = 0; i < pair.second.size(); i++)
+			{
+				seedHits[pair.second[i].first].seedGoodness = 0;
+				seedHits[pair.second[i].first].seedClusterSize = 0;
+			}
+			for (size_t i = 0; i < pair.second.size(); i++)
+			{
+				if (!chainEnd[i]) continue;
+				std::vector<size_t> chainItems;
+				chainItems.push_back(i);
+				size_t totalGoodness = 0;
+				totalGoodness += seedHits[pair.second[chainItems.back()].first].matchLen;
+				while (chainFrom[chainItems.back()] != chainItems.back())
+				{
+					chainItems.push_back(chainFrom[chainItems.back()]);
+					totalGoodness += seedHits[pair.second[chainItems.back()].first].matchLen;
+				}
+				std::sort(chainItems.begin(), chainItems.end(), [&seedHits, &pair](size_t left, size_t right) { return seedHits[pair.second[left].first].matchLen < seedHits[pair.second[left].first].matchLen; });
+				for (size_t i = chainItems.size()-1; i < chainItems.size(); i--)
+				{
+					assert(totalGoodness >= seedHits[pair.second[chainItems[i]].first].matchLen);
+					if (totalGoodness > seedHits[pair.second[chainItems[i]].first].seedGoodness)
+					{
+						seedHits[pair.second[chainItems[i]].first].seedGoodness = totalGoodness;
+						seedHits[pair.second[chainItems[i]].first].seedClusterSize = chainItems.size();
+					}
+					totalGoodness -= seedHits[pair.second[chainItems[i]].first].matchLen;
+				}
+				assert(totalGoodness == 0);
 			}
 		}
 		for (size_t i = 0; i < seedHits.size(); i++)

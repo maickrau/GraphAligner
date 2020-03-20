@@ -38,6 +38,7 @@ struct AlignerParams
 	double minimizerSeedDensity;
 	size_t seedClusterMinSize;
 	double minimizerDiscardMostNumerousFraction;
+	double seedExtendDensity;
 };
 
 void alignReads(AlignerParams params);
