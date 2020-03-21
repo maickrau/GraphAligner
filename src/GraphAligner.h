@@ -78,6 +78,7 @@ public:
 		assert(seedHits.size() > 0);
 		size_t seedScoreForEndToEndAln = 0;
 		size_t extendSeeds = params.seedExtendDensity * sequence.size() + 1;
+		if (params.seedExtendDensity == -1) extendSeeds = seedHits.size();
 		size_t worstExtendedSeedScore = 0;
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{

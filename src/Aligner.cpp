@@ -614,7 +614,7 @@ void alignReads(AlignerParams params)
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MummerSeeder* mummerseeder = nullptr;
 	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params);
-	bool loadMinimizerSeeder = params.minimizerSeedDensity > 0;
+	bool loadMinimizerSeeder = params.minimizerSeedDensity != 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
 	if (loadMinimizerSeeder)
 	{
@@ -666,6 +666,7 @@ void alignReads(AlignerParams params)
 			break;
 	}
 	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;
+	if (seeder.mode != Seeder::Mode::None && params.seedExtendDensity != -1) std::cout << "Extend up to best " << params.seedExtendDensity << " fraction of seeds" << std::endl;
 
 	std::cout << "Initial bandwidth " << params.initialBandwidth;
 	if (params.rampBandwidth > 0) std::cout << ", ramp bandwidth " << params.rampBandwidth;

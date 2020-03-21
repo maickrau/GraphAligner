@@ -46,16 +46,16 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("try-all-seeds", "extend all seeds instead of a reasonable looking subset")
+		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
 		("seeds-clustersize", boost::program_options::value<size_t>(), "discard seed clusters with fewer than arg seeds (int)")
-		("seeds-extend-density", boost::program_options::value<double>(), "extend up to approximately the best (arg * sequence length) seeds (double)")
+		("seeds-extend-density", boost::program_options::value<double>(), "extend up to approximately the best (arg * sequence length) seeds (double) (-1 for all)")
 		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
-		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (arg * sequence length) least common minimizers (double)")
+		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (arg * sequence length) least common minimizers (double) (-1 for all)")
 		("seeds-minimizer-ignore-frequent", boost::program_options::value<double>(), "ignore arg most frequent fraction of minimizers (double)")
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches fully contained in a node (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches fully contained in a node (int) (-1 for all)")
@@ -147,6 +147,7 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
 
+	if (vm.count("seeds-extend-density")) params.seedExtendDensity = vm["seeds-extend-density"].as<double>();
 	if (vm.count("seeds-minimizer-ignore-frequent")) params.minimizerDiscardMostNumerousFraction = vm["seeds-minimizer-ignore-frequent"].as<double>();
 	if (vm.count("seeds-clustersize")) params.seedClusterMinSize = vm["seeds-clustersize"].as<size_t>();
 	if (vm.count("seeds-minimizer-density")) params.minimizerSeedDensity = vm["seeds-minimizer-density"].as<double>();
@@ -261,7 +262,17 @@ int main(int argc, char** argv)
 		std::cerr << "Minimizer discard fraction must be 0 <= x < 1" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
+	if (params.minimizerSeedDensity < 0 && params.minimizerSeedDensity != -1)
+	{
+		std::cerr << "Minimizer density can't be negative" << std::endl;
+		paramError = true;
+	}
+	if (params.seedExtendDensity <= 0 && params.seedExtendDensity != -1)
+	{
+		std::cerr << "Seed extension density can't be negative" << std::endl;
+		paramError = true;
+	}
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0 && params.minimizerSeedDensity != -1) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		//use minimizers as the default seeding method
@@ -273,6 +284,11 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
+	}
+	if (params.tryAllSeeds && vm.count("seeds-extend-density") && vm["seeds-extend-density"].as<double>() != -1)
+	{
+		std::cerr << "WARNING: --try-all-seeds and --seeds-extend-density are both set! --seeds-extend-density will be ignored" << std::endl;
+		params.seedExtendDensity = -1;
 	}
 
 	if (paramError)

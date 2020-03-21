@@ -530,7 +530,9 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, doub
 		matchIndices.emplace_back(pos, bucket, start, count);
 	});
 	std::vector<SeedHit> result;
-	addMinimizers(result, matchIndices, sequence.size() * density);
+	size_t maxHits = sequence.size() * density;
+	if (density == -1) maxHits = std::numeric_limits<size_t>::max();
+	addMinimizers(result, matchIndices, maxHits);
 	return result;
 }
 
