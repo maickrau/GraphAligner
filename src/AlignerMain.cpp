@@ -95,7 +95,7 @@ int main(int argc, char** argv)
 	if (vm.count("help"))
 	{
 		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-minimizer-density 10 --seeds-minimizer-length 15 --seeds-minimizer-windowsize 25 --seeds-clustersize 1 --seeds-extend-density 0.002" << std::endl << std::endl;
+		std::cerr << "defaults are --seeds-minimizer-density 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-clustersize 1 --seeds-extend-density 0.002" << std::endl << std::endl;
 		std::cerr << alignment;
 		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
 		std::exit(0);
@@ -131,10 +131,10 @@ int main(int argc, char** argv)
 	params.compressClipped = false;
 	params.preciseClipping = false;
 	params.minimizerSeedDensity = 0;
-	params.minimizerLength = 15;
-	params.minimizerWindowSize = 25;
+	params.minimizerLength = 19;
+	params.minimizerWindowSize = 30;
 	params.seedClusterMinSize = 1;
-	params.minimizerDiscardMostNumerousFraction = 0.001;
+	params.minimizerDiscardMostNumerousFraction = 0.0002;
 	params.seedExtendDensity = 0.002;
 
 	std::vector<std::string> outputAlns;
@@ -276,9 +276,9 @@ int main(int argc, char** argv)
 	if (pickedSeedingMethods == 0)
 	{
 		//use minimizers as the default seeding method
-		params.minimizerSeedDensity = 10;
-		params.minimizerLength = 15;
-		params.minimizerWindowSize = 25;
+		params.minimizerSeedDensity = 5;
+		params.minimizerLength = 19;
+		params.minimizerWindowSize = 30;
 	}
 	if (pickedSeedingMethods > 1)
 	{
