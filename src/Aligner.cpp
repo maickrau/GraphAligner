@@ -298,7 +298,7 @@ void writeGAFToQueue(moodycamel::ProducerToken& token, const AlignerParams& para
 	for (size_t i = 0; i < alignments.alignments.size(); i++)
 	{
 		assert(!alignments.alignments[i].alignmentFailed());
-		assert(alignments.alignments[i].alignment != nullptr);
+		assert(alignments.alignments[i].GAFline.size() > 0);
 		strstr << alignments.alignments[i].GAFline;
 		strstr << '\n';
 	}
@@ -480,22 +480,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		stats.seedsExtended += alignments.seedsExtended;
 		stats.readsWithAnAlignment += 1;
 
-		if (params.outputGAMFile != "" || params.outputJSONFile != "" || !params.outputAllAlns)
-		{
-			for (size_t i = 0; i < alignments.alignments.size(); i++)
-			{
-				AddAlignment(fastq->seq_id, fastq->sequence, alignments.alignments[i]);
-				replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
-			}
-		}
-		if (params.outputGAFFile != "")
-		{
-			for (size_t i = 0; i < alignments.alignments.size(); i++)
-			{
-				AddGAFLine(alignmentGraph, fastq->seq_id, fastq->sequence, alignments.alignments[i]);
-			}
-		}
-
 		size_t totalcells = 0;
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
@@ -504,7 +488,24 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		if (!params.outputAllAlns)
 		{
-			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max(), [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
+			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max());
+		}
+
+		if (params.outputGAMFile != "" || params.outputJSONFile != "")
+		{
+			for (size_t i = 0; i < alignments.alignments.size(); i++)
+			{
+				AddAlignment(fastq->seq_id, fastq->sequence, alignments.alignments[i]);
+				replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[i].alignment, alignmentGraph);
+			}
+		}
+
+		if (params.outputGAFFile != "")
+		{
+			for (size_t i = 0; i < alignments.alignments.size(); i++)
+			{
+				AddGAFLine(alignmentGraph, fastq->seq_id, fastq->sequence, alignments.alignments[i]);
+			}
 		}
 		
 		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
@@ -514,12 +515,13 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
 		{
 			stats.alignments += 1;
-			if (alignments.alignments[i].alignment->sequence().size() == fastq->sequence.size())
+			size_t alignmentSize = alignments.alignments[i].alignmentEnd - alignments.alignments[i].alignmentStart;
+			if (alignmentSize == fastq->sequence.size())
 			{
 				stats.fullLengthAlignments += 1;
-				stats.bpInFullAlignments += alignments.alignments[i].alignment->sequence().size();
+				stats.bpInFullAlignments += alignmentSize;
 			}
-			stats.bpInAlignments += alignments.alignments[i].alignment->sequence().size();
+			stats.bpInAlignments += alignmentSize;
 			if (params.outputCorrectedFile != "" || params.outputCorrectedClippedFile != "") AddCorrected(alignments.alignments[i]);
 			alignmentpositions += std::to_string(alignments.alignments[i].alignmentStart) + "-" + std::to_string(alignments.alignments[i].alignmentEnd) + ", ";
 		}

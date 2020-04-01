@@ -252,15 +252,8 @@ private:
 			}
 		}
 
-		std::vector<WordSlice> nodeSlices;
-		if (node < params.graph.firstAmbiguous)
-		{
-			nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence, params.graph.NodeChunks(node));
-		}
-		else
-		{
-			nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence, params.graph.AmbiguousNodeChunks(node));
-		}
+		EqVector EqV = BV::getEqVector(sequence, slice.slices[bestIndex].j);
+		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), EqV, previous);
 
 		size_t nodeOffset = std::numeric_limits<size_t>::max();
 		size_t bvOffset = std::numeric_limits<size_t>::max();
@@ -312,6 +305,7 @@ private:
 		LengthType currentNode = std::numeric_limits<LengthType>::max();
 		size_t currentSlice = slice.slices.size();
 		std::vector<WordSlice> nodeSlices;
+		EqVector EqV = BV::getEqVector(sequence, 0);
 		while (result.trace.back().DPposition.seqPos != (size_t)-1)
 		{
 			size_t newSlice = result.trace.back().DPposition.seqPos / WordConfiguration<Word>::WordSize + 1;
@@ -321,6 +315,7 @@ private:
 			LengthType newNode = result.trace.back().DPposition.node;
 			if (newSlice != currentSlice || newNode != currentNode)
 			{
+				if (newSlice != currentSlice) EqV = BV::getEqVector(sequence, slice.slices[newSlice].j);
 				currentSlice = newSlice;
 				currentNode = newNode;
 				assert(slice.slices[currentSlice].scores.hasNode(currentNode));
@@ -338,14 +333,7 @@ private:
 						previous.HN[i] = WordConfiguration<Word>::AllZeros;
 					}
 				}
-				if (currentNode < params.graph.firstAmbiguous)
-				{
-					nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence, params.graph.NodeChunks(currentNode));
-				}
-				else
-				{
-					nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence, params.graph.AmbiguousNodeChunks(currentNode));
-				}
+				nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
@@ -756,94 +744,26 @@ private:
 		}
 	}
 
-	template <typename NodeChunkType>
-	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string_view& sequence, NodeChunkType nodeChunks) const
+	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice) const
 	{
-		EqVector EqV = BV::getEqVector(sequence, j);
 		size_t nodeLength = params.graph.NodeLength(node);
+		std::vector<bool> previousBand; // fake!
+		std::vector<EdgeWithPriority> incoming; // also fake!
+		incoming.emplace_back(node, 0, slice.startSlice, true);
 		std::vector<WordSlice> result;
 		result.reserve(nodeLength);
-		WordSlice ws = slice.startSlice;
-		result.push_back(ws);
-
-		ScoreType scoreBefore = ws.getScoreBeforeStart();
-		ScoreType scoreComparison = 0;
-		Word forceVP = WordConfiguration<Word>::AllOnes;
-		Word forceVN = WordConfiguration<Word>::AllZeros;
-		Word forceEq = WordConfiguration<Word>::AllOnes;
-		if (!previousSlice.exists)
+		auto sliceCopy = slice;
+		if (node < params.graph.firstAmbiguous)
 		{
-			forceVP ^= 1;
-			forceVN = 1;
-			forceEq ^= 1;
+			calculateNodeInner<false, false>(node, sliceCopy, EqV, previousSlice, incoming, previousBand, params.graph.NodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
 		}
 		else
 		{
-			scoreComparison = previousSlice.startSlice.scoreEnd;
+			calculateNodeInner<false, false>(node, sliceCopy, EqV, previousSlice, incoming, previousBand, params.graph.AmbiguousNodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
 		}
-
-		size_t chunk = 0;
-		size_t offset = 1;
-		Word hinN, hinP, Eq;
-		size_t pos;
-		WordSlice newWs;
-		for (; chunk < slice.NUM_CHUNKS; chunk++)
-		{
-			Word HP = previousSlice.HP[chunk];
-			Word HN = previousSlice.HN[chunk];
-			auto charChunk = nodeChunks[chunk * 2];
-			HP >>= offset;
-			HN >>= offset;
-			charChunk >>= offset * 2;
-			for (; offset < WordConfiguration<Word>::WordSize; offset++)
-			{
-				if (offset % 32 == 0) charChunk = nodeChunks[chunk * 2 + 1];
-				pos = chunk * WordConfiguration<Word>::WordSize + offset;
-				if (pos >= nodeLength) break;
-				Eq = EqV.getEqI(charChunk & 3);
-				Eq &= forceEq;
-				if ((HN & 1) && (scoreBefore == scoreComparison - 1))
-				{
-					assert(previousSlice.exists);
-					assert(ws.getScoreBeforeStart() == scoreBefore);
-					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, 0, 0);
-#ifdef EXTRACORRECTNESSASSERTIONS
-					assertSliceCorrectness(ws, newWs, Eq, 0);
-#endif
-				}
-				else if (scoreBefore < scoreComparison)
-				{
-					assert(previousSlice.exists);
-					assert(ws.getScoreBeforeStart() == scoreBefore);
-					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, 1, 0);
-					newWs.VP &= ~(Word)1;
-					newWs.VN |= 1;
-#ifdef EXTRACORRECTNESSASSERTIONS
-					assertSliceCorrectness(ws, newWs, Eq, 1);
-#endif
-				}
-				else
-				{
-					assert(!previousSlice.exists || ws.getScoreBeforeStart() == scoreComparison);
-					std::tie(newWs, hinP, hinN) = BV::getNextSlice(Eq, ws, HP & 1, HN & 1);
-					newWs.VP &= forceVP;
-					newWs.VN |= forceVN;
-#ifdef EXTRACORRECTNESSASSERTIONS
-					assertSliceCorrectness(ws, newWs, Eq, (HP & 1) - (HN & 1));
-#endif
-				}
-				assert(forceVN == 0 || scoreBefore < scoreComparison || newWs.getScoreBeforeStart() == ws.getScoreBeforeStart() + 1);
-				ws = newWs;
-				result.push_back(ws);
-				scoreComparison += HP & 1;
-				scoreComparison -= HN & 1;
-				HP >>= 1;
-				HN >>= 1;
-				charChunk >>= 2;
-				scoreBefore++;
-			}
-			offset = 0;
-		}
+		assert(result[0].VP == slice.startSlice.VP);
+		assert(result[0].VN == slice.startSlice.VN);
+		assert(result[0].scoreEnd == slice.startSlice.scoreEnd);
 		assert(result.back().VP == slice.endSlice.VP);
 		assert(result.back().VN == slice.endSlice.VN);
 		assert(result.back().scoreEnd == slice.endSlice.scoreEnd);
@@ -856,6 +776,15 @@ private:
 	__attribute__((always_inline))
 #endif
 	NodeCalculationResult calculateNode(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks) const
+	{
+		return calculateNodeInner<PreciseClipping, true>(i, slice, EqV, previousSlice, incoming, previousBand, nodeChunks, [](const WordSlice& slice){});
+	}
+
+	template <bool PreciseClipping, bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback>
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	NodeCalculationResult calculateNodeInner(size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, WordsliceCallback callback) const
 	{
 		assert(incoming.size() > 0);
 		WordSlice newWs;
@@ -959,7 +888,7 @@ private:
 					assert(debugTest.VN == slice.startSlice.VN);
 					assert(debugTest.scoreEnd == slice.startSlice.scoreEnd);
 #endif
-					return result;
+					if constexpr (AllowEarlyLeave) return result;
 				}
 				else if (ws.scoreEnd < slice.startSlice.scoreEnd)
 				{
@@ -991,21 +920,21 @@ private:
 						assert(debugTest.VN == slice.startSlice.VN);
 						assert(debugTest.scoreEnd == slice.startSlice.scoreEnd);
 #endif
-						return result;
+						if constexpr (AllowEarlyLeave) return result;
 					}
 					else if (newBigger == 0 && oldBigger == 0)
 					{
 						assert(ws.VP == slice.startSlice.VP);
 						assert(ws.VN == slice.startSlice.VN);
 						assert(ws.scoreEnd == slice.startSlice.scoreEnd);
-						return result;
+						if constexpr (AllowEarlyLeave) return result;
 					}
 					else
 					{
 						WordSlice test = ws.mergeWith(slice.startSlice);
 						if (test.scoreEnd == slice.startSlice.scoreEnd && test.VP == slice.startSlice.VP && test.VN == slice.startSlice.VN)
 						{
-							return result;
+							if constexpr (AllowEarlyLeave) return result;
 						}
 						ws = test;
 					}
@@ -1016,7 +945,7 @@ private:
 				WordSlice test = ws.mergeWith(slice.startSlice);
 				if (test.scoreEnd == slice.startSlice.scoreEnd && test.VP == slice.startSlice.VP && test.VP == slice.startSlice.VN)
 				{
-					return result;
+					if constexpr (AllowEarlyLeave) return result;
 				}
 				ws = test;
 			}
@@ -1081,6 +1010,7 @@ private:
 			forceUntil = nodeLength;
 		}
 		slice.startSlice = ws;
+		if constexpr (!AllowEarlyLeave) callback(ws);
 		slice.exists = true;
 		Word forceEq = WordConfiguration<Word>::AllOnes;
 		Word hinP, hinN;
@@ -1111,7 +1041,7 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 				assertSliceCorrectness(ws, newWs, Eq, (HP & 1) - (HN & 1));
 #endif
-				assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore);
+				assert(!AllowEarlyLeave || newWs.getScoreBeforeStart() >= debugLastRowMinScore);
 				ws = newWs;
 				if (ws.scoreEnd < result.minScore)
 				{
@@ -1122,6 +1052,7 @@ private:
 				{
 					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore());
 				}
+				if constexpr (!AllowEarlyLeave) callback(ws);
 				charChunk >>= 2;
 				HP >>= 1;
 				HN >>= 1;
@@ -1460,6 +1391,7 @@ private:
 		auto offset = sequence.size() - j;
 		assert(offset >= 0);
 		assert(offset < WordConfiguration<Word>::WordSize);
+		EqVector EqV = BV::getEqVector(sequence, j);
 		for (auto node : slice)
 		{
 			auto current = node.second;
@@ -1478,15 +1410,7 @@ private:
 				}
 			}
 
-			std::vector<WordSlice> nodeSlices;
-			if (node.first < params.graph.firstAmbiguous)
-			{
-				nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence, params.graph.NodeChunks(node.first));
-			}
-			else
-			{
-				nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence, params.graph.AmbiguousNodeChunks(node.first));
-			}
+			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(node.first, current, EqV, old);
 
 			assert(nodeSlices[0].VP == node.second.startSlice.VP);
 			assert(nodeSlices[0].VN == node.second.startSlice.VN);

@@ -310,7 +310,8 @@ public:
 		cellsProcessed(0),
 		elapsedMilliseconds(0),
 		alignmentStart(0),
-		alignmentEnd(0)
+		alignmentEnd(0),
+		alignmentScore(std::numeric_limits<size_t>::max())
 		{}
 		AlignmentItem(GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace&& trace, size_t cellsProcessed, size_t ms) :
 		corrected(),
@@ -319,7 +320,8 @@ public:
 		cellsProcessed(cellsProcessed),
 		elapsedMilliseconds(ms),
 		alignmentStart(0),
-		alignmentEnd(0)
+		alignmentEnd(0),
+		alignmentScore(std::numeric_limits<size_t>::max())
 		{
 			this->trace = std::make_shared<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace>();
 			*this->trace = std::move(trace);
@@ -337,6 +339,7 @@ public:
 		size_t elapsedMilliseconds;
 		size_t alignmentStart;
 		size_t alignmentEnd;
+		size_t alignmentScore;
 	};
 	std::vector<AlignmentItem> alignments;
 	size_t seedsExtended;

@@ -61,6 +61,7 @@ public:
 
 		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
 
+		alnItem.alignmentScore = alnItem.trace->score;
 		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
 		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos;
 		timeEnd = std::chrono::system_clock::now();
@@ -384,6 +385,7 @@ private:
 		seqend = result.trace->trace.back().DPposition.seqPos;
 		assert(seqend < sequence.size());
 		// result.trace = traceVector;
+		result.alignmentScore = result.trace->score;
 		result.alignmentStart = seqstart;
 		result.alignmentEnd = seqend + 1;
 		auto timeEnd = std::chrono::system_clock::now();

@@ -17,27 +17,49 @@ namespace CommonUtils
 	};
 	namespace inner
 	{
-		bool alignmentLengthCompare(const vg::Alignment* const left, const vg::Alignment* const right);
-		bool alignmentScoreCompare(const vg::Alignment* const left, const vg::Alignment* const right);
-		bool alignmentIncompatible(const vg::Alignment* const left, const vg::Alignment* const right);
+		//an overlap which is larger than the fraction cutoff of the smaller alignment means the alignments are incompatible
+		//eg alignments 12000bp and 15000bp, overlap of 12000*0.05 = 600bp means they are incompatible
+		constexpr float OverlapIncompatibleFractionCutoff = 0.05;
+		template <typename T>
+		bool alignmentCompare(const T& left, const T& right)
+		{
+			if (left.alignmentEnd - left.alignmentStart < right.alignmentEnd - right.alignmentStart) return true;
+			if (right.alignmentEnd - right.alignmentStart < left.alignmentEnd - left.alignmentStart) return false;
+			if (left.alignmentScore < right.alignmentScore) return true;
+			return false;
+		}
+		template <typename T>
+		bool alignmentIncompatible(const T& left, const T& right)
+		{
+			auto minOverlapLen = std::min(left.alignmentEnd - left.alignmentStart, right.alignmentEnd - right.alignmentStart) * OverlapIncompatibleFractionCutoff;
+			size_t leftStart = left.alignmentStart;
+			size_t leftEnd = left.alignmentEnd;
+			size_t rightStart = right.alignmentStart;
+			size_t rightEnd = right.alignmentEnd;
+			if (leftStart > rightStart)
+			{
+				std::swap(leftStart, rightStart);
+				std::swap(leftEnd, rightEnd);
+			}
+			int overlap = 0;
+			assert(leftStart <= rightStart);
+			if (leftEnd > rightStart) overlap = leftEnd - rightStart;
+			return overlap > minOverlapLen;
+		}
 	}
 	vg::Graph LoadVGGraph(std::string filename);
 	char Complement(char original);
 	std::string ReverseComplement(std::string original);
 	vg::Alignment LoadVGAlignment(std::string filename);
 	std::vector<vg::Alignment> LoadVGAlignments(std::string filename);
-	template <typename T, typename F>
-	std::vector<T> SelectAlignments(std::vector<T> alignments, size_t maxnum, F alnGetter)
+	template <typename T>
+	std::vector<T> SelectAlignments(std::vector<T> alignments, size_t maxnum)
 	{
-		std::function<const vg::Alignment*(const T&)> f = [alnGetter](const T& aln) { return (const vg::Alignment*)alnGetter(aln); };
-		std::sort(alignments.begin(), alignments.end(), [f](const T& left, const T& right) { return inner::alignmentScoreCompare(f(left), f(right)); });
-		std::stable_sort(alignments.begin(), alignments.end(), [f](const T& left, const T& right) { return inner::alignmentLengthCompare(f(left), f(right)); });
+		std::sort(alignments.begin(), alignments.end(), [](const T& left, const T& right) { return inner::alignmentCompare(left, right); });
 		std::vector<T> result;
-		assert(f(alignments[0])->sequence().size() > f(alignments.back())->sequence().size() || (f(alignments[0])->sequence().size() == f(alignments.back())->sequence().size() && f(alignments[0])->score() <= f(alignments.back())->score()));
 		for (size_t i = 0; i < alignments.size(); i++)
 		{
-			const vg::Alignment* const aln = f(alignments[i]);
-			if (!std::any_of(result.begin(), result.end(), [aln, f](const T& existing) { return inner::alignmentIncompatible(f(existing), aln); }))
+			if (!std::any_of(result.begin(), result.end(), [&alignments, i](const T& existing) { return inner::alignmentIncompatible(existing, alignments[i]); }))
 			{
 				result.emplace_back(std::move(alignments[i]));
 			}
@@ -45,8 +67,6 @@ namespace CommonUtils
 		}
 		return result;
 	}
-	std::vector<vg::Alignment> SelectAlignments(std::vector<vg::Alignment> alns, size_t maxnum);
-	std::vector<vg::Alignment*> SelectAlignments(std::vector<vg::Alignment*> alns, size_t maxnum);
 }
 
 class BufferedWriter : std::ostream
