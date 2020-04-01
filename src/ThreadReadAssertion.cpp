@@ -1,5 +1,6 @@
 #include <iostream>
 #include <sstream>
+#include <string_view>
 #include "ThreadReadAssertion.h"
 
 namespace ThreadReadAssertion
@@ -9,7 +10,7 @@ namespace ThreadReadAssertion
 	thread_local size_t currentseqPos;
 	thread_local size_t currentmatchLen;
 	thread_local size_t currentnodeOffset;
-	thread_local std::string currentRead;
+	thread_local std::string_view currentRead;
 	void signal(int signal)
 	{
 		std::stringstream msg;
@@ -19,7 +20,7 @@ namespace ThreadReadAssertion
 	}
 	void setRead(const std::string& readName)
 	{
-		currentRead = readName;
+		currentRead = std::string_view(readName.data(), readName.size());
 	}
 	void setSeed(int nodeID, bool reverse, size_t seqPos, size_t matchLen, size_t nodeOffset)
 	{
