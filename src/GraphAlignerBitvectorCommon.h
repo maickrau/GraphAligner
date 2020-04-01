@@ -166,6 +166,11 @@ public:
 
 	static EqVector getEqVector(const std::string& sequence, size_t j)
 	{
+		return getEqVector(std::string_view { sequence.data(), sequence.size() }, j);
+	}
+
+	static EqVector getEqVector(const std::string_view& sequence, size_t j)
+	{
 		Word BA = WordConfiguration<Word>::AllZeros;
 		Word BT = WordConfiguration<Word>::AllZeros;
 		Word BC = WordConfiguration<Word>::AllZeros;

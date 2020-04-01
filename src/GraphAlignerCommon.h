@@ -144,6 +144,12 @@ public:
 		sequenceCharacter(DPposition.seqPos < seq.size() ? seq[DPposition.seqPos] : '-'),
 		graphCharacter(graph.NodeSequences(DPposition.node, DPposition.nodeOffset))
 		{}
+		TraceItem(MatrixPosition DPposition, bool nodeSwitch, const std::string_view& seq, const AlignmentGraph& graph) :
+		DPposition(DPposition),
+		nodeSwitch(nodeSwitch),
+		sequenceCharacter(DPposition.seqPos < seq.size() ? seq[DPposition.seqPos] : '-'),
+		graphCharacter(graph.NodeSequences(DPposition.node, DPposition.nodeOffset))
+		{}
 		MatrixPosition DPposition;
 		bool nodeSwitch;
 		char sequenceCharacter;

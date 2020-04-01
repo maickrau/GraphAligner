@@ -80,6 +80,7 @@ public:
 		size_t extendSeeds = params.seedExtendDensity * sequence.size() + 1;
 		if (params.seedExtendDensity == -1) extendSeeds = seedHits.size();
 		size_t worstExtendedSeedScore = 0;
+		std::string revSequence = CommonUtils::ReverseComplement(sequence);
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			if (params.sloppyOptimizations && seedHits[i].seedGoodness < seedScoreForEndToEndAln)
@@ -118,7 +119,7 @@ public:
 			logger << BufferedWriter::Flush;
 			worstExtendedSeedScore = seedHits[i].seedGoodness;
 			result.seedsExtended += 1;
-			auto item = getAlignmentFromSeed(seq_id, sequence, seedHits[i], reusableState);
+			auto item = getAlignmentFromSeed(seq_id, sequence, revSequence, seedHits[i], reusableState);
 			if (item.alignmentFailed()) continue;
 			item.seedGoodness = seedHits[i].seedGoodness;
 			result.alignments.emplace_back(std::move(item));
@@ -241,10 +242,11 @@ private:
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
-		return bvAligner.getBacktraceFullStart(sequence, params.forceGlobal, reusableState);
+		std::string_view seq { sequence.data(), sequence.size() };
+		return bvAligner.getBacktraceFullStart(seq, params.forceGlobal, reusableState);
 	}
 
-	Trace getTwoDirectionalTrace(const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
+	Trace getTwoDirectionalTrace(const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(seedHit.seqPos >= 0);
 		assert(seedHit.seqPos < sequence.size());
@@ -265,14 +267,14 @@ private:
 		result.forward.score = std::numeric_limits<ScoreType>::max();
 		if (seedHit.seqPos > 0)
 		{
-			auto backwardPart = CommonUtils::ReverseComplement(sequence.substr(0, seedHit.seqPos));
+			std::string_view backwardPart { revSequence.data() + revSequence.size() - seedHit.seqPos, seedHit.seqPos };
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
 			assert(reversePos.first == backwardNodeId);
 			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, params.forceGlobal, reusableState);
 		}
 		if (seedHit.seqPos < sequence.size()-1)
 		{
-			auto forwardPart = sequence.substr(seedHit.seqPos+1);
+			std::string_view forwardPart { sequence.data() + seedHit.seqPos + 1, sequence.size() - seedHit.seqPos - 1 };
 			size_t offset = seedHit.nodeOffset;
 			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, params.forceGlobal, reusableState);
 		}
@@ -330,12 +332,12 @@ private:
 		trace.back().nodeSwitch = false;
 	}
 
-	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
+	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 	{
 		assert(params.graph.finalized);
 		auto timeStart = std::chrono::system_clock::now();
 
-		auto trace = getTwoDirectionalTrace(sequence, seedHit, reusableState);
+		auto trace = getTwoDirectionalTrace(sequence, revSequence, seedHit, reusableState);
 
 #ifndef NDEBUG
 		if (trace.forward.trace.size() > 0) verifyTrace(trace.forward.trace, sequence, trace.forward.score);

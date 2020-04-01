@@ -6,6 +6,7 @@
 #include <vector>
 #include <cmath>
 #include <iostream>
+#include <string_view>
 #include "AlignmentGraph.h"
 #include "NodeSlice.h"
 #include "CommonUtils.h"
@@ -128,7 +129,7 @@ public:
 	{
 	}
 
-	OnewayTrace getReverseTraceFromSeed(const std::string& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
@@ -155,7 +156,7 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktraceFullStart(std::string originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
 		DPSlice startSlice;
@@ -191,7 +192,7 @@ public:
 			node.endSlice = {0, 0, match ? 0 : 1};
 			node.exists = true;
 		}
-		std::string alignableSequence = originalSequence.substr(1);
+		std::string_view alignableSequence { originalSequence.data()+1, originalSequence.size() - 1 };
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
@@ -222,7 +223,7 @@ public:
 
 private:
 
-	OnewayTrace getReverseTraceFromTableExactEndPos(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromTableExactEndPos(const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
 	{
 		assert(slice.slices.size() > 1);
 		size_t bestIndex = 1;
@@ -283,14 +284,14 @@ private:
 		return getReverseTraceFromTable(sequence, slice, reusableState, startPos, startScore);
 	}
 
-	OnewayTrace getReverseTraceFromTableStartLastRow(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromTableStartLastRow(const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
 	{
 		ScoreType startScore = slice.slices.back().minScore;
 		MatrixPosition startPos {slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1)};
 		return getReverseTraceFromTable(sequence, slice, reusableState, startPos, startScore);
 	}
 
-	OnewayTrace getReverseTraceFromTable(const std::string& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore) const
+	OnewayTrace getReverseTraceFromTable(const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore) const
 	{
 		assert(slice.slices.size() > 0);
 		assert(slice.slices.back().minScoreNode != std::numeric_limits<LengthType>::max());
@@ -452,7 +453,7 @@ private:
 		}
 	}
 
-	std::vector<MatrixPosition> pickBacktraceInside(LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, MatrixPosition pos, const std::string& sequence) const
+	std::vector<MatrixPosition> pickBacktraceInside(LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, MatrixPosition pos, const std::string_view& sequence) const
 	{
 		assert(verticalOffset <= pos.seqPos);
 		assert(verticalOffset + WordConfiguration<Word>::WordSize > pos.seqPos);
@@ -495,7 +496,7 @@ private:
 		return result;
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceHorizontalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, size_t j, LengthType node, MatrixPosition pos, const std::string_view& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		assert(current.hasNode(node));
 		auto startSlice = current.node(node).startSlice;
@@ -561,7 +562,7 @@ private:
 		return std::make_pair(std::make_pair(MatrixPosition {0, 0, 0}, false), std::make_pair(MatrixPosition {0, 0, 0}, false));
 	}
 
-	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
+	std::pair<std::pair<MatrixPosition, bool>, std::pair<MatrixPosition, bool>> pickBacktraceVerticalCrossing(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, const std::vector<WordSlice> nodeScores, size_t j, LengthType node, MatrixPosition pos, const std::string_view& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		assert(pos.nodeOffset > 0);
 		assert(pos.nodeOffset < nodeScores.size());
@@ -606,7 +607,7 @@ private:
 		return std::make_pair(std::make_pair(pos, false), std::make_pair(MatrixPosition{pos.node, pos.nodeOffset - 1, pos.seqPos-1}, false));
 	}
 
-	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
+	std::pair<MatrixPosition, bool> pickBacktraceCorner(const NodeSlice<LengthType, ScoreType, Word, false>& current, const NodeSlice<LengthType, ScoreType, Word, false>& previous, LengthType node, size_t j, const std::string_view& sequence, ScoreType quitScore, bool scoresNotValid, ScoreType previousQuitScore, bool previousScoresNotValid) const
 	{
 		ScoreType scoreHere = current.node(node).startSlice.getValue(0);
 		if (scoresNotValid || scoreHere > quitScore)
@@ -738,10 +739,12 @@ private:
 		}
 	}
 
-	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string& sequence) const
+	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string_view& sequence) const
 	{
 		EqVector EqV = BV::getEqVector(sequence, j);
+		size_t nodeLength = params.graph.NodeLength(node);
 		std::vector<WordSlice> result;
+		result.reserve(nodeLength);
 		WordSlice ws = slice.startSlice;
 		result.push_back(ws);
 
@@ -766,7 +769,6 @@ private:
 		Word hinN, hinP, Eq;
 		size_t pos;
 		WordSlice newWs;
-		size_t nodeLength = params.graph.NodeLength(node);
 		for (; chunk < slice.NUM_CHUNKS; chunk++)
 		{
 			Word HP = previousSlice.HP[chunk];
@@ -823,6 +825,7 @@ private:
 		assert(result.back().VP == slice.endSlice.VP);
 		assert(result.back().VN == slice.endSlice.VN);
 		assert(result.back().scoreEnd == slice.endSlice.scoreEnd);
+		assert(result.size() == nodeLength);
 		return result;
 	}
 
@@ -1127,7 +1130,7 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, const std::string& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore) const
+	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, const std::string_view& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore) const
 	{
 		for (auto pair : currentSlice)
 		{
@@ -1184,7 +1187,7 @@ private:
 #endif
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	NodeCalculationResult calculateSlice(const std::string& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
+	NodeCalculationResult calculateSlice(const std::string_view& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore) const
 	{
 		double averageErrorRate = 0;
 		if (j > 0)
@@ -1425,7 +1428,7 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, NodeCalculationResult& sliceCalc, LengthType j, const std::string& sequence) const
+	void flattenLastSliceEnd(NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, NodeCalculationResult& sliceCalc, LengthType j, const std::string_view& sequence) const
 	{
 		assert(j < sequence.size());
 		assert(sequence.size() - j < WordConfiguration<Word>::WordSize);
@@ -1476,7 +1479,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	void fillDPSlice(const std::string& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth) const
+	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -1526,7 +1529,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	DPSlice pickMethodAndExtendFill(const std::string& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, PriorityQueue& calculableQueue, int bandwidth) const
+	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, PriorityQueue& calculableQueue, int bandwidth) const
 	{
 		if (!params.lowMemory)
 		{
@@ -1559,7 +1562,7 @@ private:
 		}
 	}
 
-	DPTable getSqrtSlices(const std::string& sequence, const DPSlice& initialSlice, size_t numSlices, bool forceGlobal, AlignerGraphsizedState& reusableState) const
+	DPTable getSqrtSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
