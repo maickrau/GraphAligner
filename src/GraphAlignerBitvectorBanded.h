@@ -251,7 +251,17 @@ private:
 				previous.HN[i] = WordConfiguration<Word>::AllZeros;
 			}
 		}
-		auto nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence);
+
+		std::vector<WordSlice> nodeSlices;
+		if (node < params.graph.firstAmbiguous)
+		{
+			nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence, params.graph.NodeChunks(node));
+		}
+		else
+		{
+			nodeSlices = recalcNodeWordslice(node, slice.slices[bestIndex].scores.node(node), previous, slice.slices[bestIndex].j, sequence, params.graph.AmbiguousNodeChunks(node));
+		}
+
 		size_t nodeOffset = std::numeric_limits<size_t>::max();
 		size_t bvOffset = std::numeric_limits<size_t>::max();
 		for (size_t i = 0; i < nodeSlices.size(); i++)
@@ -328,7 +338,14 @@ private:
 						previous.HN[i] = WordConfiguration<Word>::AllZeros;
 					}
 				}
-				nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence);
+				if (currentNode < params.graph.firstAmbiguous)
+				{
+					nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence, params.graph.NodeChunks(currentNode));
+				}
+				else
+				{
+					nodeSlices = recalcNodeWordslice(currentNode, slice.slices[currentSlice].scores.node(currentNode), previous, slice.slices[currentSlice].j, sequence, params.graph.AmbiguousNodeChunks(currentNode));
+				}
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
@@ -739,7 +756,8 @@ private:
 		}
 	}
 
-	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string_view& sequence) const
+	template <typename NodeChunkType>
+	std::vector<WordSlice> recalcNodeWordslice(LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, LengthType j, const std::string_view& sequence, NodeChunkType nodeChunks) const
 	{
 		EqVector EqV = BV::getEqVector(sequence, j);
 		size_t nodeLength = params.graph.NodeLength(node);
@@ -773,13 +791,16 @@ private:
 		{
 			Word HP = previousSlice.HP[chunk];
 			Word HN = previousSlice.HN[chunk];
+			auto charChunk = nodeChunks[chunk * 2];
 			HP >>= offset;
 			HN >>= offset;
+			charChunk >>= offset * 2;
 			for (; offset < WordConfiguration<Word>::WordSize; offset++)
 			{
+				if (offset % 32 == 0) charChunk = nodeChunks[chunk * 2 + 1];
 				pos = chunk * WordConfiguration<Word>::WordSize + offset;
 				if (pos >= nodeLength) break;
-				Eq = EqV.getEqC(params.graph.NodeSequences(node, pos));
+				Eq = EqV.getEqI(charChunk & 3);
 				Eq &= forceEq;
 				if ((HN & 1) && (scoreBefore == scoreComparison - 1))
 				{
@@ -818,6 +839,7 @@ private:
 				scoreComparison -= HN & 1;
 				HP >>= 1;
 				HN >>= 1;
+				charChunk >>= 2;
 				scoreBefore++;
 			}
 			offset = 0;
@@ -1455,7 +1477,17 @@ private:
 					old.HN[i] = WordConfiguration<Word>::AllZeros;
 				}
 			}
-			auto nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence);
+
+			std::vector<WordSlice> nodeSlices;
+			if (node.first < params.graph.firstAmbiguous)
+			{
+				nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence, params.graph.NodeChunks(node.first));
+			}
+			else
+			{
+				nodeSlices = recalcNodeWordslice(node.first, current, old, j, sequence, params.graph.AmbiguousNodeChunks(node.first));
+			}
+
 			assert(nodeSlices[0].VP == node.second.startSlice.VP);
 			assert(nodeSlices[0].VN == node.second.startSlice.VN);
 			assert(nodeSlices[0].scoreEnd == node.second.startSlice.scoreEnd);
