@@ -176,6 +176,17 @@ public:
 
 	ScoreType getValue(int row) const
 	{
+		Word mask = WordConfiguration<Word>::AllZeros;
+		if (row < WordConfiguration<Word>::WordSize-1) mask = (WordConfiguration<Word>::AllOnes << (row + 1));
+		auto value = scoreEnd + WordConfiguration<Word>::popcount(VN & mask) - WordConfiguration<Word>::popcount(VP & mask);
+#ifdef EXTRACORRECTNESSASSERTIONS
+		assert(value == getValueStartBased(row));
+#endif
+		return value;
+	}
+
+	ScoreType getValueStartBased(int row) const
+	{
 		auto mask = WordConfiguration<Word>::AllOnes;
 		if (row < WordConfiguration<Word>::WordSize-1) mask = ~(WordConfiguration<Word>::AllOnes << (row + 1));
 		auto value = getScoreBeforeStart() + WordConfiguration<Word>::popcount(VP & mask) - WordConfiguration<Word>::popcount(VN & mask);
