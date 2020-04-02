@@ -528,7 +528,7 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 	assert(nodeId < graph.nodeIDs.size());
 	assert(nodeId < graph.nodeOffset.size());
 	assert(nodeId < graph.reverse.size());
-	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, maxCount - count, graph.reverse[nodeId] };
+	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[nodeId] };
 	result.alignmentGraphNodeId = nodeId;
 	result.alignmentGraphNodeOffset = nodeOffset;
 	return result;

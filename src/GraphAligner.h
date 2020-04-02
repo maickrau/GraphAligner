@@ -209,31 +209,32 @@ public:
 		for (auto& pair : seedPoses)
 		{
 			std::sort(pair.second.begin(), pair.second.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.second < right.second; });
-			seedHits[pair.second[0].first].seedGoodness = seedHits[pair.second[0].first].matchLen;
-			seedHits[pair.second[0].first].seedClusterSize = 1;
-			for (size_t i = 1; i < pair.second.size(); i++)
+			size_t clusterStart = 0;
+			for (size_t i = 1; i <= pair.second.size(); i++)
 			{
-				seedHits[pair.second[i].first].seedGoodness = seedHits[pair.second[i].first].matchLen;
-				seedHits[pair.second[i].first].seedClusterSize = 1;
-				if (pair.second[i].second <= pair.second[i-1].second + 100)
+				assert(i == pair.second.size() || pair.second[i].second >= pair.second[i-1].second);
+				if (i < pair.second.size() && pair.second[i].second <= pair.second[i-1].second + 100) continue;
+				assert(i > clusterStart);
+				std::sort(pair.second.begin()+clusterStart, pair.second.begin()+i, [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
+				size_t matchingBps = 0;
+				size_t lastEnd = 0;
+				for (size_t j = clusterStart; j < i; j++)
 				{
-					seedHits[pair.second[i].first].seedGoodness += seedHits[pair.second[i-1].first].seedGoodness;
-					seedHits[pair.second[i].first].seedClusterSize += seedHits[pair.second[i-1].first].seedClusterSize;
+					size_t thisStart = seedHits[pair.second[j].first].seqPos - seedHits[pair.second[j].first].matchLen + 1;
+					size_t thisEnd = seedHits[pair.second[j].first].seqPos;
+					assert(thisEnd >= lastEnd);
+					assert(thisEnd > thisStart);
+					matchingBps += (thisEnd - std::max(thisStart, lastEnd));
+					// matchingBps += seedHits[pair.second[j].first].rawSeedGoodness;
+					lastEnd = thisEnd;
 				}
-			}
-			for (size_t i = pair.second.size()-1; i > 0; i--)
-			{
-				if (pair.second[i-1].second >= pair.second[i].second - 100)
+				for (size_t j = clusterStart; j < i; j++)
 				{
-					assert(seedHits[pair.second[i].first].seedGoodness >= seedHits[pair.second[i-1].first].seedGoodness);
-					seedHits[pair.second[i-1].first].seedGoodness = seedHits[pair.second[i].first].seedGoodness;
-					seedHits[pair.second[i-1].first].seedClusterSize = seedHits[pair.second[i].first].seedClusterSize;
+					seedHits[pair.second[j].first].seedGoodness = matchingBps + seedHits[pair.second[j].first].rawSeedGoodness;
+					seedHits[pair.second[j].first].seedClusterSize = i - clusterStart;
 				}
+				clusterStart = i;
 			}
-		}
-		for (size_t i = 0; i < seedHits.size(); i++)
-		{
-			seedHits[i].seedGoodness += seedHits[i].matchLen;
 		}
 		std::sort(seedHits.begin(), seedHits.end(), [](const SeedHit& left, const SeedHit& right) { return left.seedGoodness < right.seedGoodness; });
 		std::reverse(seedHits.begin(), seedHits.end());

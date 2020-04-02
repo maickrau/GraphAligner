@@ -297,7 +297,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 		size_t nodeOffset = match.ref - nodePositions[index];
 		size_t seqPos = match.query;
 		size_t matchLen = match.len;
-		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, false);
+		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, matchLen, false);
 	}
 	for (auto match : bwmatches)
 	{
@@ -314,7 +314,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 		seqPos = seqLen - seqPos - matchLen;
 		assert(nodeOffset < nodeLength(index));
 		assert(seqPos < seqLen);
-		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, true);
+		result.emplace_back(nodeID, nodeOffset, seqPos, matchLen, matchLen, true);
 	}
 	return result;
 }

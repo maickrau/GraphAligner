@@ -11,7 +11,7 @@
 class SeedHit
 {
 public:
-	SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, bool reverse) :
+	SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, size_t rawSeedGoodness, bool reverse) :
 	nodeID(nodeID),
 	nodeOffset(nodeOffset),
 	seqPos(seqPos),
@@ -19,6 +19,7 @@ public:
 	reverse(reverse),
 	alignmentGraphNodeId(std::numeric_limits<size_t>::max()),
 	alignmentGraphNodeOffset(std::numeric_limits<size_t>::max()),
+	rawSeedGoodness(rawSeedGoodness),
 	seedGoodness(0),
 	seedClusterSize(0)
 	{
@@ -30,6 +31,7 @@ public:
 	bool reverse;
 	size_t alignmentGraphNodeId;
 	size_t alignmentGraphNodeOffset;
+	size_t rawSeedGoodness;
 	size_t seedGoodness;
 	size_t seedClusterSize;
 };
