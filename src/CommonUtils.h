@@ -23,8 +23,8 @@ namespace CommonUtils
 		template <typename T>
 		bool alignmentCompare(const T& left, const T& right)
 		{
-			if (left.alignmentEnd - left.alignmentStart < right.alignmentEnd - right.alignmentStart) return true;
-			if (right.alignmentEnd - right.alignmentStart < left.alignmentEnd - left.alignmentStart) return false;
+			if (left.alignmentEnd - left.alignmentStart > right.alignmentEnd - right.alignmentStart) return true;
+			if (left.alignmentEnd - left.alignmentStart < right.alignmentEnd - right.alignmentStart) return false;
 			if (left.alignmentScore < right.alignmentScore) return true;
 			return false;
 		}
