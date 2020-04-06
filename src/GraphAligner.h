@@ -256,12 +256,12 @@ private:
 
 	bool exactAlignmentPart(const AlignmentResult::AlignmentItem& aln, const SeedHit& seedHit) const
 	{
-		if (aln.alignmentStart > seedHit.seqPos) return false;
-		if (aln.alignmentEnd < seedHit.seqPos) return false;
 		assert(aln.trace != nullptr);
 		const std::vector<TraceItem>& trace = aln.trace->trace;
 		assert(trace.size() > 0);
 		assert(trace.back().DPposition.seqPos > trace[0].DPposition.seqPos);
+		if (trace.back().DPposition.seqPos < seedHit.seqPos) return false;
+		if (trace[0].DPposition.seqPos > seedHit.seqPos) return false;
 		size_t high = trace.size();
 		size_t low = 0;
 		size_t mid = (seedHit.seqPos - trace[0].DPposition.seqPos) / (trace.back().DPposition.seqPos - trace[0].DPposition.seqPos);
@@ -271,16 +271,20 @@ private:
 			{
 				low = mid;
 				mid = (high + low) / 2;
-				assert(mid > low);
+				if (mid == low) mid += 1;
+				assert(mid < trace.size());
 			}
 			if (trace[mid].DPposition.seqPos > seedHit.seqPos)
 			{
 				high = mid;
 				mid = (high + low) / 2;
+				assert(mid < trace.size());
 			}
 			assert(low < mid);
 			assert(mid < high);
 		}
+		assert(mid < trace.size());
+		assert(trace[mid].DPposition.seqPos == seedHit.seqPos);
 		size_t down = mid;
 		size_t compareNode = seedHit.nodeID * 2;
 		if (seedHit.reverse) compareNode += 1;
