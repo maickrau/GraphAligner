@@ -131,7 +131,7 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdg
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight, overlap }, DirectedGraph::Edge { toLeft, fromLeft, overlap });
 }
 
-AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename, bool tryDAG)
+AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 {
 	AlignmentGraph result;
 	{
@@ -174,11 +174,11 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename, bool t
 		};
 		stream::for_each(graphfile, lambda);
 	}
-	result.Finalize(64, tryDAG);
+	result.Finalize(64);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph, bool tryDAG)
+AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 {
 	AlignmentGraph result;
 	std::vector<size_t> breakpointsFw;
@@ -208,11 +208,11 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph, bool tryDAG)
 		result.AddEdgeNodeId(edges.first.fromId, edges.first.toId, edges.first.overlap);
 		result.AddEdgeNodeId(edges.second.fromId, edges.second.toId, edges.second.overlap);
 	}
-	result.Finalize(64, tryDAG);
+	result.Finalize(64);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph, bool tryDAG)
+AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 {
 	AlignmentGraph result;
 	result.DBGoverlap = graph.edgeOverlap;
@@ -262,6 +262,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph, bool tryDAG)
 			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
 		}
 	}
-	result.Finalize(64, tryDAG);
+	result.Finalize(64);
 	return result;
 }

@@ -553,7 +553,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const AlignerParams& params)
 {
 	bool loadMxmSeeder = params.mumCount > 0 || params.memCount > 0;
-	bool tryDAG = params.maxCellsPerSlice == std::numeric_limits<size_t>::max();
 	if (is_file_exist(graphFile)){
 		std::cout << "Load graph from " << graphFile << std::endl;
 	}
@@ -574,12 +573,12 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 					*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 				}
 				std::cout << "Build alignment graph" << std::endl;
-				auto result = DirectedGraph::BuildFromVG(graph, tryDAG);
+				auto result = DirectedGraph::BuildFromVG(graph);
 				return result;
 			}
 			else
 			{
-				return DirectedGraph::StreamVGGraphFromFile(graphFile, tryDAG);
+				return DirectedGraph::StreamVGGraphFromFile(graphFile);
 			}
 		}
 		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
@@ -591,7 +590,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 				*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 			}
 			std::cout << "Build alignment graph" << std::endl;
-			auto result = DirectedGraph::BuildFromGFA(graph, tryDAG);
+			auto result = DirectedGraph::BuildFromGFA(graph);
 			return result;
 		}
 		else

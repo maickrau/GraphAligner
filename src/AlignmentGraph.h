@@ -5,7 +5,9 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <tuple>
+#include <phmap.h>
 #include "ThreadReadAssertion.h"
 
 
@@ -87,7 +89,7 @@ public:
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
 	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
 	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
-	void Finalize(int wordSize, bool doComponents);
+	void Finalize(int wordSize);
 	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
@@ -108,6 +110,7 @@ private:
 	void fixChainApproxPos(const size_t start);
 	std::pair<bool, size_t> findBubble(const size_t start, const std::vector<bool>& ignorableTip);
 	void chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank);
+	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> chainTips(std::vector<size_t>& rank, std::vector<bool>& ignorableTip);
 	void findChains();
 	void findLinearizable();
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);

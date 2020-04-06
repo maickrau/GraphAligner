@@ -247,7 +247,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
 }
 
-void AlignmentGraph::Finalize(int wordSize, bool doComponents)
+void AlignmentGraph::Finalize(int wordSize)
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
@@ -257,6 +257,7 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 	RenumberAmbiguousToEnd();
 	ambiguousNodes.clear();
 	findLinearizable();
+	doComponentOrder();
 	findChains();
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
@@ -286,11 +287,6 @@ void AlignmentGraph::Finalize(int wordSize, bool doComponents)
 	reverse.shrink_to_fit();
 	nodeSequences.shrink_to_fit();
 	ambiguousNodeSequences.shrink_to_fit();
-	if (doComponents)
-	{
-		std::cout << "use component ordering" << std::endl;
-		doComponentOrder();
-	}
 #ifndef NDEBUG
 	for (auto pair : nodeLookup)
 	{
@@ -320,6 +316,7 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		if (outNeighbors[v].size() == 0) return std::make_pair(false, 0);
 		for (const size_t u : outNeighbors[v])
 		{
+			if (ignorableTip[u]) continue;
 			if (u == v) return std::make_pair(false, 0);
 			if (u == start) return std::make_pair(false, 0);
 			assert(visited.count(u) == 0);
@@ -430,6 +427,105 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 	}
 }
 
+phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTips(std::vector<size_t>& rank, std::vector<bool>& ignorableTip)
+{
+	assert(componentNumber.size() == NodeSize());
+	std::vector<size_t> order;
+	order.reserve(NodeSize());
+	for (size_t i = 0; i < NodeSize(); i++)
+	{
+		order.push_back(i);
+	}
+	std::sort(order.begin(), order.end(), [this](size_t left, size_t right) { return componentNumber[left] < componentNumber[right]; });
+	std::vector<bool> fwTipComponent;
+	fwTipComponent.resize(componentNumber[order.back()]+1, true);
+	for (size_t ind = order.size()-1; ind < order.size(); ind--)
+	{
+		size_t i = order[ind];
+		if (!fwTipComponent[componentNumber[i]]) continue;
+		for (auto neighbor : outNeighbors[i])
+		{
+			assert(componentNumber[neighbor] >= componentNumber[i]);
+			if (componentNumber[neighbor] == componentNumber[i])
+			{
+				fwTipComponent[componentNumber[i]] = false;
+				break;
+			}
+			if (!fwTipComponent[componentNumber[neighbor]])
+			{
+				fwTipComponent[componentNumber[i]] = false;
+				break;
+			}
+		}
+	}
+	for (size_t ind = order.size()-1; ind < order.size(); ind--)
+	{
+		size_t i = order[ind];
+		if (!fwTipComponent[componentNumber[i]]) continue;
+		for (auto neighbor : outNeighbors[i])
+		{
+			assert(fwTipComponent[componentNumber[neighbor]]);
+			merge(chainNumber, rank, i, neighbor);
+		}
+	}
+	std::vector<bool> bwTipComponent;
+	bwTipComponent.resize(componentNumber[order.back()]+1, true);
+	for (size_t ind = 0; ind < order.size(); ind++)
+	{
+		size_t i = order[ind];
+		if (!bwTipComponent[componentNumber[i]]) continue;
+		for (auto neighbor : inNeighbors[i])
+		{
+			assert(componentNumber[neighbor] <= componentNumber[i]);
+			if (componentNumber[neighbor] == componentNumber[i])
+			{
+				bwTipComponent[componentNumber[i]] = false;
+				break;
+			}
+			if (!bwTipComponent[componentNumber[neighbor]])
+			{
+				bwTipComponent[componentNumber[i]] = false;
+				break;
+			}
+		}
+	}
+	for (size_t ind = 0; ind < order.size(); ind++)
+	{
+		size_t i = order[ind];
+		if (!bwTipComponent[componentNumber[i]]) continue;
+		for (auto neighbor : inNeighbors[i])
+		{
+			assert(bwTipComponent[componentNumber[neighbor]]);
+			merge(chainNumber, rank, i, neighbor);
+		}
+	}
+	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> result;
+	for (size_t i = 0; i < NodeSize(); i++)
+	{
+		if (bwTipComponent[componentNumber[i]] || fwTipComponent[componentNumber[i]])
+		{
+			ignorableTip[i] = true;
+		}
+		if (bwTipComponent[componentNumber[i]])
+		{
+			for (auto neighbor : outNeighbors[i])
+			{
+				if (chainNumber[neighbor] == chainNumber[i]) continue;
+				result[chainNumber[i]].insert(neighbor);
+			}
+		}
+		if (fwTipComponent[componentNumber[i]])
+		{
+			for (auto neighbor : inNeighbors[i])
+			{
+				if (chainNumber[neighbor] == chainNumber[i]) continue;
+				result[chainNumber[i]].insert(neighbor);
+			}
+		}
+	}
+	return result;
+}
+
 void AlignmentGraph::findChains()
 {
 	chainNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
@@ -444,16 +540,34 @@ void AlignmentGraph::findChains()
 	for (const auto& pair : nodeLookup)
 	{
 		assert(pair.second.size() > 0);
-		if (inNeighbors[pair.second[0]].size() == 0) ignorableTip[pair.second[0]] = true;
-		for (size_t i = 1; i < pair.second.size() && ignorableTip[pair.second[i-1]]; i++)
+		for (size_t i = 1; i < pair.second.size(); i++)
 		{
 			merge(chainNumber, rank, pair.second[0], pair.second[i]);
-			if (inNeighbors[pair.second[i]].size() == 1) ignorableTip[pair.second[i]] = true;
 		}
 	}
+	auto tipChainers = chainTips(rank, ignorableTip);
 	for (const auto& pair : nodeLookup)
 	{
 		chainBubble(pair.second.back(), ignorableTip, rank);
+	}
+	for (auto& pair : tipChainers)
+	{
+		size_t uniqueNeighbor = std::numeric_limits<size_t>::max();
+		for (auto n : pair.second)
+		{
+			if (uniqueNeighbor == std::numeric_limits<size_t>::max())
+			{
+				uniqueNeighbor = chainNumber[n];
+			}
+			if (uniqueNeighbor != chainNumber[n])
+			{
+				uniqueNeighbor = std::numeric_limits<size_t>::max()-1;
+				break;
+			}
+		}
+		assert(uniqueNeighbor != std::numeric_limits<size_t>::max());
+		if (uniqueNeighbor == std::numeric_limits<size_t>::max()-1) continue;
+		merge(chainNumber, rank, pair.first, *pair.second.begin());
 	}
 	{
 		std::vector<size_t> tmp;
