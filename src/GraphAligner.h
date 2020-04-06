@@ -117,6 +117,18 @@ public:
 				}
 				if (found) continue;
 			}
+			bool found = false;
+			for (const auto& aln : result.alignments)
+			{
+				if (exactAlignmentPart(aln, seedHits[i]))
+				{
+					logger << " skipped (existing alignment)";
+					logger << BufferedWriter::Flush;
+					found = true;
+					break;
+				}
+			}
+			if (found) continue;
 			logger << BufferedWriter::Flush;
 			worstExtendedSeedScore = seedHits[i].seedGoodness;
 			result.seedsExtended += 1;
@@ -241,6 +253,58 @@ public:
 	}
 
 private:
+
+	bool exactAlignmentPart(const AlignmentResult::AlignmentItem& aln, const SeedHit& seedHit) const
+	{
+		if (aln.alignmentStart > seedHit.seqPos) return false;
+		if (aln.alignmentEnd < seedHit.seqPos) return false;
+		assert(aln.trace != nullptr);
+		const std::vector<TraceItem>& trace = aln.trace->trace;
+		assert(trace.size() > 0);
+		assert(trace.back().DPposition.seqPos > trace[0].DPposition.seqPos);
+		size_t high = trace.size();
+		size_t low = 0;
+		size_t mid = (seedHit.seqPos - trace[0].DPposition.seqPos) / (trace.back().DPposition.seqPos - trace[0].DPposition.seqPos);
+		while (trace[mid].DPposition.seqPos != seedHit.seqPos)
+		{
+			if (trace[mid].DPposition.seqPos < seedHit.seqPos)
+			{
+				low = mid;
+				mid = (high + low) / 2;
+				assert(mid > low);
+			}
+			if (trace[mid].DPposition.seqPos > seedHit.seqPos)
+			{
+				high = mid;
+				mid = (high + low) / 2;
+			}
+			assert(low < mid);
+			assert(mid < high);
+		}
+		size_t down = mid;
+		size_t compareNode = seedHit.nodeID * 2;
+		if (seedHit.reverse) compareNode += 1;
+		while (trace[down].DPposition.seqPos == seedHit.seqPos)
+		{
+			if (compareNode == trace[down].DPposition.node && seedHit.nodeOffset == trace[down].DPposition.nodeOffset)
+			{
+				return true;
+			}
+			if (down == 0) break;
+			down -= 1;
+		}
+		size_t up = mid;
+		while (trace[up].DPposition.seqPos == seedHit.seqPos)
+		{
+			if (compareNode == trace[up].DPposition.node && seedHit.nodeOffset == trace[up].DPposition.nodeOffset)
+			{
+				return true;
+			}
+			up += 1;
+			if (up == trace.size()) break;
+		}
+		return false;
+	}
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
