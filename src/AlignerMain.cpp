@@ -46,6 +46,7 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
+		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 	;
@@ -136,6 +137,7 @@ int main(int argc, char** argv)
 	params.seedClusterMinSize = 1;
 	params.minimizerDiscardMostNumerousFraction = 0.0002;
 	params.seedExtendDensity = 0.002;
+	params.nondeterministicOptimizations = false;
 
 	std::vector<std::string> outputAlns;
 
@@ -160,6 +162,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
 
+	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("all-alignments"))
