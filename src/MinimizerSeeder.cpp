@@ -320,9 +320,28 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		buckets[i].positions.width(positionSize + 6);
 	}
 
+	std::unordered_map<size_t, size_t> nodeMinimizerStart;
+	for (size_t i = 0; i < graph.NodeSize(); i++)
+	{
+		nodeMinimizerStart[graph.nodeIDs[i]] = std::max(nodeMinimizerStart[graph.nodeIDs[i]], (size_t)0);
+		bool skipStart = false;
+		for (auto n : graph.inNeighbors[i])
+		{
+			if (graph.nodeIDs[n] != graph.nodeIDs[i])
+			{
+				skipStart = true;
+				break;
+			}
+		}
+		if (skipStart)
+		{
+			nodeMinimizerStart[graph.nodeIDs[i]] = std::max(nodeMinimizerStart[graph.nodeIDs[i]], graph.nodeOffset[i]);
+		}
+	}
+
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([this, &positionDistributor, &threadsDone, &kmerPerBucket, &positionPerBucket, thread, numThreads, &nodeMutex, &nodeIter, positionSize](){
+		threads.emplace_back([this, &nodeMinimizerStart, &positionDistributor, &threadsDone, &kmerPerBucket, &positionPerBucket, thread, numThreads, &nodeMutex, &nodeIter, positionSize](){
 			size_t vecPos = 0;
 			kmerPerBucket[thread].resize(10);
 			positionPerBucket[thread].resize(10);
@@ -345,8 +364,9 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 					size_t nodeidHere = graph.GetUnitigNode(nodeId, pos);
 					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.nodeOffset[nodeidHere]);
 				}
-				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
+				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &nodeMinimizerStart, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
 				{
+					if (pos < nodeMinimizerStart.at(nodeId)) return;
 					size_t splitNode = graph.GetUnitigNode(nodeId, pos);
 					assert(splitNode < (size_t)1 << positionSize);
 					size_t remainingOffset = pos - graph.nodeOffset[splitNode];
