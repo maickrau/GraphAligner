@@ -35,3 +35,5 @@ SmallK: 23
 BigK: 63
 # minimum k-mer abundance for the de Bruijn graph. Try between 1/100 to 2/100 of short read coverage, but not below 2.
 Abundance: 3
+# Parameters for GraphAligner
+GraphAlignerParams: -x dbg

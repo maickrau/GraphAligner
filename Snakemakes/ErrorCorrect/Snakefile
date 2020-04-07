@@ -14,6 +14,7 @@ LONGREADS = config["LongReads"]
 SMALLK = config["SmallK"]
 BIGK = config["BigK"]
 ABUNDANCE = config["Abundance"]
+GRAPHALIGNERPARAMS = config["GraphAlignerParams"]
 
 SHORTREADNAMES = [n.split('.')[0] for n in SHORTREADS]
 SHORTREADEXTENSIONS = ['.'.join(n.split('.')[1:]) for n in SHORTREADS]
@@ -58,7 +59,7 @@ rule run_bcalm:
 
 rule convert_bcalm:
 	input: rules.run_bcalm.output
-	output: temp(TMPDIR + "graph.gfa")
+	output: TMPDIR + "graph.gfa"
 	shell: "{BCALMCONVERTPATH} {input} {output} {BIGK}"
 
 rule align_reads:
@@ -75,7 +76,7 @@ rule align_reads:
 		stderr = TMPDIR + "aligner_stderr.txt"
 	threads: 40
 	shell:
-		"/usr/bin/time -v {GRAPHALIGNERPATH} -g {input.graph} --corrected-out {output.corrected} --corrected-clipped-out {output.clipped} -f {params.readconcat} -t {threads} 1> {log.stdout} 2> {log.stderr}"
+		"/usr/bin/time -v {GRAPHALIGNERPATH} -g {input.graph} --corrected-out {output.corrected} --corrected-clipped-out {output.clipped} -f {params.readconcat} -t {threads} {GRAPHALIGNERPARAMS} 1> {log.stdout} 2> {log.stderr}"
 
 rule get_stats:
 	input:

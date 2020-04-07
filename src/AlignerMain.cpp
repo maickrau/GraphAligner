@@ -39,6 +39,13 @@ int main(int argc, char** argv)
 		("corrected-out", boost::program_options::value<std::string>(), "output corrected reads file (.fa/.fa.gz)")
 		("corrected-clipped-out", boost::program_options::value<std::string>(), "output corrected clipped reads file (.fa/.fa.gz)")
 	;
+	boost::program_options::options_description presets("Preset parameters");
+	presets.add_options()
+		("preset,x", boost::program_options::value<std::string>(), 
+			"Preset parameters\n"
+			"dbg - Parameters optimized for de Bruijn graphs\n"
+			"vg - Parameters optimized for variation graphs")
+	;
 	boost::program_options::options_description general("General parameters");
 	general.add_options()
 		("help,h", "help message")
@@ -78,7 +85,7 @@ int main(int argc, char** argv)
 	;
 
 	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden);
+	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden).add(presets);
 
 	boost::program_options::variables_map vm;
 	try
@@ -95,10 +102,8 @@ int main(int argc, char** argv)
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << general << std::endl << seeding;
-		std::cerr << "defaults are --seeds-minimizer-density 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-clustersize 1 --seeds-extend-density 0.002" << std::endl << std::endl;
-		std::cerr << alignment;
-		std::cerr << "defaults are -b 5 -B 10 -C 10000" << std::endl << std::endl;
+		std::cerr << mandatory << std::endl << general << std::endl << seeding << std::endl << alignment << std::endl;
+		std::cerr << presets << std::endl;
 		std::exit(0);
 	}
 	if (vm.count("version"))
@@ -140,6 +145,38 @@ int main(int argc, char** argv)
 	params.nondeterministicOptimizations = false;
 
 	std::vector<std::string> outputAlns;
+	bool paramError = false;
+
+	if (vm.count("preset"))
+	{
+		std::string preset = vm["preset"].as<std::string>();
+		if (preset == "dbg")
+		{
+			params.minimizerSeedDensity = 5;
+			params.minimizerLength = 19;
+			params.minimizerWindowSize = 30;
+			params.seedExtendDensity = 0.002;
+			params.nondeterministicOptimizations = true;
+			params.initialBandwidth = 5;
+			params.rampBandwidth = 10;
+			params.maxCellsPerSlice = 10000;
+		}
+		else if (preset == "vg")
+		{
+			params.minimizerSeedDensity = 10;
+			params.minimizerLength = 15;
+			params.minimizerWindowSize = 30;
+			params.seedExtendDensity = -1;
+			params.minimizerDiscardMostNumerousFraction = 0.001;
+			params.nondeterministicOptimizations = false;
+			params.initialBandwidth = 10;
+		}
+		else
+		{
+			std::cerr << "unknown preset \"" << preset << "\"" << std::endl;
+			paramError = true;
+		}
+	}
 
 	if (vm.count("graph")) params.graphFile = vm["graph"].as<std::string>();
 	if (vm.count("reads")) params.fastqFiles = vm["reads"].as<std::vector<std::string>>();
@@ -176,8 +213,6 @@ int main(int argc, char** argv)
 	if (vm.count("global-alignment")) params.forceGlobal = true;
 	if (vm.count("precise-clipping")) params.preciseClipping = true;
 
-	bool paramError = false;
-
 	if (params.graphFile == "")
 	{
 		std::cerr << "graph file must be given" << std::endl;
@@ -195,15 +230,15 @@ int main(int argc, char** argv)
 	}
 	for (std::string file : outputAlns)
 	{
-		if (file.substr(file.size()-4) == ".gam")
+		if (file.size() >= 4 && file.substr(file.size()-4) == ".gam")
 		{
 			params.outputGAMFile = file;
 		}
-		else if (file.substr(file.size()-5) == ".json")
+		else if (file.size() >= 5 && file.substr(file.size()-5) == ".json")
 		{
 			params.outputJSONFile = file;
 		}
-		else if (file.substr(file.size()-4) == ".gaf")
+		else if (file.size() >= 4 && file.substr(file.size()-4) == ".gaf")
 		{
 			params.outputGAFFile = file;
 		}
@@ -232,13 +267,6 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
-	}
-	if (params.initialBandwidth == 0 && params.rampBandwidth == 0 && params.maxCellsPerSlice == std::numeric_limits<decltype(params.maxCellsPerSlice)>::max())
-	{
-		//default extension parameters
-		params.initialBandwidth = 5;
-		params.rampBandwidth = 10;
-		params.maxCellsPerSlice = 10000;
 	}
 	if (params.initialBandwidth < 1)
 	{
@@ -275,13 +303,11 @@ int main(int argc, char** argv)
 		std::cerr << "Seed extension density can't be negative" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0 && params.minimizerSeedDensity != -1) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
-		//use minimizers as the default seeding method
-		params.minimizerSeedDensity = 5;
-		params.minimizerLength = 19;
-		params.minimizerWindowSize = 30;
+		std::cerr << "pick a seeding method" << std::endl;
+		paramError = true;
 	}
 	if (pickedSeedingMethods > 1)
 	{
