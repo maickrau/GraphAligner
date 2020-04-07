@@ -165,7 +165,7 @@ int main(int argc, char** argv)
 		{
 			params.minimizerSeedDensity = 10;
 			params.minimizerLength = 15;
-			params.minimizerWindowSize = 30;
+			params.minimizerWindowSize = 20;
 			params.seedExtendDensity = -1;
 			params.minimizerDiscardMostNumerousFraction = 0.001;
 			params.nondeterministicOptimizations = false;
