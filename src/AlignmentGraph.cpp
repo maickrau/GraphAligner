@@ -401,7 +401,7 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 	assert(std::numeric_limits<size_t>::max() > nodeLength.size() * SPLIT_NODE_SIZE * 2);
 	std::vector<std::pair<size_t, size_t>> stack;
 	size_t chain = chainNumber[start];
-	stack.emplace_back(start, nodeLength.size() * SPLIT_NODE_SIZE);
+	stack.emplace_back(start, (nodeLength.size() + 5) * SPLIT_NODE_SIZE);
 	while (stack.size() > 0)
 	{
 		size_t v;
@@ -414,8 +414,8 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 		{
 			if (chainNumber[u] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
-			assert(std::numeric_limits<size_t>::max() - nodeLength[v] > dist);
-			stack.emplace_back(u, dist + nodeLength[v]);
+			assert(std::numeric_limits<size_t>::max() - nodeLength[u] > dist);
+			stack.emplace_back(u, dist + nodeLength[u]);
 		}
 		for (const size_t u : inNeighbors[v])
 		{
