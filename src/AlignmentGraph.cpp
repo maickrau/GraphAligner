@@ -317,13 +317,14 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		for (const size_t u : outNeighbors[v])
 		{
 			if (ignorableTip[u]) continue;
-			if (u == v) return std::make_pair(false, 0);
+			if (u == v) continue;
 			if (u == start) return std::make_pair(false, 0);
 			assert(visited.count(u) == 0);
 			seen.insert(u);
 			bool hasNonvisitedParent = false;
 			for (const size_t w : inNeighbors[u])
 			{
+				if (w == u) continue;
 				if (!ignorableTip[w] && visited.count(w) == 0)
 				{
 					hasNonvisitedParent = true;
@@ -383,6 +384,7 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 		const size_t top = stack.back();
 		stack.pop_back();
 		if (visited.count(top) == 1) continue;
+		if (ignorableTip[top]) continue;
 		visited.insert(top);
 		merge(chainNumber, rank, start, top);
 		for (const auto neighbor : outNeighbors[top])
@@ -526,6 +528,50 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	return result;
 }
 
+void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& ignorableTip)
+{
+	for (size_t i = 0; i < nodeLength.size(); i++)
+	{
+		size_t uniqueFwNeighbor = std::numeric_limits<size_t>::max();
+		for (auto u : outNeighbors[i])
+		{
+			if (ignorableTip[u]) continue;
+			if (u == i) continue;
+			if (uniqueFwNeighbor == std::numeric_limits<size_t>::max())
+			{
+				uniqueFwNeighbor = u;
+			}
+			else
+			{
+				assert(u != uniqueFwNeighbor);
+				uniqueFwNeighbor = std::numeric_limits<size_t>::max()-1;
+			}
+		}
+		size_t uniqueBwNeighbor = std::numeric_limits<size_t>::max();
+		for (auto u : inNeighbors[i])
+		{
+			if (ignorableTip[u]) continue;
+			if (u == i) continue;
+			if (uniqueBwNeighbor == std::numeric_limits<size_t>::max())
+			{
+				uniqueBwNeighbor = u;
+			}
+			else if (u != uniqueBwNeighbor)
+			{
+				uniqueBwNeighbor = std::numeric_limits<size_t>::max()-1;
+			}
+		}
+		if (uniqueFwNeighbor != uniqueBwNeighbor) continue;
+		if (uniqueFwNeighbor == std::numeric_limits<size_t>::max()) continue;
+		if (uniqueFwNeighbor == std::numeric_limits<size_t>::max()-1) continue;
+		if (uniqueBwNeighbor == std::numeric_limits<size_t>::max()) continue;
+		if (uniqueBwNeighbor == std::numeric_limits<size_t>::max()-1) continue;
+		ignorableTip[i] = true;
+		assert(uniqueBwNeighbor == uniqueFwNeighbor);
+		merge(chainNumber, rank, i, uniqueFwNeighbor);
+	}
+}
+
 void AlignmentGraph::findChains()
 {
 	chainNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
@@ -546,6 +592,7 @@ void AlignmentGraph::findChains()
 		}
 	}
 	auto tipChainers = chainTips(rank, ignorableTip);
+	chainCycles(rank, ignorableTip);
 	for (const auto& pair : nodeLookup)
 	{
 		chainBubble(pair.second.back(), ignorableTip, rank);

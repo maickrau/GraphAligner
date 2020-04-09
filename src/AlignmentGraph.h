@@ -111,6 +111,7 @@ private:
 	std::pair<bool, size_t> findBubble(const size_t start, const std::vector<bool>& ignorableTip);
 	void chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank);
 	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> chainTips(std::vector<size_t>& rank, std::vector<bool>& ignorableTip);
+	void chainCycles(std::vector<size_t>& rank, std::vector<bool>& ignorableTip);
 	void findChains();
 	void findLinearizable();
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
