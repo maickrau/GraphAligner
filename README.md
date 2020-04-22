@@ -27,13 +27,23 @@ If you want to compile without miniconda, you will need to install [boost](https
 
 ### Running
 
-Quickstart: `GraphAligner -g input_graph.gfa -f input_reads.fa -a output_alignments.json`
+Quickstart: `GraphAligner -g test/graph.gfa -f test/read.fa -a test/aln.gaf -x vg`
 
 See [Parameters](#parameters), the option `GraphAligner --help` and the subsections below for more information and options
 
+#### Test example
+
+The command above outputs the following alignment in `test/aln.gaf`:
+
+`read	71	0	71	+	>1>2>4	87	3	73	66	72	255	NM:i:6	dv:f:0.0833333	id:f:0.916667	cg:Z:4M1M2M1M1I37M1D5M1I5M1M13M`
+
+which aligned the read to the nodes 1,2,4 with an identity of 91.66%. See [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf) for more information about the output format. Alternatively try `-a aln.gam` for output compatible with [vg](https://github.com/vgteam/vg/).
+
+The parameter `-x vg` uses a parameter preset for aligning reads to a variation graph. Other options are `-x dbg` for aligning to a de Bruijn graph.
+
 #### File formats
 
-The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [vg's alignment format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto), either as a binary .gam or JSON depending on the file name. Custom seeds can be inputed in [.gam format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto).
+The aligner's file formats are interoperable with [vg](https://github.com/vgteam/vg/)'s file formats. Graphs can be inputed either in [.gfa format](https://github.com/GFA-spec/GFA-spec) or [.vg format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto). Reads are inputed as .fasta or .fastq, either gzipped or uncompressed. Alignments are outputed in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf) or [vg's alignment format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto), either as a binary .gam or JSON depending on the file name. Custom seeds can be inputed in [.gam format](https://github.com/vgteam/libvgio/blob/master/deps/vg.proto).
 
 #### Seed hits
 
@@ -45,7 +55,7 @@ Alternatively you can use the parameter `--seeds-first-full-rows` to use the dyn
 
 #### Extension
 
-The aligner uses a bitvector banded DP alignment algorithm to extend the seed hits. The DP matrix is calculated inside a certain area (the band), which depends on the extension parameters. Note that "bandwidth" in graph alignment does NOT directly correspond to bandwidth in linear alignment. The bandwidth parameter describes the maximum allowed score difference between the minimum score in a row and a cell, with cells whose score is higher than that falling outside the band. Generally the bandwidth parameters should be between 1-35.
+The aligner uses a bitvector banded DP alignment algorithm to extend the seed hits. The DP matrix is calculated inside a certain area (the band), which depends on the extension parameters. Note that "bandwidth" in graph alignment does NOT directly correspond to bandwidth in linear alignment. The bandwidth parameter describes the maximum allowed score difference between the minimum score in a row and a cell, with cells whose score is higher than that falling outside the band. Bandwidth higher than 35 is not recommended for complex graphs due to huge increases in runtime but might work for variation graphs.
 
 The algorithm starts using the initial bandwidth. Should it detect that the alignment is incorrect, it will rewind and rerun with the ramp bandwidth parameter, aligning high-error parts of the read without slowing down alignment in low-error parts. The tangle effort parameter determines how much time the aligner spends inside complex cyclic subgraphs. If the size of the band grows beyond the tangle effort parameter, the aligner will use the current best alignment for the aligned prefix and move forward along the read. This might miss the optimal alignment.
 
@@ -58,12 +68,12 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 - `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
 - `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
 - `--global-alignment` force the read to be aligned end-to-end. Normally the alignment is stopped if the score gets too poor. This forces the alignment to continue to the end of the read regardless of score. If you use this you should do some other filtering on the alignments to remove false alignments.
+- `-x` parameter preset. Use `-x vg` for aligning to variation graphs and other simple graphs, and `-x dbg` for aligning to de Bruijn graphs.
 
 Seeding:
 
 - `-s` External seeds. Load seeds from a .gam file. You can input multiple files with `-s file1 -s file2 ...` or `-s file1 file2 ...`
-- `--seeds-minimizer-chunksize` Minimizer seeds are grouped into chunks based on their position in the read. Chunk size in base pairs
-- `--seeds-minimizer-count` Minimizer seeds. Use the n least common minimizers from each chunk in the read. -1 for all minimizers
+- `--seeds-minimizer-density` For a read of length `n`, use the `arg * n` most unique seeds
 - `--seeds-minimizer-length` k-mer size for minimizer seeds
 - `--seeds-minimizer-windowsize` Window size for minimizer seeds
 - `--seeds-mum-count` MUM seeds. Use the n longest maximal unique matches. -1 for all MUMs
@@ -72,13 +82,9 @@ Seeding:
 - `--seeds-mxm-cache-prefix` MUM/MEM file cache prefix. Store the MUM/MEM index into disk for reuse. Recommended unless you are sure you won't align to the same graph multiple times
 - `--seeds-first-full-rows` Don't use seeds. Instead use the DP alignment on the first row. The runtime depends on the size of the graph so this is very slow. Not recommended
 
-Defaults are `--seeds-minimizer-count 5 --seeds-minimizer-length 19 --seeds-minimizer-windowsize 30 --seeds-minimizer-chunksize 100`
-
 Extension:
 
-- `-b` alignment bandwidth. Unlike in linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values should be between 1-35.
-- `-B` ramp bandwidth. If a read cannot be aligned with the alignment bandwidth, switch to the ramp bandwidth at the problematic location. Values should be between 1-35.
-- `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values should be between 1'000 - 500'000.
+- `-b` alignment bandwidth. Unlike in linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values recommended to be between 1-35.
+- `-B` ramp bandwidth. If a read cannot be aligned with the alignment bandwidth, switch to the ramp bandwidth at the problematic location. Values recommended to be between 1-35.
+- `-C` tangle effort. Determines how much effort the aligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values recommended to be between 1'000 - 500'000.
 - `--high-memory` high memory mode. Runs a bit faster but uses a LOT more memory
-
-Defaults are `-b 5 -B 10 -C 10000`
