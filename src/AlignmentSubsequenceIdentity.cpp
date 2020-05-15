@@ -67,7 +67,7 @@ Alignment reverse(const Alignment& old)
 	return result;
 }
 
-double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, const std::unordered_map<std::string, size_t>& readLengths)
+std::pair<double, size_t> getAlignmentIdentity(const Alignment& read, const Alignment& transcript, const std::unordered_map<std::string, size_t>& readLengths)
 {
 	std::vector<std::vector<size_t>> matchLen;
 	matchLen.resize(read.path.size()+1);
@@ -76,6 +76,8 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 		matchLen[i].resize(transcript.path.size()+1, 0);
 	}
 	size_t maxMatch = 0;
+	size_t maxmatchIndex = 0;
+	size_t maxmatchMissing = 0;
 	for (size_t i = 0; i < read.path.size(); i++)
 	{
 		for (size_t j = 0; j < transcript.path.size(); j++)
@@ -89,8 +91,19 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 			{
 				matchLen[i+1][j+1] = std::max(matchLen[i+1][j+1], matchLen[i][j]);
 			}
-			maxMatch = std::max(maxMatch, matchLen[i+1][j+1]);
+			if (matchLen[i+1][j+1] > maxMatch)
+			{
+				maxMatch = matchLen[i+1][j+1];
+				maxmatchIndex = j;
+				maxmatchMissing = 0;
+				if (read.length[i] < transcript.length[j]) maxmatchMissing = transcript.length[j] - read.length[i];
+			}
 		}
+	}
+	size_t threeprimeDistance = maxmatchMissing;
+	for (size_t i = maxmatchIndex+1; i < transcript.length.size(); i++)
+	{
+		threeprimeDistance += transcript.length[i];
 	}
 	assert(maxMatch >= 0);
 	double length;
@@ -104,7 +117,7 @@ double getAlignmentIdentity(const Alignment& read, const Alignment& transcript, 
 		assert(maxMatch <= readLengths.at(read.name));
 		length = (double)maxMatch / (double)readLengths.at(read.name);
 	}
-	return length;
+	return std::make_pair(length, threeprimeDistance);
 }
 
 int main(int argc, char** argv)
@@ -150,7 +163,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-	std::unordered_map<std::pair<size_t, size_t>, double> readTranscriptBestPair;
+	std::unordered_map<std::pair<size_t, size_t>, std::pair<double, size_t>> readTranscriptBestPair;
 
 	for (size_t readi = 0; readi < reads.size(); readi++)
 	{
@@ -165,8 +178,9 @@ int main(int argc, char** argv)
 		{
 			auto identityFw = getAlignmentIdentity(read, transcripts[i], readLengths);
 			auto identityBw = getAlignmentIdentity(reverseread, transcripts[i], readLengths);
-			auto bigger = std::max(identityFw, identityBw);
-			if (bigger > 0 && (readTranscriptBestPair.count(std::make_pair(readi, i)) == 0 || readTranscriptBestPair[std::make_pair(readi, i)] < bigger))
+			auto bigger = identityFw;
+			if (identityBw.first > identityFw.first) bigger = identityBw;
+			if (bigger.first > 0 && (readTranscriptBestPair.count(std::make_pair(readi, i)) == 0 || readTranscriptBestPair[std::make_pair(readi, i)].first < bigger.first))
 			{
 				readTranscriptBestPair[std::make_pair(readi, i)] = bigger;
 			}
@@ -174,6 +188,6 @@ int main(int argc, char** argv)
 	}
 	for (auto mapping : readTranscriptBestPair)
 	{
-		std::cout << reads[mapping.first.first].name << "\t" << transcripts[mapping.first.second].name << "\t" << mapping.second << std::endl;
+		std::cout << reads[mapping.first.first].name << "\t" << transcripts[mapping.first.second].name << "\t" << mapping.second.first << "\t" << mapping.second.second << std::endl;
 	}
 }
