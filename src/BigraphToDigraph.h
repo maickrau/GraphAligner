@@ -31,9 +31,9 @@ public:
 	static std::pair<Edge, Edge> ConvertVGEdgeToEdges(const vg::Edge& edge);
 	static std::pair<Node, Node> ConvertGFANodeToNodes(int id, const std::string& seq, const std::string& name);
 	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(int from, const std::string& fromStart, int to, const std::string& toEnd, size_t overlap);
-	static AlignmentGraph BuildFromVG(const vg::Graph& graph);
-	static AlignmentGraph BuildFromGFA(const GfaGraph& graph);
-	static AlignmentGraph StreamVGGraphFromFile(std::string filename);
+	static AlignmentGraph BuildFromVG(const vg::Graph& graph, size_t prefixSeederDepth = 0);
+	static AlignmentGraph BuildFromGFA(const GfaGraph& graph, size_t prefixSeederDepth = 0);
+	static AlignmentGraph StreamVGGraphFromFile(std::string filename, size_t prefixSeederDepth = 0);
 private:
 };
 

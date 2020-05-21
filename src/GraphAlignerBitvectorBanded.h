@@ -131,6 +131,7 @@ public:
 
 	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
+		assert(!params.graph.HasPrefixSeeder());
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = getInitialSliceExactPosition(bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
@@ -159,6 +160,7 @@ public:
 	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
+		assert(!params.graph.HasPrefixSeeder());
 		DPSlice startSlice;
 		startSlice.j = -WordConfiguration<Word>::WordSize;
 		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
@@ -221,7 +223,89 @@ public:
 		return result;
 	}
 
+	OnewayTrace getBacktracePrefixSeeder(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
+	{
+		assert(originalSequence.size() > 1);
+		assert(params.graph.HasPrefixSeeder());
+		DPSlice startSlice;
+		startSlice.j = -WordConfiguration<Word>::WordSize;
+		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
+		startSlice.bandwidth = 1;
+		startSlice.minScore = 0;
+		startSlice.minScoreNode = params.graph.firstPrefixSeederNode;
+		startSlice.minScoreNodeOffset = 0;
+		startSlice.scores.addNodeToMap(params.graph.firstPrefixSeederNode);
+		startSlice.scores.setMinScore(params.graph.firstPrefixSeederNode, 0);
+		auto& node = startSlice.scores.node(params.graph.firstPrefixSeederNode);
+		node.startSlice = { 0, 0, 0 };
+		node.minScore = 0;
+		node.endSlice = node.startSlice;
+		node.exists = true;
+		std::string_view alignableSequence { originalSequence.data(), originalSequence.size() - 1 };
+		assert(alignableSequence.size() > 0);
+		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
+		if (slice.slices.size() <= 1)
+		{
+			return OnewayTrace::TraceFailed();
+		}
+
+		OnewayTrace result;
+		if (params.preciseClipping)
+		{
+			result = getReverseTraceFromTableExactEndPos(alignableSequence, slice, reusableState);
+		}
+		else
+		{
+			result = getReverseTraceFromTableStartLastRow(alignableSequence, slice, reusableState);
+		}
+		fixPrefixSeederTrace(result);
+		std::reverse(result.trace.begin(), result.trace.end());
+		return result;
+	}
+
 private:
+
+	void fixPrefixSeederTrace(OnewayTrace& trace) const
+	{
+		size_t firstNonPrefixSeeder = std::numeric_limits<size_t>::max();
+		for (size_t i = trace.trace.size()-1; i < trace.trace.size(); i--)
+		{
+			if (trace.trace[i].DPposition.node < params.graph.firstPrefixSeederNode)
+			{
+				firstNonPrefixSeeder = i;
+				break;
+			}
+		}
+		assert(firstNonPrefixSeeder < trace.trace.size()-1);
+
+		// todo fix !!!!
+		assert(firstNonPrefixSeeder != std::numeric_limits<size_t>::max()); // todo fix !!!!
+		// todo fix !!!!
+
+		bool found = findPrefixRec(trace, firstNonPrefixSeeder+1);
+		assert(found);
+	}
+
+	bool findPrefixRec(OnewayTrace& trace, size_t traceIndex) const
+	{
+		size_t oldNode = trace.trace[traceIndex].DPposition.node;
+		assert(oldNode >= params.graph.firstPrefixSeederNode);
+		assert(traceIndex > 0);
+		assert(trace.trace[traceIndex-1].DPposition.node < params.graph.firstPrefixSeederNode);
+		for (auto neighbor : params.graph.inNeighbors[trace.trace[traceIndex-1].DPposition.node])
+		{
+			if (neighbor >= params.graph.firstPrefixSeederNode) continue;
+			if (params.graph.NodeSequences(neighbor, 0) == trace.trace[traceIndex].graphCharacter)
+			{
+				trace.trace[traceIndex].DPposition.node = neighbor;
+				if (findPrefixRec(trace, traceIndex+1)) return true;
+			}
+		}
+		trace.trace[traceIndex].DPposition.node = oldNode;
+		return false;
+	}
 
 	OnewayTrace getReverseTraceFromTableExactEndPos(const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState) const
 	{

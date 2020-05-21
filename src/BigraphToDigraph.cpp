@@ -131,9 +131,9 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdg
 	return std::make_pair(DirectedGraph::Edge { fromRight, toRight, overlap }, DirectedGraph::Edge { toLeft, fromLeft, overlap });
 }
 
-AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
+AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename, size_t prefixSeederDepth)
 {
-	AlignmentGraph result;
+	AlignmentGraph result { prefixSeederDepth > 0 };
 	{
 		std::vector<size_t> breakpointsFw;
 		std::vector<size_t> breakpointsBw;
@@ -174,13 +174,13 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 		};
 		stream::for_each(graphfile, lambda);
 	}
-	result.Finalize(64);
+	result.Finalize(64, prefixSeederDepth);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
+AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph, size_t prefixSeederDepth)
 {
-	AlignmentGraph result;
+	AlignmentGraph result { prefixSeederDepth > 0 };
 	std::vector<size_t> breakpointsFw;
 	std::vector<size_t> breakpointsBw;
 	breakpointsFw.push_back(0);
@@ -208,13 +208,13 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 		result.AddEdgeNodeId(edges.first.fromId, edges.first.toId, edges.first.overlap);
 		result.AddEdgeNodeId(edges.second.fromId, edges.second.toId, edges.second.overlap);
 	}
-	result.Finalize(64);
+	result.Finalize(64, prefixSeederDepth);
 	return result;
 }
 
-AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
+AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph, size_t prefixSeederDepth)
 {
-	AlignmentGraph result;
+	AlignmentGraph result { prefixSeederDepth > 0 };
 	result.DBGoverlap = graph.edgeOverlap;
 	std::unordered_map<int, std::vector<size_t>> breakpoints;
 	for (auto pair : graph.varyingOverlaps)
@@ -262,6 +262,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
 		}
 	}
-	result.Finalize(64);
+	result.Finalize(64, prefixSeederDepth);
 	return result;
 }

@@ -71,6 +71,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
+		("seeds-prefix-seeder", boost::program_options::value<int>(), "no seeding, instead use a prefix trie of depth arg. Slower than seeding (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -198,6 +199,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
+	if (vm.count("seeds-prefix-seeder")) params.prefixSeederDepth = vm["seeds-prefix-seeder"].as<int>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
@@ -303,7 +305,7 @@ int main(int argc, char** argv)
 		std::cerr << "Seed extension density can't be negative" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0) + ((params.prefixSeederDepth > 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;
