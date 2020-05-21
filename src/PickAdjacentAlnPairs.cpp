@@ -5,66 +5,78 @@
 #include "CommonUtils.h"
 #include "fastqloader.h"
 
-std::vector<vg::Alignment> pickPairs(const std::vector<vg::Alignment>& alns, const std::unordered_map<std::string, size_t>& readLens, int maxSplitDist, int minPartialLen)
+void outputPairs(std::ofstream& alignmentOut, const std::string& readname, const std::unordered_map<std::string, size_t>& readLens, const std::vector<vg::Alignment>& starts, const std::vector<vg::Alignment>& ends, const int maxSplitDist, const int minPartialLen)
 {
-	std::unordered_map<std::string, std::vector<const vg::Alignment*>> startsPerRead;
-	std::unordered_map<std::string, std::vector<const vg::Alignment*>> endsPerRead;
-	for (auto& aln : alns)
+	std::vector<vg::Alignment> pairs;
+	size_t currentPairNum = 0;
+	for (auto& start : starts)
 	{
+		assert(start.query_position() == 0);
+		int startEnd = 0;
+		for (int i = 0; i < start.path().mapping_size(); i++)
+		{
+			startEnd += start.path().mapping(i).edit(0).to_length();
+		}
+		assert(startEnd >= minPartialLen);
+		for (auto& end : ends)
+		{
+			int endStart = end.query_position();
+			if (abs(startEnd-endStart) > maxSplitDist) continue;
+			vg::Alignment left { start };
+			vg::Alignment right { end };
+			left.set_name(readname + "_pair" + std::to_string(currentPairNum) + "_1");
+			right.set_name(readname + "_pair" + std::to_string(currentPairNum) + "_2");
+			pairs.push_back(std::move(left));
+			pairs.push_back(std::move(right));
+			currentPairNum++;
+		}
+	}
+	stream::write_buffered(alignmentOut, pairs, 0);
+}
+
+void pickAndWritePairs(std::string inputFile, std::string outputFile, const std::unordered_map<std::string, size_t>& readLens, const int maxSplitDist, const int minPartialLen)
+{
+	std::ofstream alignmentOut { outputFile, std::ios::out | std::ios::binary };
+	std::string currentRead;
+	std::vector<vg::Alignment> starts;
+	std::vector<vg::Alignment> ends;
+
+	std::ifstream alignmentIn { inputFile, std::ios::in | std::ios::binary };
+	std::function<void(vg::Alignment&)> lambda = [&alignmentOut, &readLens, &currentRead, &starts, &ends, maxSplitDist, minPartialLen](vg::Alignment& aln) {
+		if (aln.name() != currentRead)
+		{
+			outputPairs(alignmentOut, currentRead, readLens, starts, ends, maxSplitDist, minPartialLen);
+			starts.clear();
+			ends.clear();
+			currentRead = aln.name();
+		}
 		assert(readLens.count(aln.name()) == 1);
 		size_t alnlen = 0;
 		for (int i = 0; i < aln.path().mapping_size(); i++)
 		{
 			alnlen += aln.path().mapping(i).edit(0).to_length();
 		}
-		if (alnlen < minPartialLen) continue;
+		if (alnlen < minPartialLen) return;
 		if (aln.query_position() == 0)
 		{
-			startsPerRead[aln.name()].push_back(&aln);
+			starts.push_back(aln);
 		}
 		if (aln.query_position() + alnlen == readLens.at(aln.name()))
 		{
-			endsPerRead[aln.name()].push_back(&aln);
+			ends.push_back(aln);
 		}
-	}
-	std::vector<vg::Alignment> result;
-	for (auto pair : startsPerRead)
-	{
-		size_t currentPairNum = 0;
-		for (auto start : pair.second)
-		{
-			assert(start->query_position() == 0);
-			int startEnd = 0;
-			for (int i = 0; i < start->path().mapping_size(); i++)
-			{
-				startEnd += start->path().mapping(i).edit(0).to_length();
-			}
-			assert(startEnd >= minPartialLen);
-			for (auto end : endsPerRead[pair.first])
-			{
-				int endStart = end->query_position();
-				if (abs(startEnd-endStart) > maxSplitDist) continue;
-				vg::Alignment left { *start };
-				vg::Alignment right { *end };
-				left.set_name(pair.first + "_pair" + std::to_string(currentPairNum) + "_1");
-				right.set_name(pair.first + "_pair" + std::to_string(currentPairNum) + "_2");
-				result.push_back(std::move(left));
-				result.push_back(std::move(right));
-				currentPairNum++;
-			}
-		}
-	}
-	return result;
+	};
+	stream::for_each(alignmentIn, lambda);
+	outputPairs(alignmentOut, currentRead, readLens, starts, ends, maxSplitDist, minPartialLen);
 }
 
 std::unordered_map<std::string, size_t> getReadLens(std::string filename)
 {
-	auto reads = loadFastqFromFile(filename);
 	std::unordered_map<std::string, size_t> result;
-	for (auto read : reads)
+	FastQ::streamFastqFromFile(filename, false, [&result](const FastQ& read)
 	{
 		result[read.seq_id] = read.sequence.size();
-	}
+	});
 	return result;
 }
 
@@ -77,9 +89,5 @@ int main(int argc, char** argv)
 	int minPartialLen = std::stoi(argv[5]);
 
 	auto readLens = getReadLens(readFile);
-	auto alns = CommonUtils::LoadVGAlignments(inputAlns);
-	auto pairs = pickPairs(alns, readLens, maxSplitDist, minPartialLen);
-
-	std::ofstream alignmentOut { outputAlns, std::ios::out | std::ios::binary };
-	stream::write_buffered(alignmentOut, pairs, 0);
+	pickAndWritePairs(inputAlns, outputAlns, readLens, maxSplitDist, minPartialLen);
 }
