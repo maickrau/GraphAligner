@@ -621,6 +621,10 @@ void alignReads(AlignerParams params)
 	{
 		std::cout << "Build minimizer seeder from the graph" << std::endl;
 		minimizerseeder = new MinimizerSeeder(alignmentGraph, params.minimizerLength, params.minimizerWindowSize, params.numThreads, 1.0 - params.minimizerDiscardMostNumerousFraction);
+		if (!minimizerseeder->canSeed())
+		{
+			std::cout << "Warning: Minimizer seeder has no seed hits. Reads cannot be aligned. Try unchopping the graph with vg or a different seeding mode" << std::endl;
+		}
 	}
 
 	if (params.seedFiles.size() > 0)

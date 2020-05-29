@@ -31,6 +31,7 @@ class MinimizerSeeder
 public:
 	MinimizerSeeder(const AlignmentGraph& graph, size_t minimizerLength, size_t windowSize, size_t numThreads, double keepLeastFrequentFraction);
 	std::vector<SeedHit> getSeeds(const std::string& sequence, double density) const;
+	bool canSeed() const;
 private:
 	void addMinimizers(std::vector<SeedHit>& result, std::vector<std::tuple<size_t, size_t, size_t, size_t>>& matchIndices, size_t maxCount) const;
 	size_t getStart(size_t bucket, size_t index) const;

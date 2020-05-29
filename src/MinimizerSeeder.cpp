@@ -567,7 +567,10 @@ void MinimizerSeeder::initMaxCount(double keepLeastFrequentFraction)
 		}
 	}
 	std::sort(counts.begin(), counts.end());
-	maxCount = counts[counts.size() * keepLeastFrequentFraction];
+	if (counts.size() == 0) return;
+	size_t index = counts.size() * keepLeastFrequentFraction;
+	if (index == counts.size()) index = counts.size()-1;
+	maxCount = counts[index];
 	maxCount += 1;
 }
 
@@ -588,4 +591,9 @@ MinimizerSeeder::KmerBucket::KmerBucket() :
 MinimizerSeeder::KmerBucket::~KmerBucket()
 {
 	if (locator != nullptr) delete locator;
+}
+
+bool MinimizerSeeder::canSeed() const
+{
+	return maxCount > 0;
 }
