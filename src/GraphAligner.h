@@ -63,7 +63,7 @@ public:
 
 		alnItem.alignmentScore = alnItem.trace->score;
 		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
-		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos;
+		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos + 1;
 		timeEnd = std::chrono::system_clock::now();
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
