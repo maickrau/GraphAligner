@@ -828,7 +828,6 @@ public:
 	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice)
 	{
 		size_t nodeLength = params.graph.NodeLength(node);
-		std::vector<bool> previousBand; // fake!
 		std::vector<EdgeWithPriority> incoming; // also fake!
 		incoming.emplace_back(node, 0, slice.startSlice, true);
 		std::vector<WordSlice> result;
@@ -836,11 +835,11 @@ public:
 		auto sliceCopy = slice;
 		if (node < params.graph.firstAmbiguous)
 		{
-			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, previousBand, params.graph.NodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
+			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
 		}
 		else
 		{
-			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, previousBand, params.graph.AmbiguousNodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
+			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
 		}
 		assert(result[0].VP == slice.startSlice.VP);
 		assert(result[0].VN == slice.startSlice.VN);
@@ -858,7 +857,7 @@ public:
 #endif
 	static NodeCalculationResult calculateNodeClipPrecise(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks)
 	{
-		return calculateNodeInner<true, true>(params, i, slice, EqV, previousSlice, incoming, previousBand, nodeChunks, [](const WordSlice& slice){});
+		return calculateNodeInner<true, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, [](const WordSlice& slice){});
 	}
 
 	template <typename NodeChunkType>
@@ -867,14 +866,23 @@ public:
 #endif
 	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks)
 	{
-		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, previousBand, nodeChunks, [](const WordSlice& slice){});
+		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, [](const WordSlice& slice){});
 	}
 
-	template <bool PreciseClipping, bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback>
+	template <typename NodeChunkType>
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeInner(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, WordsliceCallback callback)
+	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const DPSlice& previousBand, NodeChunkType nodeChunks)
+	{
+		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand.scores.hasNode(pos); }, nodeChunks, [](const WordSlice& slice){});
+	}
+
+	template <bool PreciseClipping, bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback, typename ExistenceCheckFunction>
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static NodeCalculationResult calculateNodeInner(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, ExistenceCheckFunction bandCheck, NodeChunkType nodeChunks, WordsliceCallback callback)
 	{
 		assert(incoming.size() > 0);
 		WordSlice newWs;
@@ -968,7 +976,7 @@ public:
 
 		if (slice.exists)
 		{
-			if (hasSkipless && params.graph.inNeighbors[i].size() == 1 && previousBand[params.graph.inNeighbors[i][0]])
+			if (hasSkipless && params.graph.inNeighbors[i].size() == 1 && bandCheck(params.graph.inNeighbors[i][0]))
 			{
 				if (ws.scoreEnd > slice.startSlice.scoreEnd)
 				{

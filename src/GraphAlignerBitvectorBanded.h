@@ -530,21 +530,13 @@ private:
 			auto timeStart = std::chrono::system_clock::now();
 #endif
 			DPSlice newSlice;
-			if (reusableState.sparseComponentQueue.valid())
+			if (reusableState.componentQueue.valid())
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.sparseComponentQueue, bandwidth);
-			}
-			else if (reusableState.denseComponentQueue.valid())
-			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.denseComponentQueue, bandwidth);
-			}
-			else if (params.lowMemory)
-			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.sparseCalculableQueue, bandwidth);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth);
 			}
 			else
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.denseCalculableQueue, bandwidth);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth);
 			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
@@ -664,8 +656,7 @@ private:
 		assert(result.slices.size() <= numSlices + 1);
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-		assert(reusableState.sparseCalculableQueue.size() == 0);
-		assert(reusableState.denseCalculableQueue.size() == 0);
+		assert(reusableState.calculableQueue.size() == 0);
 		for (size_t i = 0; i < reusableState.currentBand.size(); i++)
 		{
 			assert(!reusableState.currentBand[i]);

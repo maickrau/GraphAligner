@@ -147,6 +147,8 @@ private:
 	friend class GraphAlignerBitvectorBanded;
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAlignerBitvectorCommon;
+	template <typename LengthType, typename ScoreType, typename Word>
+	friend class GraphAlignerBitvectorDijkstra;
 	friend class DirectedGraph;
 	friend class MinimizerSeeder;
 };

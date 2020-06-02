@@ -7,6 +7,7 @@
 #include "ComponentPriorityQueue.h"
 #include "NodeSlice.h"
 #include "WordSlice.h"
+#include "DijkstraQueue.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerCommon
@@ -32,7 +33,8 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -45,15 +47,14 @@ public:
 		int priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
 		bool skipFirst;
+		size_t slice;
 	};
 	class AlignerGraphsizedState
 	{
 	public:
 		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
-		sparseComponentQueue(),
-		sparseCalculableQueue(),
-		denseComponentQueue(),
-		denseCalculableQueue(),
+		componentQueue(),
+		calculableQueue(),
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
@@ -63,14 +64,9 @@ public:
 			{
 				evenNodesliceMap.resize(graph.NodeSize(), {});
 				oddNodesliceMap.resize(graph.NodeSize(), {});
-				denseComponentQueue.initialize(graph.ComponentSize());
-				denseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			}
-			else
-			{
-				sparseComponentQueue.initialize(graph.ComponentSize());
-				sparseCalculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
-			}
+			componentQueue.initialize(graph.ComponentSize());
+			calculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 		}
@@ -78,17 +74,15 @@ public:
 		{
 			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
-			sparseComponentQueue.clear();
-			sparseCalculableQueue.clear();
-			denseComponentQueue.clear();
-			denseCalculableQueue.clear();
+			componentQueue.clear();
+			calculableQueue.clear();
+			dijkstraQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 		}
-		ComponentPriorityQueue<EdgeWithPriority, true> sparseComponentQueue;
-		ArrayPriorityQueue<EdgeWithPriority, true> sparseCalculableQueue;
-		ComponentPriorityQueue<EdgeWithPriority, true> denseComponentQueue;
-		ArrayPriorityQueue<EdgeWithPriority, true> denseCalculableQueue;
+		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
+		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
+		DijkstraPriorityQueue<EdgeWithPriority> dijkstraQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
