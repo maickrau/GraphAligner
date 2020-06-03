@@ -45,6 +45,7 @@ public:
 
 	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
+		assert(!params.graph.HasPrefixSeeder());
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
@@ -73,6 +74,7 @@ public:
 	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
+		assert(!params.graph.HasPrefixSeeder());
 		DPSlice startSlice;
 		startSlice.j = -WordConfiguration<Word>::WordSize;
 		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
@@ -132,6 +134,48 @@ public:
 		std::reverse(result.trace.begin(), result.trace.end());
 		result.trace[0].sequenceCharacter = originalSequence[0];
 		assert(result.trace[0].DPposition.seqPos == 0);
+		return result;
+	}
+
+	OnewayTrace getBacktracePrefixSeeder(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
+	{
+		assert(originalSequence.size() > 1);
+		assert(params.graph.HasPrefixSeeder());
+		DPSlice startSlice;
+		startSlice.j = -WordConfiguration<Word>::WordSize;
+		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
+		startSlice.bandwidth = 1;
+		startSlice.minScore = 0;
+		startSlice.minScoreNode = params.graph.firstPrefixSeederNode;
+		startSlice.minScoreNodeOffset = 0;
+		startSlice.scores.addNodeToMap(params.graph.firstPrefixSeederNode);
+		startSlice.scores.setMinScore(params.graph.firstPrefixSeederNode, 0);
+		auto& node = startSlice.scores.node(params.graph.firstPrefixSeederNode);
+		node.startSlice = { 0, 0, 0 };
+		node.minScore = 0;
+		node.endSlice = node.startSlice;
+		node.exists = true;
+		std::string_view alignableSequence { originalSequence.data(), originalSequence.size() - 1 };
+		assert(alignableSequence.size() > 0);
+		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
+		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
+		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
+		if (slice.slices.size() <= 1)
+		{
+			return OnewayTrace::TraceFailed();
+		}
+
+		OnewayTrace result;
+		if (params.preciseClipping)
+		{
+			result = getReverseTraceFromTableExactEndPos(alignableSequence, slice, reusableState);
+		}
+		else
+		{
+			result = getReverseTraceFromTableStartLastRow(alignableSequence, slice, reusableState);
+		}
+		fixPrefixSeederTrace(result);
+		std::reverse(result.trace.begin(), result.trace.end());
 		return result;
 	}
 

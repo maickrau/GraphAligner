@@ -46,6 +46,35 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
+	AlignmentResult AlignOneWayPrefixSeeder(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	{
+		AlignmentResult result;
+		result.readName = seq_id;
+		auto timeStart = std::chrono::system_clock::now();
+		assert(params.graph.finalized);
+		auto trace = getBacktracePrefixSeeder(sequence, reusableState);
+		auto timeEnd = std::chrono::system_clock::now();
+		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		//failed alignment, don't output
+		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
+		if (trace.trace.size() == 0) return result;
+#ifndef NDEBUG
+		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
+#endif
+		fixForwardTraceSeqPos(trace.trace, 0, sequence);
+
+		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
+
+		alnItem.alignmentScore = alnItem.trace->score;
+		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
+		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos;
+		timeEnd = std::chrono::system_clock::now();
+		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		alnItem.elapsedMilliseconds = time;
+		result.alignments.emplace_back(std::move(alnItem));
+		return result;
+	}
+
 	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
 		AlignmentResult result;
@@ -347,6 +376,12 @@ private:
 	{
 		std::string_view seq { sequence.data(), sequence.size() };
 		return dijkstraAligner.getBacktraceFullStart(seq, params.forceGlobal, reusableState);
+	}
+
+	OnewayTrace getBacktraceDijkstraPrefixSeeder(const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	{
+		std::string_view seq { sequence.data(), sequence.size() };
+		return dijkstraAligner.getBacktracePrefixSeeder(seq, params.forceGlobal, reusableState);
 	}
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const

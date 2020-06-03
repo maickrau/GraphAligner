@@ -40,6 +40,7 @@ struct AlignerParams
 	double minimizerDiscardMostNumerousFraction;
 	double seedExtendDensity;
 	bool nondeterministicOptimizations;
+	size_t prefixSeederDepth;
 };
 
 void alignReads(AlignerParams params);
