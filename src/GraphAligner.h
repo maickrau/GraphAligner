@@ -46,13 +46,13 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
-	AlignmentResult AlignOneWayPrefixSeeder(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	AlignmentResult AlignOneWayDijkstraPrefixSeeder(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
 		AlignmentResult result;
 		result.readName = seq_id;
 		auto timeStart = std::chrono::system_clock::now();
 		assert(params.graph.finalized);
-		auto trace = getBacktracePrefixSeeder(sequence, reusableState);
+		auto trace = getBacktraceDijkstraPrefixSeeder(sequence, reusableState);
 		auto timeEnd = std::chrono::system_clock::now();
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output

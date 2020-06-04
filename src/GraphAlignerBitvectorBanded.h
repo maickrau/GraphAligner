@@ -137,48 +137,6 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktracePrefixSeeder(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
-	{
-		assert(originalSequence.size() > 1);
-		assert(params.graph.HasPrefixSeeder());
-		DPSlice startSlice;
-		startSlice.j = -WordConfiguration<Word>::WordSize;
-		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());
-		startSlice.bandwidth = 1;
-		startSlice.minScore = 0;
-		startSlice.minScoreNode = params.graph.firstPrefixSeederNode;
-		startSlice.minScoreNodeOffset = 0;
-		startSlice.scores.addNodeToMap(params.graph.firstPrefixSeederNode);
-		startSlice.scores.setMinScore(params.graph.firstPrefixSeederNode, 0);
-		auto& node = startSlice.scores.node(params.graph.firstPrefixSeederNode);
-		node.startSlice = { 0, 0, 0 };
-		node.minScore = 0;
-		node.endSlice = node.startSlice;
-		node.exists = true;
-		std::string_view alignableSequence { originalSequence.data(), originalSequence.size() - 1 };
-		assert(alignableSequence.size() > 0);
-		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto slice = getSqrtSlices(alignableSequence, startSlice, numSlices, forceGlobal, reusableState);
-		if (!params.preciseClipping && !forceGlobal) removeWronglyAlignedEnd(slice);
-		if (slice.slices.size() <= 1)
-		{
-			return OnewayTrace::TraceFailed();
-		}
-
-		OnewayTrace result;
-		if (params.preciseClipping)
-		{
-			result = getReverseTraceFromTableExactEndPos(alignableSequence, slice, reusableState);
-		}
-		else
-		{
-			result = getReverseTraceFromTableStartLastRow(alignableSequence, slice, reusableState);
-		}
-		fixPrefixSeederTrace(result);
-		std::reverse(result.trace.begin(), result.trace.end());
-		return result;
-	}
-
 private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
