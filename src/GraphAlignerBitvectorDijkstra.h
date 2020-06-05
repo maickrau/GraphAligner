@@ -219,11 +219,11 @@ private:
 			NodeCalculationResult nodeCalc;
 			if (i < params.graph.firstAmbiguous)
 			{
-				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, table.slices[tableSlice-1], params.graph.NodeChunks(i));
+				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.NodeChunks(i));
 			}
 			else
 			{
-				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, table.slices[tableSlice-1], params.graph.AmbiguousNodeChunks(i));
+				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.AmbiguousNodeChunks(i));
 			}
 			if (tableSlice == numSlices)
 			{

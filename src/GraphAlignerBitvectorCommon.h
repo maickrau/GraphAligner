@@ -873,9 +873,9 @@ public:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const DPSlice& previousBand, NodeChunkType nodeChunks)
+	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, NodeChunkType nodeChunks)
 	{
-		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand.scores.hasNode(pos); }, nodeChunks, [](const WordSlice& slice){});
+		return calculateNodeInner<false, false>(params, i, slice, EqV, previousSlice, incoming, [](size_t pos) { return false; }, nodeChunks, [](const WordSlice& slice){});
 	}
 
 	template <bool PreciseClipping, bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback, typename ExistenceCheckFunction>
@@ -1049,11 +1049,10 @@ public:
 			}
 		}
 
-		if (hasSkipless && previousSlice.exists)
+		if (previousSlice.exists)
 		{
 			if (ws.getScoreBeforeStart() > previousSlice.startSlice.scoreEnd)
 			{
-				//todo vertical merge
 				ws = ws.mergeWith(getSourceSliceFromScore(previousSlice.startSlice.scoreEnd));
 			}
 		}
