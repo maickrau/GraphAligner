@@ -13,7 +13,7 @@ AlignmentGraph AlignmentGraph::DummyGraph()
 	return dummy;
 }
 
-AlignmentGraph::AlignmentGraph(bool buildPrefixSeeder) :
+AlignmentGraph::AlignmentGraph() :
 nodeLength(),
 nodeLookup(),
 nodeIDs(),
@@ -22,9 +22,7 @@ nodeSequences(),
 ambiguousNodeSequences(),
 firstAmbiguous(std::numeric_limits<size_t>::max()),
 DBGoverlap(0),
-finalized(false),
-firstPrefixSeederNode(std::numeric_limits<size_t>::max()),
-shatterNodes(buildPrefixSeeder)
+finalized(false)
 {
 }
 
@@ -50,7 +48,6 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(!HasPrefixSeeder());
 	//subgraph extraction might produce different subgraphs with common nodes
 	//don't add duplicate nodes
 	if (nodeLookup.count(nodeId) != 0) return;
@@ -59,12 +56,17 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 	assert(breakpoints.size() >= 2);
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
-	if (shatterNodes)
+	for (size_t breakpoint = 1; breakpoint < breakpoints.size(); breakpoint++)
 	{
-		for (size_t i = 0; i < sequence.size(); i++)
+		if (breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
+		assert(breakpoints[breakpoint] > breakpoints[breakpoint-1]);
+		for (size_t offset = breakpoints[breakpoint-1]; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
 		{
-			AddNode(nodeId, i, sequence.substr(i, 1), reverseNode);
-			if (i > 0)
+			size_t size = SPLIT_NODE_SIZE;
+			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
+			assert(size > 0);
+			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
+			if (offset > 0)
 			{
 				assert(outNeighbors.size() >= 2);
 				assert(outNeighbors.size() == inNeighbors.size());
@@ -77,39 +79,12 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 			}
 		}
 	}
-	else
-	{
-		for (size_t breakpoint = 1; breakpoint < breakpoints.size(); breakpoint++)
-		{
-			if (breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
-			assert(breakpoints[breakpoint] > breakpoints[breakpoint-1]);
-			for (size_t offset = breakpoints[breakpoint-1]; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
-			{
-				size_t size = SPLIT_NODE_SIZE;
-				if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
-				assert(size > 0);
-				AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
-				if (offset > 0)
-				{
-					assert(outNeighbors.size() >= 2);
-					assert(outNeighbors.size() == inNeighbors.size());
-					assert(nodeIDs.size() == outNeighbors.size());
-					assert(nodeOffset.size() == outNeighbors.size());
-					assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-					assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
-					outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-					inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
-				}
-			}
-		}
-	}
 }
 
 void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode)
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(!HasPrefixSeeder());
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
 
 	nodeLookup[nodeId].push_back(nodeLength.size());
@@ -254,7 +229,6 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(!HasPrefixSeeder());
 	assert(nodeLookup.count(node_id_from) > 0);
 	assert(nodeLookup.count(node_id_to) > 0);
 	size_t from = nodeLookup.at(node_id_from).back();
@@ -273,7 +247,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
 }
 
-void AlignmentGraph::Finalize(int wordSize, size_t prefixSeederDepth)
+void AlignmentGraph::Finalize(int wordSize)
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
@@ -282,14 +256,12 @@ void AlignmentGraph::Finalize(int wordSize, size_t prefixSeederDepth)
 	assert(nodeIDs.size() == nodeLength.size());
 	RenumberAmbiguousToEnd();
 	ambiguousNodes.clear();
-	if (prefixSeederDepth > 0) buildPrefixSeeder(prefixSeederDepth);
 	findLinearizable();
 	doComponentOrder();
 	findChains();
 	std::cout << nodeLookup.size() << " original nodes" << std::endl;
 	std::cout << nodeLength.size() << " split nodes" << std::endl;
 	std::cout << ambiguousNodeSequences.size() << " ambiguous split nodes" << std::endl;
-	if (HasPrefixSeeder()) std::cout << nodeLength.size() - firstPrefixSeederNode << " prefix seeder nodes" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
@@ -862,6 +834,7 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t offset) const
 {
 	assert(nodeLookup.count(nodeId) == 1);
+	const auto& nodes = nodeLookup.at(nodeId);
 	size_t originalSize = originalNodeSize.at(nodeId);
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
@@ -937,7 +910,6 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 	assert(ambiguousNodes.size() == nodeLength.size());
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(!HasPrefixSeeder());
 	std::vector<size_t> renumbering;
 	renumbering.reserve(ambiguousNodes.size());
 	size_t nonAmbiguousCount = 0;
@@ -1129,230 +1101,4 @@ void AlignmentGraph::doComponentOrder()
 size_t AlignmentGraph::ComponentSize() const
 {
 	return componentNumber.size();
-}
-
-bool AlignmentGraph::HasPrefixSeeder() const
-{
-	return firstPrefixSeederNode != std::numeric_limits<size_t>::max();
-}
-
-size_t AlignmentGraph::addPrefixNode(char c)
-{
-	assert(!finalized);
-	nodeLength.push_back(1);
-	nodeIDs.push_back(-1);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
-	reverse.push_back(false);
-	nodeOffset.push_back(0);
-	AmbiguousChunkSequence ambiguousSeq;
-	ambiguousSeq.A = 0;
-	ambiguousSeq.C = 0;
-	ambiguousSeq.G = 0;
-	ambiguousSeq.T = 0;
-	switch(c)
-	{
-		case 'a':
-		case 'A':
-			ambiguousSeq.A |= 1;
-			break;
-		case 'c':
-		case 'C':
-			ambiguousSeq.C |= 1;
-			break;
-		case 'g':
-		case 'G':
-			ambiguousSeq.G |= 1;
-			break;
-		case 't':
-		case 'T':
-		case 'u':
-		case 'U':
-			ambiguousSeq.T |= 1;
-			break;
-		case 'r':
-		case 'R':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.G |= 1;
-			break;
-		case 'y':
-		case 'Y':
-			ambiguousSeq.C |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 's':
-		case 'S':
-			ambiguousSeq.G |= 1;
-			ambiguousSeq.C |= 1;
-			break;
-		case 'w':
-		case 'W':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 'k':
-		case 'K':
-			ambiguousSeq.G |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 'm':
-		case 'M':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.C |= 1;
-			break;
-		case 'b':
-		case 'B':
-			ambiguousSeq.C |= 1;
-			ambiguousSeq.G |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 'd':
-		case 'D':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.G |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 'h':
-		case 'H':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.C |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		case 'v':
-		case 'V':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.C |= 1;
-			ambiguousSeq.G |= 1;
-			break;
-		case 'n':
-		case 'N':
-			ambiguousSeq.A |= 1;
-			ambiguousSeq.C |= 1;
-			ambiguousSeq.G |= 1;
-			ambiguousSeq.T |= 1;
-			break;
-		default:
-			assert(false);
-	}
-	ambiguousNodes.push_back(true);
-	ambiguousNodeSequences.emplace_back(ambiguousSeq);
-	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeLength.size() == inNeighbors.size());
-	assert(inNeighbors.size() == outNeighbors.size());
-	return nodeLength.size()-1;
-}
-
-void AlignmentGraph::buildPrefixSeeder(size_t maxDepth)
-{
-	assert(!finalized);
-	std::vector<size_t> belongsToGroup;
-	belongsToGroup.resize(NodeSize(), NodeSize());
-	for (const auto& pair : nodeLookup)
-	{
-		size_t tippableOffset = std::numeric_limits<size_t>::max();
-		for (size_t node : pair.second)
-		{
-			if (inNeighbors[node].size() >= 2)
-			{
-				tippableOffset = std::min(tippableOffset, nodeOffset[node]);
-			}
-			else if (inNeighbors[node].size() == 1 && nodeIDs[inNeighbors[node][0]] != nodeIDs[node])
-			{
-				tippableOffset = std::min(tippableOffset, nodeOffset[node]);
-			}
-		}
-		if (tippableOffset != std::numeric_limits<size_t>::max() && tippableOffset != 0)
-		{
-			for (size_t node : pair.second)
-			{
-				if (nodeOffset[node] < tippableOffset)
-				{
-					belongsToGroup[node] = std::numeric_limits<size_t>::max();
-				}
-			}
-		}
-	}
-	firstPrefixSeederNode = addPrefixNode('N');
-	assert(firstPrefixSeederNode == NodeSize()-1);
-	assert(firstPrefixSeederNode == belongsToGroup.size());
-	for (size_t layer = 0; layer < maxDepth; layer++)
-	{
-		std::vector<size_t> newGroup;
-		newGroup = belongsToGroup;
-		std::map<std::pair<std::set<size_t>, char>, size_t> newGroupFinder;
-		phmap::flat_hash_map<size_t, size_t> groupSize;
-		for (size_t i = 0; i < belongsToGroup.size(); i++)
-		{
-			if (belongsToGroup[i] == std::numeric_limits<size_t>::max()) continue;
-			assert(NodeLength(i) == 1);
-			std::pair<std::set<size_t>, char> key;
-			key.second = NodeSequences(i, 0);
-			for (auto neighbor : inNeighbors[i])
-			{
-				assert(neighbor < NodeSize());
-				if (belongsToGroup[neighbor] == std::numeric_limits<size_t>::max()) continue;
-				assert(belongsToGroup[neighbor] < NodeSize());
-				key.first.insert(belongsToGroup[neighbor]);
-			}
-			if (key.first.size() == 0 && layer > 0)
-			{
-				newGroup[i] = std::numeric_limits<size_t>::max();
-				continue;
-			}
-			size_t group = 0;
-			if (newGroupFinder.count(key) == 1)
-			{
-				group = newGroupFinder.at(key);
-			}
-			else
-			{
-				newGroupFinder[key] = addPrefixNode(key.second);
-				group = newGroupFinder.at(key);
-				assert(group < NodeSize());
-				assert(inNeighbors.size() > group);
-				assert(outNeighbors.size() > group);
-				for (auto inneighbor : key.first)
-				{
-					assert(inneighbor < NodeSize());
-					inNeighbors[group].push_back(inneighbor);
-					outNeighbors[inneighbor].push_back(group);
-				}
-			}
-			newGroup[i] = group;
-			groupSize[group] += 1;
-		}
-		for (size_t i = 0; i < belongsToGroup.size(); i++)
-		{
-			if (groupSize[newGroup[i]] != 1) continue;
-			newGroup[i] = std::numeric_limits<size_t>::max();
-			std::set<size_t> inneighbors;
-			for (auto neighbor : inNeighbors[i])
-			{
-				inneighbors.insert(belongsToGroup[neighbor]);
-			}
-			for (auto neighbor : inneighbors)
-			{
-				if (neighbor == std::numeric_limits<size_t>::max()) continue;
-				inNeighbors[i].push_back(neighbor);
-				outNeighbors[neighbor].push_back(i);
-			}
-		}
-		belongsToGroup = newGroup;
-		if (groupSize.size() == 0) break;
-	}
-	for (size_t i = 0; i < belongsToGroup.size(); i++)
-	{
-		if (belongsToGroup[i] == std::numeric_limits<size_t>::max()) continue;
-		std::set<size_t> inneighbors;
-		for (auto neighbor : inNeighbors[i])
-		{
-			inneighbors.insert(belongsToGroup[neighbor]);
-		}
-		for (auto neighbor : inneighbors)
-		{
-			if (neighbor == std::numeric_limits<size_t>::max()) continue;
-			inNeighbors[i].push_back(neighbor);
-			outNeighbors[neighbor].push_back(i);
-		}
-	}
 }

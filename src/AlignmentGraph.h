@@ -85,11 +85,11 @@ public:
 		int nodeId;
 		size_t nodePos;
 	};
-	AlignmentGraph(bool buildPrefixSeeder = false);
+	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
 	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
 	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
-	void Finalize(int wordSize, size_t prefixSeederDepth = 0);
+	void Finalize(int wordSize);
 	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
@@ -105,7 +105,6 @@ public:
 	size_t ComponentSize() const;
 	static AlignmentGraph DummyGraph();
 	size_t getDBGoverlap() const;
-	bool HasPrefixSeeder() const;
 
 private:
 	void fixChainApproxPos(const size_t start);
@@ -118,8 +117,6 @@ private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
-	void buildPrefixSeeder(size_t maxDepth);
-	size_t addPrefixNode(char c);
 	std::vector<size_t> nodeLength;
 	std::unordered_map<int, std::vector<size_t>> nodeLookup;
 	std::unordered_map<int, size_t> originalNodeSize;
@@ -139,8 +136,6 @@ private:
 	size_t firstAmbiguous;
 	size_t DBGoverlap;
 	bool finalized;
-	size_t firstPrefixSeederNode;
-	bool shatterNodes;
 
 	template <typename LengthType, typename ScoreType, typename Word>
 	friend class GraphAligner;

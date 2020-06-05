@@ -45,7 +45,6 @@ public:
 
 	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
-		assert(!params.graph.HasPrefixSeeder());
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
 		auto slice = getSqrtSlices(sequence, initialBandwidth, numSlices, forceGlobal, reusableState);
@@ -74,7 +73,6 @@ public:
 	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, bool forceGlobal, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
-		assert(!params.graph.HasPrefixSeeder());
 		DPSlice startSlice;
 		startSlice.j = -WordConfiguration<Word>::WordSize;
 		startSlice.scores.addEmptyNodeMap(params.graph.NodeSize());

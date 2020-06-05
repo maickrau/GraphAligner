@@ -443,14 +443,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			else
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				if (params.prefixSeederDepth > 0)
-				{
-					alignments = AlignOneWayDijkstraPrefixSeeder(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
-				}
-				else
-				{
-					alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
-				}
+				// alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
+				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
@@ -580,12 +574,12 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 					*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 				}
 				std::cout << "Build alignment graph" << std::endl;
-				auto result = DirectedGraph::BuildFromVG(graph, params.prefixSeederDepth);
+				auto result = DirectedGraph::BuildFromVG(graph);
 				return result;
 			}
 			else
 			{
-				return DirectedGraph::StreamVGGraphFromFile(graphFile, params.prefixSeederDepth);
+				return DirectedGraph::StreamVGGraphFromFile(graphFile);
 			}
 		}
 		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
@@ -597,7 +591,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 				*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
 			}
 			std::cout << "Build alignment graph" << std::endl;
-			auto result = DirectedGraph::BuildFromGFA(graph, params.prefixSeederDepth);
+			auto result = DirectedGraph::BuildFromGFA(graph);
 			return result;
 		}
 		else
@@ -674,14 +668,7 @@ void alignReads(AlignerParams params)
 			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", density " << seeder.minimizerSeedDensity << std::endl;
 			break;
 		case Seeder::Mode::None:
-			if (params.prefixSeederDepth == 0)
-			{
-				std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
-			}
-			else
-			{
-				std::cout << "Prefix seeder, depth " << params.prefixSeederDepth << std::endl;
-			}
+			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
 			break;
 	}
 	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;

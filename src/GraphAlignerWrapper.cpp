@@ -5,13 +5,6 @@
 #include "GraphAligner.h"
 #include "ThreadReadAssertion.h"
 
-AlignmentResult AlignOneWayDijkstraPrefixSeeder(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool forceGlobal, bool preciseClipping, bool nondeterministicOptimizations)
-{
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, rampBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, false, lowMemory, forceGlobal, preciseClipping, 1, 0, nondeterministicOptimizations};
-	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
-	return aligner.AlignOneWayDijkstraPrefixSeeder(seq_id, sequence, reusableState);
-}
-
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool forceGlobal, bool preciseClipping, bool nondeterministicOptimizations)
 {
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, rampBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, false, lowMemory, forceGlobal, preciseClipping, 1, 0, nondeterministicOptimizations};
