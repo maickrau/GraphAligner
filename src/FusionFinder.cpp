@@ -193,14 +193,14 @@ std::string getCorrected(const vg::Alignment& aln, const GfaGraph& graph)
 
 void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen)
 {
-	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph, true);
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 500, true };
+	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph);
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 1, true };
 	for (auto readIndex : readIndices)
 	{
 		const auto& read = reads[readIndex];
 		try
 		{
-			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 500, 500, true, reusableState, true, true, false);
+			auto alignments = AlignOneWayDijkstra(alignmentGraph, read.seq_id, read.sequence, true, reusableState, true, false);
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
