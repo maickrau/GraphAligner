@@ -443,7 +443,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			else if (params.optimalDijkstra)
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
+				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, !params.verboseMode, reusableState, params.forceGlobal, params.preciseClipping);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
