@@ -40,6 +40,7 @@ struct AlignerParams
 	double minimizerDiscardMostNumerousFraction;
 	double seedExtendDensity;
 	bool nondeterministicOptimizations;
+	bool optimalDijkstra;
 };
 
 void alignReads(AlignerParams params);

@@ -440,11 +440,17 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
+			else if (params.optimalDijkstra)
+			{
+				auto alntimeStart = std::chrono::system_clock::now();
+				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
+				auto alntimeEnd = std::chrono::system_clock::now();
+				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
+			}
 			else
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				// alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
-				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
@@ -668,13 +674,20 @@ void alignReads(AlignerParams params)
 			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", density " << seeder.minimizerSeedDensity << std::endl;
 			break;
 		case Seeder::Mode::None:
-			std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
+			if (params.optimalDijkstra)
+			{
+				std::cout << "Optimal alignment. VERY SLOW!" << std::endl;
+			}
+			else
+			{
+				std::cout << "No seeds, calculate the entire first row. VERY SLOW!" << std::endl;
+			}
 			break;
 	}
 	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;
 	if (seeder.mode != Seeder::Mode::None && params.seedExtendDensity != -1) std::cout << "Extend up to best " << params.seedExtendDensity << " fraction of seeds" << std::endl;
 
-	std::cout << "Initial bandwidth " << params.initialBandwidth;
+	if (!params.optimalDijkstra) std::cout << "Initial bandwidth " << params.initialBandwidth;
 	if (params.rampBandwidth > 0) std::cout << ", ramp bandwidth " << params.rampBandwidth;
 	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
 	std::cout << std::endl;
