@@ -121,11 +121,11 @@ public:
 		OnewayTrace result;
 		if (params.preciseClipping)
 		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState);
+			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState, false);
 		}
 		else
 		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, table, reusableState);
+			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, table, reusableState, false);
 		}
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{

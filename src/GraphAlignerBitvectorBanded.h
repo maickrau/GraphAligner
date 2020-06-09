@@ -60,11 +60,11 @@ public:
 		OnewayTrace result;
 		if (params.preciseClipping)
 		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, sequence, slice, reusableState);
+			result = BV::getReverseTraceFromTableExactEndPos(params, sequence, slice, reusableState, true);
 		}
 		else
 		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, sequence, slice, reusableState);
+			result = BV::getReverseTraceFromTableStartLastRow(params, sequence, slice, reusableState, true);
 		}
 
 		return result;
@@ -119,11 +119,11 @@ public:
 		OnewayTrace result;
 		if (params.preciseClipping)
 		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, slice, reusableState);
+			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, slice, reusableState, true);
 		}
 		else
 		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, slice, reusableState);
+			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, slice, reusableState, true);
 		}
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{
@@ -406,7 +406,7 @@ private:
 
 		if (!params.preciseClipping && j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
-			BV::flattenLastSliceEnd(params, currentSlice, previousSlice, result, j, sequence);
+			BV::flattenLastSliceEnd(params, currentSlice, previousSlice, result, j, sequence, true);
 		}
 
 #ifdef SLICEVERBOSE

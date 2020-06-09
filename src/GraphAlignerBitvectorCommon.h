@@ -318,7 +318,7 @@ public:
 		return EqV;
 	}
 
-	static OnewayTrace getReverseTraceFromTableExactEndPos(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState)
+	static OnewayTrace getReverseTraceFromTableExactEndPos(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency)
 	{
 		assert(slice.slices.size() > 1);
 		size_t bestIndex = 1;
@@ -348,7 +348,7 @@ public:
 		}
 
 		EqVector EqV = getEqVector(sequence, slice.slices[bestIndex].j);
-		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, slice.slices[bestIndex].scores.node(node), EqV, previous);
+		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, slice.slices[bestIndex].scores.node(node), EqV, previous, sliceConsistency);
 
 		size_t nodeOffset = std::numeric_limits<size_t>::max();
 		size_t bvOffset = std::numeric_limits<size_t>::max();
@@ -379,17 +379,17 @@ public:
 		assert(slice.slices[bestIndex].j + bvOffset < sequence.size());
 		ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
 		MatrixPosition startPos { node, nodeOffset, slice.slices[bestIndex].j + bvOffset };
-		return getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore);
+		return getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency);
 	}
 
-	static OnewayTrace getReverseTraceFromTableStartLastRow(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState)
+	static OnewayTrace getReverseTraceFromTableStartLastRow(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency)
 	{
 		ScoreType startScore = slice.slices.back().minScore;
 		MatrixPosition startPos {slice.slices.back().minScoreNode, slice.slices.back().minScoreNodeOffset, std::min(slice.slices.back().j + WordConfiguration<Word>::WordSize - 1, sequence.size()-1)};
-		return getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore);
+		return getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency);
 	}
 
-	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore)
+	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency)
 	{
 		assert(slice.slices.size() > 0);
 		assert(slice.slices.back().minScoreNode != std::numeric_limits<LengthType>::max());
@@ -428,7 +428,7 @@ public:
 						previous.HN[i] = WordConfiguration<Word>::AllZeros;
 					}
 				}
-				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous);
+				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
@@ -825,7 +825,7 @@ public:
 		}
 	}
 
-	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice)
+	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, bool sliceConsistency)
 	{
 		size_t nodeLength = params.graph.NodeLength(node);
 		std::vector<EdgeWithPriority> incoming; // also fake!
@@ -841,13 +841,13 @@ public:
 		{
 			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), [&result](const WordSlice& slice) { result.push_back(slice); });
 		}
-		assert(result[0].VP == slice.startSlice.VP);
-		assert(result[0].VN == slice.startSlice.VN);
-		assert(result[0].scoreEnd == slice.startSlice.scoreEnd);
-		assert(result.back().VP == slice.endSlice.VP);
-		assert(result.back().VN == slice.endSlice.VN);
-		assert(result.back().scoreEnd == slice.endSlice.scoreEnd);
 		assert(result.size() == nodeLength);
+		assert(!sliceConsistency || result[0].scoreEnd == slice.startSlice.scoreEnd);
+		assert(!sliceConsistency || result[0].VP == slice.startSlice.VP);
+		assert(!sliceConsistency || result[0].VN == slice.startSlice.VN);
+		assert(!sliceConsistency || result.back().scoreEnd == slice.endSlice.scoreEnd);
+		assert(!sliceConsistency || result.back().VP == slice.endSlice.VP);
+		assert(!sliceConsistency || result.back().VN == slice.endSlice.VN);
 		return result;
 	}
 
@@ -1168,7 +1168,7 @@ public:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	static void flattenLastSliceEnd(const Params& params, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, NodeCalculationResult& sliceCalc, LengthType j, const std::string_view& sequence)
+	static void flattenLastSliceEnd(const Params& params, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& slice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, NodeCalculationResult& sliceCalc, LengthType j, const std::string_view& sequence, bool sliceConsistency)
 	{
 		assert(j < sequence.size());
 		assert(sequence.size() - j < WordConfiguration<Word>::WordSize);
@@ -1197,7 +1197,7 @@ public:
 				}
 			}
 
-			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node.first, current, EqV, old);
+			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node.first, current, EqV, old, sliceConsistency);
 
 			assert(nodeSlices[0].VP == node.second.startSlice.VP);
 			assert(nodeSlices[0].VN == node.second.startSlice.VN);
