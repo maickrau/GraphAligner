@@ -477,10 +477,32 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 	std::unordered_map<std::string, std::unordered_set<size_t>> result;
 	for (size_t i = 0; i < reads.size(); i++)
 	{
-		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 25);
-		for (auto seed : seeds)
+		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 10);
+		std::sort(seeds.begin(), seeds.end(), [&nameMapping](const SeedHit& left, const SeedHit& right) { return (nameMapping[left.nodeID] < nameMapping[right.nodeID]) || (nameMapping[left.nodeID] == nameMapping[right.nodeID] && left.seqPos < right.seqPos); });
+		size_t seqEnd = 0;
+		size_t overlap = 0;
+		std::string lastId = nameMapping[seeds[0].nodeID];
+		for (size_t j = 0; j < seeds.size(); j++)
 		{
-			result[nameMapping[seed.nodeID]].insert(i);
+			if (nameMapping[seeds[j].nodeID] != lastId)
+			{
+				if (overlap >= 1000 || overlap >= reads[i].sequence.size() * .35)
+				{
+					result[lastId].insert(i);
+				}
+				lastId = nameMapping[seeds[j].nodeID];
+				seqEnd = 0;
+				overlap = 0;
+			}
+			if (seeds[j].seqPos + seeds[j].matchLen > seqEnd)
+			{
+				overlap += std::min(seeds[j].matchLen, (seeds[j].seqPos + seeds[j].matchLen) - seqEnd);
+				seqEnd = seeds[j].seqPos + seeds[j].matchLen;
+			}
+		}
+		if (overlap >= 1000 || overlap >= reads[i].sequence.size() * .35)
+		{
+			result[lastId].insert(i);
 		}
 	}
 	return result;
