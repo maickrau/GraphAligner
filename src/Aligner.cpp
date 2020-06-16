@@ -665,10 +665,14 @@ void alignReads(AlignerParams params)
 			std::cout << "Seeds from file" << std::endl;
 			break;
 		case Seeder::Mode::Mum:
-			std::cout << "MUM seeds, min length " << seeder.mxmLength << ", max count " << seeder.mumCount << std::endl;
+			std::cout << "MUM seeds, min length " << seeder.mxmLength;
+			if (seeder.mumCount != std::numeric_limits<size_t>::max()) std::cout << ", max count " << seeder.mumCount;
+			std::cout << std::endl;
 			break;
 		case Seeder::Mode::Mem:
-			std::cout << "MEM seeds, min length " << seeder.mxmLength << ", max count " << seeder.memCount << std::endl;
+			std::cout << "MEM seeds, min length " << seeder.mxmLength;
+			if (seeder.memCount != std::numeric_limits<size_t>::max()) std::cout << ", max count " << seeder.memCount;
+			std::cout << std::endl;
 			break;
 		case Seeder::Mode::Minimizer:
 			std::cout << "Minimizer seeds, length " << seeder.minimizerLength << ", window size " << seeder.minimizerWindowSize << ", density " << seeder.minimizerSeedDensity << std::endl;
