@@ -17,24 +17,24 @@ const float K = 29.8318175495*1.25982891379;
 namespace AlignmentSelection
 {
 	//approx ~ n(matches) - 2 * n(mismatches), higher is better
-	double S(const vg::Alignment* const aln)
+	double S(const AlignmentResult::AlignmentItem& aln)
 	{
-		return aln->sequence().size() - aln->score() * 3;
+		return (aln.alignmentEnd - aln.alignmentStart) - aln.alignmentScore * 3;
 	}
 
-	double Evalue(size_t m, size_t n, const vg::Alignment* const aln)
+	double Evalue(size_t m, size_t n, const AlignmentResult::AlignmentItem& aln)
 	{
 		return K * m * n * exp(-lambda * S(aln));
 	}
-	bool alignmentIncompatible(const vg::Alignment* const left, const vg::Alignment* const right)
+	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
 	{
-		auto minOverlapLen = std::min(left->sequence().size(), right->sequence().size()) * OverlapIncompatibleFractionCutoff;
-		assert(left->query_position() >= 0);
-		assert(right->query_position() >= 0);
-		size_t leftStart = left->query_position();
-		size_t leftEnd = leftStart + left->sequence().size();
-		size_t rightStart = right->query_position();
-		size_t rightEnd = rightStart + right->sequence().size();
+		auto minOverlapLen = std::min((left.alignmentEnd - left.alignmentStart), (right.alignmentEnd - right.alignmentStart)) * OverlapIncompatibleFractionCutoff;
+		assert(left.alignmentStart >= 0);
+		assert(right.alignmentStart >= 0);
+		size_t leftStart = left.alignmentStart;
+		size_t leftEnd = left.alignmentEnd;
+		size_t rightStart = right.alignmentStart;
+		size_t rightEnd = right.alignmentEnd;
 		if (leftStart > rightStart)
 		{
 			std::swap(leftStart, rightStart);
@@ -47,32 +47,66 @@ namespace AlignmentSelection
 	}
 
 	//lower E-value is better
-	bool alignmentECompare(const vg::Alignment* const left, const vg::Alignment* const right, size_t m, size_t n)
+	bool alignmentECompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right, size_t m, size_t n)
 	{
 		return Evalue(m, n, left) < Evalue(m, n, right);
 	}
 
-	bool alignmentScoreCompare(const vg::Alignment* const left, const vg::Alignment* const right)
+	bool alignmentScoreCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
 	{
 		return S(left) > S(right);
 	}
 
 	//longer is better, after that lower score is better
-	bool alignmentLengthCompare(const vg::Alignment* const left, const vg::Alignment* const right)
+	bool alignmentLengthCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
 	{
-		if (left->sequence().size() > right->sequence().size()) return true;
-		if (right->sequence().size() > left->sequence().size()) return false;
-		if (left->score() < right->score()) return true;
+		if ((left.alignmentEnd - left.alignmentStart) > (right.alignmentEnd - right.alignmentStart)) return true;
+		if ((right.alignmentEnd - right.alignmentStart) > (left.alignmentEnd - left.alignmentStart)) return false;
+		if (left.alignmentScore < right.alignmentScore) return true;
 		return false;
 	}
 
-	std::vector<vg::Alignment> SelectAlignments(std::vector<vg::Alignment> alns, SelectionOptions options)
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& allAlignments, SelectionOptions options)
 	{
-		return SelectAlignments(alns, options, [](const vg::Alignment& aln) { return &aln; });
+		// roundabout to fit the signature of const ref while allowing filtering
+		std::vector<AlignmentResult::AlignmentItem> filteredByE;
+		if (options.ECutoff != -1)
+		{
+			filteredByE = SelectECutoff(allAlignments, options.graphSize, options.readSize, options.ECutoff);
+		}
+		const std::vector<AlignmentResult::AlignmentItem>& alignments { (options.ECutoff != -1) ? filteredByE : allAlignments };
+		switch(options.method)
+		{
+			case GreedyLength:
+				return GreedySelectAlignments(alignments, alignmentLengthCompare);
+			case GreedyScore:
+				return GreedySelectAlignments(alignments, alignmentScoreCompare);
+			case GreedyE:
+				return GreedySelectAlignments(alignments, std::bind(alignmentECompare, std::placeholders::_1, std::placeholders::_2, options.graphSize, options.readSize));
+			case ScheduleInverseESum:
+				return ScheduleSelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem aln) { return 1.0 / Evalue(options.graphSize, options.readSize, aln); });
+			case ScheduleInverseEProduct:
+				return ScheduleSelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem aln) { return -log(Evalue(options.graphSize, options.readSize, aln)); });
+			case ScheduleScore:
+				return ScheduleSelectAlignments(alignments, S);
+			case ScheduleLength:
+				return ScheduleSelectAlignments(alignments, [](const AlignmentResult::AlignmentItem aln) { return (aln.alignmentEnd - aln.alignmentStart) + 0.5 - 0.5 / (aln.alignmentScore); });
+			default:
+			case All:
+				return alignments;
+		}
+		assert(false);
+		return alignments;
 	}
 
-	std::vector<vg::Alignment*> SelectAlignments(std::vector<vg::Alignment*> alns, SelectionOptions options)
+	std::vector<AlignmentResult::AlignmentItem> SelectECutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, size_t m, size_t n, double cutoff)
 	{
-		return SelectAlignments(alns, options, [](vg::Alignment* aln) { return aln; });
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			if (Evalue(m, n, alignments[i]) <= cutoff) result.push_back(alignments[i]);
+		}
+		return result;
 	}
+
 }

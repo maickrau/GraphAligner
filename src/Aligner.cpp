@@ -121,6 +121,7 @@ struct AlignmentStats
 	bpInReadsWithASeed(0),
 	bpInAlignments(0),
 	bpInFullAlignments(0),
+	allAlignmentsCount(0),
 	assertionBroke(false)
 	{
 	}
@@ -136,6 +137,7 @@ struct AlignmentStats
 	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
 	std::atomic<size_t> bpInFullAlignments;
+	std::atomic<size_t> allAlignmentsCount;
 	std::atomic<bool> assertionBroke;
 };
 
@@ -470,8 +472,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		stats.allAlignmentsCount += alignments.alignments.size();
+
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
-		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions, [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
+		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions);
 
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
@@ -501,11 +505,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		}
 		
 		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
-
-		if (!params.outputAllAlns)
-		{
-			alignments.alignments = CommonUtils::SelectAlignments(alignments.alignments, std::numeric_limits<size_t>::max());
-		}
 
 		if (params.outputGAMFile != "" || params.outputJSONFile != "")
 		{
@@ -705,6 +704,8 @@ void alignReads(AlignerParams params)
 	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
 	std::cout << std::endl;
 
+	if (params.selectionECutoff != -1) std::cout << "Discard alignments with an E-value > " << params.selectionECutoff << std::endl;
+
 	if (params.outputGAMFile != "") std::cout << "write alignments to " << params.outputGAMFile << std::endl;
 	if (params.outputJSONFile != "") std::cout << "write alignments to " << params.outputJSONFile << std::endl;
 	if (params.outputGAFFile != "") std::cout << "write alignments to " << params.outputGAFFile << std::endl;
@@ -758,7 +759,6 @@ void alignReads(AlignerParams params)
 	correctedWriterThread.join();
 	correctedClippedWriterThread.join();
 	fastqThread.join();
-	writerThread.join();
 
 	if (mummerseeder != nullptr) delete mummerseeder;
 	if (minimizerseeder != nullptr) delete minimizerseeder;
@@ -775,7 +775,9 @@ void alignReads(AlignerParams params)
 	std::cout << "Seeds extended: " << stats.seedsExtended << std::endl;
 	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
 	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
-	std::cout << "Alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)" << std::endl;
+	std::cout << "Alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)";
+	if (stats.allAlignmentsCount > stats.alignments) std::cout << " (" << (stats.allAlignmentsCount - stats.alignments) << " additional alignments discarded)";
+	std::cout << std::endl;
 	std::cout << "End-to-end alignments: " << stats.fullLengthAlignments << " (" << stats.bpInFullAlignments << "bp)" << std::endl;
 	if (stats.assertionBroke)
 	{
