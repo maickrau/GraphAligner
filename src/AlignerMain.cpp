@@ -52,6 +52,7 @@ int main(int argc, char** argv)
 		("version", "print version")
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
+		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg and then select")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
@@ -83,6 +84,13 @@ int main(int argc, char** argv)
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
 		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
+		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
+		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
+		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
+		("schedule-length", "optimally select a non-overlapping set based on the alignment length")
+		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
+		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
+		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -132,7 +140,8 @@ int main(int argc, char** argv)
 	params.mumCount = 0;
 	params.memCount = 0;
 	params.seederCachePrefix = "";
-	params.outputAllAlns = false;
+	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
+	params.selectionECutoff = -1;
 	params.forceGlobal = false;
 	params.compressCorrected = false;
 	params.compressClipped = false;
@@ -204,10 +213,45 @@ int main(int argc, char** argv)
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
+	if (vm.count("verbose")) params.verboseMode = true;
+	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
+	if (vm.count("high-memory")) params.highMemory = true;
+
+	int resultSelectionMethods = 0;
 	if (vm.count("all-alignments"))
 	{
-		params.outputAllAlns = true;
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::All;
 		params.tryAllSeeds = true;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("greedy-length"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("E-cutoff"))
+	{
+		params.selectionECutoff = vm["E-cutoff"].as<double>();
+	}
+	if (vm.count("schedule-inverse-E-sum"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseESum;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-inverse-E-product"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseEProduct;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-score"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleScore;
+		resultSelectionMethods += 1;
+	}
+	if (vm.count("schedule-length"))
+	{
+		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleLength;
+		resultSelectionMethods += 1;
 	}
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
@@ -343,6 +387,11 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "WARNING: --try-all-seeds and --seeds-extend-density are both set! --seeds-extend-density will be ignored" << std::endl;
 		params.seedExtendDensity = -1;
+	}
+	if (resultSelectionMethods > 1)
+	{
+		std::cerr << "pick only one method for selecting outputted alignments" << std::endl;
+		paramError = true;
 	}
 
 	if (paramError)

@@ -5,6 +5,7 @@
 #include <vector>
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
+#include "AlignmentSelection.h"
 
 struct AlignerParams
 {
@@ -27,8 +28,9 @@ struct AlignerParams
 	size_t mxmLength;
 	size_t mumCount;
 	size_t memCount;
-	bool outputAllAlns;
 	std::string seederCachePrefix;
+	AlignmentSelection::SelectionMethod alignmentSelectionMethod;
+	double selectionECutoff;
 	bool forceGlobal;
 	bool compressCorrected;
 	bool compressClipped;

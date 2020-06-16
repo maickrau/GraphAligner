@@ -50,8 +50,8 @@ class GfaGraph
 {
 public:
 	GfaGraph();
-	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false);
-	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false);
+	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false, bool warnAboutMissingNodes=false);
+	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false, bool warnAboutMissingNodes=false);
 	void SaveToFile(std::string filename) const;
 	void SaveToStream(std::ostream& stream) const;
 	void AddSubgraph(const GfaGraph& subgraph);

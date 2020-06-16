@@ -8,6 +8,7 @@
 #include "stream.hpp"
 #include "fastqloader.h"
 #include "CommonUtils.h"
+#include "AlignmentSelection.h"
 
 std::atomic<bool> readingDone;
 std::atomic<bool> splittingDone;
@@ -78,9 +79,11 @@ void splitAlignmentsIntoSelectedAndFullLength(const std::unordered_map<std::stri
 		}
 	}
 
+	AlignmentSelection::SelectionOptions options;
+	options.method = AlignmentSelection::SelectionMethod::GreedyLength;
 	for (auto pair : alnsPerRead)
 	{
-		auto selected = CommonUtils::SelectAlignments(pair.second, std::numeric_limits<size_t>::max());
+		auto selected = AlignmentSelection::SelectAlignments(pair.second, options);
 		outputSelected.enqueue_bulk(selected.data(), selected.size());
 		allAlnsCount += pair.second.size();
 		selectedAlnCount += selected.size();

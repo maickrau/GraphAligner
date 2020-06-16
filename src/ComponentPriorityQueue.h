@@ -110,6 +110,8 @@ public:
 	{
 		decltype(extras) empty;
 		std::swap(extras, empty);
+		extras.set_empty_key(std::numeric_limits<size_t>::max());
+		extras.set_deleted_key(std::numeric_limits<size_t>::max()-1);
 	}
 	template<bool Sparse = SparseStorage>
 	typename std::enable_if<!Sparse>::type sparsify()

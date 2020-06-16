@@ -17,6 +17,7 @@
 #include "MummerSeeder.h"
 #include "ReadCorrection.h"
 #include "MinimizerSeeder.h"
+#include "AlignmentSelection.h"
 
 struct Seeder
 {
@@ -377,6 +378,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	moodycamel::ProducerToken clippedToken { correctedClippedOut };
 	assertSetNoRead("Before any read");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, std::max(params.initialBandwidth, params.rampBandwidth), !params.highMemory };
+	AlignmentSelection::SelectionOptions selectionOptions;
+	selectionOptions.method = params.alignmentSelectionMethod;
+	selectionOptions.graphSize = alignmentGraph.SizeInBP();
+	selectionOptions.ECutoff = params.selectionECutoff;
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (params.verboseMode)
@@ -401,6 +406,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		if (fastq == nullptr) break;
 		assertSetNoRead(fastq->seq_id);
 		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
+		selectionOptions.readSize = fastq->sequence.size();
 		stats.reads += 1;
 		stats.bpInReads += fastq->sequence.size();
 
@@ -465,6 +471,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		}
 
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
+		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions, [](const AlignmentResult::AlignmentItem& aln) { return aln.alignment.get(); });
 
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
@@ -492,6 +499,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			totalcells += alignments.alignments[i].cellsProcessed;
 		}
+		
+		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 
 		if (!params.outputAllAlns)
 		{
@@ -749,6 +758,7 @@ void alignReads(AlignerParams params)
 	correctedWriterThread.join();
 	correctedClippedWriterThread.join();
 	fastqThread.join();
+	writerThread.join();
 
 	if (mummerseeder != nullptr) delete mummerseeder;
 	if (minimizerseeder != nullptr) delete minimizerseeder;

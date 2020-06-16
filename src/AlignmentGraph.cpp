@@ -19,6 +19,7 @@ nodeLookup(),
 nodeIDs(),
 inNeighbors(),
 nodeSequences(),
+bpSize(0),
 ambiguousNodeSequences(),
 firstAmbiguous(std::numeric_limits<size_t>::max()),
 DBGoverlap(0),
@@ -87,6 +88,7 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	assert(!finalized);
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
 
+	bpSize += sequence.size();
 	nodeLookup[nodeId].push_back(nodeLength.size());
 	nodeLength.push_back(sequence.size());
 	nodeIDs.push_back(nodeId);
@@ -1101,4 +1103,9 @@ void AlignmentGraph::doComponentOrder()
 size_t AlignmentGraph::ComponentSize() const
 {
 	return componentNumber.size();
+}
+
+size_t AlignmentGraph::SizeInBP() const
+{
+	return bpSize;
 }

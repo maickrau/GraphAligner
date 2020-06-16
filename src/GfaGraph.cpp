@@ -155,10 +155,10 @@ void GfaGraph::AddSubgraph(const GfaGraph& other)
 	}
 }
 
-GfaGraph GfaGraph::LoadFromFile(std::string filename, bool allowVaryingOverlaps)
+GfaGraph GfaGraph::LoadFromFile(std::string filename, bool allowVaryingOverlaps, bool warnAboutMissingNodes)
 {
 	std::ifstream file {filename};
-	return LoadFromStream(file, allowVaryingOverlaps);
+	return LoadFromStream(file, allowVaryingOverlaps, warnAboutMissingNodes);
 }
 
 int getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name)
@@ -209,7 +209,7 @@ void GfaGraph::numberBackToIntegers()
 	originalNodeName.clear();
 }
 
-GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
+GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps, bool warnAboutMissingNodes)
 {
 	std::unordered_map<std::string, int> nameMapping;
 	GfaGraph result;
@@ -316,10 +316,13 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 		if (result.nodes.count(edge.first.id) == 0)
 		{
 			nonexistantEdges.push_back(edge.first);
-			for (auto target : edge.second)
+			if (warnAboutMissingNodes)
 			{
-				std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(target.id) == 1 ? result.originalNodeName.at(target.id) : std::to_string(target.id)) << (target.end ? "+" : "-") << std::endl;
-				hasNonexistant = true;
+				for (auto target : edge.second)
+				{
+					std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(target.id) == 1 ? result.originalNodeName.at(target.id) : std::to_string(target.id)) << (target.end ? "+" : "-") << std::endl;
+					hasNonexistant = true;
+				}
 			}
 			continue;
 		}
@@ -327,13 +330,16 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps)
 		{
 			if (result.nodes.count(edge.second[i].id) == 0)
 			{
-				std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(edge.second[i].id) == 1 ? result.originalNodeName.at(edge.second[i].id) : std::to_string(edge.second[i].id)) << (edge.second[i].end ? "+" : "-") << std::endl;
-				hasNonexistant = true;
+				if (warnAboutMissingNodes)
+				{
+					std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(edge.second[i].id) == 1 ? result.originalNodeName.at(edge.second[i].id) : std::to_string(edge.second[i].id)) << (edge.second[i].end ? "+" : "-") << std::endl;
+					hasNonexistant = true;
+				}
 				edge.second.erase(edge.second.begin()+i);
 			}
 		}
 	}
-	if (hasNonexistant)
+	if (warnAboutMissingNodes && hasNonexistant)
 	{
 		std::cerr << "WARNING: Edges between non-existant nodes have been removed." << std::endl;
 		std::cout << "WARNING: The graph has edges between non-existant nodes. Check the stderr output." << std::endl;
