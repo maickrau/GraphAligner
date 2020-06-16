@@ -262,11 +262,11 @@ public:
 				assert(i > clusterStart);
 				std::sort(pair.second.begin()+clusterStart, pair.second.begin()+i, [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
 				size_t matchingBps = 0;
-				size_t lastEnd = 0;
+				int lastEnd = std::numeric_limits<int>::min();
 				for (size_t j = clusterStart; j < i; j++)
 				{
-					size_t thisStart = seedHits[pair.second[j].first].seqPos - seedHits[pair.second[j].first].matchLen + 1;
-					size_t thisEnd = seedHits[pair.second[j].first].seqPos;
+					int thisStart = (int)seedHits[pair.second[j].first].seqPos - (int)seedHits[pair.second[j].first].matchLen + 1;
+					int thisEnd = (int)seedHits[pair.second[j].first].seqPos;
 					assert(thisEnd >= lastEnd);
 					assert(thisEnd > thisStart);
 					matchingBps += (thisEnd - std::max(thisStart, lastEnd));
