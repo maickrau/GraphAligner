@@ -464,46 +464,139 @@ void writeCorrected(const std::vector<FusionAlignment>& result, const GfaGraph& 
 	}
 }
 
-std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<FastQ>& reads)
+// fake declarations because MinimizerSeeder.cpp is also linked
+size_t charToInt(char c);
+std::vector<bool> getValidChars();
+extern std::vector<bool> validChar;
+
+template <typename CallbackF>
+void iterateKmers(const std::string& str, size_t kmerLength, CallbackF callback)
+{
+	if (str.size() < kmerLength) return;
+	const size_t mask = ~(0xFFFFFFFFFFFFFFFF << (kmerLength * 2));
+	assert(mask == pow(4, kmerLength)-1);
+	size_t offset = 0;
+start:
+	while (offset < str.size() && !validChar[str[offset]]) offset++;
+	if (offset + kmerLength > str.size()) return;
+	size_t kmer = 0;
+	for (size_t i = 0; i < kmerLength; i++)
+	{
+		if (!validChar[str[offset+i]])
+		{
+			offset += i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer |= charToInt(str[offset+i]);
+	}
+	callback(offset + kmerLength-1, kmer);
+	for (size_t i = kmerLength; offset+i < str.size(); i++)
+	{
+		if (!validChar[str[offset+i]])
+		{
+			offset += i;
+			goto start;
+		}
+		kmer <<= 2;
+		kmer &= mask;
+		kmer |= charToInt(str[offset + i]);
+		callback(offset + i, kmer);
+	}
+}
+
+std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<FastQ>& reads, const size_t numThreads)
 {
 	GfaGraph fakeGraph;
-	std::vector<std::string> nameMapping;
-	for (auto transcript : transcripts)
+	std::vector<std::pair<std::string, size_t>> transcriptptrs;
+	for (size_t i = 0; i < transcripts.size(); i++)
 	{
-		fakeGraph.nodes[nameMapping.size()] = transcript.sequence();
-		nameMapping.push_back(geneFromTranscript(transcript.name()));
+		transcriptptrs.emplace_back(geneFromTranscript(transcripts[i].name()), i);
 	}
-	auto seeder = MummerSeeder(fakeGraph, "");
-	std::unordered_map<std::string, std::unordered_set<size_t>> result;
-	for (size_t i = 0; i < reads.size(); i++)
+	std::sort(transcriptptrs.begin(), transcriptptrs.end(), [](const std::pair<std::string, size_t>& left, const std::pair<std::string, size_t>& right) { return left.first < right.first; });
+	std::vector<std::vector<size_t>> kmerIndex;
+	kmerIndex.resize(pow(4, 11));
+	std::unordered_set<size_t> currentKmers;
+	std::string currentGene;
+	size_t currentNameIndex = -1;
+	for (auto& pair : transcriptptrs)
 	{
-		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 10);
-		std::sort(seeds.begin(), seeds.end(), [&nameMapping](const SeedHit& left, const SeedHit& right) { return (nameMapping[left.nodeID] < nameMapping[right.nodeID]) || (nameMapping[left.nodeID] == nameMapping[right.nodeID] && left.seqPos < right.seqPos); });
-		size_t seqEnd = 0;
-		size_t overlap = 0;
-		std::string lastId = nameMapping[seeds[0].nodeID];
-		for (size_t j = 0; j < seeds.size(); j++)
+		if (geneFromTranscript(transcripts[pair.second].name()) != currentGene)
 		{
-			if (nameMapping[seeds[j].nodeID] != lastId)
+			if (currentNameIndex != -1)
 			{
-				if (overlap >= 1000 || overlap >= reads[i].sequence.size() * .35)
+				for (auto kmer : currentKmers)
 				{
-					result[lastId].insert(i);
+					kmerIndex[kmer].push_back(currentNameIndex);
 				}
-				lastId = nameMapping[seeds[j].nodeID];
-				seqEnd = 0;
-				overlap = 0;
 			}
-			if (seeds[j].seqPos + seeds[j].matchLen > seqEnd)
-			{
-				overlap += std::min(seeds[j].matchLen, (seeds[j].seqPos + seeds[j].matchLen) - seqEnd);
-				seqEnd = seeds[j].seqPos + seeds[j].matchLen;
-			}
+			currentKmers.clear();
+			currentGene = geneFromTranscript(transcripts[pair.second].name());
+			currentNameIndex = pair.second;
 		}
-		if (overlap >= 1000 || overlap >= reads[i].sequence.size() * .35)
+		iterateKmers(transcripts[pair.second].sequence(), 11, [&currentKmers](size_t offset, size_t kmer)
 		{
-			result[lastId].insert(i);
-		}
+			currentKmers.insert(kmer);
+		});
+		iterateKmers(CommonUtils::ReverseComplement(transcripts[pair.second].sequence()), 11, [&currentKmers](size_t offset, size_t kmer)
+		{
+			currentKmers.insert(kmer);
+		});
+	}
+	for (auto kmer : currentKmers)
+	{
+		kmerIndex[kmer].push_back(currentNameIndex);
+	}
+	std::unordered_map<std::string, std::unordered_set<size_t>> result;
+	std::mutex resultMutex;
+	std::mutex readMutex;
+	size_t nextRead = 0;
+	std::vector<std::thread> threads;
+	for (size_t thread = 0; thread < numThreads; thread++)
+	{
+		threads.emplace_back([&nextRead, &transcripts, &reads, &result, &resultMutex, &readMutex, &kmerIndex]()
+		{
+			while (true)
+			{
+				size_t i = 0;
+				{
+					std::lock_guard<std::mutex> guard { readMutex };
+					i = nextRead;
+					nextRead += 1;
+				}
+				if (i >= reads.size()) break;
+				std::unordered_map<size_t, size_t> lastMatch;
+				std::unordered_map<size_t, size_t> matchSize;
+				iterateKmers(reads[i].sequence, 11, [&lastMatch, &matchSize, &kmerIndex](size_t offset, size_t kmer)
+				{
+					for (auto index : kmerIndex[kmer])
+					{
+						size_t addition = std::min(offset - lastMatch[index], (size_t)11);
+						lastMatch[index] = offset;
+						matchSize[index] += addition;
+					}
+				});
+				for (auto pair : matchSize)
+				{
+					std::vector<std::string> insertions;
+					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .35)
+					{
+						insertions.push_back(geneFromTranscript(transcripts[pair.first].name()));
+					}
+					{
+						std::lock_guard<std::mutex> guard { resultMutex };
+						for (const auto& gene : insertions)
+						{
+							result[gene].insert(i);
+						}
+					}
+				}
+			}
+		});
+	}
+	for (size_t i = 0; i < numThreads; i++)
+	{
+		threads[i].join();
 	}
 	return result;
 }
@@ -538,7 +631,7 @@ int main(int argc, char** argv)
 	std::cerr << "get gene belongers" << std::endl;
 	auto geneBelongers = getGeneBelongers(transcripts, graph);
 	std::cerr << "get extra gene-matches" << std::endl;
-	auto extraGeneMatches = getExtraGeneMatches(transcripts, reads);
+	auto extraGeneMatches = getExtraGeneMatches(transcripts, reads, numThreads);
 	std::cerr << "get alns" << std::endl;
 	auto bestAlns = getBestAlignments(putativeFusions, hasSeeds, graph, geneBelongers, reads, maxScoreFraction, minFusionLen, fusionPenalty, numThreads, extraGeneMatches);
 	std::cerr << "write fusions" << std::endl;
