@@ -308,29 +308,29 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	bestNonfusionAlnsPerThread.resize(numThreads);
 	std::cerr << "get nonfusions" << std::endl;
 	nextPair = 0;
-	std::vector<std::string> fusionGenes;
+	std::vector<std::string> nonFusionGenes;
 	for (auto pair : readsInNonfusionGraph)
 	{
-		fusionGenes.push_back(pair.first);
+		nonFusionGenes.push_back(pair.first);
 	}
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([&fusionGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
+		threads.emplace_back([&nonFusionGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
 		{
 			while (true)
 			{
 				size_t i = 0;
 				{
 					std::lock_guard<std::mutex> lock { nextPairMutex };
-					if (nextPair == fusionGenes.size()) break;
+					if (nextPair == nonFusionGenes.size()) break;
 					i = nextPair;
-					std::cerr << "nonfusion " << nextPair << "/" << fusionGenes.size() << std::endl;
+					std::cerr << "nonfusion " << nextPair << "/" << nonFusionGenes.size() << std::endl;
 					nextPair += 1;
 				}
-				auto nonfusiongraph = getNonfusionGraph(fusionGenes[i], graph, geneBelongers);
-				assert(readsInNonfusionGraph.count(fusionGenes[i]) == 1);
-				std::vector<size_t> readIndices { readsInNonfusionGraph.at(fusionGenes[i]).begin(), readsInNonfusionGraph.at(fusionGenes[i]).end() };
-				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], fusionGenes[i], fusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0, true);
+				auto nonfusiongraph = getNonfusionGraph(nonFusionGenes[i], graph, geneBelongers);
+				assert(readsInNonfusionGraph.count(nonFusionGenes[i]) == 1);
+				std::vector<size_t> readIndices { readsInNonfusionGraph.at(nonFusionGenes[i]).begin(), readsInNonfusionGraph.at(nonFusionGenes[i]).end() };
+				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], nonFusionGenes[i], nonFusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0, false);
 			}
 		});
 	}
@@ -587,7 +587,7 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 				for (auto pair : matchSize)
 				{
 					std::vector<std::string> insertions;
-					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .35)
+					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .30)
 					{
 						insertions.push_back(geneFromTranscript(transcripts[pair.first].name()));
 					}
