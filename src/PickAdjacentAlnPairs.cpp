@@ -31,7 +31,7 @@ void outputPairs(std::ofstream& alignmentOut, const std::string& readname, const
 			currentPairNum++;
 		}
 	}
-	stream::write_buffered(alignmentOut, pairs, 0);
+	if (pairs.size() > 0) stream::write_buffered(alignmentOut, pairs, 0);
 }
 
 void pickAndWritePairs(std::string inputFile, std::string outputFile, const std::unordered_map<std::string, size_t>& readLens, const int maxSplitDist, const int minPartialLen)
