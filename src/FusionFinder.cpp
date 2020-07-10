@@ -209,6 +209,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 			{
 				alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 500, 500, true, reusableState, true, true, false, false);
 			}
+			if (bestAlns.count(read.seq_id) == 1 && alignments.alignments[0].alignmentScore > bestAlns.at(read.seq_id).alignment->score()) continue;
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
