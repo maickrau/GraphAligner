@@ -245,7 +245,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 	}
 }
 
-std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads, std::unordered_map<std::string, std::unordered_set<size_t>> readsInNonfusionGraph)
+std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::string, std::string>>& putativeFusions, const std::unordered_map<std::string, std::vector<size_t>>& hasSeeds, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers, const std::vector<FastQ>& allReads, double maxScoreFraction, int minFusionLen, int fusionPenalty, size_t numThreads, std::unordered_map<std::string, std::unordered_set<size_t>>& readsInNonfusionGraph)
 {
 	std::cerr << "get fusions" << std::endl;
 	std::vector<std::thread> threads;
@@ -269,7 +269,6 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 					nextPair += 1;
 				}
 				assert(putativeFusions[i].first != putativeFusions[i].second);
-				auto fusiongraph = getFusionGraph(putativeFusions[i].first, putativeFusions[i].second, graph, geneBelongers);
 				std::unordered_set<size_t> readsHere;
 				// if (hasSeeds.count(putativeFusions[i].first) == 0) continue;
 				// if (hasSeeds.count(putativeFusions[i].second) == 0) continue;
@@ -284,6 +283,8 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 					readsInNonfusionGraph[putativeFusions[i].second].insert(readsHere.begin(), readsHere.end());
 				}
 				std::vector<size_t> readIndices { readsHere.begin(), readsHere.end() };
+				if (readIndices.size() == 0) continue;
+				auto fusiongraph = getFusionGraph(putativeFusions[i].first, putativeFusions[i].second, graph, geneBelongers);
 				addBestAlnsOnePair(bestFusionAlnsPerThread[thread], putativeFusions[i].first, putativeFusions[i].second, fusiongraph, allReads, readIndices, maxScoreFraction, minFusionLen, false);
 			}
 		});
@@ -374,9 +375,8 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	return result;
 }
 
-void writeFusions(const std::vector<FusionAlignment>& result, std::string filename)
+void writeFusions(const std::vector<FusionAlignment>& result, std::ofstream& file)
 {
-	std::ofstream file { filename };
 	for (auto aln : result)
 	{
 		auto fusionaln = aln.alignment;
@@ -436,16 +436,25 @@ void writeFusions(const std::vector<FusionAlignment>& result, std::string filena
 	}
 }
 
-std::unordered_map<std::string, std::vector<size_t>> loadPartialToTranscripts(std::string filename, const std::vector<FastQ>& reads)
+std::unordered_map<std::string, std::vector<size_t>> getIntSeeds(const std::unordered_map<std::string, std::vector<std::string>>& hasSeeds, const std::vector<FastQ>& reads)
 {
-	std::unordered_map<std::string, size_t> readIndex;
+	std::unordered_map<std::string, std::vector<size_t>> result;
 	for (size_t i = 0; i < reads.size(); i++)
 	{
-		readIndex[reads[i].seq_id] = i;
+		if (hasSeeds.count(reads[i].seq_id) == 0) continue;
+		for (const auto& gene : hasSeeds.at(reads[i].seq_id))
+		{
+			result[gene].push_back(i);
+		}
 	}
+	return result;
+}
+
+std::unordered_map<std::string, std::vector<std::string>> loadPartialToTranscripts(std::string filename)
+{
 	std::ifstream file { filename };
 	std::regex splitter("([^\\t]+)_pair\\d+_\\d+\\t([^\\t]+)\\t1");
-	std::unordered_map<std::string, std::vector<size_t>> result;
+	std::unordered_map<std::string, std::vector<std::string>> result;
 	while (file.good())
 	{
 		std::string line;
@@ -457,15 +466,13 @@ std::unordered_map<std::string, std::vector<size_t>> loadPartialToTranscripts(st
 		assert(match.size() == 3);
 		std::string read { match[1].first, match[1].second };
 		std::string transcript { match[2].first, match[2].second };
-		assert(readIndex.count(read) == 1);
-		result[geneFromTranscript(transcript)].push_back(readIndex[read]);
+		result[read].push_back(geneFromTranscript(transcript));
 	}
 	return result;
 }
 
-void writeCorrected(const std::vector<FusionAlignment>& result, const GfaGraph& graph, std::string filename)
+void writeCorrected(const std::vector<FusionAlignment>& result, const GfaGraph& graph, std::ofstream& file)
 {
-	std::ofstream file { filename };
 	for (auto aln : result)
 	{
 		file << ">" << aln.alignment->name() << std::endl;
@@ -514,16 +521,15 @@ start:
 	}
 }
 
-std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<FastQ>& reads, const size_t numThreads)
+std::vector<std::vector<size_t>> getExtraGeneMatchKmerIndex(const std::vector<vg::Alignment>& transcripts)
 {
-	GfaGraph fakeGraph;
+	std::vector<std::vector<size_t>> kmerIndex;
 	std::vector<std::pair<std::string, size_t>> transcriptptrs;
 	for (size_t i = 0; i < transcripts.size(); i++)
 	{
 		transcriptptrs.emplace_back(geneFromTranscript(transcripts[i].name()), i);
 	}
 	std::sort(transcriptptrs.begin(), transcriptptrs.end(), [](const std::pair<std::string, size_t>& left, const std::pair<std::string, size_t>& right) { return left.first < right.first; });
-	std::vector<std::vector<size_t>> kmerIndex;
 	kmerIndex.resize(pow(4, 11));
 	std::unordered_set<size_t> currentKmers;
 	std::string currentGene;
@@ -556,6 +562,11 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 	{
 		kmerIndex[kmer].push_back(currentNameIndex);
 	}
+	return kmerIndex;
+}
+
+std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<std::vector<size_t>>& kmerIndex, const std::vector<FastQ>& reads, const size_t numThreads)
+{
 	std::unordered_map<std::string, std::unordered_set<size_t>> result;
 	std::mutex resultMutex;
 	std::mutex readMutex;
@@ -610,6 +621,30 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 	return result;
 }
 
+template <typename F>
+void runInReadChunks(std::string filename, size_t chunkSize, F callback)
+{
+	std::vector<FastQ> vec;
+	std::cerr << "stream reads from " << filename << std::endl;
+	FastQ::streamFastqFromFile(filename, false, [&vec, &callback, chunkSize](FastQ read)
+	{
+		vec.emplace_back(std::move(read));
+		if (vec.size() == chunkSize)
+		{
+			callback(vec);
+			vec.clear();
+		}
+		assert(vec.size() < chunkSize);
+	});
+	std::cerr << "done streaming reads, size " << vec.size() << std::endl;
+	if (vec.size() > 0)
+	{
+		callback(vec);
+		vec.clear();
+	}
+	std::cerr << "done reading" << std::endl;
+}
+
 int main(int argc, char** argv)
 {
 	std::cerr << "Fusion finder " << VERSION << std::endl;
@@ -626,25 +661,37 @@ int main(int argc, char** argv)
 	int numThreads = std::stoi(argv[10]);
 	std::string resultFusionFile { argv[11] };
 	std::string correctedReadsFile { argv[12] };
+	int chunkSize = std::stoi(argv[13]);
 
 	std::cerr << "load graph" << std::endl;
 	auto graph = GfaGraph::LoadFromFile(graphFile);
 	std::cerr << "load putative fusions" << std::endl;
 	auto putativeFusions = loadPutativeFusions(putativeFusionsFile, minPutativeSupport);
-	std::cerr << "load reads" << std::endl;
-	auto reads = loadFastqFromFile(readFile);
-	std::cerr << "load partial assignments" << std::endl;
-	auto hasSeeds = loadPartialToTranscripts(partialMatrixFile, reads);
 	std::cerr << "load transcript alignments" << std::endl;
 	auto transcripts = CommonUtils::LoadVGAlignments(transcriptAlignmentFile);
 	std::cerr << "get gene belongers" << std::endl;
 	auto geneBelongers = getGeneBelongers(transcripts, graph);
-	std::cerr << "get extra gene-matches" << std::endl;
-	auto extraGeneMatches = getExtraGeneMatches(transcripts, reads, numThreads);
-	std::cerr << "get alns" << std::endl;
-	auto bestAlns = getBestAlignments(putativeFusions, hasSeeds, graph, geneBelongers, reads, maxScoreFraction, minFusionLen, fusionPenalty, numThreads, extraGeneMatches);
-	std::cerr << "write fusions" << std::endl;
-	writeFusions(bestAlns, resultFusionFile);
-	std::cerr << "write corrected reads" << std::endl;
-	writeCorrected(bestAlns, graph, correctedReadsFile);
+	std::cerr << "load partial assignments" << std::endl;
+	auto hasSeeds = loadPartialToTranscripts(partialMatrixFile);
+	std::cerr << "build extra gene-match index" << std::endl;
+	auto kmerIndex = getExtraGeneMatchKmerIndex(transcripts);
+	std::cerr << "run in chunks" << std::endl;
+	size_t readsProcessed = 0;
+	std::ofstream correctedOut { correctedReadsFile };
+	std::ofstream resultFusionsOut { resultFusionFile };
+	runInReadChunks(readFile, chunkSize, [&readsProcessed, &correctedOut, &resultFusionsOut, &kmerIndex, &transcripts, numThreads, &putativeFusions, &hasSeeds, &graph, &geneBelongers, maxScoreFraction, minFusionLen, fusionPenalty](const std::vector<FastQ>& reads)
+	{
+		std::cerr << "reads " << readsProcessed << " - " << readsProcessed + reads.size() << std::endl;
+		readsProcessed += reads.size();
+		std::cerr << "get chunk extra gene-matches" << std::endl;
+		auto extraGeneMatches = getExtraGeneMatches(transcripts, kmerIndex, reads, numThreads);
+		std::cerr << "get chunk partial assignments" << std::endl;
+		auto intSeeds = getIntSeeds(hasSeeds, reads);
+		std::cerr << "get chunk alns" << std::endl;
+		auto bestAlns = getBestAlignments(putativeFusions, intSeeds, graph, geneBelongers, reads, maxScoreFraction, minFusionLen, fusionPenalty, numThreads, extraGeneMatches);
+		std::cerr << "write chunk fusions" << std::endl;
+		writeFusions(bestAlns, resultFusionsOut);
+		std::cerr << "write chunk corrected reads" << std::endl;
+		writeCorrected(bestAlns, graph, correctedOut);
+	});
 }
