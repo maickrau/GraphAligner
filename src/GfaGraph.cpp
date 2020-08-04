@@ -305,6 +305,22 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			}
 		}
 	}
+	if (allowVaryingOverlaps)
+	{
+		for (auto pair : result.varyingOverlaps)
+		{
+			auto from = pair.first.first;
+			auto to = pair.first.second;
+			auto overlap = pair.second;
+			assert(result.nodes.count(from.id) == 1);
+			assert(result.nodes.count(to.id) == 1);
+			if (result.nodes.at(from.id).size() <= overlap || result.nodes.at(to.id).size() <= overlap)
+			{
+				throw CommonUtils::InvalidGraphException { std::string{"Overlap between nodes "} + result.originalNodeName.at(from.id) + " and " + result.originalNodeName.at(to.id) + " is too big. Fix the overlap to be smaller than both nodes" };
+			}
+		}
+	}
+	// todo: similar check when constant overlaps are used
 	if (allIdsIntegers)
 	{
 		result.numberBackToIntegers();
