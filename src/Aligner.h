@@ -43,6 +43,7 @@ struct AlignerParams
 	double seedExtendDensity;
 	bool nondeterministicOptimizations;
 	bool optimalDijkstra;
+	bool rowsBackwardsToo;
 };
 
 void alignReads(AlignerParams params);

@@ -46,32 +46,18 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, bool backwardsToo) const
 	{
 		AlignmentResult result;
 		result.readName = seq_id;
-		auto timeStart = std::chrono::system_clock::now();
-		assert(params.graph.finalized);
-		auto trace = getBacktraceFullStart(sequence, reusableState);
-		auto timeEnd = std::chrono::system_clock::now();
-		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		//failed alignment, don't output
-		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
-		if (trace.trace.size() == 0) return result;
-#ifndef NDEBUG
-		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
-#endif
-		fixForwardTraceSeqPos(trace.trace, 0, sequence);
-
-		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
-
-		alnItem.alignmentScore = alnItem.trace->score;
-		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
-		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos + 1;
-		timeEnd = std::chrono::system_clock::now();
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		alnItem.elapsedMilliseconds = time;
-		result.alignments.emplace_back(std::move(alnItem));
+		auto fw = fullstartOneWay(seq_id, sequence, reusableState, sequence, true);
+		if (!fw.alignmentFailed()) result.alignments.emplace_back(std::move(fw));
+		if (backwardsToo && (fw.alignmentFailed() || fw.alignmentEnd != sequence.size()))
+		{
+			auto revSequence = CommonUtils::ReverseComplement(sequence);
+			auto bw = fullstartOneWay(seq_id, revSequence, reusableState, sequence, false);
+			if (!bw.alignmentFailed()) result.alignments.emplace_back(std::move(bw));
+		}
 		return result;
 	}
 
@@ -287,6 +273,39 @@ public:
 
 private:
 
+	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, const std::string& fwSequence, bool forward) const
+	{
+		auto timeStart = std::chrono::system_clock::now();
+		assert(params.graph.finalized);
+		auto trace = getBacktraceFullStart(sequence, reusableState);
+		auto timeEnd = std::chrono::system_clock::now();
+		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		//failed alignment, don't output
+		if (trace.score == std::numeric_limits<ScoreType>::max()) return AlignmentResult::AlignmentItem {};
+		if (trace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+#ifndef NDEBUG
+		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
+#endif
+		if (forward)
+		{
+			fixForwardTraceSeqPos(trace.trace, 0, fwSequence);
+		}
+		else
+		{
+			fixReverseTraceSeqPosAndOrder(trace.trace, fwSequence.size()-1, fwSequence);
+		}
+
+		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
+
+		alnItem.alignmentScore = alnItem.trace->score;
+		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
+		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos + 1;
+		timeEnd = std::chrono::system_clock::now();
+		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		alnItem.elapsedMilliseconds = time;
+		return alnItem;
+	}
+
 	bool exactAlignmentPart(const AlignmentResult::AlignmentItem& aln, const SeedHit& seedHit) const
 	{
 		assert(aln.trace != nullptr);
@@ -417,6 +436,7 @@ private:
 		trace[0].sequenceCharacter = sequence[trace[0].DPposition.seqPos];
 	}
 
+	//end is the (fw) index of the last alignable base pair, not one beyond
 	void fixReverseTraceSeqPosAndOrder(std::vector<TraceItem>& trace, LengthType end, const std::string& sequence) const
 	{
 		if (trace.size() == 0) return;

@@ -91,6 +91,7 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
+		("full-rows-backwards-too", "run --seeds-first-full-rows backwards as well if the forward alignment doesn't span to the end")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -154,6 +155,7 @@ int main(int argc, char** argv)
 	params.seedExtendDensity = 0.002;
 	params.nondeterministicOptimizations = false;
 	params.optimalDijkstra = false;
+	params.rowsBackwardsToo = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -209,6 +211,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
+	if (vm.count("full-rows-backwards-too")) params.rowsBackwardsToo = true;
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
