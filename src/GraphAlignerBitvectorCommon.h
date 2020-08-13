@@ -354,13 +354,13 @@ public:
 		size_t bvOffset = std::numeric_limits<size_t>::max();
 		for (size_t i = 0; i < nodeSlices.size(); i++)
 		{
-			auto maxScore = nodeSlices[i].maxXScore(params.XscoreErrorCost) + (ScoreType)slice.slices[bestIndex].j;
+			auto maxScore = nodeSlices[i].maxXScoreFirstSlices(params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[bestIndex].j))) + (ScoreType)slice.slices[bestIndex].j;
 			assert(maxScore <= score);
 			if (maxScore == score)
 			{
 				for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
 				{
-					// if (slice.slices[bestIndex].j + off >= sequence.size()) continue;
+					if (slice.slices[bestIndex].j + off >= sequence.size()) continue;
 					auto scoreHere = nodeSlices[i].getXScore(off, params.XscoreErrorCost) + (ScoreType)slice.slices[bestIndex].j;
 					assert(scoreHere <= score);
 					if (scoreHere == score)
@@ -1175,6 +1175,8 @@ public:
 		sliceCalc.minScore = std::numeric_limits<ScoreType>::max();
 		sliceCalc.minScoreNode = std::numeric_limits<LengthType>::max();
 		sliceCalc.minScoreNodeOffset = std::numeric_limits<LengthType>::max();
+		sliceCalc.maxExactEndposScore = std::numeric_limits<ScoreType>::min();
+		sliceCalc.maxExactEndposNode = std::numeric_limits<LengthType>::max();
 		auto offset = sequence.size() - j;
 		assert(offset >= 0);
 		assert(offset < WordConfiguration<Word>::WordSize);
@@ -1214,6 +1216,11 @@ public:
 					sliceCalc.minScoreNode = node.first;
 					sliceCalc.minScoreNodeOffset = i;
 				}
+				if (wordSliceResult.maxXScoreFirstSlices(params.XscoreErrorCost, offset) > sliceCalc.maxExactEndposScore)
+				{
+					sliceCalc.maxExactEndposScore = wordSliceResult.maxXScore(params.XscoreErrorCost);
+					sliceCalc.maxExactEndposNode = i;
+				}
 			}
 		}
 		assert(sliceCalc.minScore != std::numeric_limits<ScoreType>::max());
@@ -1249,6 +1256,8 @@ public:
 		result.scores.addNodeToMap(nodeIndex);
 		result.minScoreNode = nodeIndex;
 		result.minScoreNodeOffset = offsetInNode;
+		result.maxExactEndposScore = 0;
+		result.maxExactEndposNode = result.minScoreNode;
 		auto& node = result.scores.node(nodeIndex);
 		node.startSlice = {0, 0, (int)offsetInNode};
 		node.endSlice = {0, 0, (int)params.graph.NodeLength(nodeIndex) - 1 - (int)offsetInNode};

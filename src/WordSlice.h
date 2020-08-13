@@ -220,13 +220,20 @@ public:
 		return result;
 	}
 
-	ScoreType maxXScore(double errorCost) const
+	ScoreType maxXScoreFirstSlices(double errorCost, int cells) const
 	{
-		ScoreType result = maxXScoreLocalMinima(errorCost);
+		assert(cells > 0);
+		assert(cells <= WordConfiguration<Word>::WordSize);
+		ScoreType result = maxXScoreLocalMinima(errorCost, cells);
 #ifdef EXTRACORRECTNESSASSERTIONS
-		assert(result == maxXScoreCellByCell(errorCost));
+		assert(result == maxXScoreCellByCell(errorCost, cells));
 #endif
 		return result;
+	}
+
+	ScoreType maxXScore(double errorCost) const
+	{
+		return maxXScoreFirstSlices(errorCost, WordConfiguration<Word>::WordSize);
 	}
 
 	ScoreType getXScore(int offset, double errorCost) const
@@ -254,10 +261,10 @@ public:
 private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-	ScoreType maxXScoreCellByCell(double errorCost) const
+	ScoreType maxXScoreCellByCell(double errorCost, size_t cells) const
 	{
 		ScoreType result = std::numeric_limits<ScoreType>::min();
-		for (int i = 0; i < WordConfiguration<Word>::WordSize; i++)
+		for (int i = 0; i < WordConfiguration<Word>::WordSize && i < cells; i++)
 		{
 			result = std::max(result, getXScore(i, errorCost));
 		}
@@ -303,7 +310,7 @@ private:
 	}
 #endif
 
-	ScoreType maxXScoreLocalMinima(double errorCost) const
+	ScoreType maxXScoreLocalMinima(double errorCost, size_t cells) const
 	{
 		ScoreType scoreBeforeStart = getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
@@ -319,10 +326,10 @@ private:
 		{
 			//all cells from the right up to the first minimum are one
 			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
+			size_t cellsHere = ((WordConfiguration<Word>::popcount(currentMinimumMask)));
+			if (cellsHere > cells) break;
 			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
-			scoreHere *= -errorCost;
-			scoreHere += (ScoreType)((WordConfiguration<Word>::popcount(currentMinimumMask)));
-			result = std::max(result, scoreHere);
+			result = std::max(result, (ScoreType)(cellsHere - scoreHere * errorCost));
 			possibleLocalMinima &= ~currentMinimumMask;
 		}
 		return result;

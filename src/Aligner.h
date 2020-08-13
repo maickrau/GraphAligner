@@ -45,6 +45,7 @@ struct AlignerParams
 	bool optimalDijkstra;
 	bool rowsBackwardsToo;
 	double preciseClippingIdentityCutoff;
+	int Xdropcutoff;
 };
 
 void alignReads(AlignerParams params);

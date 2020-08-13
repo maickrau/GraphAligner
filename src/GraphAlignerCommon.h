@@ -92,7 +92,7 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
@@ -105,7 +105,8 @@ public:
 		minSeedClusterSize(minSeedClusterSize),
 		seedExtendDensity(seedExtendDensity),
 		nondeterministicOptimizations(nondeterministicOptimizations),
-		XscoreErrorCost(preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)
+		XscoreErrorCost(preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0),
+		Xdropcutoff(Xdropcutoff)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -121,6 +122,7 @@ public:
 		const double seedExtendDensity;
 		const bool nondeterministicOptimizations;
 		const double XscoreErrorCost;
+		const int Xdropcutoff;
 	};
 	struct TraceItem
 	{

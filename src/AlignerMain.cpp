@@ -83,6 +83,7 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
+		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
 		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
 		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
@@ -156,6 +157,8 @@ int main(int argc, char** argv)
 	params.nondeterministicOptimizations = false;
 	params.optimalDijkstra = false;
 	params.rowsBackwardsToo = false;
+	params.preciseClippingIdentityCutoff = 0.5;
+	params.Xdropcutoff = 0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -267,6 +270,15 @@ int main(int argc, char** argv)
 		if (params.preciseClippingIdentityCutoff < 0.001 || params.preciseClippingIdentityCutoff > 0.999)
 		{
 			std::cerr << "precise clipping identity cutoff must be between 0.001 and 0.999" << std::endl;
+			paramError = true;
+		}
+	}
+	if (vm.count("X-drop"))
+	{
+		params.Xdropcutoff = vm["X-drop"].as<int>();
+		if (params.Xdropcutoff < 1)
+		{
+			std::cerr << "X-drop score cutoff must be > 1" << std::endl;
 			paramError = true;
 		}
 	}
@@ -394,6 +406,12 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
+	}
+	if (params.Xdropcutoff > 0 && !params.preciseClipping)
+	{
+		std::cerr << "--X-drop is set but --precise-clipping is not, using default value of --precise-clipping .66" << std::endl;
+		params.preciseClipping = true;
+		params.preciseClippingIdentityCutoff = 0.66;
 	}
 	if (params.tryAllSeeds && vm.count("seeds-extend-density") && vm["seeds-extend-density"].as<double>() != -1)
 	{
