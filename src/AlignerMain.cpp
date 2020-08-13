@@ -83,7 +83,7 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
-		("precise-clipping", "clip the alignment ends more precisely. Recommended for Illumina reads")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
 		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
 		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
 		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
@@ -260,7 +260,16 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("global-alignment")) params.forceGlobal = true;
-	if (vm.count("precise-clipping")) params.preciseClipping = true;
+	if (vm.count("precise-clipping"))
+	{
+		params.preciseClipping = true;
+		params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
+		if (params.preciseClippingIdentityCutoff < 0.001 || params.preciseClippingIdentityCutoff > 0.999)
+		{
+			std::cerr << "precise clipping identity cutoff must be between 0.001 and 0.999" << std::endl;
+			paramError = true;
+		}
+	}
 	if (vm.count("optimal-alignment")) params.optimalDijkstra = true;
 
 	if (params.graphFile == "")

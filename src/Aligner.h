@@ -44,6 +44,7 @@ struct AlignerParams
 	bool nondeterministicOptimizations;
 	bool optimalDijkstra;
 	bool rowsBackwardsToo;
+	double preciseClippingIdentityCutoff;
 };
 
 void alignReads(AlignerParams params);

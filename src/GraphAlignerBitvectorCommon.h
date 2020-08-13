@@ -354,14 +354,14 @@ public:
 		size_t bvOffset = std::numeric_limits<size_t>::max();
 		for (size_t i = 0; i < nodeSlices.size(); i++)
 		{
-			auto maxScore = nodeSlices[i].maxXScore() + (ScoreType)slice.slices[bestIndex].j;
+			auto maxScore = nodeSlices[i].maxXScore(params.XscoreErrorCost) + (ScoreType)slice.slices[bestIndex].j;
 			assert(maxScore <= score);
 			if (maxScore == score)
 			{
 				for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
 				{
 					// if (slice.slices[bestIndex].j + off >= sequence.size()) continue;
-					auto scoreHere = nodeSlices[i].getXScore(off) + (ScoreType)slice.slices[bestIndex].j;
+					auto scoreHere = nodeSlices[i].getXScore(off, params.XscoreErrorCost) + (ScoreType)slice.slices[bestIndex].j;
 					assert(scoreHere <= score);
 					if (scoreHere == score)
 					{
@@ -970,7 +970,7 @@ public:
 		result.minScoreNodeOffset = 0;
 		if (PreciseClipping)
 		{
-			result.maxExactEndposScore = ws.maxXScore();
+			result.maxExactEndposScore = ws.maxXScore(params.XscoreErrorCost);
 			result.maxExactEndposNode = i;
 		}
 
@@ -1147,7 +1147,7 @@ public:
 				}
 				if (PreciseClipping)
 				{
-					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore());
+					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore(params.XscoreErrorCost));
 				}
 				if constexpr (!AllowEarlyLeave) callback(ws);
 				charChunk >>= 2;
