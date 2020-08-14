@@ -14,7 +14,7 @@ struct AlignerParams
 	size_t numThreads;
 	size_t initialBandwidth;
 	size_t rampBandwidth;
-	int dynamicRowStart;
+	bool dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::vector<std::string> seedFiles;
 	std::string outputGAMFile;

@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
-		("seeds-first-full-rows", boost::program_options::value<int>(), "no seeding, instead calculate the first arg rows fully. VERY SLOW except on tiny graphs (int)")
+		("first-rows-DP", "no seeding, instead use DP alignment for the first rows. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
-		("full-rows-backwards-too", "run --seeds-first-full-rows backwards as well if the forward alignment doesn't span to the end")
+		("DP-rows-backwards-too", "run --first-rows-DP backwards as well if the forward alignment doesn't span to the end")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -133,7 +133,7 @@ int main(int argc, char** argv)
 	params.numThreads = 1;
 	params.initialBandwidth = 0;
 	params.rampBandwidth = 0;
-	params.dynamicRowStart = 0;
+	params.dynamicRowStart = false;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
 	params.tryAllSeeds = false;
@@ -213,8 +213,8 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
-	if (vm.count("seeds-first-full-rows")) params.dynamicRowStart = vm["seeds-first-full-rows"].as<int>();
-	if (vm.count("full-rows-backwards-too")) params.rowsBackwardsToo = true;
+	if (vm.count("first-rows-DP")) params.dynamicRowStart = true;
+	if (vm.count("DP-rows-backwards-too")) params.rowsBackwardsToo = true;
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
@@ -329,11 +329,6 @@ int main(int argc, char** argv)
 		std::cerr << "unknown output corrected read format, must be .fa or .fa.gz" << std::endl;
 		paramError = true;
 	}
-	if (params.dynamicRowStart % 64 != 0)
-	{
-		std::cerr << "first-full-rows has to be a multiple of 64" << std::endl;
-		paramError = true;
-	}
 	if (params.numThreads < 1)
 	{
 		std::cerr << "number of threads must be >= 1" << std::endl;
@@ -374,7 +369,7 @@ int main(int argc, char** argv)
 		std::cerr << "Seed extension density can't be negative" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart != 0) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
 	if (params.optimalDijkstra && (params.initialBandwidth > 0))
 	{
 		std::cerr << "--optimal-alignment set, ignoring parameter --bandwidth" << std::endl;
@@ -389,7 +384,7 @@ int main(int argc, char** argv)
 	}
 	if (params.optimalDijkstra && pickedSeedingMethods > 0)
 	{
-		if (params.dynamicRowStart > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-first-full-rows" << std::endl;
+		if (params.dynamicRowStart) std::cerr << "--optimal-alignment cannot be combined with --first-rows-DP" << std::endl;
 		if (params.seedFiles.size() > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-file" << std::endl;
 		if (params.mumCount > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-mum-count" << std::endl;
 		if (params.memCount > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-mem-count" << std::endl;
