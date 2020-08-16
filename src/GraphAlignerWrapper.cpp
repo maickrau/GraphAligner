@@ -5,11 +5,11 @@
 #include "GraphAligner.h"
 #include "ThreadReadAssertion.h"
 
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool forceGlobal, bool preciseClipping, bool nondeterministicOptimizations, bool backwardsToo, double preciseClippingIdentityCutoff, int Xdropcutoff)
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t rampBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool forceGlobal, bool preciseClipping, bool nondeterministicOptimizations, bool backwardsToo, double preciseClippingIdentityCutoff, int Xdropcutoff, size_t DPRestartStride)
 {
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, rampBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, false, lowMemory, forceGlobal, preciseClipping, 1, 0, nondeterministicOptimizations, preciseClippingIdentityCutoff, Xdropcutoff};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
-	return aligner.AlignOneWay(seq_id, sequence, reusableState, backwardsToo);
+	return aligner.AlignOneWay(seq_id, sequence, reusableState, backwardsToo, DPRestartStride);
 }
 
 AlignmentResult AlignOneWayDijkstra(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool forceGlobal, bool preciseClipping)

@@ -46,6 +46,7 @@ struct AlignerParams
 	bool rowsBackwardsToo;
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
+	size_t DPRestartStride;
 };
 
 void alignReads(AlignerParams params);

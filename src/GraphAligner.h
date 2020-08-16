@@ -46,16 +46,41 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, bool backwardsToo) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, bool backwardsToo, size_t DPRestartStride) const
 	{
 		AlignmentResult result;
 		result.readName = seq_id;
-		auto fw = fullstartOneWay(seq_id, sequence, reusableState, sequence, true);
+		std::string_view fwview { sequence.data(), sequence.size() };
+		auto fw = fullstartOneWay(seq_id, fwview, reusableState, sequence, true, 0);
 		if (!fw.alignmentFailed()) result.alignments.emplace_back(std::move(fw));
+		if (DPRestartStride > 0)
+		{
+			size_t start = 0;
+			size_t lastEnd = 0;
+			if (result.alignments.size() > 0) lastEnd = result.alignments.back().alignmentEnd;
+			while (start < sequence.size())
+			{
+				start = lastEnd + DPRestartStride;
+				if (start >= sequence.size()) break;
+				std::string_view view { sequence.data() + start, sequence.size() - start };
+				auto aln = fullstartOneWay(seq_id, view, reusableState, sequence, true, start);
+				if (!aln.alignmentFailed())
+				{
+					assert(aln.alignmentEnd > lastEnd);
+					lastEnd = aln.alignmentEnd;
+					result.alignments.emplace_back(std::move(aln));
+				}
+				else
+				{
+					lastEnd = start;
+				}
+			}
+		}
 		if (backwardsToo && (fw.alignmentFailed() || fw.alignmentEnd != sequence.size()))
 		{
 			auto revSequence = CommonUtils::ReverseComplement(sequence);
-			auto bw = fullstartOneWay(seq_id, revSequence, reusableState, sequence, false);
+			std::string_view bwview { revSequence.data(), revSequence.size() };
+			auto bw = fullstartOneWay(seq_id, bwview, reusableState, sequence, false, 0);
 			if (!bw.alignmentFailed()) result.alignments.emplace_back(std::move(bw));
 		}
 		return result;
@@ -273,7 +298,7 @@ public:
 
 private:
 
-	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, const std::string& fwSequence, bool forward) const
+	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, const std::string_view& sequence, AlignerGraphsizedState& reusableState, const std::string& fwSequence, bool forward, size_t offset) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(params.graph.finalized);
@@ -288,7 +313,7 @@ private:
 #endif
 		if (forward)
 		{
-			fixForwardTraceSeqPos(trace.trace, 0, fwSequence);
+			fixForwardTraceSeqPos(trace.trace, offset, fwSequence);
 		}
 		else
 		{
@@ -371,6 +396,11 @@ private:
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
 	{
 		std::string_view seq { sequence.data(), sequence.size() };
+		return getBacktraceFullStart(seq, reusableState);
+	}
+
+	OnewayTrace getBacktraceFullStart(const std::string_view& seq, AlignerGraphsizedState& reusableState) const
+	{
 		return bvAligner.getBacktraceFullStart(seq, params.forceGlobal, params.Xdropcutoff, reusableState);
 	}
 
@@ -532,6 +562,11 @@ private:
 
 #ifndef NDEBUG
 	void verifyTrace(const std::vector<TraceItem>& trace, const std::string& sequence, ScoreType score) const
+	{
+		std::string_view view { sequence.data(), sequence.size() };
+		verifyTrace(trace, view, score);
+	}
+	void verifyTrace(const std::vector<TraceItem>& trace, const std::string_view& sequence, ScoreType score) const
 	{
 		size_t start = 0;
 		while (trace[start].DPposition.seqPos == (size_t)-1)

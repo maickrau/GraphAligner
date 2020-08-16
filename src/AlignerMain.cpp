@@ -93,6 +93,7 @@ int main(int argc, char** argv)
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
 		("DP-rows-backwards-too", "run --seedless-DP backwards as well if the forward alignment doesn't span to the end")
+		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -159,6 +160,7 @@ int main(int argc, char** argv)
 	params.rowsBackwardsToo = false;
 	params.preciseClippingIdentityCutoff = 0.5;
 	params.Xdropcutoff = 0;
+	params.DPRestartStride = 0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -213,8 +215,9 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
-	if (vm.count("first-rows-DP")) params.dynamicRowStart = true;
+	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-rows-backwards-too")) params.rowsBackwardsToo = true;
+	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
