@@ -72,7 +72,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
-		("first-rows-DP", "no seeding, instead use DP alignment for the first rows. VERY SLOW except on tiny graphs (int)")
+		("seedless-DP", "no seeding, instead use DP alignment for entire rows. VERY SLOW except on tiny graphs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
-		("DP-rows-backwards-too", "run --first-rows-DP backwards as well if the forward alignment doesn't span to the end")
+		("DP-rows-backwards-too", "run --seedless-DP backwards as well if the forward alignment doesn't span to the end")
 	;
 
 	boost::program_options::options_description cmdline_options;
