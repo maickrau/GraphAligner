@@ -50,8 +50,8 @@ public:
 	{
 		AlignmentResult result;
 		result.readName = seq_id;
-		std::string_view fwview { sequence.data(), sequence.size() };
-		auto fw = fullstartOneWay(seq_id, fwview, reusableState, sequence, true, 0);
+		std::string bwSequence = CommonUtils::ReverseComplement(sequence);
+		auto fw = fullstartOneWay(seq_id, reusableState, sequence, bwSequence, 0);
 		if (!fw.alignmentFailed()) result.alignments.emplace_back(std::move(fw));
 		if (DPRestartStride > 0)
 		{
@@ -62,8 +62,7 @@ public:
 			{
 				start = lastEnd + DPRestartStride;
 				if (start >= sequence.size()) break;
-				std::string_view view { sequence.data() + start, sequence.size() - start };
-				auto aln = fullstartOneWay(seq_id, view, reusableState, sequence, true, start);
+				auto aln = fullstartOneWay(seq_id, reusableState, sequence, bwSequence, start);
 				if (!aln.alignmentFailed())
 				{
 					assert(aln.alignmentEnd > lastEnd);
@@ -291,37 +290,67 @@ public:
 
 private:
 
-	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, const std::string_view& sequence, AlignerGraphsizedState& reusableState, const std::string& fwSequence, bool forward, size_t offset) const
+	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, AlignerGraphsizedState& reusableState, const std::string& fwSequence, const std::string& bwSequence, size_t offset) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
 		assert(params.graph.finalized);
-		auto trace = getBacktraceFullStart(sequence, reusableState);
+		std::string_view fwView { fwSequence.data() + offset, fwSequence.size() - offset };
+		auto fwTrace = getBacktraceFullStart(fwView, reusableState);
 		auto timeEnd = std::chrono::system_clock::now();
-		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		//failed alignment, don't output
-		if (trace.score == std::numeric_limits<ScoreType>::max()) return AlignmentResult::AlignmentItem {};
-		if (trace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+		if (fwTrace.score == std::numeric_limits<ScoreType>::max()) return AlignmentResult::AlignmentItem {};
+		if (fwTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
 #ifndef NDEBUG
-		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
+		if (fwTrace.trace.size() > 0) verifyTrace(fwTrace.trace, fwView, fwTrace.score);
 #endif
-		clipTraceStart(trace);
-		if (trace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
-		if (forward)
+		clipTraceStart(fwTrace);
+		if (fwTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+		fixForwardTraceSeqPos(fwTrace.trace, offset, fwSequence);
+		OnewayTrace bwTrace = OnewayTrace::TraceFailed();
+		if (fwTrace.trace[0].DPposition.seqPos != 0)
 		{
-			fixForwardTraceSeqPos(trace.trace, offset, fwSequence);
-		}
-		else
-		{
-			fixReverseTraceSeqPosAndOrder(trace.trace, fwSequence.size()-1, fwSequence);
+			std::string_view backwardPart { bwSequence.data() + bwSequence.size() - fwTrace.trace[0].DPposition.seqPos, fwTrace.trace[0].DPposition.seqPos };
+			auto reversePos = params.graph.GetReversePosition(fwTrace.trace[0].DPposition.node, fwTrace.trace[0].DPposition.nodeOffset);
+			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.forceGlobal, params.Xdropcutoff, reusableState);
+			if (!bwTrace.failed())
+			{
+				std::reverse(bwTrace.trace.begin(), bwTrace.trace.end());
+#ifndef NDEBUG
+				verifyTrace(bwTrace.trace, backwardPart, bwTrace.score);
+#endif
+				fixReverseTraceSeqPosAndOrder(bwTrace.trace, fwTrace.trace[0].DPposition.seqPos-1, fwSequence);
+			}
 		}
 
-		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
+		OnewayTrace mergedTrace;
+		if (!bwTrace.failed())
+		{
+			mergedTrace = std::move(bwTrace);
+			if (!fwTrace.failed())
+			{
+				assert(mergedTrace.trace.size() > 0);
+				assert(fwTrace.trace.size() > 0);
+				assert(mergedTrace.trace.back().DPposition == fwTrace.trace[0].DPposition);
+				mergedTrace.trace.pop_back();
+				mergedTrace.trace.insert(mergedTrace.trace.end(), fwTrace.trace.begin(), fwTrace.trace.end());
+				mergedTrace.score += fwTrace.score;
+			}
+		}
+		else if (!fwTrace.failed())
+		{
+			mergedTrace = std::move(fwTrace);
+		}
+#ifndef NDEBUG
+		if (mergedTrace.trace.size() > 0) verifyFixedTrace(fwTrace.trace, fwSequence, fwTrace.score);
+#endif
+
+		AlignmentResult::AlignmentItem alnItem { std::move(mergedTrace), 0, std::numeric_limits<size_t>::max() };
 
 		alnItem.alignmentScore = alnItem.trace->score;
 		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
 		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos + 1;
 		timeEnd = std::chrono::system_clock::now();
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+		auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
 		return alnItem;
 	}
@@ -613,6 +642,50 @@ private:
 			assert(trace[i].DPposition.seqPos < sequence.size());
 			auto newpos = trace[i].DPposition;
 			auto oldpos = trace[i-1].DPposition;
+			auto oldNodeIndex = oldpos.node;
+			auto newNodeIndex = newpos.node;
+			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);
+			if (oldNodeIndex == newNodeIndex)
+			{
+				assert((newpos.nodeOffset >= oldpos.nodeOffset && newpos.seqPos >= oldpos.seqPos) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
+				continue;
+			}
+			assert(oldNodeIndex != newNodeIndex);
+			assert(std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end());
+			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
+			assert(oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1);
+			assert(newpos.nodeOffset == 0);
+		}
+	}
+	void verifyFixedTrace(const std::vector<TraceItem>& trace, const std::string& sequence, ScoreType score) const
+	{
+		if (trace.size() == 0) return;
+		assert(trace[0].DPposition.seqPos < sequence.size());
+		assert(trace.back().DPposition.seqPos < sequence.size());
+		for (size_t i = 1; i < trace.size(); i++)
+		{
+			assert(trace[i].DPposition.seqPos < sequence.size());
+			auto newpos = trace[i].DPposition;
+			auto oldpos = trace[i-1].DPposition;
+
+			assert(newpos.nodeOffset < params.graph.originalNodeSize.at(newpos.node));
+			size_t nodeIndex = params.graph.GetUnitigNode(newpos.node, newpos.nodeOffset);
+			assert(params.graph.nodeOffset[nodeIndex] <= newpos.nodeOffset);
+			assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > newpos.nodeOffset);
+			size_t offsetInNode = newpos.nodeOffset - params.graph.nodeOffset[nodeIndex];
+			assert(offsetInNode < params.graph.NodeLength(nodeIndex));
+			newpos.node = nodeIndex;
+			newpos.nodeOffset = offsetInNode;
+
+			assert(oldpos.nodeOffset < params.graph.originalNodeSize.at(oldpos.node));
+			nodeIndex = params.graph.GetUnitigNode(oldpos.node, oldpos.nodeOffset);
+			assert(params.graph.nodeOffset[nodeIndex] <= oldpos.nodeOffset);
+			assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > oldpos.nodeOffset);
+			offsetInNode = oldpos.nodeOffset - params.graph.nodeOffset[nodeIndex];
+			assert(offsetInNode < params.graph.NodeLength(nodeIndex));
+			oldpos.node = nodeIndex;
+			oldpos.nodeOffset = offsetInNode;
+
 			auto oldNodeIndex = oldpos.node;
 			auto newNodeIndex = newpos.node;
 			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);
