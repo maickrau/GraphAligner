@@ -304,6 +304,8 @@ private:
 #ifndef NDEBUG
 		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
 #endif
+		clipTraceStart(trace);
+		if (trace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
 		if (forward)
 		{
 			fixForwardTraceSeqPos(trace.trace, offset, fwSequence);
@@ -551,6 +553,44 @@ private:
 		result.cellsProcessed = cellsProcessed;
 		result.elapsedMilliseconds = elapsedMilliseconds;
 		return result;
+	}
+
+	void clipTraceStart(OnewayTrace& trace) const
+	{
+		if (trace.trace.size() == 0) return;
+		ScoreType maxX = std::numeric_limits<ScoreType>::min();
+		size_t maxXIndex = std::numeric_limits<size_t>::max();
+		size_t score = 0;
+		size_t maxXScore = 0;
+		for (size_t i = trace.trace.size()-1; i < trace.trace.size(); i--)
+		{
+			bool posSwitch = (i == trace.trace.size()-1) ||  trace.trace[i].nodeSwitch || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node;
+			if (i != trace.trace.size()-1 && trace.trace[i+1].DPposition.seqPos == trace.trace[i].DPposition.seqPos)
+			{
+				score += 1;
+			}
+			else if (i != trace.trace.size()-1 && !posSwitch)
+			{
+				score += 1;
+			}
+			else if (!Common::characterMatch(trace.trace[i].sequenceCharacter, trace.trace[i].graphCharacter))
+			{
+				score += 1;
+			}
+			ScoreType Xhere = trace.trace.back().DPposition.seqPos - trace.trace[i].DPposition.seqPos + 1 - score * params.XscoreErrorCost;
+			if (Xhere > maxX)
+			{
+				maxX = Xhere;
+				maxXIndex = i;
+				maxXScore = score;
+			}
+		}
+		assert(maxXIndex < trace.trace.size());
+		if (maxXIndex > 0)
+		{
+			trace.score = maxXScore;
+			trace.trace.erase(trace.trace.begin(), trace.trace.begin() + maxXIndex);
+		}
 	}
 
 #ifndef NDEBUG
