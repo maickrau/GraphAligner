@@ -43,7 +43,6 @@ struct AlignerParams
 	double seedExtendDensity;
 	bool nondeterministicOptimizations;
 	bool optimalDijkstra;
-	bool rowsBackwardsToo;
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;

@@ -92,7 +92,6 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
-		("DP-rows-backwards-too", "run --seedless-DP backwards as well if the forward alignment doesn't span to the end")
 		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
 	;
 
@@ -157,7 +156,6 @@ int main(int argc, char** argv)
 	params.seedExtendDensity = 0.002;
 	params.nondeterministicOptimizations = false;
 	params.optimalDijkstra = false;
-	params.rowsBackwardsToo = false;
 	params.preciseClippingIdentityCutoff = 0.5;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
@@ -216,7 +214,6 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
-	if (vm.count("DP-rows-backwards-too")) params.rowsBackwardsToo = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;

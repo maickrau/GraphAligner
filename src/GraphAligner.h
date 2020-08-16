@@ -46,7 +46,7 @@ public:
 		if (!params.quietMode) logger = { std::cerr };
 	}
 	
-	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, bool backwardsToo, size_t DPRestartStride) const
+	AlignmentResult AlignOneWay(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState, size_t DPRestartStride) const
 	{
 		AlignmentResult result;
 		result.readName = seq_id;
@@ -75,13 +75,6 @@ public:
 					lastEnd = start;
 				}
 			}
-		}
-		if (backwardsToo && (fw.alignmentFailed() || fw.alignmentEnd != sequence.size()))
-		{
-			auto revSequence = CommonUtils::ReverseComplement(sequence);
-			std::string_view bwview { revSequence.data(), revSequence.size() };
-			auto bw = fullstartOneWay(seq_id, bwview, reusableState, sequence, false, 0);
-			if (!bw.alignmentFailed()) result.alignments.emplace_back(std::move(bw));
 		}
 		return result;
 	}
