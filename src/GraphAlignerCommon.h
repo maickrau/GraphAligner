@@ -207,6 +207,8 @@ public:
 			case 't':
 			case 'T':
 				return ambiguousMatch(graphCharacter, 'T');
+			case '-':
+				return false;
 		}
 		return (ambiguousMatch(sequenceCharacter, 'A') && ambiguousMatch(graphCharacter, 'A'))
 		|| (ambiguousMatch(sequenceCharacter, 'C') && ambiguousMatch(graphCharacter, 'C'))
@@ -221,6 +223,8 @@ public:
 		assert(exactChar == 'A' || exactChar == 'T' || exactChar == 'C' || exactChar == 'G');
 		switch(ambiguousChar)
 		{
+			case '-':
+				return false;
 			case 'A':
 			case 'a':
 				return exactChar == 'A';
