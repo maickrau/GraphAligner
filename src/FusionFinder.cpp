@@ -75,13 +75,13 @@ std::unordered_map<std::string, std::unordered_set<int>> getGeneBelongers(const 
 	return result;
 }
 
-GfaGraph getNonfusionGraph(std::string gene, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers)
+GfaGraph getNonfusionGraph(const std::string& gene, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers)
 {
 	assert(geneBelongers.count(gene) == 1);
 	return graph.GetSubgraph(geneBelongers.at(gene));
 }
 
-GfaGraph getFusionGraph(std::string leftGene, std::string rightGene, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers)
+GfaGraph getFusionGraph(const std::string& leftGene, const std::string& rightGene, const GfaGraph& graph, const std::unordered_map<std::string, std::unordered_set<int>>& geneBelongers)
 {
 	assert(geneBelongers.count(leftGene) == 1);
 	assert(geneBelongers.count(rightGene) == 1);
@@ -191,7 +191,7 @@ std::string getCorrected(const vg::Alignment& aln, const GfaGraph& graph)
 	return result;
 }
 
-void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAlns, std::string leftGene, std::string rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen, bool optimal)
+void addBestAlnsOnePair(std::unordered_map<size_t, FusionAlignment>& bestAlns, const std::string& leftGene, const std::string& rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen, bool optimal)
 {
 	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph);
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 100, true };
@@ -209,7 +209,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 			{
 				alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 100, 100, true, reusableState, true, true, false, false, 0, 0, 0);
 			}
-			if (bestAlns.count(read.seq_id) == 1 && alignments.alignments[0].alignmentScore > bestAlns.at(read.seq_id).alignment->score()) continue;
+			if (bestAlns.count(readIndex) == 1 && alignments.alignments[0].alignmentScore > bestAlns.at(readIndex).alignment->score()) continue;
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
@@ -233,9 +233,9 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 				}
 			}
 			if (leftAlnSize < minFusionLen || rightAlnSize < minFusionLen) continue;
-			if (bestAlns.count(read.seq_id) == 0 || alignments.alignments[0].alignment->score() < bestAlns.at(read.seq_id).alignment->score())
+			if (bestAlns.count(readIndex) == 0 || alignments.alignments[0].alignment->score() < bestAlns.at(readIndex).alignment->score())
 			{
-				bestAlns[read.seq_id] = FusionAlignment { alignments.alignments[0].alignment, leftGene, rightGene, 0, getCorrected(*alignments.alignments[0].alignment, fusiongraph) };
+				bestAlns[readIndex] = FusionAlignment { alignments.alignments[0].alignment, leftGene, rightGene, 0, getCorrected(*alignments.alignments[0].alignment, fusiongraph) };
 			}
 		}
 		catch (ThreadReadAssertion::AssertionFailure& e)
@@ -251,7 +251,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	std::vector<std::thread> threads;
 	size_t nextPair = 0;
 	std::mutex nextPairMutex;
-	std::vector<std::unordered_map<std::string, FusionAlignment>> bestFusionAlnsPerThread;
+	std::vector<std::unordered_map<size_t, FusionAlignment>> bestFusionAlnsPerThread;
 	std::mutex readsInNonfusionGraphMutex;
 	bestFusionAlnsPerThread.resize(numThreads);
 	for (size_t thread = 0; thread < numThreads; thread++)
@@ -299,7 +299,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	}
 	threads.clear();
 	std::cerr << "merge fusion results" << std::endl;
-	std::unordered_map<std::string, FusionAlignment> bestFusionAlns;
+	std::unordered_map<size_t, FusionAlignment> bestFusionAlns;
 	for (size_t i = 0; i < numThreads; i++)
 	{
 		for (auto pair : bestFusionAlnsPerThread[i])
@@ -310,7 +310,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 			}
 		}
 	}
-	std::vector<std::unordered_map<std::string, FusionAlignment>> bestNonfusionAlnsPerThread;
+	std::vector<std::unordered_map<size_t, FusionAlignment>> bestNonfusionAlnsPerThread;
 	bestNonfusionAlnsPerThread.resize(numThreads);
 	std::cerr << "get forbidden genes" << std::endl;
 	std::unordered_set<std::string> forbiddenGenes;
@@ -342,7 +342,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	}
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([&nonFusionGenes, &forbiddenGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
+		threads.emplace_back([&nonFusionGenes, &bestFusionAlns, fusionPenalty, &forbiddenGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
 		{
 			while (true)
 			{
@@ -363,6 +363,21 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 				auto nonfusiongraph = getNonfusionGraph(nonFusionGenes[i], graph, geneBelongers);
 				assert(readsInNonfusionGraph.count(nonFusionGenes[i]) == 1);
 				std::vector<size_t> readIndices { readsInNonfusionGraph.at(nonFusionGenes[i]).begin(), readsInNonfusionGraph.at(nonFusionGenes[i]).end() };
+				for (size_t j = readIndices.size()-1; j < readIndices.size(); j++)
+				{
+					if (bestFusionAlns.count(j) == 0)
+					{
+						std::swap(readIndices[j], readIndices.back());
+						readIndices.pop_back();
+						continue;
+					}
+					if (bestNonfusionAlnsPerThread[thread].count(j) == 1 && bestNonfusionAlnsPerThread[thread].at(j).alignment->score() <= bestFusionAlns.at(j).alignment->score() + fusionPenalty)
+					{
+						std::swap(readIndices[j], readIndices.back());
+						readIndices.pop_back();
+						continue;
+					}
+				}
 				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], nonFusionGenes[i], nonFusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0, false);
 				{
 					std::lock_guard<std::mutex> lock { nextPairMutex };
@@ -375,7 +390,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	{
 		threads[i].join();
 	}
-	std::unordered_map<std::string, FusionAlignment> bestNonfusionAlns;
+	std::unordered_map<size_t, FusionAlignment> bestNonfusionAlns;
 	std::cerr << "merge nonfusion results" << std::endl;
 	for (size_t i = 0; i < numThreads; i++)
 	{
