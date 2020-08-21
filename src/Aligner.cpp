@@ -384,6 +384,15 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	selectionOptions.method = params.alignmentSelectionMethod;
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
 	selectionOptions.ECutoff = params.selectionECutoff;
+	if (params.preciseClipping)
+	{
+		selectionOptions.EValueCalc = EValueCalculator { params.preciseClippingIdentityCutoff };
+	}
+	else
+	{
+		// default 70% min identity threshold
+		selectionOptions.EValueCalc = EValueCalculator { .7 };
+	}
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (params.verboseMode)

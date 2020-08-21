@@ -7,6 +7,7 @@
 #include <functional>
 #include "vg.pb.h"
 #include "GraphAlignerCommon.h"
+#include "EValue.h"
 
 namespace AlignmentSelection
 {
@@ -27,14 +28,10 @@ namespace AlignmentSelection
 		size_t graphSize;
 		size_t readSize;
 		double ECutoff;
+		EValueCalculator EValueCalc;
 	};
-	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alns, SelectionOptions method);
-	double S(const AlignmentResult::AlignmentItem& aln);
-	double Evalue(size_t m, size_t n, const AlignmentResult::AlignmentItem& aln);
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alignments, SelectionOptions options);
 	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right);
-	bool alignmentLengthCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right);
-	bool alignmentScoreCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right);
-	bool alignmentECompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right, size_t m, size_t n);
 
 	template <typename AlnScorer>
 	std::vector<AlignmentResult::AlignmentItem> GreedySelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alignments, AlnScorer alnScorer)
@@ -98,8 +95,7 @@ namespace AlignmentSelection
 		return result;
 	}
 
-	std::vector<AlignmentResult::AlignmentItem> SelectECutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, size_t m, size_t n, double cutoff);
-	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alignments, SelectionOptions options);
+	std::vector<AlignmentResult::AlignmentItem> SelectECutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, size_t m, size_t n, double cutoff, const EValueCalculator& EValueCalc);
 
 };
 

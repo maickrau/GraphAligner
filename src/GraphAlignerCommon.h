@@ -334,6 +334,10 @@ public:
 		{
 			return alignmentEnd == alignmentStart;
 		}
+		size_t alignmentLength() const
+		{
+			return alignmentEnd - alignmentStart;
+		}
 		std::string corrected;
 		std::string GAFline;
 		std::shared_ptr<vg::Alignment> alignment;

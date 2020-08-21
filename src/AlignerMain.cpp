@@ -8,6 +8,7 @@
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
+#include "EValue.h"
 
 int main(int argc, char** argv)
 {
