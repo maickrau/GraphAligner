@@ -207,7 +207,7 @@ void addBestAlnsOnePair(std::unordered_map<std::string, FusionAlignment>& bestAl
 			}
 			else
 			{
-				alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 100, 100, true, reusableState, true, true, false, false);
+				alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 100, 100, true, reusableState, true, true, false, false, 0, 0, 0);
 			}
 			if (bestAlns.count(read.seq_id) == 1 && alignments.alignments[0].alignmentScore > bestAlns.at(read.seq_id).alignment->score()) continue;
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
@@ -634,7 +634,7 @@ std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(
 				for (auto pair : matchSize)
 				{
 					std::vector<std::string> insertions;
-					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .30)
+					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .25)
 					{
 						insertions.push_back(geneFromTranscript(transcripts[pair.first].name()));
 					}
