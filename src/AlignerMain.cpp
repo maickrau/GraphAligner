@@ -73,7 +73,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
-		("seedless-DP", "no seeding, instead use DP alignment for entire rows. VERY SLOW except on tiny graphs (int)")
+		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
