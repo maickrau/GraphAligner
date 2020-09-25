@@ -61,7 +61,7 @@ public:
 			while (start < sequence.size())
 			{
 				start = lastEnd + DPRestartStride;
-				if (start >= sequence.size()) break;
+				if (start >= sequence.size()-1) break;
 				auto aln = fullstartOneWay(seq_id, reusableState, sequence, bwSequence, start);
 				if (!aln.alignmentFailed())
 				{
