@@ -329,6 +329,8 @@ public:
 		for (size_t offset = 0; offset < WordConfiguration<Word>::WordSize; offset++)
 		{
 			ScoreType seedScore = ((ScoreType)(j+offset) + 1 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
+			assert((size_t)seedScore < j + WordConfiguration<Word>::WordSize);
+			assert((size_t)oldSeedScore < j + WordConfiguration<Word>::WordSize);
 			assert(seedScore == oldSeedScore || seedScore == oldSeedScore+1);
 			if (seedScore == oldSeedScore+1)
 			{
@@ -337,6 +339,7 @@ public:
 			oldSeedScore = seedScore;
 		}
 		result.scoreEnd = oldSeedScore;
+		assert(result.getScoreBeforeStart() < j + WordConfiguration<Word>::WordSize);
 		return result;
 	}
 
@@ -1038,7 +1041,7 @@ public:
 				newWs.VP &= WordConfiguration<Word>::AllOnes ^ 1;
 				newWs.VN |= 1;
 			}
-			assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore);
+			// assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore || newWs.getScoreBeforeStart() >= extraSlice.getScoreBeforeStart());
 			if (!hasWs)
 			{
 				ws = newWs;
@@ -1239,7 +1242,7 @@ public:
 				if (hinP == 1) assert(newWs.scoreEnd == ws.scoreEnd+1);
 				if (hinN == 1) assert(newWs.scoreEnd == ws.scoreEnd-1);
 #endif
-				assert(!AllowEarlyLeave || newWs.getScoreBeforeStart() >= debugLastRowMinScore);
+				// assert(!AllowEarlyLeave || newWs.getScoreBeforeStart() >= debugLastRowMinScore || newWs.getScoreBeforeStart() >= extraSlice.getScoreBeforeStart());
 				ws = newWs;
 				if (ws.scoreEnd < result.minScore)
 				{
