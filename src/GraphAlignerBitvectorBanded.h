@@ -596,7 +596,7 @@ private:
 			int bandwidth = (params.rampBandwidth > params.initialBandwidth && rampUntil >= slice) ? params.rampBandwidth : params.initialBandwidth;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
-			debugLastRowMinScore = lastSlice.minScore;
+			if (lastSlice.minScore != std::numeric_limits<ScoreType>::max() - bandwidth - 1) debugLastRowMinScore = lastSlice.minScore;
 #endif
 #ifdef SLICEVERBOSE
 			auto timeStart = std::chrono::system_clock::now();

@@ -477,6 +477,10 @@ public:
 				{
 					break;
 				}
+				if (result.trace.size() > 0 && bt.first == result.trace.back().DPposition && !bt.second && nodeSlices[bt.first.nodeOffset].getValue(bt.first.seqPos % WordConfiguration<Word>::WordSize) == extraSlice.getScoreBeforeStart())
+				{
+					break;
+				}
 				result.trace.emplace_back(bt.first, bt.second, sequence, params.graph);
 				checkBacktraceCircularity(result);
 				continue;
@@ -814,6 +818,9 @@ public:
 		}
 		assert(scoreHere <= quitScore);
 		bool eq = Common::characterMatch(sequence[j], params.graph.NodeSequences(node, 0));
+		MatrixPosition bestInvalidBacktrace { std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max() };
+		ScoreType bestInvalidBacktraceScore = scoreHere+1;
+		bool bestInvalidNodeSwitch = false;
 		if (previous.hasNode(node))
 		{
 			assert(previous.node(node).startSlice.scoreEnd >= scoreHere-1);
@@ -821,9 +828,16 @@ public:
 			{
 				return std::make_pair(MatrixPosition {node, 0, j-1 }, false);
 			}
+			if (previousScoresNotValid || previous.node(node).startSlice.scoreEnd > previousQuitScore)
+			{
+				if (previous.node(node).startSlice.scoreEnd < bestInvalidBacktraceScore)
+				{
+					bestInvalidBacktraceScore = previous.node(node).startSlice.scoreEnd;
+					bestInvalidBacktrace = MatrixPosition { node, 0, j-1 };
+					bestInvalidNodeSwitch = false;
+				}
+			}
 		}
-		MatrixPosition bestInvalidBacktrace { (size_t)-1, (size_t)-1, (size_t)-1 };
-		ScoreType bestInvalidBacktraceScore = scoreHere+1;
 		for (auto neighbor : params.graph.inNeighbors[node])
 		{
 			if (current.hasNode(neighbor))
@@ -844,6 +858,7 @@ public:
 					{
 						bestInvalidBacktraceScore = cornerScore;
 						bestInvalidBacktrace = MatrixPosition {neighbor, params.graph.NodeLength(neighbor)-1, j-1 };
+						bestInvalidNodeSwitch = true;
 					}
 				}
 				else
@@ -856,6 +871,10 @@ public:
 				}
 			}
 		}
+		if (eq && scoreHere == extraSlice.getScoreBeforeStart())
+		{
+			return std::make_pair(MatrixPosition { node, 0, j }, false);
+		}
 		if (scoreHere == extraSlice.getValue(0))
 		{
 			return std::make_pair(MatrixPosition { node, 0, j }, false);
@@ -864,7 +883,7 @@ public:
 		if (bestInvalidBacktraceScore < scoreHere+1)
 		{
 			assert(bestInvalidBacktrace.node != (size_t)-1 || bestInvalidBacktrace.nodeOffset != (size_t)-1 || bestInvalidBacktrace.seqPos != (size_t)-1);
-			return std::make_pair(bestInvalidBacktrace, true);
+			return std::make_pair(bestInvalidBacktrace, bestInvalidNodeSwitch);
 		}
 		assert(false);
 		return std::make_pair(MatrixPosition {0, 0, 0}, false);
