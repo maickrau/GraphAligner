@@ -198,7 +198,6 @@ public:
 			result.minScoreNodeOffset = minScoreNodeOffset;
 			result.maxExactEndposNode = maxExactEndposNode;
 			result.maxExactEndposScore = maxExactEndposScore;
-			assert(scores.size() != 0);
 			result.scores = scores;
 			result.correctness = correctness;
 			result.j = j;

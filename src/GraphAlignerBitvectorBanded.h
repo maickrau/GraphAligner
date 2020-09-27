@@ -236,6 +236,12 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
 	NodeCalculationResult calculateSlice(const std::string_view& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice) const
 	{
+		if (previousMinScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1)
+		{
+			assert(extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max());
+			previousMinScore = extraSlice.getScoreBeforeStart();
+			previousQuitScore = extraSlice.getScoreBeforeStart() + bandwidth;
+		}
 		double averageErrorRate = 0;
 		if (j > 0)
 		{
@@ -496,14 +502,16 @@ private:
 		slice.minScore = sliceResult.minScore;
 		slice.maxExactEndposScore = sliceResult.maxExactEndposScore + slice.j;
 		slice.maxExactEndposNode = sliceResult.maxExactEndposNode;
-		assert(sliceResult.minScore <= (ScoreType)slice.j + (ScoreType)WordConfiguration<Word>::WordSize);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == 0) || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == 0) || sliceResult.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == 0) || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == 0) || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == 0) || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(slice.minScore >= previousSlice.minScore);
-		slice.correctness = slice.correctness.NextState(slice.minScore - previousSlice.minScore, WordConfiguration<Word>::WordSize);
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.minScore <= (ScoreType)slice.j + (ScoreType)WordConfiguration<Word>::WordSize);
+		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert(slice.minScore >= previousSlice.minScore || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
+		ScoreType diff = slice.minScore - previousSlice.minScore;
+		if (previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1) diff = 0;
+		slice.correctness = slice.correctness.NextState(diff, WordConfiguration<Word>::WordSize);
 		slice.bandwidth = bandwidth;
 #ifdef SLICEVERBOSE
 		slice.nodesProcessed = sliceResult.nodesProcessed;
