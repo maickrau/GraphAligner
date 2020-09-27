@@ -273,11 +273,11 @@ void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t wi
 	iterateMinimizersReal(str, minimizerLength, windowSize, [&otherMinimizers](size_t pos, size_t kmer) { otherMinimizers.emplace_back(pos, kmer); });
 	std::sort(otherMinimizers.begin(), otherMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
 	std::sort(simpleMinimizers.begin(), simpleMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
-	assert(simpleMinimizers.size() == otherMinimizers.size());
-	for (size_t i = 0; i < simpleMinimizers.size(); i++)
+	// assert(simpleMinimizers.size() == otherMinimizers.size());
+	for (size_t i = 0; i < otherMinimizers.size(); i++)
 	{
-		assert(simpleMinimizers[i] == otherMinimizers[i]);
-		callback(simpleMinimizers[i].first, simpleMinimizers[i].second);
+		// assert(simpleMinimizers[i] == otherMinimizers[i]);
+		callback(otherMinimizers[i].first, otherMinimizers[i].second);
 	}
 }
 

@@ -38,10 +38,10 @@ private:
 public:
 
 	GraphAligner(const Params& params) :
+	params(params),
 	bvAligner(params),
 	dijkstraAligner(params),
-	logger(),
-	params(params)
+	logger()
 	{
 		if (!params.quietMode) logger = { std::cerr };
 	}
@@ -104,6 +104,23 @@ public:
 		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
 		result.alignments.emplace_back(std::move(alnItem));
+		return result;
+	}
+
+	AlignmentResult AlignMultiseed(const std::string& seq_id, const std::string& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	{
+		assertSetRead(seq_id, 0, true, 0, 0, 0);
+		assert(params.graph.finalized);
+		AlignmentResult result;
+		result.readName = seq_id;
+		assert(seedHits.size() > 0);
+		std::string revSequence = CommonUtils::ReverseComplement(sequence);
+		result.alignments = getAlignmentsFromMultiseeds(seq_id, sequence, revSequence, seedHits, reusableState);
+		for (const auto& item : result.alignments)
+		{
+			assert(!item.alignmentFailed());
+		}
+		assertSetNoRead(seq_id);
 		return result;
 	}
 
@@ -224,6 +241,52 @@ public:
 		}
 	}
 
+	void prepareSeedsForMultiseeding(std::vector<SeedHit>& seedHits) const
+	{
+		std::unordered_set<std::pair<size_t, size_t>> actives;
+		for (size_t i = seedHits.size()-1; i < seedHits.size(); i--)
+		{
+			if (seedHits[i].alignmentGraphNodeId == std::numeric_limits<size_t>::max())
+			{
+				int forwardNodeId;
+				if (seedHits[i].reverse)
+				{
+					forwardNodeId = seedHits[i].nodeID * 2 + 1;
+				}
+				else
+				{
+					forwardNodeId = seedHits[i].nodeID * 2;
+				}
+				assert(seedHits[i].alignmentGraphNodeId == std::numeric_limits<size_t>::max());
+				assert(seedHits[i].alignmentGraphNodeOffset == std::numeric_limits<size_t>::max());
+				seedHits[i].alignmentGraphNodeId = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
+				assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[seedHits[i].alignmentGraphNodeId]);
+				seedHits[i].alignmentGraphNodeOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[seedHits[i].alignmentGraphNodeId];
+				assert(params.graph.chainApproxPos[seedHits[i].alignmentGraphNodeId] + seedHits[i].alignmentGraphNodeOffset >= seedHits[i].seqPos);
+			}
+			else
+			{
+				assert(seedHits[i].alignmentGraphNodeOffset != std::numeric_limits<size_t>::max());
+			}
+			size_t slice = seedHits[i].seqPos / WordConfiguration<Word>::WordSize;
+			std::pair<size_t, size_t> key { seedHits[i].alignmentGraphNodeId, slice };
+			if (actives.count(key) == 1)
+			{
+				std::swap(seedHits[i], seedHits.back());
+				seedHits.pop_back();
+				continue;
+			}
+			actives.insert(key);
+		}
+		std::sort(seedHits.begin(), seedHits.end(), [](const SeedHit& left, const SeedHit& right)
+		{
+			if (left.seqPos / WordConfiguration<Word>::WordSize < right.seqPos / WordConfiguration<Word>::WordSize) return true;
+			if (left.seqPos / WordConfiguration<Word>::WordSize > right.seqPos / WordConfiguration<Word>::WordSize) return false;
+			assert(left.alignmentGraphNodeId != right.alignmentGraphNodeId);
+			return false;
+		});
+	}
+
 	void orderSeedsByChaining(std::vector<SeedHit>& seedHits) const
 	{
 		phmap::flat_hash_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
@@ -290,21 +353,10 @@ public:
 
 private:
 
-	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, AlignerGraphsizedState& reusableState, const std::string& fwSequence, const std::string& bwSequence, size_t offset) const
+	OnewayTrace clipAndAddBackwardTrace(const std::string& seq_id, OnewayTrace&& fwTrace, AlignerGraphsizedState& reusableState, const std::string& fwSequence, const std::string& bwSequence, size_t offset) const
 	{
-		auto timeStart = std::chrono::system_clock::now();
-		assert(params.graph.finalized);
-		std::string_view fwView { fwSequence.data() + offset, fwSequence.size() - offset };
-		auto fwTrace = getBacktraceFullStart(fwView, reusableState);
-		auto timeEnd = std::chrono::system_clock::now();
-		//failed alignment, don't output
-		if (fwTrace.score == std::numeric_limits<ScoreType>::max()) return AlignmentResult::AlignmentItem {};
-		if (fwTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
-#ifndef NDEBUG
-		if (fwTrace.trace.size() > 0) verifyTrace(fwTrace.trace, fwView, fwTrace.score);
-#endif
 		clipTraceStart(fwTrace);
-		if (fwTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+		if (fwTrace.trace.size() == 0) return std::move(fwTrace);
 		fixForwardTraceSeqPos(fwTrace.trace, offset, fwSequence);
 		OnewayTrace bwTrace = OnewayTrace::TraceFailed();
 		if (fwTrace.trace[0].DPposition.seqPos != 0)
@@ -343,6 +395,24 @@ private:
 #ifndef NDEBUG
 		if (mergedTrace.trace.size() > 0) verifyFixedTrace(fwTrace.trace, fwSequence, fwTrace.score);
 #endif
+		return std::move(mergedTrace);
+	}
+
+	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, AlignerGraphsizedState& reusableState, const std::string& fwSequence, const std::string& bwSequence, size_t offset) const
+	{
+		auto timeStart = std::chrono::system_clock::now();
+		assert(params.graph.finalized);
+		std::string_view fwView { fwSequence.data() + offset, fwSequence.size() - offset };
+		auto fwTrace = getBacktraceFullStart(fwView, reusableState);
+		auto timeEnd = std::chrono::system_clock::now();
+		//failed alignment, don't output
+		if (fwTrace.score == std::numeric_limits<ScoreType>::max()) return AlignmentResult::AlignmentItem {};
+		if (fwTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+#ifndef NDEBUG
+		if (fwTrace.trace.size() > 0) verifyTrace(fwTrace.trace, fwView, fwTrace.score);
+#endif
+		OnewayTrace mergedTrace = clipAndAddBackwardTrace(seq_id, std::move(fwTrace), reusableState, fwSequence, bwSequence, offset);
+		if (mergedTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
 
 		AlignmentResult::AlignmentItem alnItem { std::move(mergedTrace), 0, std::numeric_limits<size_t>::max() };
 
@@ -426,6 +496,11 @@ private:
 	OnewayTrace getBacktraceFullStart(const std::string_view& seq, AlignerGraphsizedState& reusableState) const
 	{
 		return bvAligner.getBacktraceFullStart(seq, params.forceGlobal, params.Xdropcutoff, reusableState);
+	}
+
+	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	{
+		return bvAligner.getMultiseedTraces(sequence, seedHits, reusableState);
 	}
 
 	Trace getTwoDirectionalTrace(const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -513,6 +588,29 @@ private:
 			trace[i].nodeSwitch = trace[i+1].nodeSwitch;
 		}
 		trace.back().nodeSwitch = false;
+	}
+
+	std::vector<AlignmentResult::AlignmentItem> getAlignmentsFromMultiseeds(const std::string& seq_id, const std::string& sequence, const std::string& revSequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	{
+		auto traces = getMultiseedTraces(sequence, revSequence, seedHits, reusableState);
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < traces.size(); i++)
+		{
+			assert(!traces[i].failed());
+			auto mergedTrace = clipAndAddBackwardTrace(seq_id, std::move(traces[i]), reusableState, sequence, revSequence, 0);
+			if (mergedTrace.failed()) continue;
+			result.emplace_back(std::move(mergedTrace), 0, std::numeric_limits<size_t>::max());
+			LengthType seqstart = 0;
+			LengthType seqend = 0;
+			assert(result.back().trace->trace.size() > 0);
+			seqstart = result.back().trace->trace[0].DPposition.seqPos;
+			seqend = result.back().trace->trace.back().DPposition.seqPos;
+			assert(seqend < sequence.size());
+			result.back().alignmentScore = result.back().trace->score;
+			result.back().alignmentStart = seqstart;
+			result.back().alignmentEnd = seqend + 1;
+		}
+		return result;
 	}
 
 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
