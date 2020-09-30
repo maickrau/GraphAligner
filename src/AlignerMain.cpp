@@ -59,8 +59,8 @@ int main(int argc, char** argv)
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
-		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
+		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as the identity cutoff between correct / wrong alignments (float)")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -76,7 +76,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
-		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
+		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -272,6 +272,10 @@ int main(int argc, char** argv)
 		{
 			std::cerr << "precise clipping identity cutoff must be between 0.001 and 0.999" << std::endl;
 			paramError = true;
+		}
+		if (params.preciseClippingIdentityCutoff >= 0.001 && params.preciseClippingIdentityCutoff < 0.501)
+		{
+			std::cerr << "Warning: precise clipping identity cutoff set below 0.501. Output will almost certainly contain spurious alignments." << std::endl;
 		}
 	}
 	if (vm.count("X-drop"))
