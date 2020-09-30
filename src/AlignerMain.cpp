@@ -59,6 +59,8 @@ int main(int argc, char** argv)
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
+		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -74,6 +76,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
+		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -84,8 +87,6 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
-		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
 		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
 		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
 		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
@@ -93,7 +94,6 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
-		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
 	;
 
 	boost::program_options::options_description cmdline_options;
