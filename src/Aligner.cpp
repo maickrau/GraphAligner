@@ -448,14 +448,26 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto clusterTimeStart = std::chrono::system_clock::now();
-				PrepareMultiseeds(alignmentGraph, seeds);
-				// OrderSeeds(alignmentGraph, seeds);
+				if (params.multiseedDP)
+				{
+					PrepareMultiseeds(alignmentGraph, seeds);
+				}
+				else
+				{
+					OrderSeeds(alignmentGraph, seeds);
+				}
 				auto clusterTimeEnd = std::chrono::system_clock::now();
 				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
 				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
-				// alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				if (params.multiseedDP)
+				{
+					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				}
+				else
+				{
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				}
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}

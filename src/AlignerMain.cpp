@@ -74,6 +74,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
+		("multiseed-DP", boost::program_options::value<bool>(), "simultaneously extend all seeds (1/0)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -160,6 +161,7 @@ int main(int argc, char** argv)
 	params.preciseClippingIdentityCutoff = 0.5;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
+	params.multiseedDP = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -216,6 +218,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
+	if (vm.count("multiseed-DP")) params.multiseedDP = vm["multiseed-DP"].as<bool>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();

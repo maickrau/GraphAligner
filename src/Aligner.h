@@ -46,6 +46,7 @@ struct AlignerParams
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;
+	bool multiseedDP;
 };
 
 void alignReads(AlignerParams params);
