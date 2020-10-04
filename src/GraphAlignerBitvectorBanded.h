@@ -439,7 +439,7 @@ private:
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
-				assert(newEndMinScore >= previousMinScore || newEndMinScore >= seedstartSlice.getScoreBeforeStart());
+				// assert(newEndMinScore >= previousMinScore || newEndMinScore >= seedstartSlice.getScoreBeforeStart());
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
 				{
