@@ -217,6 +217,9 @@ private:
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
 	void addSeedHitToScoresAndQueue(const SeedHit& seedHit, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, const WordSlice extraSlice) const
 	{
+#ifdef SLICEVERBOSE
+		std::cerr << " " << seedHit.alignmentGraphNodeId << "(" << seedHit.nodeID << ")";
+#endif
 		size_t node = seedHit.alignmentGraphNodeId;
 		assert(node != std::numeric_limits<size_t>::max());
 		currentBand[node] = true;
@@ -314,12 +317,28 @@ private:
 		}
 		assert(calculableQueue.size() > 0 || seedhitStart != std::numeric_limits<size_t>::max());
 
+#ifdef SLICEVERBOSE
+		std::cerr << "seeds";
+#endif
+
 		if (extraSlice.getScoreBeforeStart() < previousQuitScore + WordConfiguration<Word>::WordSize)
 		{
+#ifdef SLICEVERBOSE
+			std::cerr << " " << seedhitEnd - seedhitStart << ":";
+#endif
 			for (size_t i = seedhitStart; i < seedhitEnd; i++)
 			{
 				addSeedHitToScoresAndQueue(seedHits[i], currentSlice, previousSlice, currentBand, previousBand, calculableQueue, extraSlice);
 			}
+#ifdef SLICEVERBOSE
+			std::cerr << std::endl;
+#endif
+		}
+		else
+		{
+#ifdef SLICEVERBOSE
+			std::cerr << " not added because of score" << std::endl;
+#endif
 		}
 
 		ScoreType currentMinScoreAtEndRow = result.minScore;
@@ -903,7 +922,6 @@ private:
 	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<SeedHit>& seedHits) const
 	{
 		assert(reusableState.componentQueue.valid());
-		assert(params.maxCellsPerSlice == std::numeric_limits<size_t>::max());
 		assert(params.preciseClipping);
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
@@ -933,7 +951,7 @@ private:
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " nodes " << newSlice.scores.size() << " slices " << newSlice.numCells << " nodesprocessed " << newSlice.nodesProcessed << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (int)(newSlice.numCells)) << "%";
+			std::cerr << "slice " << slice << " bandwidth " << bandwidth << " minscore " << newSlice.minScore << " diff " << (newSlice.minScore - lastSlice.minScore) << " time " << time << " nodes " << newSlice.scores.size() << " slices " << newSlice.numCells << " nodesprocessed " << newSlice.nodesProcessed << " cellsprocessed " << newSlice.cellsProcessed << " overhead " << (100 * (int)(newSlice.cellsProcessed - newSlice.numCells) / (std::max((int)newSlice.numCells, (int)1))) << "%";
 #endif
 
 			assert(newSlice.j == lastSlice.j + WordConfiguration<Word>::WordSize);
