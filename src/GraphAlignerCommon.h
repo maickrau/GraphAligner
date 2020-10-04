@@ -58,7 +58,8 @@ public:
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
-		previousBand()
+		previousBand(),
+		hasSeedStart()
 		{
 			if (!lowMemory)
 			{
@@ -69,6 +70,7 @@ public:
 			calculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
+			hasSeedStart.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
@@ -79,6 +81,7 @@ public:
 			dijkstraQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
+			hasSeedStart.assign(hasSeedStart.size(), false);
 		}
 		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
@@ -87,6 +90,7 @@ public:
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
+		std::vector<bool> hasSeedStart;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params

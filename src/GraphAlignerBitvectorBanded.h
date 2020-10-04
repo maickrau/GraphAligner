@@ -237,13 +237,13 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	NodeCalculationResult calculateSlice(const std::string_view& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice) const
+	NodeCalculationResult calculateSlice(const std::string_view& sequence, size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes) const
 	{
 		if (previousMinScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1)
 		{
-			assert(extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max());
-			previousMinScore = extraSlice.getScoreBeforeStart();
-			previousQuitScore = extraSlice.getScoreBeforeStart() + bandwidth;
+			assert(seedstartSlice.scoreEnd != std::numeric_limits<ScoreType>::max());
+			previousMinScore = seedstartSlice.getScoreBeforeStart();
+			previousQuitScore = seedstartSlice.getScoreBeforeStart() + bandwidth;
 		}
 		double averageErrorRate = 0;
 		if (j > 0)
@@ -321,14 +321,19 @@ private:
 		std::cerr << "seeds";
 #endif
 
-		if (extraSlice.getScoreBeforeStart() < previousQuitScore + WordConfiguration<Word>::WordSize)
+		std::vector<size_t> clearSeedStarts;
+		if (seedstartSlice.getScoreBeforeStart() < previousQuitScore + WordConfiguration<Word>::WordSize)
 		{
 #ifdef SLICEVERBOSE
 			std::cerr << " " << seedhitEnd - seedhitStart << ":";
 #endif
 			for (size_t i = seedhitStart; i < seedhitEnd; i++)
 			{
-				addSeedHitToScoresAndQueue(seedHits[i], currentSlice, previousSlice, currentBand, previousBand, calculableQueue, extraSlice);
+				addSeedHitToScoresAndQueue(seedHits[i], currentSlice, previousSlice, currentBand, previousBand, calculableQueue, seedstartSlice);
+				assert(!hasSeedStart[seedHits[i].alignmentGraphNodeId]);
+				hasSeedStart[seedHits[i].alignmentGraphNodeId] = true;
+				clearSeedStarts.push_back(seedHits[i].alignmentGraphNodeId);
+				seedstartNodes.insert(seedHits[i].alignmentGraphNodeId);
 			}
 #ifdef SLICEVERBOSE
 			std::cerr << std::endl;
@@ -341,6 +346,7 @@ private:
 #endif
 		}
 
+		WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		ScoreType currentMinScoreAtEndRow = result.minScore;
 		while (calculableQueue.size() > 0)
 		{
@@ -367,6 +373,8 @@ private:
 			auto& thisNode = currentSlice.node(i);
 			auto oldEnd = thisNode.endSlice;
 			if (!thisNode.exists) oldEnd = { 0, 0, std::numeric_limits<ScoreType>::max() };
+			WordSlice extraSlice = hasSeedStart[i] ? seedstartSlice : fakeSlice;
+			if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max()) oldEnd = oldEnd.mergeWith(extraSlice);
 			typename NodeSlice<LengthType, ScoreType, Word, HasVectorMap>::NodeSliceMapItem previousThisNode;
 
 			if (previousBand[i])
@@ -431,7 +439,7 @@ private:
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
-				assert(newEndMinScore >= previousMinScore);
+				assert(newEndMinScore >= previousMinScore || newEndMinScore >= seedstartSlice.getScoreBeforeStart());
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
 				{
@@ -471,6 +479,12 @@ private:
 			if (result.cellsProcessed > params.maxCellsPerSlice) break;
 		}
 
+		for (auto node : clearSeedStarts)
+		{
+			assert(hasSeedStart[node]);
+			hasSeedStart[node] = false;
+		}
+
 #ifdef EXTRACORRECTNESSASSERTIONS
 		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore, extraSlice);
 #endif
@@ -479,7 +493,7 @@ private:
 
 		if (!params.preciseClipping && j + WordConfiguration<Word>::WordSize > sequence.size())
 		{
-			BV::flattenLastSliceEnd(params, currentSlice, previousSlice, result, j, sequence, true, extraSlice);
+			BV::flattenLastSliceEnd(params, currentSlice, previousSlice, result, j, sequence, true, seedstartSlice);
 		}
 
 #ifdef SLICEVERBOSE
@@ -492,7 +506,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice) const
+	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool viterbi) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -502,18 +516,18 @@ private:
 		{
 			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
 			{
-				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice);
+				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes);
 			}
 			else
 			{
-				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice);
+				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes);
 			}
 			slice.scores = slice.scoresVectorMap.getMapSlice();
 		}
 		else
 		{
 			assert(!previousSlice.scoresVectorMap.hasVectorMapCurrently());
-			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice);
+			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes);
 		}
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
@@ -527,10 +541,10 @@ private:
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(slice.minScore >= previousSlice.minScore || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
+		assert(slice.minScore >= previousSlice.minScore || slice.minScore >= extraSlice.getScoreBeforeStart() || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
 		ScoreType diff = slice.minScore - previousSlice.minScore;
 		if (previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1) diff = 0;
-		slice.correctness = slice.correctness.NextState(diff, WordConfiguration<Word>::WordSize);
+		if (viterbi) slice.correctness = slice.correctness.NextState(diff, WordConfiguration<Word>::WordSize);
 		slice.bandwidth = bandwidth;
 #ifdef SLICEVERBOSE
 		slice.nodesProcessed = sliceResult.nodesProcessed;
@@ -545,14 +559,14 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice) const
+	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem>& nodesliceMap, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool viterbi) const
 	{
 		if (!params.lowMemory)
 		{
 			DPSlice bandTest { &nodesliceMap };
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, viterbi);
 			return bandTest;
 		}
 		else
@@ -561,7 +575,7 @@ private:
 			bandTest.scores.addEmptyNodeMap(previous.scores.size());
 			bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
 			bandTest.correctness = previous.correctness;
-			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice);
+			fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, viterbi);
 			return bandTest;
 		}
 	}
@@ -623,11 +637,11 @@ private:
 			DPSlice newSlice;
 			if (reusableState.componentQueue.valid())
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, true);
 			}
 			else
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, true);
 			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
@@ -814,11 +828,11 @@ private:
 			DPSlice newSlice;
 			if (reusableState.componentQueue.valid())
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false);
 			}
 			else
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false);
 			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
@@ -946,7 +960,7 @@ private:
 			}
 			assert(nextSeedHit == seedHits.size() || seedHits[nextSeedHit].seqPos / WordConfiguration<Word>::WordSize > (lastSlice.j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize);
 			WordSlice seedSlice = BV::getSeedSlice(lastSlice.j + WordConfiguration<Word>::WordSize, params);
-			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice);
+			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, false);
 			lastSeedHit = nextSeedHit;
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
