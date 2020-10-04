@@ -1272,7 +1272,7 @@ public:
 		slice.endSlice = ws;
 #ifndef NDEBUG
 		if (previousSlice.exists) assert(slice.endSlice.getScoreBeforeStart() <= previousSlice.endSlice.scoreEnd);
-		if (previousSlice.exists && forceUntil < nodeLength - 1) assert(slice.endSlice.getScoreBeforeStart() == previousSlice.endSlice.scoreEnd);
+		if (previousSlice.exists && forceUntil < nodeLength - 1 && extraSlice.scoreEnd == std::numeric_limits<ScoreType>::max()) assert(slice.endSlice.getScoreBeforeStart() == previousSlice.endSlice.scoreEnd);
 #endif
 		return result;
 	}
