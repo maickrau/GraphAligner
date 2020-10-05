@@ -233,7 +233,9 @@ private:
 		assert(calculableQueue.IsComponentPriorityQueue());
 		if (calculableQueue.IsComponentPriorityQueue())
 		{
-			calculableQueue.insert(params.graph.componentNumber[node], extraSlice.getValue(0), EdgeWithPriority { node, extraSlice.getValue(0), extraSlice, true });
+			EdgeWithPriority insertEdge { node, extraSlice.getValue(0), extraSlice, true };
+			insertEdge.forceCalculation = true;
+			calculableQueue.insert(params.graph.componentNumber[node], extraSlice.getValue(0), insertEdge);
 		}
 	}
 

@@ -995,10 +995,12 @@ public:
 
 		Word Eq = EqV.getEqI(nodeChunks[0] & 3);
 		bool hasSkipless = false;
+		bool forceCalculation = false;
 
 		for (auto inc : incoming)
 		{
 			result.cellsProcessed++;
+			if (inc.forceCalculation) forceCalculation = true;
 			if (inc.skipFirst)
 			{
 				if (!hasWs)
@@ -1077,7 +1079,7 @@ public:
 			result.maxExactEndposNode = i;
 		}
 
-		if (slice.exists)
+		if (!forceCalculation && slice.exists)
 		{
 			if (hasSkipless && params.graph.inNeighbors[i].size() == 1 && bandCheck(params.graph.inNeighbors[i][0]))
 			{
@@ -1186,7 +1188,7 @@ public:
 				ScoreType adjustScore = std::min(scoreBefore, scoreComparison);
 				for (size_t fixchunk = 0; fixchunk < slice.NUM_CHUNKS; fixchunk++)
 				{
-					for (; fixoffset < WordConfiguration<Word>::WordSize; fixoffset++)
+					for (; fixoffset < WordConfiguration<Word>::WordSize && fixchunk * WordConfiguration<Word>::WordSize + fixoffset < nodeLength; fixoffset++)
 					{
 						ScoreType newScoreComparison = scoreComparison;
 						newScoreComparison += (fixedHP[fixchunk] >> fixoffset) & 1;
@@ -1223,8 +1225,8 @@ public:
 				assert(scoreComparison == previousSlice.endSlice.scoreEnd);
 				assert(adjustScore <= extraSlice.getScoreBeforeStart());
 				assert(adjustScore <= previousSlice.endSlice.scoreEnd);
-				assert(adjustScore <= ws.getScoreBeforeStart() + nodeLength);
-				assert(adjustScore == previousSlice.endSlice.scoreEnd || adjustScore == extraSlice.getScoreBeforeStart() || adjustScore == ws.getScoreBeforeStart() + nodeLength);
+				assert(adjustScore <= ws.getScoreBeforeStart() + nodeLength - 1);
+				assert(adjustScore == previousSlice.endSlice.scoreEnd || adjustScore == extraSlice.getScoreBeforeStart() || adjustScore == ws.getScoreBeforeStart() + nodeLength - 1);
 			}
 			else if (scoreBefore < scoreComparison)
 			{
