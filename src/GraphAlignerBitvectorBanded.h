@@ -233,7 +233,7 @@ private:
 		assert(calculableQueue.IsComponentPriorityQueue());
 		if (calculableQueue.IsComponentPriorityQueue())
 		{
-			calculableQueue.insert(params.graph.componentNumber[node], extraSlice.getScoreBeforeStart(), EdgeWithPriority { node, extraSlice.getScoreBeforeStart(), BV::getSourceSliceFromScore(extraSlice.getScoreBeforeStart()), false });
+			calculableQueue.insert(params.graph.componentNumber[node], extraSlice.getValue(0), EdgeWithPriority { node, extraSlice.getValue(0), extraSlice, true });
 		}
 	}
 
