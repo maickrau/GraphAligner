@@ -342,6 +342,8 @@ public:
 			oldSeedScore = seedScore;
 		}
 		result.scoreEnd = oldSeedScore;
+		result.VP &= ~((Word)1);
+		result.VN |= (Word)1;
 		assert(result.getScoreBeforeStart() < j + WordConfiguration<Word>::WordSize);
 		return result;
 	}
@@ -1165,34 +1167,88 @@ public:
 		}
 
 		LengthType pos = 1;
-		size_t forceUntil = 0;
+		Word forceMask = WordConfiguration<Word>::AllZeros;
+		Word fixedHP[1] { previousSlice.HP[0] };
+		Word fixedHN[1] { previousSlice.HN[0] };
+
 		if (previousSlice.exists)
 		{
 			ScoreType scoreBefore = ws.getScoreBeforeStart();
 			ScoreType scoreComparison = previousSlice.startSlice.scoreEnd;
 			assert(scoreBefore <= scoreComparison);
-			if (scoreBefore < scoreComparison)
+			if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max())
 			{
+				scoreBefore = std::min(scoreBefore, extraSlice.getScoreBeforeStart());
+				assert(scoreBefore <= extraSlice.getScoreBeforeStart());
+				assert(scoreBefore <= ws.getScoreBeforeStart());
 				size_t fixoffset = 1;
+				if (scoreBefore < scoreComparison) forceMask |= (Word)1;
+				ScoreType adjustScore = std::min(scoreBefore, scoreComparison);
 				for (size_t fixchunk = 0; fixchunk < slice.NUM_CHUNKS; fixchunk++)
 				{
 					for (; fixoffset < WordConfiguration<Word>::WordSize; fixoffset++)
 					{
 						ScoreType newScoreComparison = scoreComparison;
-						newScoreComparison += (previousSlice.HP[fixchunk] >> fixoffset) & 1;
-						newScoreComparison -= (previousSlice.HN[fixchunk] >> fixoffset) & 1;
+						newScoreComparison += (fixedHP[fixchunk] >> fixoffset) & 1;
+						newScoreComparison -= (fixedHN[fixchunk] >> fixoffset) & 1;
+						if (scoreBefore < extraSlice.getScoreBeforeStart()) scoreBefore += 1;
+						assert(scoreBefore <= extraSlice.getScoreBeforeStart());
+						Word mask = ((Word)1) << fixoffset;
+						if (scoreBefore < newScoreComparison)
+						{
+							forceMask |= mask;
+						}
+						ScoreType newAdjustScore = std::min(newScoreComparison, scoreBefore);
+						assert(newAdjustScore >= adjustScore-1);
+						assert(newAdjustScore <= adjustScore+1);
+						if (newAdjustScore == adjustScore-1)
+						{
+							fixedHN[fixchunk] |= mask;
+							fixedHP[fixchunk] &= ~mask;
+						}
+						else if (newAdjustScore == adjustScore)
+						{
+							fixedHP[fixchunk] &= ~mask;
+							fixedHN[fixchunk] &= ~mask;
+						}
+						else if (newAdjustScore == adjustScore+1)
+						{
+							fixedHP[fixchunk] |= mask;
+							fixedHN[fixchunk] &= ~mask;
+						}
+						adjustScore = newAdjustScore;
+						scoreComparison = newScoreComparison;
+					}
+				}
+				assert(scoreComparison == previousSlice.endSlice.scoreEnd);
+				assert(adjustScore <= extraSlice.getScoreBeforeStart());
+				assert(adjustScore <= previousSlice.endSlice.scoreEnd);
+				assert(adjustScore <= ws.getScoreBeforeStart() + nodeLength);
+				assert(adjustScore == previousSlice.endSlice.scoreEnd || adjustScore == extraSlice.getScoreBeforeStart() || adjustScore == ws.getScoreBeforeStart() + nodeLength);
+			}
+			else if (scoreBefore < scoreComparison)
+			{
+				size_t fixoffset = 1;
+				forceMask |= (Word)1;
+				for (size_t fixchunk = 0; fixchunk < slice.NUM_CHUNKS; fixchunk++)
+				{
+					for (; fixoffset < WordConfiguration<Word>::WordSize; fixoffset++)
+					{
+						ScoreType newScoreComparison = scoreComparison;
+						newScoreComparison += (fixedHP[fixchunk] >> fixoffset) & 1;
+						newScoreComparison -= (fixedHN[fixchunk] >> fixoffset) & 1;
 						Word mask = ((Word)1) << fixoffset;
 						assert(scoreBefore <= newScoreComparison);
 						if (scoreBefore < newScoreComparison)
 						{
-							previousSlice.HP[fixchunk] |= mask;
-							previousSlice.HN[fixchunk] &= ~mask;
-							forceUntil = fixchunk * WordConfiguration<Word>::WordSize + fixoffset;
+							fixedHP[fixchunk] |= mask;
+							fixedHN[fixchunk] &= ~mask;
+							forceMask |= mask;
 						}
 						if (scoreBefore == newScoreComparison)
 						{
-							previousSlice.HP[fixchunk] &= ~mask;
-							previousSlice.HN[fixchunk] &= ~mask;
+							fixedHP[fixchunk] &= ~mask;
+							fixedHN[fixchunk] &= ~mask;
 						}
 						scoreBefore++;
 						scoreComparison = newScoreComparison;
@@ -1205,8 +1261,9 @@ public:
 		}
 		else
 		{
-			forceUntil = nodeLength;
+			forceMask = WordConfiguration<Word>::AllOnes;
 		}
+		bool endIncomparable = forceMask & ((Word)1 << (Word)(nodeLength-1));
 		slice.startSlice = ws;
 		if constexpr (!AllowEarlyLeave) callback(ws);
 		slice.exists = true;
@@ -1220,18 +1277,19 @@ public:
 		{
 			size_t bigChunk = smallChunk / 2;
 			size_t bigChunkOffset = (smallChunk % 2) * (WordConfiguration<Word>::WordSize / 2);
-			Word HP = previousSlice.HP[bigChunk] >> bigChunkOffset;
-			Word HN = previousSlice.HN[bigChunk] >> bigChunkOffset;
+			Word HP = fixedHP[bigChunk] >> bigChunkOffset;
+			Word HN = fixedHN[bigChunk] >> bigChunkOffset;
 			auto charChunk = nodeChunks[smallChunk];
 			HP >>= offset;
 			HN >>= offset;
 			charChunk >>= offset * 2;
+			forceMask >>= offset;
 			for (; offset < WordConfiguration<Word>::WordSize / 2 && pos < nodeLength; offset++)
 			{
 				Eq = EqV.getEqI(charChunk & 3);
 				Eq &= forceEq;
 				std::tie(newWs, hinP, hinN) = getNextSlice(Eq, ws, HP & 1, HN & 1);
-				if (forceUntil >= pos)
+				if (forceMask & 1)
 				{
 					newWs.VP &= WordConfiguration<Word>::AllOnes ^ 1;
 					newWs.VN |= 1;
@@ -1239,6 +1297,8 @@ public:
 				if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max())
 				{
 					newWs = newWs.mergeWith(extraSlice);
+					assert(newWs.scoreEnd >= ws.scoreEnd-1);
+					assert(newWs.scoreEnd <= ws.scoreEnd+1);
 					hinP = newWs.scoreEnd == ws.scoreEnd+1 ? 1 : 0;
 					hinN = newWs.scoreEnd == ws.scoreEnd-1 ? 1 : 0;
 				}
@@ -1262,6 +1322,7 @@ public:
 				charChunk >>= 2;
 				HP >>= 1;
 				HN >>= 1;
+				forceMask >>= 1;
 				pos++;
 				slice.HP[bigChunk] |= hinP << (offset + bigChunkOffset);
 				slice.HN[bigChunk] |= hinN << (offset + bigChunkOffset);
@@ -1272,7 +1333,7 @@ public:
 		slice.endSlice = ws;
 #ifndef NDEBUG
 		if (previousSlice.exists) assert(slice.endSlice.getScoreBeforeStart() <= previousSlice.endSlice.scoreEnd);
-		if (previousSlice.exists && forceUntil < nodeLength - 1 && extraSlice.scoreEnd == std::numeric_limits<ScoreType>::max()) assert(slice.endSlice.getScoreBeforeStart() == previousSlice.endSlice.scoreEnd);
+		if (previousSlice.exists && !endIncomparable) assert(slice.endSlice.getScoreBeforeStart() == previousSlice.endSlice.scoreEnd || slice.endSlice.getScoreBeforeStart() == extraSlice.getScoreBeforeStart());
 #endif
 		return result;
 	}

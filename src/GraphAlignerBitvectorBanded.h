@@ -157,12 +157,13 @@ private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
-	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, const std::string_view& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore, const WordSlice extraSlice) const
+	void checkNodeBoundaryCorrectness(const NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, const std::string_view& sequence, size_t j, ScoreType maxScore, ScoreType previousMaxScore, const std::vector<bool>& hasSeedStart, const WordSlice seedstartSlice, const WordSlice fakeSlice) const
 	{
-		assert(previousMaxScore <= maxScore);
+		assert(previousMaxScore <= maxScore || seedstartSlice.getScoreBeforeStart() <= maxScore);
 		for (auto pair : currentSlice)
 		{
 			auto node = pair.first;
+			WordSlice extraSlice = hasSeedStart[node] ? seedstartSlice : fakeSlice;
 			if (previousSlice.hasNode(node) && previousSlice.node(node).exists)
 			{
 				assert(pair.second.startSlice.getScoreBeforeStart() <= previousSlice.node(node).startSlice.scoreEnd);
@@ -423,7 +424,7 @@ private:
 			}
 			// todo fix
 			// assert(nodeCalc.minScore <= previousQuitScore + bandwidth + params.graph.SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize);
-			assert(nodeCalc.minScore <= (ScoreType)j + (ScoreType)WordConfiguration<Word>::WordSize + 1);
+			assert(nodeCalc.minScore <= (ScoreType)j + (ScoreType)WordConfiguration<Word>::WordSize + (ScoreType)WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 #ifdef SLICEVERBOSE
@@ -479,15 +480,15 @@ private:
 			if (result.cellsProcessed > params.maxCellsPerSlice) break;
 		}
 
+#ifdef EXTRACORRECTNESSASSERTIONS
+		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore, hasSeedStart, seedstartSlice, fakeSlice);
+#endif
+
 		for (auto node : clearSeedStarts)
 		{
 			assert(hasSeedStart[node]);
 			hasSeedStart[node] = false;
 		}
-
-#ifdef EXTRACORRECTNESSASSERTIONS
-		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore, extraSlice);
-#endif
 
 		assert(result.minScoreNode != std::numeric_limits<LengthType>::max() || (seedhitStart == seedhitEnd && seedhitStart != std::numeric_limits<size_t>::max()));
 
