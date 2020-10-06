@@ -426,15 +426,16 @@ public:
 	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency, bool multiseed)
 	{
 		assert(slice.slices.size() > 0);
-		assert(slice.slices.back().minScoreNode != std::numeric_limits<LengthType>::max());
-		assert(slice.slices.back().minScoreNodeOffset != std::numeric_limits<LengthType>::max());
+		size_t currentSlice = startPos.seqPos / WordConfiguration<Word>::WordSize + 1;
+		assert(currentSlice < slice.slices.size());
+		assert(slice.slices[currentSlice].minScoreNode != std::numeric_limits<LengthType>::max());
+		assert(slice.slices[currentSlice].minScoreNodeOffset != std::numeric_limits<LengthType>::max());
 		OnewayTrace result;
 		result.score = startScore;
 		result.trace.emplace_back(startPos, false, sequence, params.graph);
 		LengthType currentNode = std::numeric_limits<LengthType>::max();
-		size_t currentSlice = slice.slices.size();
 		std::vector<WordSlice> nodeSlices;
-		EqVector EqV = getEqVector(sequence, 0);
+		EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 		WordSlice extraSlice;
 		while (result.trace.back().DPposition.seqPos != (size_t)-1)
 		{
