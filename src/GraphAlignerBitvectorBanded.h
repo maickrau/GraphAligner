@@ -544,7 +544,7 @@ private:
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore <= ((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || slice.maxExactEndposScore >= -((ScoreType)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(slice.minScore >= previousSlice.minScore || slice.minScore >= extraSlice.getScoreBeforeStart() || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
+		assert(slice.minScore >= previousSlice.minScore || slice.minScore >= extraSlice.getValue(0) || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
 		ScoreType diff = slice.minScore - previousSlice.minScore;
 		if (previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1) diff = 0;
 		if (viterbi) slice.correctness = slice.correctness.NextState(diff, WordConfiguration<Word>::WordSize);
