@@ -975,6 +975,11 @@ private:
 
 			cellsProcessed += newSlice.cellsProcessed;
 
+			if (newSlice.cellsProcessed >= params.maxCellsPerSlice)
+			{
+				newSlice.scoresNotValid = true;
+			}
+
 #ifdef SLICEVERBOSE
 			std::cerr << std::endl;
 #endif
