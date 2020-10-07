@@ -366,6 +366,7 @@ public:
 				assert(slice.slices[currentSlice].nodeMaxExactEndposScore.count(node) == 1);
 				ScoreType score = slice.slices[currentSlice].nodeMaxExactEndposScore.at(node);
 				if (score <= 0) continue;
+				if (score < slice.slices[currentSlice].maxExactEndposScore * params.multimapScoreFraction) continue;
 				assert(currentSlice > 0);
 				if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.count(node) == 1)
 				{

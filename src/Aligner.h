@@ -47,6 +47,7 @@ struct AlignerParams
 	int Xdropcutoff;
 	size_t DPRestartStride;
 	bool multiseedDP;
+	double multimapScoreFraction;
 };
 
 void alignReads(AlignerParams params);

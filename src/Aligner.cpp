@@ -393,6 +393,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		// default 70% min identity threshold
 		selectionOptions.EValueCalc = EValueCalculator { .7 };
 	}
+	selectionOptions.AlignmentScoreFractionCutoff = params.multimapScoreFraction;
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
 	if (params.verboseMode)
@@ -462,7 +463,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto alntimeStart = std::chrono::system_clock::now();
 				if (params.multiseedDP)
 				{
-					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
 				}
 				else
 				{

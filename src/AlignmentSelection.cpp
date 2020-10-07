@@ -58,7 +58,12 @@ namespace AlignmentSelection
 		{
 			filteredByE = SelectECutoff(allAlignments, options.graphSize, options.readSize, options.ECutoff, options.EValueCalc);
 		}
-		const std::vector<AlignmentResult::AlignmentItem>& alignments { (options.ECutoff != -1) ? filteredByE : allAlignments };
+		std::vector<AlignmentResult::AlignmentItem> filteredByAlignmentScoreFraction;
+		if (options.AlignmentScoreFractionCutoff != 0)
+		{
+			filteredByAlignmentScoreFraction = SelectAlignmentFractionCutoff((options.ECutoff != -1) ? filteredByE : allAlignments, options.AlignmentScoreFractionCutoff, options.EValueCalc);
+		}
+		const std::vector<AlignmentResult::AlignmentItem>& alignments { options.AlignmentScoreFractionCutoff != 0 ? filteredByAlignmentScoreFraction : ((options.ECutoff != -1) ? filteredByE : allAlignments) };
 		switch(options.method)
 		{
 			case GreedyLength:
@@ -89,6 +94,28 @@ namespace AlignmentSelection
 		for (size_t i = 0; i < alignments.size(); i++)
 		{
 			if (EValueCalc.getEValue(m, n, alignments[i].alignmentLength(), alignments[i].alignmentScore) <= cutoff) result.push_back(alignments[i]);
+		}
+		return result;
+	}
+
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentFractionCutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, double fraction, const EValueCalculator& EValueCalc)
+	{
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			bool skipped = false;
+			for (size_t j = 0; j < alignments.size(); j++)
+			{
+				if (i == j) continue;
+				if (!alignmentIncompatible(alignments[i], alignments[j])) continue;
+				if (EValueCalc.getAlignmentScore(alignments[i].alignmentLength(), alignments[i].alignmentScore) < EValueCalc.getAlignmentScore(alignments[j].alignmentLength(), alignments[j].alignmentScore) * fraction)
+				{
+					skipped = true;
+					break;
+				}
+			}
+			if (skipped) continue;
+			result.push_back(alignments[i]);
 		}
 		return result;
 	}
