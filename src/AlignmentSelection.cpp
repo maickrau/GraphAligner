@@ -136,7 +136,7 @@ namespace AlignmentSelection
 					otherSum += 10;
 					break;
 				}
-				assert(alignments[j].alignmentXScore <= alignments[i].alignmentXScore);
+				assert(alignments[j].alignmentXScore <= alignments[i].alignmentXScore+1);
 				otherSum += pow(10.0, alignments[j].alignmentXScore - alignments[i].alignmentXScore);
 				if (otherSum >= 10) break;
 			}
@@ -153,6 +153,7 @@ namespace AlignmentSelection
 				assert(otherSum >= 0.000001);
 				assert(otherSum <= 10);
 				alignments[i].mappingQuality = -log(1.0 - 1.0/(1.0 + otherSum)) * 10;
+				if (alignments[i].mappingQuality >= 60) alignments[i].mappingQuality = 60;
 			}
 			assert(alignments[i].mappingQuality >= 0);
 			assert(alignments[i].mappingQuality <= 60);
