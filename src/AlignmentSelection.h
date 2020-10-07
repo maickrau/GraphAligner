@@ -98,6 +98,7 @@ namespace AlignmentSelection
 
 	std::vector<AlignmentResult::AlignmentItem> SelectECutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, size_t m, size_t n, double cutoff, const EValueCalculator& EValueCalc);
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentFractionCutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, double cutoff, const EValueCalculator& EValueCalc);
+	void AddMappingQualities(std::vector<AlignmentResult::AlignmentItem>& alignments);
 
 };
 

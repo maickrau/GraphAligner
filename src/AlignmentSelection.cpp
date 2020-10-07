@@ -120,4 +120,44 @@ namespace AlignmentSelection
 		return result;
 	}
 
+	void AddMappingQualities(std::vector<AlignmentResult::AlignmentItem>& alignments)
+	{
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			assert(alignments[i].alignmentXScore != -1);
+			double otherSum = 0;
+			for (size_t j = 0; j < alignments.size(); j++)
+			{
+				if (i == j) continue;
+				if (!alignmentIncompatible(alignments[i], alignments[j])) continue;
+				assert(alignments[j].alignmentXScore != -1);
+				if (alignments[j].alignmentXScore >= alignments[i].alignmentXScore+1)
+				{
+					otherSum += 10;
+					break;
+				}
+				assert(alignments[j].alignmentXScore <= alignments[i].alignmentXScore);
+				otherSum += pow(10.0, alignments[j].alignmentXScore - alignments[i].alignmentXScore);
+				if (otherSum >= 10) break;
+			}
+			if (otherSum >= 10)
+			{
+				alignments[i].mappingQuality = 0;
+			}
+			else if (otherSum <= 0.000001)
+			{
+				alignments[i].mappingQuality = 60;
+			}
+			else
+			{
+				assert(otherSum >= 0.000001);
+				assert(otherSum <= 10);
+				alignments[i].mappingQuality = -log(1.0 - 1.0/(1.0 + otherSum)) * 10;
+			}
+			assert(alignments[i].mappingQuality >= 0);
+			assert(alignments[i].mappingQuality <= 60);
+		}
+	}
+
+
 }

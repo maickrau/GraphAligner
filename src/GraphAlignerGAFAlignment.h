@@ -33,7 +33,7 @@ class GraphAlignerGAFAlignment
 	};
 public:
 
-	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, const Params& params)
+	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params)
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;
@@ -49,7 +49,6 @@ public:
 		size_t nodePathEnd = 0;
 		size_t matches = 0;
 		size_t blockLength = trace.size();
-		int mappingQuality = 255;
 
 		MergedNodePos currentPos;
 		currentPos.nodeId = trace[0].DPposition.node;
