@@ -188,6 +188,7 @@ public:
 		size_t bandwidth;
 		bool scoresNotValid;
 		std::unordered_set<size_t> seedstartNodes;
+		phmap::flat_hash_map<size_t, ScoreType> nodeMaxExactEndposScore;
 #ifdef SLICEVERBOSE
 		size_t nodesProcessed;
 		size_t numCells;
@@ -207,6 +208,7 @@ public:
 			result.bandwidth = bandwidth;
 			result.scoresNotValid = scoresNotValid;
 			result.seedstartNodes = seedstartNodes;
+			result.nodeMaxExactEndposScore = nodeMaxExactEndposScore;
 #ifdef SLICEVERBOSE
 			result.nodesProcessed = nodesProcessed;
 			result.numCells = numCells;
@@ -348,6 +350,132 @@ public:
 		return result;
 	}
 
+	static std::vector<OnewayTrace> getLocalMaximaTracesFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency, bool multiseed)
+	{
+		std::vector<OnewayTrace> result;
+		assert(slice.slices.size() > 1);
+		assert(slice.slices[0].scores.size() == 0);
+		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
+		{
+			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
+			if (slice.slices[currentSlice].maxExactEndposScore <= 0) continue;
+			for (auto pair : slice.slices[currentSlice].scores)
+			{
+				if (!pair.second.exists) continue;
+				auto node = pair.first;
+				assert(slice.slices[currentSlice].nodeMaxExactEndposScore.count(node) == 1);
+				ScoreType score = slice.slices[currentSlice].nodeMaxExactEndposScore.at(node);
+				if (score <= 0) continue;
+				assert(currentSlice > 0);
+				if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.count(node) == 1)
+				{
+					if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.at(node) > score) continue;
+				}
+				if (currentSlice < slice.slices.size()-1 && slice.slices[currentSlice+1].nodeMaxExactEndposScore.count(node) == 1)
+				{
+					if (slice.slices[currentSlice+1].nodeMaxExactEndposScore.at(node) >= score) continue;
+				}
+				bool notLocalMaximum = false;
+				for (auto neighbor : params.graph.inNeighbors[node])
+				{
+					if (slice.slices[currentSlice].nodeMaxExactEndposScore.count(neighbor) == 1)
+					{
+						if (slice.slices[currentSlice].nodeMaxExactEndposScore.at(neighbor) > score)
+						{
+							notLocalMaximum = true;
+							break;
+						}
+					}
+					assert(currentSlice > 0);
+					if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.count(neighbor) == 1)
+					{
+						if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.at(neighbor) > score)
+						{
+							notLocalMaximum = true;
+							break;
+						}
+					}
+				}
+				for (auto neighbor : params.graph.outNeighbors[node])
+				{
+					if (slice.slices[currentSlice].nodeMaxExactEndposScore.count(neighbor) == 1)
+					{
+						if (slice.slices[currentSlice].nodeMaxExactEndposScore.at(neighbor) > score)
+						{
+							notLocalMaximum = true;
+							break;
+						}
+					}
+					if (currentSlice < slice.slices.size()-1 && slice.slices[currentSlice+1].nodeMaxExactEndposScore.count(neighbor) == 1)
+					{
+						if (slice.slices[currentSlice+1].nodeMaxExactEndposScore.at(neighbor) > score)
+						{
+							notLocalMaximum = true;
+							break;
+						}
+					}
+				}
+				if (notLocalMaximum) continue;
+				typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem previous;
+				assert(currentSlice > 0);
+				if (slice.slices[currentSlice-1].scores.hasNode(node))
+				{
+					previous = slice.slices[currentSlice-1].scores.node(node);
+				}
+				else
+				{
+					for (size_t i = 0; i < previous.NUM_CHUNKS; i++)
+					{
+						previous.HP[i] = WordConfiguration<Word>::AllOnes;
+						previous.HN[i] = WordConfiguration<Word>::AllZeros;
+					}
+				}
+				EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
+				WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
+				WordSlice seedstartSlice = getSeedSlice(slice.slices[currentSlice].j, params);
+				WordSlice extraSlice = slice.slices[currentSlice].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
+				std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, pair.second, EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
+				assert(nodeSlices[0].scoreEnd == pair.second.startSlice.scoreEnd);
+				assert(nodeSlices[0].VP == pair.second.startSlice.VP);
+				assert(nodeSlices[0].VN == pair.second.startSlice.VN);
+				assert(nodeSlices.back().scoreEnd == pair.second.endSlice.scoreEnd);
+				assert(nodeSlices.back().VP == pair.second.endSlice.VP);
+				assert(nodeSlices.back().VN == pair.second.endSlice.VN);
+				size_t nodeOffset = std::numeric_limits<size_t>::max();
+				size_t bvOffset = std::numeric_limits<size_t>::max();
+				for (size_t i = 0; i < nodeSlices.size(); i++)
+				{
+					auto maxScore = nodeSlices[i].maxXScoreFirstSlices(slice.slices[currentSlice].j, params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[currentSlice].j)));
+					assert(maxScore <= score);
+					if (maxScore == score)
+					{
+						for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
+						{
+							if (slice.slices[currentSlice].j + off >= sequence.size()) continue;
+							auto scoreHere = nodeSlices[i].getXScore(slice.slices[currentSlice].j, off, params.XscoreErrorCost);
+							assert(scoreHere <= score);
+							if (scoreHere == score)
+							{
+								if (nodeOffset == std::numeric_limits<size_t>::max() || off > bvOffset)
+								{
+									nodeOffset = i;
+									bvOffset = off;
+								}
+							}
+						}
+					}
+				}
+				assert(nodeOffset != std::numeric_limits<size_t>::max());
+				assert(bvOffset != std::numeric_limits<size_t>::max());
+				assert(slice.slices[currentSlice].j + bvOffset < sequence.size());
+				ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
+				MatrixPosition startPos { node, nodeOffset, slice.slices[currentSlice].j + bvOffset };
+				result.push_back(getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed));
+			}
+		}
+		return result;
+	}
+
 	static OnewayTrace getReverseTraceFromTableExactEndPos(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency, bool multiseed)
 	{
 		assert(slice.slices.size() > 1);
@@ -382,20 +510,20 @@ public:
 		WordSlice seedstartSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		if (multiseed) seedstartSlice = getSeedSlice(slice.slices[bestIndex].j, params);
 		WordSlice extraSlice = slice.slices[bestIndex].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
-		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, slice.slices[bestIndex].scores.node(node), EqV, previous, sliceConsistency, extraSlice);
+		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, slice.slices[bestIndex].scores.node(node), EqV, previous, sliceConsistency, extraSlice, slice.slices[bestIndex].j);
 
 		size_t nodeOffset = std::numeric_limits<size_t>::max();
 		size_t bvOffset = std::numeric_limits<size_t>::max();
 		for (size_t i = 0; i < nodeSlices.size(); i++)
 		{
-			auto maxScore = nodeSlices[i].maxXScoreFirstSlices(params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[bestIndex].j))) + (ScoreType)slice.slices[bestIndex].j;
+			auto maxScore = nodeSlices[i].maxXScoreFirstSlices((ScoreType)slice.slices[bestIndex].j, params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[bestIndex].j)));
 			assert(maxScore <= score);
 			if (maxScore == score)
 			{
 				for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
 				{
 					if (slice.slices[bestIndex].j + off >= sequence.size()) continue;
-					auto scoreHere = nodeSlices[i].getXScore(off, params.XscoreErrorCost) + (ScoreType)slice.slices[bestIndex].j;
+					auto scoreHere = nodeSlices[i].getXScore((ScoreType)slice.slices[bestIndex].j, off, params.XscoreErrorCost);
 					assert(scoreHere <= score);
 					if (scoreHere == score)
 					{
@@ -437,6 +565,7 @@ public:
 		std::vector<WordSlice> nodeSlices;
 		EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 		WordSlice extraSlice;
+		ScoreType lastScore;
 		while (result.trace.back().DPposition.seqPos != (size_t)-1)
 		{
 			size_t newSlice = result.trace.back().DPposition.seqPos / WordConfiguration<Word>::WordSize + 1;
@@ -468,7 +597,7 @@ public:
 				extraSlice.VN = WordConfiguration<Word>::AllZeros;
 				extraSlice.scoreEnd = std::numeric_limits<ScoreType>::max();
 				if (slice.slices[currentSlice].seedstartNodes.count(currentNode) == 1) extraSlice = getSeedSlice(slice.slices[currentSlice].j, params);
-				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency, extraSlice);
+				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
@@ -481,6 +610,7 @@ public:
 			assert((ScoreType)slice.slices[currentSlice].bandwidth >= 0);
 			assert((ScoreType)slice.slices[currentSlice].bandwidth < std::numeric_limits<ScoreType>::max());
 			assert(slice.slices[currentSlice].minScore < std::numeric_limits<ScoreType>::max() - (ScoreType)slice.slices[currentSlice].bandwidth);
+			lastScore = nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize);
 			if (result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().DPposition.nodeOffset == 0)
 			{
 				auto bt = pickBacktraceCorner(params, slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid, extraSlice);
@@ -565,6 +695,8 @@ public:
 				break;
 			}
 		}
+		assert(result.score >= lastScore);
+		result.score -= lastScore;
 		do
 		{
 			if (multiseed) break;
@@ -922,7 +1054,7 @@ public:
 		}
 	}
 
-	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, bool sliceConsistency, const WordSlice extraSlice)
+	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, bool sliceConsistency, const WordSlice extraSlice, ScoreType seqOffset)
 	{
 		size_t nodeLength = params.graph.NodeLength(node);
 		std::vector<EdgeWithPriority> incoming; // also fake!
@@ -932,11 +1064,11 @@ public:
 		auto sliceCopy = slice;
 		if (node < params.graph.firstAmbiguous)
 		{
-			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); });
+			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); }, seqOffset);
 		}
 		else
 		{
-			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); });
+			calculateNodeInner<false, false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); }, seqOffset);
 		}
 		assert(result.size() == nodeLength);
 		assert(!sliceConsistency || result[0].scoreEnd == slice.startSlice.scoreEnd);
@@ -952,34 +1084,34 @@ public:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeClipPrecise(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, const WordSlice extraSlice)
+	static NodeCalculationResult calculateNodeClipPrecise(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, const WordSlice extraSlice, ScoreType seqOffset)
 	{
-		return calculateNodeInner<true, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, extraSlice, [](const WordSlice& slice){});
+		return calculateNodeInner<true, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, extraSlice, [](const WordSlice& slice){}, seqOffset);
 	}
 
 	template <typename NodeChunkType>
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, const WordSlice extraSlice)
+	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, const WordSlice extraSlice, ScoreType seqOffset)
 	{
-		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, extraSlice, [](const WordSlice& slice){});
+		return calculateNodeInner<false, true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, extraSlice, [](const WordSlice& slice){}, seqOffset);
 	}
 
 	template <typename NodeChunkType>
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, NodeChunkType nodeChunks, const WordSlice extraSlice)
+	static NodeCalculationResult calculateNodeClipApprox(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, NodeChunkType nodeChunks, const WordSlice extraSlice, ScoreType seqOffset)
 	{
-		return calculateNodeInner<false, false>(params, i, slice, EqV, previousSlice, incoming, [](size_t pos) { return false; }, nodeChunks, extraSlice, [](const WordSlice& slice){});
+		return calculateNodeInner<false, false>(params, i, slice, EqV, previousSlice, incoming, [](size_t pos) { return false; }, nodeChunks, extraSlice, [](const WordSlice& slice){}, seqOffset);
 	}
 
 	template <bool PreciseClipping, bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback, typename ExistenceCheckFunction>
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static NodeCalculationResult calculateNodeInner(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, ExistenceCheckFunction bandCheck, NodeChunkType nodeChunks, const WordSlice extraSlice, WordsliceCallback callback)
+	static NodeCalculationResult calculateNodeInner(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, ExistenceCheckFunction bandCheck, NodeChunkType nodeChunks, const WordSlice extraSlice, WordsliceCallback callback, ScoreType seqOffset)
 	{
 		assert(incoming.size() > 0);
 		WordSlice newWs;
@@ -1076,7 +1208,7 @@ public:
 
 		if (PreciseClipping)
 		{
-			result.maxExactEndposScore = ws.maxXScore(params.XscoreErrorCost);
+			result.maxExactEndposScore = ws.maxXScore(seqOffset, params.XscoreErrorCost);
 			result.maxExactEndposNode = i;
 		}
 
@@ -1319,7 +1451,7 @@ public:
 				}
 				if (PreciseClipping)
 				{
-					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore(params.XscoreErrorCost));
+					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore(seqOffset, params.XscoreErrorCost));
 				}
 				if constexpr (!AllowEarlyLeave) callback(ws);
 				charChunk >>= 2;
@@ -1373,7 +1505,7 @@ public:
 				}
 			}
 
-			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node.first, current, EqV, old, sliceConsistency, extraSlice);
+			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node.first, current, EqV, old, sliceConsistency, extraSlice, j);
 
 			assert(nodeSlices[0].VP == node.second.startSlice.VP);
 			assert(nodeSlices[0].VN == node.second.startSlice.VN);
@@ -1390,9 +1522,9 @@ public:
 					sliceCalc.minScoreNode = node.first;
 					sliceCalc.minScoreNodeOffset = i;
 				}
-				if (wordSliceResult.maxXScoreFirstSlices(params.XscoreErrorCost, offset) > sliceCalc.maxExactEndposScore)
+				if (wordSliceResult.maxXScoreFirstSlices(j, params.XscoreErrorCost, offset) > sliceCalc.maxExactEndposScore)
 				{
-					sliceCalc.maxExactEndposScore = wordSliceResult.maxXScore(params.XscoreErrorCost);
+					sliceCalc.maxExactEndposScore = wordSliceResult.maxXScore(j, params.XscoreErrorCost);
 					sliceCalc.maxExactEndposNode = i;
 				}
 			}
