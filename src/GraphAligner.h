@@ -225,7 +225,7 @@ public:
 	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment) const
 	{
 		assert(alignment.trace->trace.size() > 0);
-		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, params);
+		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, alignment.alignmentXScore, params);
 	}
 
 	void AddCorrected(AlignmentResult::AlignmentItem& alignment) const
@@ -609,6 +609,7 @@ private:
 			result.back().alignmentScore = result.back().trace->score;
 			result.back().alignmentStart = seqstart;
 			result.back().alignmentEnd = seqend + 1;
+			result.back().alignmentXScore = result.back().alignmentLength() - params.XscoreErrorCost * result.back().alignmentScore;
 		}
 		return result;
 	}

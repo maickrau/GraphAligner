@@ -108,7 +108,7 @@ namespace AlignmentSelection
 			{
 				if (i == j) continue;
 				if (!alignmentIncompatible(alignments[i], alignments[j])) continue;
-				if (EValueCalc.getAlignmentScore(alignments[i].alignmentLength(), alignments[i].alignmentScore) < EValueCalc.getAlignmentScore(alignments[j].alignmentLength(), alignments[j].alignmentScore) * fraction)
+				if (alignments[i].alignmentXScore < alignments[j].alignmentXScore * fraction)
 				{
 					skipped = true;
 					break;
