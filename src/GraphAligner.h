@@ -852,10 +852,28 @@ private:
 				continue;
 			}
 			assert(oldNodeIndex != newNodeIndex);
-			assert(std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end());
 			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
-			assert(oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1);
-			assert(newpos.nodeOffset == 0);
+			bool foundSimple = std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end();
+			if (foundSimple)
+			{
+				assert(newpos.nodeOffset == 0);
+				assert(oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1);
+			}
+			if (!foundSimple)
+			{
+				auto revOldNode = (trace[i-1].DPposition.node % 2 == 0) ? (trace[i-1].DPposition.node + 1) : (trace[i-1].DPposition.node - 1);
+				auto revNewNode = (trace[i].DPposition.node % 2 == 0) ? (trace[i].DPposition.node + 1) : (trace[i].DPposition.node - 1);
+				auto revOldOffset = params.graph.originalNodeSize.at(trace[i-1].DPposition.node) - trace[i-1].DPposition.nodeOffset - 1;
+				auto revNewOffset = params.graph.originalNodeSize.at(trace[i].DPposition.node) - trace[i].DPposition.nodeOffset - 1;
+				auto revOldNodeIndex = params.graph.GetUnitigNode(revOldNode, revOldOffset);
+				auto revNewNodeIndex = params.graph.GetUnitigNode(revNewNode, revNewOffset);
+				auto revOldNodeOffset = revOldOffset - params.graph.nodeOffset[revOldNodeIndex];
+				auto revNewNodeOffset = revNewOffset - params.graph.nodeOffset[revNewNodeIndex];
+				bool foundReverse = std::find(params.graph.outNeighbors[revNewNodeIndex].begin(), params.graph.outNeighbors[revNewNodeIndex].end(), revOldNodeIndex) != params.graph.outNeighbors[revNewNodeIndex].end();
+				assert(foundReverse);
+				assert(revOldNodeOffset == 0);
+				assert(revNewNodeOffset == params.graph.NodeLength(revNewNodeIndex)-1);
+			}
 		}
 		assert(score == foundScore);
 	}
