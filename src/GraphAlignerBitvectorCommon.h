@@ -355,6 +355,12 @@ public:
 		std::vector<OnewayTrace> result;
 		assert(slice.slices.size() > 1);
 		assert(slice.slices[0].scores.size() == 0);
+		std::vector<ScoreType> sliceMaxScores;
+		sliceMaxScores.resize(slice.slices.size());
+		for (size_t i = 0; i < slice.slices.size(); i++)
+		{
+			sliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
+		}
 		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
 		{
 			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
@@ -366,7 +372,7 @@ public:
 				assert(slice.slices[currentSlice].nodeMaxExactEndposScore.count(node) == 1);
 				ScoreType score = slice.slices[currentSlice].nodeMaxExactEndposScore.at(node);
 				if (score <= 0) continue;
-				if (score < slice.slices[currentSlice].maxExactEndposScore * params.multimapScoreFraction) continue;
+				if (score < sliceMaxScores[currentSlice] * params.multimapScoreFraction) continue;
 				assert(currentSlice > 0);
 				if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.count(node) == 1)
 				{
@@ -472,6 +478,14 @@ public:
 				ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
 				MatrixPosition startPos { node, nodeOffset, slice.slices[currentSlice].j + bvOffset };
 				result.push_back(getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed));
+				size_t traceEnd = result.back().trace[0].DPposition.seqPos;
+				size_t traceStart = result.back().trace.back().DPposition.seqPos;
+				assert(traceEnd >= traceStart);
+				size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
+				for (size_t i = startSlice; i < currentSlice; i++)
+				{
+					sliceMaxScores[i] = std::max(sliceMaxScores[i], score);
+				}
 			}
 		}
 		return result;
