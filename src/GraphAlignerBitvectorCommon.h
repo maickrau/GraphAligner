@@ -322,7 +322,7 @@ public:
 		return EqV;
 	}
 
-	static WordSlice getSeedSlice(size_t j, const Params& params)
+	static WordSlice getSeedSlice(size_t j, size_t seqLen, const Params& params)
 	{
 		assert(j % WordConfiguration<Word>::WordSize == 0);
 		WordSlice result { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, 0 };
@@ -333,6 +333,13 @@ public:
 		}
 		for (size_t offset = 0; offset < WordConfiguration<Word>::WordSize; offset++)
 		{
+			if (j+offset >= seqLen)
+			{
+				ScoreType seedScore = oldSeedScore+1;
+				result.VP |= (Word)1 << (Word)offset;
+				oldSeedScore = seedScore;
+				continue;
+			}
 			ScoreType seedScore = ((ScoreType)(j+offset) + 1 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
 			assert((size_t)seedScore < j + WordConfiguration<Word>::WordSize);
 			assert((size_t)oldSeedScore < j + WordConfiguration<Word>::WordSize);
@@ -439,7 +446,7 @@ public:
 				}
 				EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 				WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
-				WordSlice seedstartSlice = getSeedSlice(slice.slices[currentSlice].j, params);
+				WordSlice seedstartSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
 				WordSlice extraSlice = slice.slices[currentSlice].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
 				std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, pair.second, EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
 				assert(nodeSlices[0].scoreEnd == pair.second.startSlice.scoreEnd);
@@ -523,7 +530,7 @@ public:
 		EqVector EqV = getEqVector(sequence, slice.slices[bestIndex].j);
 		WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		WordSlice seedstartSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
-		if (multiseed) seedstartSlice = getSeedSlice(slice.slices[bestIndex].j, params);
+		if (multiseed) seedstartSlice = getSeedSlice(slice.slices[bestIndex].j, sequence.size(), params);
 		WordSlice extraSlice = slice.slices[bestIndex].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
 		std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, slice.slices[bestIndex].scores.node(node), EqV, previous, sliceConsistency, extraSlice, slice.slices[bestIndex].j);
 
@@ -611,7 +618,7 @@ public:
 				extraSlice.VP = WordConfiguration<Word>::AllZeros;
 				extraSlice.VN = WordConfiguration<Word>::AllZeros;
 				extraSlice.scoreEnd = std::numeric_limits<ScoreType>::max();
-				if (slice.slices[currentSlice].seedstartNodes.count(currentNode) == 1) extraSlice = getSeedSlice(slice.slices[currentSlice].j, params);
+				if (slice.slices[currentSlice].seedstartNodes.count(currentNode) == 1) extraSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
 				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
