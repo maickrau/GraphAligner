@@ -780,16 +780,8 @@ private:
 	}
 	void verifyTrace(const std::vector<TraceItem>& trace, const std::string_view& sequence, ScoreType score) const
 	{
-		size_t start = 0;
-		while (trace[start].DPposition.seqPos == (size_t)-1)
+		for (size_t i = 1; i < trace.size(); i++)
 		{
-			start++;
-			assert(start < trace.size());
-		}
-		start++;
-		for (size_t i = start; i < trace.size(); i++)
-		{
-			assert(trace[i].DPposition.seqPos < sequence.size());
 			auto newpos = trace[i].DPposition;
 			auto oldpos = trace[i-1].DPposition;
 			auto oldNodeIndex = oldpos.node;
@@ -797,7 +789,7 @@ private:
 			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);
 			if (oldNodeIndex == newNodeIndex)
 			{
-				assert((newpos.nodeOffset >= oldpos.nodeOffset && newpos.seqPos >= oldpos.seqPos) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
+				assert(((newpos.nodeOffset == oldpos.nodeOffset || newpos.nodeOffset == oldpos.nodeOffset+1) && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
 				continue;
 			}
 			assert(oldNodeIndex != newNodeIndex);

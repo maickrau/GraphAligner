@@ -633,6 +633,10 @@ public:
 				assert(result.trace.back().DPposition.nodeOffset > 0);
 				if (!slice.slices[currentSlice-1].scores.hasNode(currentNode))
 				{
+					for (size_t i = result.trace.back().DPposition.nodeOffset-1; i > 0; i--)
+					{
+						result.trace.emplace_back(MatrixPosition {currentNode, i, result.trace.back().DPposition.seqPos}, false, sequence, params.graph);
+					}
 					result.trace.emplace_back(MatrixPosition {currentNode, 0, result.trace.back().DPposition.seqPos}, false, sequence, params.graph);
 					continue;
 				}
