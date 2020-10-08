@@ -49,6 +49,7 @@ public:
 		auto initialSlice = BV::getInitialEmptySlice();
 		auto slice = getMultiseedSlices(sequence, initialSlice, numSlices, reusableState, seedHits);
 		std::vector<OnewayTrace> results = BV::getLocalMaximaTracesFromTable(params, sequence, slice, reusableState, true, true);
+		removeDuplicateTraces(results);
 		for (size_t i = 0; i < results.size(); i++)
 		{
 			std::reverse(results[i].trace.begin(), results[i].trace.end());
@@ -156,6 +157,30 @@ public:
 	}
 
 private:
+
+	void removeDuplicateTraces(std::vector<OnewayTrace>& traces) const
+	{
+		std::sort(traces.begin(), traces.end(), [this](const OnewayTrace& left, const OnewayTrace& right) {
+			assert(left.trace[0].DPposition.seqPos >= left.trace.back().DPposition.seqPos);
+			ScoreType leftScore = left.trace[0].DPposition.seqPos - left.trace.back().DPposition.seqPos + 1;
+			leftScore -= (ScoreType)left.score * params.XscoreErrorCost;
+			ScoreType rightScore = right.trace[0].DPposition.seqPos - right.trace.back().DPposition.seqPos + 1;
+			rightScore -= (ScoreType)right.score * params.XscoreErrorCost;
+			return leftScore > rightScore;
+		});
+		for (size_t i = traces.size()-1; i > 0; i--)
+		{
+			for (size_t j = 0; j < i; j++)
+			{
+				if (traces[i].trace.back().DPposition == traces[j].trace.back().DPposition)
+				{
+					std::swap(traces[i], traces.back());
+					traces.pop_back();
+					break;
+				}
+			}
+		}
+	}
 
 #ifdef EXTRACORRECTNESSASSERTIONS
 	template <bool HasVectorMap, bool PreviousHasVectorMap>
