@@ -220,7 +220,7 @@ public:
 		return result;
 	}
 
-	ScoreType maxXScoreFirstSlices(ScoreType seqOffset, double errorCost, int cells) const
+	ScoreType maxXScoreFirstSlices(ScoreType seqOffset, ScoreType errorCost, int cells) const
 	{
 		assert(cells > 0);
 		assert(cells <= WordConfiguration<Word>::WordSize);
@@ -231,14 +231,14 @@ public:
 		return result;
 	}
 
-	ScoreType maxXScore(ScoreType seqOffset, double errorCost) const
+	ScoreType maxXScore(ScoreType seqOffset, ScoreType errorCost) const
 	{
 		return maxXScoreFirstSlices(seqOffset, errorCost, WordConfiguration<Word>::WordSize);
 	}
 
-	ScoreType getXScore(ScoreType seqOffset, int offset, double errorCost) const
+	ScoreType getXScore(ScoreType seqOffset, int offset, ScoreType errorCost) const
 	{
-		return (seqOffset + offset+1) - getValue(offset) * errorCost;
+		return (seqOffset + offset+1)*100 - getValue(offset) * errorCost;
 	}
 
 	ScoreType getScoreBeforeStart() const
@@ -261,7 +261,7 @@ public:
 private:
 
 #ifdef EXTRACORRECTNESSASSERTIONS
-	ScoreType maxXScoreCellByCell(ScoreType seqOffset, double errorCost, size_t cells) const
+	ScoreType maxXScoreCellByCell(ScoreType seqOffset, ScoreType errorCost, size_t cells) const
 	{
 		ScoreType result = std::numeric_limits<ScoreType>::min();
 		for (int i = 0; i < WordConfiguration<Word>::WordSize && i < cells; i++)
@@ -310,7 +310,7 @@ private:
 	}
 #endif
 
-	ScoreType maxXScoreLocalMinima(ScoreType seqOffset, double errorCost, size_t cells) const
+	ScoreType maxXScoreLocalMinima(ScoreType seqOffset, ScoreType errorCost, size_t cells) const
 	{
 		ScoreType scoreBeforeStart = getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
@@ -331,15 +331,17 @@ private:
 		{
 			possibleLocalMinima |= (Word)1 << (Word)(WordConfiguration<Word>::WordSize-1);
 		}
+		ScoreType zeroScore = seqOffset * 100 - scoreBeforeStart * errorCost;
 		while (possibleLocalMinima != 0)
 		{
 			//all cells from the right up to the first minimum are one
 			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
-			size_t cellsHere = ((WordConfiguration<Word>::popcount(currentMinimumMask)));
-			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
-			result = std::max(result, (ScoreType)((ScoreType)(seqOffset + cellsHere) - (ScoreType)scoreHere * errorCost));
+			ScoreType cellsHere = WordConfiguration<Word>::popcount(currentMinimumMask);
+			ScoreType scoreHere = (ScoreType)WordConfiguration<Word>::popcount(VP & currentMinimumMask) - (ScoreType)WordConfiguration<Word>::popcount(VN & currentMinimumMask);
+			result = std::max(result, cellsHere*100 - scoreHere * errorCost);
 			possibleLocalMinima &= ~currentMinimumMask;
 		}
+		result += zeroScore;
 		return result;
 	}
 

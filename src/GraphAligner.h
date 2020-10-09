@@ -640,7 +640,7 @@ private:
 			assert(!traces[i].failed());
 			auto mergedTrace = clipAndAddBackwardTrace(seq_id, std::move(traces[i]), reusableState, sequence, revSequence, 0);
 			if (mergedTrace.failed()) continue;
-			double alignmentXScore = (ScoreType)(mergedTrace.trace.back().DPposition.seqPos - mergedTrace.trace[0].DPposition.seqPos + 1) - params.XscoreErrorCost * (ScoreType)mergedTrace.score;
+			ScoreType alignmentXScore = (ScoreType)(mergedTrace.trace.back().DPposition.seqPos - mergedTrace.trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)mergedTrace.score;
 			if (alignmentXScore <= 0) continue;
 			result.emplace_back(std::move(mergedTrace), 0, std::numeric_limits<size_t>::max());
 			LengthType seqstart = 0;
@@ -652,8 +652,9 @@ private:
 			result.back().alignmentScore = result.back().trace->score;
 			result.back().alignmentStart = seqstart;
 			result.back().alignmentEnd = seqend + 1;
-			result.back().alignmentXScore = (ScoreType)result.back().alignmentLength() - params.XscoreErrorCost * (ScoreType)result.back().alignmentScore;
+			result.back().alignmentXScore = (ScoreType)result.back().alignmentLength()*100 - params.XscoreErrorCost * (ScoreType)result.back().alignmentScore;
 			assert(result.back().alignmentXScore == alignmentXScore);
+			result.back().alignmentXScore /= 100.0;
 		}
 		return result;
 	}
@@ -749,7 +750,7 @@ private:
 			{
 				score += 1;
 			}
-			ScoreType Xhere = trace.trace.back().DPposition.seqPos - trace.trace[i].DPposition.seqPos + 1 - score * params.XscoreErrorCost;
+			ScoreType Xhere = (trace.trace.back().DPposition.seqPos - trace.trace[i].DPposition.seqPos + 1)*100 - score * params.XscoreErrorCost;
 			if (Xhere > maxX)
 			{
 				maxX = Xhere;

@@ -110,7 +110,7 @@ public:
 		minSeedClusterSize(minSeedClusterSize),
 		seedExtendDensity(seedExtendDensity),
 		nondeterministicOptimizations(nondeterministicOptimizations),
-		XscoreErrorCost(preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0),
+		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
 		Xdropcutoff(Xdropcutoff),
 		multimapScoreFraction(multimapScoreFraction)
 		{
@@ -127,7 +127,7 @@ public:
 		const size_t minSeedClusterSize;
 		const double seedExtendDensity;
 		const bool nondeterministicOptimizations;
-		const double XscoreErrorCost;
+		const ScoreType XscoreErrorCost;
 		const int Xdropcutoff;
 		const double multimapScoreFraction;
 	};

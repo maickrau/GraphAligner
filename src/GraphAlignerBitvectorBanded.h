@@ -162,9 +162,9 @@ private:
 	{
 		std::sort(traces.begin(), traces.end(), [this](const OnewayTrace& left, const OnewayTrace& right) {
 			assert(left.trace[0].DPposition.seqPos >= left.trace.back().DPposition.seqPos);
-			ScoreType leftScore = left.trace[0].DPposition.seqPos - left.trace.back().DPposition.seqPos + 1;
+			ScoreType leftScore = (left.trace[0].DPposition.seqPos - left.trace.back().DPposition.seqPos + 1)*100;
 			leftScore -= (ScoreType)left.score * params.XscoreErrorCost;
-			ScoreType rightScore = right.trace[0].DPposition.seqPos - right.trace.back().DPposition.seqPos + 1;
+			ScoreType rightScore = (right.trace[0].DPposition.seqPos - right.trace.back().DPposition.seqPos + 1)*100;
 			rightScore -= (ScoreType)right.score * params.XscoreErrorCost;
 			return leftScore > rightScore;
 		});
@@ -1001,8 +1001,8 @@ private:
 			assert(nextSeedHit == seedHits.size() || seedHits[nextSeedHit].seqPos / WordConfiguration<Word>::WordSize > (lastSlice.j + WordConfiguration<Word>::WordSize) / WordConfiguration<Word>::WordSize);
 			size_t seqOffset = lastSlice.j + WordConfiguration<Word>::WordSize;
 			WordSlice seedSlice = BV::getSeedSlice(seqOffset, sequence.size(), params);
-			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) >= -(ScoreType)WordConfiguration<Word>::WordSize);
-			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) <= (ScoreType)WordConfiguration<Word>::WordSize);
+			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) >= -(ScoreType)WordConfiguration<Word>::WordSize*100);
+			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) <= (ScoreType)WordConfiguration<Word>::WordSize*100);
 			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, (slice % 2 == 0) ? reusableState.evenNodesliceMap : reusableState.oddNodesliceMap, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, false, true);
 			lastSeedHit = nextSeedHit;
 #ifdef SLICEVERBOSE

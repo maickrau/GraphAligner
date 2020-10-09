@@ -329,7 +329,7 @@ public:
 		ScoreType oldSeedScore = 0;
 		if (j > 0)
 		{
-			oldSeedScore = ((ScoreType)(j-1) + 1 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
+			oldSeedScore = ((ScoreType)(j-1+1)*100 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
 		}
 		for (size_t offset = 0; offset < WordConfiguration<Word>::WordSize; offset++)
 		{
@@ -340,7 +340,7 @@ public:
 				oldSeedScore = seedScore;
 				continue;
 			}
-			ScoreType seedScore = ((ScoreType)(j+offset) + 1 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
+			ScoreType seedScore = ((ScoreType)(j+offset+1)*100 + params.XscoreErrorCost / 2) / params.XscoreErrorCost;
 			assert((size_t)seedScore < j + WordConfiguration<Word>::WordSize);
 			assert((size_t)oldSeedScore < j + WordConfiguration<Word>::WordSize);
 			assert(seedScore == oldSeedScore || seedScore == oldSeedScore+1);
