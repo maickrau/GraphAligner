@@ -325,6 +325,7 @@ private:
 		if (cells < WordConfiguration<Word>::WordSize)
 		{
 			possibleLocalMinima |= (Word)1 << (Word)(cells-1);
+			possibleLocalMinima &= ~(WordConfiguration<Word>::AllOnes << cells);
 		}
 		else
 		{
@@ -335,7 +336,6 @@ private:
 			//all cells from the right up to the first minimum are one
 			Word currentMinimumMask = possibleLocalMinima ^ (possibleLocalMinima-1);
 			size_t cellsHere = ((WordConfiguration<Word>::popcount(currentMinimumMask)));
-			if (cellsHere > cells) break;
 			ScoreType scoreHere = scoreBeforeStart + WordConfiguration<Word>::popcount(VP & currentMinimumMask) - WordConfiguration<Word>::popcount(VN & currentMinimumMask);
 			result = std::max(result, (ScoreType)((ScoreType)(seqOffset + cellsHere) - (ScoreType)scoreHere * errorCost));
 			possibleLocalMinima &= ~currentMinimumMask;
