@@ -451,7 +451,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto clusterTimeStart = std::chrono::system_clock::now();
 				if (params.multiseedDP)
 				{
-					PrepareMultiseeds(alignmentGraph, seeds);
+					PrepareMultiseeds(alignmentGraph, seeds, fastq->sequence.size());
 				}
 				else
 				{

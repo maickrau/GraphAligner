@@ -241,50 +241,43 @@ public:
 		}
 	}
 
-	void prepareSeedsForMultiseeding(std::vector<SeedHit>& seedHits) const
+	std::vector<SeedHit> prepareSeedsForMultiseeding(const std::vector<SeedHit>& seedHits, const size_t seqLen) const
 	{
-		std::unordered_set<std::pair<size_t, size_t>> actives;
-		for (size_t i = seedHits.size()-1; i < seedHits.size(); i--)
+		std::vector<std::unordered_set<size_t>> actives;
+		actives.resize((seqLen + WordConfiguration<Word>::WordSize + 1) / WordConfiguration<Word>::WordSize);
+		for (const auto& seed : seedHits)
 		{
-			if (seedHits[i].alignmentGraphNodeId == std::numeric_limits<size_t>::max())
+			size_t sliceIndex = seed.seqPos / WordConfiguration<Word>::WordSize;
+			assert(sliceIndex < actives.size());
+			size_t nodeId = seed.alignmentGraphNodeId;
+			if (seed.alignmentGraphNodeId == std::numeric_limits<size_t>::max())
 			{
 				int forwardNodeId;
-				if (seedHits[i].reverse)
+				if (seed.reverse)
 				{
-					forwardNodeId = seedHits[i].nodeID * 2 + 1;
+					forwardNodeId = seed.nodeID * 2 + 1;
 				}
 				else
 				{
-					forwardNodeId = seedHits[i].nodeID * 2;
+					forwardNodeId = seed.nodeID * 2;
 				}
-				assert(seedHits[i].alignmentGraphNodeId == std::numeric_limits<size_t>::max());
-				assert(seedHits[i].alignmentGraphNodeOffset == std::numeric_limits<size_t>::max());
-				seedHits[i].alignmentGraphNodeId = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
-				assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[seedHits[i].alignmentGraphNodeId]);
-				seedHits[i].alignmentGraphNodeOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[seedHits[i].alignmentGraphNodeId];
-				assert(params.graph.chainApproxPos[seedHits[i].alignmentGraphNodeId] + seedHits[i].alignmentGraphNodeOffset >= seedHits[i].seqPos);
+				assert(seed.alignmentGraphNodeId == std::numeric_limits<size_t>::max());
+				nodeId = params.graph.GetUnitigNode(forwardNodeId, seed.nodeOffset);
 			}
-			else
-			{
-				assert(seedHits[i].alignmentGraphNodeOffset != std::numeric_limits<size_t>::max());
-			}
-			size_t slice = seedHits[i].seqPos / WordConfiguration<Word>::WordSize;
-			std::pair<size_t, size_t> key { seedHits[i].alignmentGraphNodeId, slice };
-			if (actives.count(key) == 1)
-			{
-				std::swap(seedHits[i], seedHits.back());
-				seedHits.pop_back();
-				continue;
-			}
-			actives.insert(key);
+			actives[sliceIndex].insert(nodeId);
 		}
-		std::sort(seedHits.begin(), seedHits.end(), [](const SeedHit& left, const SeedHit& right)
+		std::vector<SeedHit> result;
+		for (size_t i = 0; i < actives.size(); i++)
 		{
-			if (left.seqPos / WordConfiguration<Word>::WordSize < right.seqPos / WordConfiguration<Word>::WordSize) return true;
-			if (left.seqPos / WordConfiguration<Word>::WordSize > right.seqPos / WordConfiguration<Word>::WordSize) return false;
-			assert(left.alignmentGraphNodeId != right.alignmentGraphNodeId);
-			return false;
-		});
+			for (auto nodeId : actives[i])
+			{
+				result.emplace_back();
+				result.back().seqPos = i * WordConfiguration<Word>::WordSize;
+				result.back().alignmentGraphNodeId = nodeId;
+				result.back().alignmentGraphNodeOffset = 0;
+			}
+		}
+		return result;
 	}
 
 	void orderSeedsByChaining(std::vector<SeedHit>& seedHits) const

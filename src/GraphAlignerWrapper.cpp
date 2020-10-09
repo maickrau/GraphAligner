@@ -61,9 +61,9 @@ void OrderSeeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits)
 	aligner.orderSeedsByChaining(seedHits);
 }
 
-void PrepareMultiseeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits)
+void PrepareMultiseeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits, const size_t seqLen)
 {
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, 1, graph, 1, true, true, true, false, false, 1, 0, false, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
-	aligner.prepareSeedsForMultiseeding(seedHits);
+	seedHits = aligner.prepareSeedsForMultiseeding(seedHits, seqLen);
 }

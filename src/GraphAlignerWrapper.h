@@ -11,6 +11,19 @@
 class SeedHit
 {
 public:
+	SeedHit() :
+	nodeID(std::numeric_limits<int>::min()),
+	nodeOffset(std::numeric_limits<size_t>::max()),
+	seqPos(std::numeric_limits<size_t>::max()),
+	matchLen(std::numeric_limits<size_t>::max()),
+	reverse(false),
+	alignmentGraphNodeId(std::numeric_limits<size_t>::max()),
+	alignmentGraphNodeOffset(std::numeric_limits<size_t>::max()),
+	rawSeedGoodness(0),
+	seedGoodness(0),
+	seedClusterSize(0)
+	{
+	}
 	SeedHit(int nodeID, size_t nodeOffset, size_t seqPos, size_t matchLen, size_t rawSeedGoodness, bool reverse) :
 	nodeID(nodeID),
 	nodeOffset(nodeOffset),
@@ -45,6 +58,6 @@ void AddAlignment(const std::string& seq_id, const std::string& sequence, Alignm
 void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment);
 void AddCorrected(AlignmentResult::AlignmentItem& alignment);
 void OrderSeeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits);
-void PrepareMultiseeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits);
+void PrepareMultiseeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits, const size_t seqLen);
 
 #endif
