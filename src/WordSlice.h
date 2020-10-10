@@ -220,20 +220,20 @@ public:
 		return result;
 	}
 
-	ScoreType maxXScoreFirstSlices(ScoreType seqOffset, ScoreType errorCost, int cells) const
+	ScoreType maxXScoreFirstSlices(ScoreType seqOffset, ScoreType errorCost, int cells, Word extraMask = WordConfiguration<Word>::AllOnes) const
 	{
 		assert(cells > 0);
 		assert(cells <= WordConfiguration<Word>::WordSize);
-		ScoreType result = maxXScoreLocalMinima(seqOffset, errorCost, cells);
+		ScoreType result = maxXScoreLocalMinima(seqOffset, errorCost, cells, extraMask);
 #ifdef EXTRACORRECTNESSASSERTIONS
 		assert(result == maxXScoreCellByCell(seqOffset, errorCost, cells));
 #endif
 		return result;
 	}
 
-	ScoreType maxXScore(ScoreType seqOffset, ScoreType errorCost) const
+	ScoreType maxXScore(ScoreType seqOffset, ScoreType errorCost, Word extraMask = WordConfiguration<Word>::AllOnes) const
 	{
-		return maxXScoreFirstSlices(seqOffset, errorCost, WordConfiguration<Word>::WordSize);
+		return maxXScoreFirstSlices(seqOffset, errorCost, WordConfiguration<Word>::WordSize, extraMask);
 	}
 
 	ScoreType getXScore(ScoreType seqOffset, int offset, ScoreType errorCost) const
@@ -310,7 +310,7 @@ private:
 	}
 #endif
 
-	ScoreType maxXScoreLocalMinima(ScoreType seqOffset, ScoreType errorCost, size_t cells) const
+	ScoreType maxXScoreLocalMinima(ScoreType seqOffset, ScoreType errorCost, size_t cells, Word extraMask) const
 	{
 		ScoreType scoreBeforeStart = getScoreBeforeStart();
 		//rightmost VP between any VN's, aka one cell to the left of a minimum
@@ -321,6 +321,7 @@ private:
 		//leftmost bit might be a minimum if there is no VP to its right
 		possibleLocalMinima |= WordConfiguration<Word>::LastBit & (priorityCausedMinima | ~(priorityCausedMinima - VP)) & ~VP;
 		ScoreType result = std::numeric_limits<ScoreType>::min();
+		possibleLocalMinima &= extraMask;
 		possibleLocalMinima |= 1;
 		if (cells < WordConfiguration<Word>::WordSize)
 		{

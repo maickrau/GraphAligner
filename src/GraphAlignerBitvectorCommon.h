@@ -244,7 +244,7 @@ public:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	static std::tuple<WordSlice, Word, Word> getNextSlice(Word Eq, WordSlice slice, Word hinP, Word hinN)
+	static inline std::tuple<WordSlice, Word, Word> getNextSlice(Word Eq, WordSlice slice, Word hinP, Word hinN)
 	{
 		//http://www.gersteinlab.org/courses/452/09-spring/pdf/Myers.pdf
 		//pages 405 and 408
@@ -263,7 +263,7 @@ public:
 		slice.scoreEnd -= hinN; //line 12
 		slice.scoreEnd += hinP; //line 14
 
-		return std::make_tuple(slice, hinP, hinN);
+		return std::make_tuple(slice, Ph, Mh);
 	}
 
 	static WordSlice flattenWordSlice(WordSlice slice, size_t row)
@@ -1449,7 +1449,9 @@ public:
 			{
 				Eq = EqV.getEqI(charChunk & 3);
 				Eq &= forceEq;
-				std::tie(newWs, hinP, hinN) = getNextSlice(Eq, ws, HP & 1, HN & 1);
+				Word newHP;
+				Word newHN;
+				std::tie(newWs, newHP, newHN) = getNextSlice(Eq, ws, HP & 1, HN & 1);
 				if (forceMask & 1)
 				{
 					newWs.VP &= WordConfiguration<Word>::AllOnes ^ 1;
@@ -1462,6 +1464,11 @@ public:
 					assert(newWs.scoreEnd <= ws.scoreEnd+1);
 					hinP = newWs.scoreEnd == ws.scoreEnd+1 ? 1 : 0;
 					hinN = newWs.scoreEnd == ws.scoreEnd-1 ? 1 : 0;
+				}
+				else
+				{
+					hinP = newHP >> (WordConfiguration<Word>::WordSize-1);
+					hinN = newHN >> (WordConfiguration<Word>::WordSize-1);
 				}
 #ifdef EXTRACORRECTNESSASSERTIONS
 				assertSliceCorrectness(ws, newWs, Eq, (HP & 1) - (HN & 1), extraSlice);
@@ -1477,7 +1484,7 @@ public:
 				}
 				if (PreciseClipping)
 				{
-					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore(seqOffset, params.XscoreErrorCost));
+					result.maxExactEndposScore = std::max(result.maxExactEndposScore, ws.maxXScore(seqOffset, params.XscoreErrorCost, newHN));
 				}
 				if constexpr (!AllowEarlyLeave) callback(ws);
 				charChunk >>= 2;
