@@ -528,7 +528,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		{
 			for (size_t i = 0; i < alignments.alignments.size(); i++)
 			{
-				AddGAFLine(alignmentGraph, fastq->seq_id, fastq->sequence, alignments.alignments[i]);
+				AddGAFLine(alignmentGraph, fastq->seq_id, fastq->sequence, alignments.alignments[i], params.cigarMatchMismatchMerge);
 			}
 		}
 		

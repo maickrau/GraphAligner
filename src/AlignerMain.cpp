@@ -61,6 +61,7 @@ int main(int argc, char** argv)
 		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as the identity cutoff between correct / wrong alignments (float)")
+		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -160,6 +161,7 @@ int main(int argc, char** argv)
 	params.preciseClippingIdentityCutoff = 0.5;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
+	params.cigarMatchMismatchMerge = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -223,6 +225,7 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
+	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 
 	int resultSelectionMethods = 0;
 	if (vm.count("all-alignments"))

@@ -27,13 +27,14 @@ class GraphAlignerGAFAlignment
 	{
 		Match,
 		Mismatch,
+		MatchOrMismatch,
 		Insertion,
 		Deletion,
 		Empty
 	};
 public:
 
-	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, const Params& params)
+	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, const Params& params, bool cigarMatchMismatchMerge)
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;
@@ -61,7 +62,20 @@ public:
 		size_t deletions = 0;
 		size_t insertions = 0;
 		size_t editLength = 0;
-		if (Common::characterMatch(trace[0].sequenceCharacter, trace[0].graphCharacter))
+		if (cigarMatchMismatchMerge)
+		{
+			currentEdit = MatchOrMismatch;
+			editLength = 1;
+			if (Common::characterMatch(trace[0].sequenceCharacter, trace[0].graphCharacter))
+			{
+				matches += 1;
+			}
+			else
+			{
+				mismatches += 1;
+			}
+		}
+		else if (Common::characterMatch(trace[0].sequenceCharacter, trace[0].graphCharacter))
 		{
 			currentEdit = Match;
 			editLength = 1;
@@ -120,6 +134,25 @@ public:
 				}
 				editLength += 1;
 				insertions += 1;
+			}
+			else if (cigarMatchMismatchMerge)
+			{
+				if (currentEdit == Empty) currentEdit = MatchOrMismatch;
+				if (currentEdit != MatchOrMismatch)
+				{
+					addCigarItem(cigar, editLength, currentEdit);
+					currentEdit = MatchOrMismatch;
+					editLength = 0;
+				}
+				editLength += 1;
+				if (Common::characterMatch(trace[pos].sequenceCharacter, trace[pos].graphCharacter))
+				{
+					matches += 1;
+				}
+				else
+				{
+					mismatches += 1;
+				}
 			}
 			else if (Common::characterMatch(trace[pos].sequenceCharacter, trace[pos].graphCharacter))
 			{
@@ -195,11 +228,14 @@ private:
 		str << editLength;
 		switch(type)
 		{
-			case Match:
+			case MatchOrMismatch:
 				str << "M";
 				break;
+			case Match:
+				str << "=";
+				break;
 			case Mismatch:
-				str << "M";
+				str << "X";
 				break;
 			case Insertion:
 				str << "I";
