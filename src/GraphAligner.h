@@ -222,10 +222,10 @@ public:
 		alignment.alignment->set_query_position(alignment.alignmentStart);
 	}
 
-	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment) const
+	void AddGAFLine(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge) const
 	{
 		assert(alignment.trace->trace.size() > 0);
-		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, alignment.alignmentXScore, alignment.mappingQuality, params);
+		alignment.GAFline = GAFAlignment::traceToAlignment(seq_id, sequence, *alignment.trace, alignment.alignmentXScore, alignment.mappingQuality, params, cigarMatchMismatchMerge);
 	}
 
 	void AddCorrected(AlignmentResult::AlignmentItem& alignment) const

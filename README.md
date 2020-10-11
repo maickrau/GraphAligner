@@ -1,6 +1,6 @@
 # GraphAligner
 
-Seed-and-extend program for aligning long error-prone reads to genome graphs. For a description of the bitvector alignment extension algorithm, see https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btz162/5372677
+Seed-and-extend program for aligning long error-prone reads to genome graphs. To cite, see https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02157-2. For a description of the bitvector alignment extension algorithm, see https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btz162/5372677
 
 ### Installation
 

@@ -48,6 +48,7 @@ struct AlignerParams
 	size_t DPRestartStride;
 	bool multiseedDP;
 	double multimapScoreFraction;
+	bool cigarMatchMismatchMerge;
 };
 
 void alignReads(AlignerParams params);

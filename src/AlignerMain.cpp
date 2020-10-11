@@ -59,6 +59,9 @@ int main(int argc, char** argv)
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
+		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as the identity cutoff between correct / wrong alignments (float)")
+		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -76,6 +79,7 @@ int main(int argc, char** argv)
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
 		("multiseed-DP", boost::program_options::value<bool>(), "simultaneously extend all seeds (1/0)")
 		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double)")
+		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -86,8 +90,6 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
-		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as cutoff between correct / wrong alignments")
 		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
 		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
 		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
@@ -95,7 +97,6 @@ int main(int argc, char** argv)
 		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
 		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
 		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
-		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -164,6 +165,7 @@ int main(int argc, char** argv)
 	params.DPRestartStride = 0;
 	params.multiseedDP = false;
 	params.multimapScoreFraction = 0;
+	params.cigarMatchMismatchMerge = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -229,6 +231,7 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
+	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 
 	int resultSelectionMethods = 0;
 	if (vm.count("all-alignments"))
@@ -278,6 +281,10 @@ int main(int argc, char** argv)
 		{
 			std::cerr << "precise clipping identity cutoff must be between 0.001 and 0.999" << std::endl;
 			paramError = true;
+		}
+		if (params.preciseClippingIdentityCutoff >= 0.001 && params.preciseClippingIdentityCutoff < 0.501)
+		{
+			std::cerr << "Warning: precise clipping identity cutoff set below 0.501. Output will almost certainly contain spurious alignments." << std::endl;
 		}
 	}
 	if (vm.count("X-drop"))
