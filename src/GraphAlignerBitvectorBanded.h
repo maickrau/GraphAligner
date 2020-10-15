@@ -160,6 +160,7 @@ private:
 
 	void removeDuplicateTraces(std::vector<OnewayTrace>& traces) const
 	{
+		if (traces.size() == 0) return;
 		std::sort(traces.begin(), traces.end(), [this](const OnewayTrace& left, const OnewayTrace& right) {
 			assert(left.trace[0].DPposition.seqPos >= left.trace.back().DPposition.seqPos);
 			ScoreType leftScore = (left.trace[0].DPposition.seqPos - left.trace.back().DPposition.seqPos + 1)*100;
