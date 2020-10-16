@@ -464,7 +464,7 @@ private:
 			}
 			// todo fix
 			// assert(nodeCalc.minScore <= previousQuitScore + bandwidth + params.graph.SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize);
-			assert(nodeCalc.minScore <= (ScoreType)j + (ScoreType)WordConfiguration<Word>::WordSize + (ScoreType)WordConfiguration<Word>::WordSize);
+			assert(nodeCalc.minScore <= (ScoreType)j + bandwidth + (ScoreType)WordConfiguration<Word>::WordSize + (ScoreType)WordConfiguration<Word>::WordSize);
 			currentMinScoreAtEndRow = std::min(currentMinScoreAtEndRow, nodeCalc.minScore);
 			currentSlice.setMinScoreIfSmaller(i, nodeCalc.minScore);
 #ifdef SLICEVERBOSE
