@@ -384,6 +384,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	selectionOptions.method = params.alignmentSelectionMethod;
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
 	selectionOptions.ECutoff = params.selectionECutoff;
+	selectionOptions.minAlignmentScore = params.minAlignmentScore;
 	if (params.preciseClipping)
 	{
 		selectionOptions.EValueCalc = EValueCalculator { params.preciseClippingIdentityCutoff };

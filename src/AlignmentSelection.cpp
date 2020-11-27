@@ -53,17 +53,24 @@ namespace AlignmentSelection
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& allAlignments, SelectionOptions options)
 	{
 		// roundabout to fit the signature of const ref while allowing filtering
-		std::vector<AlignmentResult::AlignmentItem> filteredByE;
+		std::vector<AlignmentResult::AlignmentItem> filtered;
+		bool wasFiltered = false;
+		if (options.minAlignmentScore > std::numeric_limits<int>::min())
+		{
+			filtered = SelectAlignmentScore(wasFiltered ? filtered : allAlignments, options.minAlignmentScore, options.EValueCalc);
+			wasFiltered = true;
+		}
 		if (options.ECutoff != -1)
 		{
-			filteredByE = SelectECutoff(allAlignments, options.graphSize, options.readSize, options.ECutoff, options.EValueCalc);
+			filtered = SelectECutoff(wasFiltered ? filtered : allAlignments, options.graphSize, options.readSize, options.ECutoff, options.EValueCalc);
+			wasFiltered = true;
 		}
-		std::vector<AlignmentResult::AlignmentItem> filteredByAlignmentScoreFraction;
 		if (options.AlignmentScoreFractionCutoff != 0)
 		{
-			filteredByAlignmentScoreFraction = SelectAlignmentFractionCutoff((options.ECutoff != -1) ? filteredByE : allAlignments, options.AlignmentScoreFractionCutoff, options.EValueCalc);
+			filtered = SelectAlignmentFractionCutoff(wasFiltered ? filtered : allAlignments, options.AlignmentScoreFractionCutoff, options.EValueCalc);
+			wasFiltered = true;
 		}
-		const std::vector<AlignmentResult::AlignmentItem>& alignments { options.AlignmentScoreFractionCutoff != 0 ? filteredByAlignmentScoreFraction : ((options.ECutoff != -1) ? filteredByE : allAlignments) };
+		const std::vector<AlignmentResult::AlignmentItem>& alignments { wasFiltered ? filtered : allAlignments };
 		switch(options.method)
 		{
 			case GreedyLength:
@@ -94,6 +101,16 @@ namespace AlignmentSelection
 		for (size_t i = 0; i < alignments.size(); i++)
 		{
 			if (EValueCalc.getEValue(m, n, alignments[i].alignmentLength(), alignments[i].alignmentScore) <= cutoff) result.push_back(alignments[i]);
+		}
+		return result;
+	}
+
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentScore(const std::vector<AlignmentResult::AlignmentItem>& alignments, double cutoff, const EValueCalculator& EValueCalc)
+	{
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			if (alignments[i].alignmentXScore >= cutoff) result.push_back(alignments[i]);
 		}
 		return result;
 	}

@@ -54,6 +54,7 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg")
+		("min-alignment-score", boost::program_options::value<double>(), "discard alignments whose alignment score is < arg (default 0)")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
@@ -166,6 +167,7 @@ int main(int argc, char** argv)
 	params.multiseedDP = false;
 	params.multimapScoreFraction = 0;
 	params.cigarMatchMismatchMerge = false;
+	params.minAlignmentScore = 0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -232,6 +234,7 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
+	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 
 	int resultSelectionMethods = 0;
 	if (vm.count("all-alignments"))
