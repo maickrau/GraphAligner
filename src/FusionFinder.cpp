@@ -191,25 +191,16 @@ std::string getCorrected(const vg::Alignment& aln, const GfaGraph& graph)
 	return result;
 }
 
-void addBestAlnsOnePair(std::unordered_map<size_t, FusionAlignment>& bestAlns, const std::string& leftGene, const std::string& rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen, bool optimal)
+void addBestAlnsOnePair(std::unordered_map<size_t, FusionAlignment>& bestAlns, const std::string& leftGene, const std::string& rightGene, const GfaGraph& fusiongraph, const std::vector<FastQ>& reads, const std::vector<size_t>& readIndices, double maxScoreFraction, int minFusionLen)
 {
 	auto alignmentGraph = DirectedGraph::BuildFromGFA(fusiongraph);
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 100, true };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, 1000, true };
 	for (auto readIndex : readIndices)
 	{
 		const auto& read = reads[readIndex];
 		try
 		{
-			AlignmentResult alignments;
-			if (optimal)
-			{
-				alignments = AlignOneWayDijkstra(alignmentGraph, read.seq_id, read.sequence, true, reusableState, true, false);
-			}
-			else
-			{
-				alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 100, 100, true, reusableState, true, true, false, false, 0, 0, 0);
-			}
-			if (bestAlns.count(readIndex) == 1 && alignments.alignments[0].alignmentScore > bestAlns.at(readIndex).alignment->score()) continue;
+			auto alignments = AlignOneWay(alignmentGraph, read.seq_id, read.sequence, 1000, 1000, true, reusableState, true, true, false, false, 0, 0, 0);
 			AddAlignment(read.seq_id, read.sequence, alignments.alignments[0]);
 			replaceDigraphNodeIdsWithOriginalNodeIds(*alignments.alignments[0].alignment, alignmentGraph);
 			if (alignments.alignments[0].alignment->score() > read.sequence.size() * maxScoreFraction) continue;
@@ -285,7 +276,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 				std::vector<size_t> readIndices { readsHere.begin(), readsHere.end() };
 				if (readIndices.size() == 0) continue;
 				auto fusiongraph = getFusionGraph(putativeFusions[i].first, putativeFusions[i].second, graph, geneBelongers);
-				addBestAlnsOnePair(bestFusionAlnsPerThread[thread], putativeFusions[i].first, putativeFusions[i].second, fusiongraph, allReads, readIndices, maxScoreFraction, minFusionLen, false);
+				addBestAlnsOnePair(bestFusionAlnsPerThread[thread], putativeFusions[i].first, putativeFusions[i].second, fusiongraph, allReads, readIndices, maxScoreFraction, minFusionLen);
 				{
 					std::lock_guard<std::mutex> lock { nextPairMutex };
 					std::cerr << "finished fusion " << i << "/" << putativeFusions.size() << " " << putativeFusions[i].first << "-" << putativeFusions[i].second << std::endl;
@@ -312,27 +303,6 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	}
 	std::vector<std::unordered_map<size_t, FusionAlignment>> bestNonfusionAlnsPerThread;
 	bestNonfusionAlnsPerThread.resize(numThreads);
-	std::cerr << "get forbidden genes" << std::endl;
-	std::unordered_set<std::string> forbiddenGenes;
-	size_t totalCount = 0;
-	size_t geneCount = 0;
-	for (const auto& pair : readsInNonfusionGraph)
-	{
-		if (pair.second.size() > 0) geneCount += 1;
-		totalCount += pair.second.size();
-	}
-	assert(geneCount > 0);
-	size_t cutoff = (double)totalCount * 200.0 / (double)geneCount;
-	for (const auto& pair : readsInNonfusionGraph)
-	{
-		if (pair.second.size() > cutoff) forbiddenGenes.insert(pair.first);
-	}
-	std::cerr << forbiddenGenes.size() << " forbidden genes:";
-	for (auto gene : forbiddenGenes)
-	{
-		std::cerr << " " << gene;
-	}
-	std::cerr << std::endl;
 	std::cerr << "get nonfusions" << std::endl;
 	nextPair = 0;
 	std::vector<std::string> nonFusionGenes;
@@ -342,7 +312,7 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 	}
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([&nonFusionGenes, &bestFusionAlns, fusionPenalty, &forbiddenGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
+		threads.emplace_back([&nonFusionGenes, &bestNonfusionAlnsPerThread, &allReads, thread, maxScoreFraction, minFusionLen, &nextPair, &graph, &geneBelongers, &readsInNonfusionGraph, &nextPairMutex]()
 		{
 			while (true)
 			{
@@ -354,31 +324,10 @@ std::vector<FusionAlignment> getBestAlignments(const std::vector<std::pair<std::
 					std::cerr << "nonfusion " << nextPair << "/" << nonFusionGenes.size() << " " << nonFusionGenes[i] << " " << readsInNonfusionGraph.at(nonFusionGenes[i]).size() << " reads" << std::endl;
 					nextPair += 1;
 				}
-				if (forbiddenGenes.count(nonFusionGenes[i]) == 1)
-				{
-					std::lock_guard<std::mutex> lock { nextPairMutex };
-					std::cerr << "forbidden nonfusion " << i << "/" << nonFusionGenes.size() << " " << nonFusionGenes[i] << std::endl;
-					continue;
-				}
 				auto nonfusiongraph = getNonfusionGraph(nonFusionGenes[i], graph, geneBelongers);
 				assert(readsInNonfusionGraph.count(nonFusionGenes[i]) == 1);
 				std::vector<size_t> readIndices { readsInNonfusionGraph.at(nonFusionGenes[i]).begin(), readsInNonfusionGraph.at(nonFusionGenes[i]).end() };
-				for (size_t j = readIndices.size()-1; j < readIndices.size(); j++)
-				{
-					if (bestFusionAlns.count(j) == 0)
-					{
-						std::swap(readIndices[j], readIndices.back());
-						readIndices.pop_back();
-						continue;
-					}
-					if (bestNonfusionAlnsPerThread[thread].count(j) == 1 && bestNonfusionAlnsPerThread[thread].at(j).alignment->score() <= bestFusionAlns.at(j).alignment->score() + fusionPenalty)
-					{
-						std::swap(readIndices[j], readIndices.back());
-						readIndices.pop_back();
-						continue;
-					}
-				}
-				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], nonFusionGenes[i], nonFusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0, false);
+				addBestAlnsOnePair(bestNonfusionAlnsPerThread[thread], nonFusionGenes[i], nonFusionGenes[i], nonfusiongraph, allReads, readIndices, 1, 0);
 				{
 					std::lock_guard<std::mutex> lock { nextPairMutex };
 					std::cerr << "finished nonfusion " << i << "/" << nonFusionGenes.size() << " " << nonFusionGenes[i] << std::endl;
@@ -530,143 +479,16 @@ void writeCorrected(const std::vector<FusionAlignment>& result, const GfaGraph& 
 	}
 }
 
-// fake declarations because MinimizerSeeder.cpp is also linked
-size_t charToInt(char c);
-std::vector<bool> getValidChars();
-extern std::vector<bool> validChar;
-
-template <typename CallbackF>
-void iterateKmers(const std::string& str, size_t kmerLength, CallbackF callback)
-{
-	if (str.size() < kmerLength) return;
-	const size_t mask = ~(0xFFFFFFFFFFFFFFFF << (kmerLength * 2));
-	assert(mask == pow(4, kmerLength)-1);
-	size_t offset = 0;
-start:
-	while (offset < str.size() && !validChar[str[offset]]) offset++;
-	if (offset + kmerLength > str.size()) return;
-	size_t kmer = 0;
-	for (size_t i = 0; i < kmerLength; i++)
-	{
-		if (!validChar[str[offset+i]])
-		{
-			offset += i;
-			goto start;
-		}
-		kmer <<= 2;
-		kmer |= charToInt(str[offset+i]);
-	}
-	callback(offset + kmerLength-1, kmer);
-	for (size_t i = kmerLength; offset+i < str.size(); i++)
-	{
-		if (!validChar[str[offset+i]])
-		{
-			offset += i;
-			goto start;
-		}
-		kmer <<= 2;
-		kmer &= mask;
-		kmer |= charToInt(str[offset + i]);
-		callback(offset + i, kmer);
-	}
-}
-
-std::vector<std::vector<size_t>> getExtraGeneMatchKmerIndex(const std::vector<vg::Alignment>& transcripts)
-{
-	std::vector<std::vector<size_t>> kmerIndex;
-	std::vector<std::pair<std::string, size_t>> transcriptptrs;
-	for (size_t i = 0; i < transcripts.size(); i++)
-	{
-		transcriptptrs.emplace_back(geneFromTranscript(transcripts[i].name()), i);
-	}
-	std::sort(transcriptptrs.begin(), transcriptptrs.end(), [](const std::pair<std::string, size_t>& left, const std::pair<std::string, size_t>& right) { return left.first < right.first; });
-	kmerIndex.resize(pow(4, 11));
-	std::unordered_set<size_t> currentKmers;
-	std::string currentGene;
-	size_t currentNameIndex = -1;
-	for (auto& pair : transcriptptrs)
-	{
-		if (geneFromTranscript(transcripts[pair.second].name()) != currentGene)
-		{
-			if (currentNameIndex != -1)
-			{
-				for (auto kmer : currentKmers)
-				{
-					kmerIndex[kmer].push_back(currentNameIndex);
-				}
-			}
-			currentKmers.clear();
-			currentGene = geneFromTranscript(transcripts[pair.second].name());
-			currentNameIndex = pair.second;
-		}
-		iterateKmers(transcripts[pair.second].sequence(), 11, [&currentKmers](size_t offset, size_t kmer)
-		{
-			currentKmers.insert(kmer);
-		});
-		iterateKmers(CommonUtils::ReverseComplement(transcripts[pair.second].sequence()), 11, [&currentKmers](size_t offset, size_t kmer)
-		{
-			currentKmers.insert(kmer);
-		});
-	}
-	for (auto kmer : currentKmers)
-	{
-		kmerIndex[kmer].push_back(currentNameIndex);
-	}
-	return kmerIndex;
-}
-
-std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const std::vector<vg::Alignment>& transcripts, const std::vector<std::vector<size_t>>& kmerIndex, const std::vector<FastQ>& reads, const size_t numThreads)
+std::unordered_map<std::string, std::unordered_set<size_t>> getExtraGeneMatches(const MummerSeeder& seeder, const std::vector<std::string>& nameMapping, const std::vector<FastQ>& reads)
 {
 	std::unordered_map<std::string, std::unordered_set<size_t>> result;
-	std::mutex resultMutex;
-	std::mutex readMutex;
-	size_t nextRead = 0;
-	std::vector<std::thread> threads;
-	for (size_t thread = 0; thread < numThreads; thread++)
+	for (size_t i = 0; i < reads.size(); i++)
 	{
-		threads.emplace_back([&nextRead, &transcripts, &reads, &result, &resultMutex, &readMutex, &kmerIndex]()
+		auto seeds = seeder.getMemSeeds(reads[i].sequence, -1, 20);
+		for (auto seed : seeds)
 		{
-			while (true)
-			{
-				size_t i = 0;
-				{
-					std::lock_guard<std::mutex> guard { readMutex };
-					i = nextRead;
-					nextRead += 1;
-				}
-				if (i >= reads.size()) break;
-				std::unordered_map<size_t, size_t> lastMatch;
-				std::unordered_map<size_t, size_t> matchSize;
-				iterateKmers(reads[i].sequence, 11, [&lastMatch, &matchSize, &kmerIndex](size_t offset, size_t kmer)
-				{
-					for (auto index : kmerIndex[kmer])
-					{
-						size_t addition = std::min(offset - lastMatch[index], (size_t)11);
-						lastMatch[index] = offset;
-						matchSize[index] += addition;
-					}
-				});
-				for (auto pair : matchSize)
-				{
-					std::vector<std::string> insertions;
-					if (pair.second >= 1000 || pair.second >= reads[i].sequence.size() * .25)
-					{
-						insertions.push_back(geneFromTranscript(transcripts[pair.first].name()));
-					}
-					{
-						std::lock_guard<std::mutex> guard { resultMutex };
-						for (const auto& gene : insertions)
-						{
-							result[gene].insert(i);
-						}
-					}
-				}
-			}
-		});
-	}
-	for (size_t i = 0; i < numThreads; i++)
-	{
-		threads[i].join();
+			result[nameMapping[seed.nodeID]].insert(i);
+		}
 	}
 	return result;
 }
@@ -693,6 +515,19 @@ void runInReadChunks(std::string filename, size_t chunkSize, F callback)
 		vec.clear();
 	}
 	std::cerr << "done reading" << std::endl;
+}
+
+std::pair<MummerSeeder*, std::vector<std::string>> getExtraGeneMatchIndex(const std::vector<vg::Alignment>& transcripts)
+{
+	GfaGraph fakeGraph;
+	std::vector<std::string> nameMapping;
+	for (auto transcript : transcripts)
+	{
+		fakeGraph.nodes[nameMapping.size()] = transcript.sequence();
+		nameMapping.push_back(geneFromTranscript(transcript.name()));
+	}
+	MummerSeeder* seeder = new MummerSeeder(fakeGraph, "");
+	return std::make_pair(seeder, nameMapping);
 }
 
 int main(int argc, char** argv)
@@ -723,18 +558,21 @@ int main(int argc, char** argv)
 	auto geneBelongers = getGeneBelongers(transcripts, graph);
 	std::cerr << "load partial assignments" << std::endl;
 	auto hasSeeds = loadPartialToTranscripts(partialMatrixFile);
-	std::cerr << "build extra gene-match index" << std::endl;
-	auto kmerIndex = getExtraGeneMatchKmerIndex(transcripts);
+	std::cerr << "get extra gene-match index" << std::endl;
+	MummerSeeder* extraSeeder;
+	std::vector<std::string> nameMapping;
+	std::tie(extraSeeder, nameMapping) = getExtraGeneMatchIndex(transcripts);
 	std::cerr << "run in chunks" << std::endl;
 	size_t readsProcessed = 0;
 	std::ofstream correctedOut { correctedReadsFile };
 	std::ofstream resultFusionsOut { resultFusionFile };
-	runInReadChunks(readFile, chunkSize, [&readsProcessed, &correctedOut, &resultFusionsOut, &kmerIndex, &transcripts, numThreads, &putativeFusions, &hasSeeds, &graph, &geneBelongers, maxScoreFraction, minFusionLen, fusionPenalty](const std::vector<FastQ>& reads)
+
+	runInReadChunks(readFile, chunkSize, [&readsProcessed, &correctedOut, &resultFusionsOut, &extraSeeder, &nameMapping, &transcripts, numThreads, &putativeFusions, &hasSeeds, &graph, &geneBelongers, maxScoreFraction, minFusionLen, fusionPenalty](const std::vector<FastQ>& reads)
 	{
 		std::cerr << "reads " << readsProcessed << " - " << readsProcessed + reads.size() << std::endl;
 		readsProcessed += reads.size();
 		std::cerr << "get chunk extra gene-matches" << std::endl;
-		auto extraGeneMatches = getExtraGeneMatches(transcripts, kmerIndex, reads, numThreads);
+		auto extraGeneMatches = getExtraGeneMatches(*extraSeeder, nameMapping, reads);
 		std::cerr << "get chunk partial assignments" << std::endl;
 		auto intSeeds = getIntSeeds(hasSeeds, reads);
 		std::cerr << "get chunk alns" << std::endl;
@@ -744,4 +582,5 @@ int main(int argc, char** argv)
 		std::cerr << "write chunk corrected reads" << std::endl;
 		writeCorrected(bestAlns, graph, correctedOut);
 	});
+	delete extraSeeder;
 }
