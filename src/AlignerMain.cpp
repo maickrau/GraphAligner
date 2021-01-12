@@ -54,6 +54,7 @@ int main(int argc, char** argv)
 		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
 		("verbose", "print progress messages")
 		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg")
+		("min-alignment-score", boost::program_options::value<double>(), "discard alignments whose alignment score is < arg (default 0)")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
@@ -77,6 +78,8 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
+		("multiseed-DP", boost::program_options::value<bool>(), "simultaneously extend all seeds (1/0)")
+		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double)")
 		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
 	;
 	boost::program_options::options_description alignment("Extension");
@@ -161,7 +164,10 @@ int main(int argc, char** argv)
 	params.preciseClippingIdentityCutoff = 0.5;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
+	params.multiseedDP = false;
+	params.multimapScoreFraction = 0;
 	params.cigarMatchMismatchMerge = false;
+	params.minAlignmentScore = 0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -218,6 +224,8 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
+	if (vm.count("multiseed-DP")) params.multiseedDP = vm["multiseed-DP"].as<bool>();
+	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
@@ -226,6 +234,7 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
+	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 
 	int resultSelectionMethods = 0;
 	if (vm.count("all-alignments"))
@@ -377,6 +386,16 @@ int main(int argc, char** argv)
 		std::cerr << "Seed extension density can't be negative" << std::endl;
 		paramError = true;
 	}
+	if (params.multimapScoreFraction < 0)
+	{
+		std::cerr << "--multimap-score-fraction cannot be less than 0" << std::endl;
+		paramError = true;
+	}
+	if (params.multimapScoreFraction > 1)
+	{
+		std::cerr << "--multimap-score-fraction cannot be more than 1" << std::endl;
+		paramError = true;
+	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
 	if (params.optimalDijkstra && (params.initialBandwidth > 0))
 	{
@@ -389,6 +408,16 @@ int main(int argc, char** argv)
 	if (params.optimalDijkstra && (params.maxCellsPerSlice != std::numeric_limits<decltype(params.maxCellsPerSlice)>::max()))
 	{
 		std::cerr << "--optimal-alignment set, ignoring parameter --tangle-effort" << std::endl;
+	}
+	if (params.multiseedDP && vm.count("multimap-score-fraction") == 0)
+	{
+		params.multimapScoreFraction = 0.9;
+		std::cerr << "--multiseed-DP set but --multimap-score-fraction missing, using default --multimap-score-fraction " << params.multimapScoreFraction << std::endl;
+	}
+	if (vm.count("multimap-score-fraction") && !params.multiseedDP)
+	{
+		std::cerr << "--multimap-score-fraction set but --multiseed-DP is off, ignoring --multimap-score-fraction" << std::endl;
+		params.multimapScoreFraction = 0;
 	}
 	if (params.optimalDijkstra && pickedSeedingMethods > 0)
 	{

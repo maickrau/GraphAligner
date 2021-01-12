@@ -121,11 +121,11 @@ public:
 		OnewayTrace result;
 		if (params.preciseClipping)
 		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState, false);
+			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState, false, false);
 		}
 		else
 		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, table, reusableState, false);
+			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, table, reusableState, false, false);
 		}
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{
@@ -166,6 +166,7 @@ private:
 		}
 		size_t lastRowScore = std::numeric_limits<size_t>::max();
 		assert(reusableState.dijkstraQueue.zero() == 0);
+		WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		while (true)
 		{
 			if (reusableState.dijkstraQueue.size() == 0) break;
@@ -219,11 +220,11 @@ private:
 			NodeCalculationResult nodeCalc;
 			if (i < params.graph.firstAmbiguous)
 			{
-				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.NodeChunks(i));
+				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.NodeChunks(i), fakeSlice, table.slices[tableSlice].j);
 			}
 			else
 			{
-				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.AmbiguousNodeChunks(i));
+				nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV[slice], previousThisNode, *extras, params.graph.AmbiguousNodeChunks(i), fakeSlice, table.slices[tableSlice].j);
 			}
 			if (tableSlice == numSlices)
 			{
@@ -243,12 +244,12 @@ private:
 			assert(nodeCalc.minScore <= zeroScore + params.graph.SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize);
 			table.slices[tableSlice].scores.setMinScoreIfSmaller(i, nodeCalc.minScore);
 #ifdef SLICEVERBOSE
-			volatile size_t firstslices = table.slices[tableSlice].node(i).firstSlicesCalcedWhenCalced;
-			volatile size_t calcedslices = table.slices[tableSlice].node(i).slicesCalcedWhenCalced;
-			if (table.slices[tableSlice].node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) table.slices[tableSlice].node(i).firstSlicesCalcedWhenCalced = result.cellsProcessed;
-			if (table.slices[tableSlice].node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(table.slices[tableSlice].node(i).slicesCalcedWhenCalced < result.cellsProcessed);
-			table.slices[tableSlice].node(i).slicesCalcedWhenCalced = table.cellsProcessed;
-			assert(table.slices[tableSlice].node(i).firstSlicesCalcedWhenCalced <= table.slices[tableSlice].node(i).slicesCalcedWhenCalced);
+			volatile size_t firstslices = table.slices[tableSlice].scores.node(i).firstSlicesCalcedWhenCalced;
+			volatile size_t calcedslices = table.slices[tableSlice].scores.node(i).slicesCalcedWhenCalced;
+			if (table.slices[tableSlice].scores.node(i).firstSlicesCalcedWhenCalced == std::numeric_limits<size_t>::max()) table.slices[tableSlice].scores.node(i).firstSlicesCalcedWhenCalced = nodeCalc.cellsProcessed;
+			if (table.slices[tableSlice].scores.node(i).slicesCalcedWhenCalced != std::numeric_limits<size_t>::max()) assert(table.slices[tableSlice].scores.node(i).slicesCalcedWhenCalced < nodeCalc.cellsProcessed);
+			table.slices[tableSlice].scores.node(i).slicesCalcedWhenCalced = table.slices[tableSlice].cellsProcessed;
+			assert(table.slices[tableSlice].scores.node(i).firstSlicesCalcedWhenCalced <= table.slices[tableSlice].scores.node(i).slicesCalcedWhenCalced);
 #endif
 			auto newEnd = thisNode.endSlice;
 			auto newHP = thisNode.HP[0];

@@ -53,12 +53,24 @@ namespace AlignmentSelection
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& allAlignments, SelectionOptions options)
 	{
 		// roundabout to fit the signature of const ref while allowing filtering
-		std::vector<AlignmentResult::AlignmentItem> filteredByE;
+		std::vector<AlignmentResult::AlignmentItem> filtered;
+		bool wasFiltered = false;
+		if (options.minAlignmentScore > std::numeric_limits<int>::min())
+		{
+			filtered = SelectAlignmentScore(wasFiltered ? filtered : allAlignments, options.minAlignmentScore, options.EValueCalc);
+			wasFiltered = true;
+		}
 		if (options.ECutoff != -1)
 		{
-			filteredByE = SelectECutoff(allAlignments, options.graphSize, options.readSize, options.ECutoff, options.EValueCalc);
+			filtered = SelectECutoff(wasFiltered ? filtered : allAlignments, options.graphSize, options.readSize, options.ECutoff, options.EValueCalc);
+			wasFiltered = true;
 		}
-		const std::vector<AlignmentResult::AlignmentItem>& alignments { (options.ECutoff != -1) ? filteredByE : allAlignments };
+		if (options.AlignmentScoreFractionCutoff != 0)
+		{
+			filtered = SelectAlignmentFractionCutoff(wasFiltered ? filtered : allAlignments, options.AlignmentScoreFractionCutoff, options.EValueCalc);
+			wasFiltered = true;
+		}
+		const std::vector<AlignmentResult::AlignmentItem>& alignments { wasFiltered ? filtered : allAlignments };
 		switch(options.method)
 		{
 			case GreedyLength:
@@ -92,5 +104,78 @@ namespace AlignmentSelection
 		}
 		return result;
 	}
+
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentScore(const std::vector<AlignmentResult::AlignmentItem>& alignments, double cutoff, const EValueCalculator& EValueCalc)
+	{
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			if (alignments[i].alignmentXScore >= cutoff) result.push_back(alignments[i]);
+		}
+		return result;
+	}
+
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentFractionCutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, double fraction, const EValueCalculator& EValueCalc)
+	{
+		std::vector<AlignmentResult::AlignmentItem> result;
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			bool skipped = false;
+			for (size_t j = 0; j < alignments.size(); j++)
+			{
+				if (i == j) continue;
+				if (!alignmentIncompatible(alignments[i], alignments[j])) continue;
+				if (alignments[i].alignmentXScore < alignments[j].alignmentXScore * fraction)
+				{
+					skipped = true;
+					break;
+				}
+			}
+			if (skipped) continue;
+			result.push_back(alignments[i]);
+		}
+		return result;
+	}
+
+	void AddMappingQualities(std::vector<AlignmentResult::AlignmentItem>& alignments)
+	{
+		for (size_t i = 0; i < alignments.size(); i++)
+		{
+			assert(alignments[i].alignmentXScore != -1);
+			double otherSum = 0;
+			for (size_t j = 0; j < alignments.size(); j++)
+			{
+				if (i == j) continue;
+				if (!alignmentIncompatible(alignments[i], alignments[j])) continue;
+				assert(alignments[j].alignmentXScore != -1);
+				if (alignments[j].alignmentXScore >= alignments[i].alignmentXScore+1)
+				{
+					otherSum += 10;
+					break;
+				}
+				assert(alignments[j].alignmentXScore <= alignments[i].alignmentXScore+1);
+				otherSum += pow(10.0, alignments[j].alignmentXScore - alignments[i].alignmentXScore);
+				if (otherSum >= 10) break;
+			}
+			if (otherSum >= 10)
+			{
+				alignments[i].mappingQuality = 0;
+			}
+			else if (otherSum <= 0.000001)
+			{
+				alignments[i].mappingQuality = 60;
+			}
+			else
+			{
+				assert(otherSum >= 0.000001);
+				assert(otherSum <= 10);
+				alignments[i].mappingQuality = -log(1.0 - 1.0/(1.0 + otherSum)) * 10;
+				if (alignments[i].mappingQuality >= 60) alignments[i].mappingQuality = 60;
+			}
+			assert(alignments[i].mappingQuality >= 0);
+			assert(alignments[i].mappingQuality <= 60);
+		}
+	}
+
 
 }

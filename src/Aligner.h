@@ -46,7 +46,10 @@ struct AlignerParams
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;
+	bool multiseedDP;
+	double multimapScoreFraction;
 	bool cigarMatchMismatchMerge;
+	double minAlignmentScore;
 };
 
 void alignReads(AlignerParams params);

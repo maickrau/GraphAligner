@@ -29,6 +29,8 @@ namespace AlignmentSelection
 		size_t readSize;
 		double ECutoff;
 		EValueCalculator EValueCalc;
+		double AlignmentScoreFractionCutoff;
+		int minAlignmentScore;
 	};
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alignments, SelectionOptions options);
 	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right);
@@ -95,7 +97,10 @@ namespace AlignmentSelection
 		return result;
 	}
 
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentScore(const std::vector<AlignmentResult::AlignmentItem>& alignments, double score, const EValueCalculator& EValueCalc);
 	std::vector<AlignmentResult::AlignmentItem> SelectECutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, size_t m, size_t n, double cutoff, const EValueCalculator& EValueCalc);
+	std::vector<AlignmentResult::AlignmentItem> SelectAlignmentFractionCutoff(const std::vector<AlignmentResult::AlignmentItem>& alignments, double cutoff, const EValueCalculator& EValueCalc);
+	void AddMappingQualities(std::vector<AlignmentResult::AlignmentItem>& alignments);
 
 };
 

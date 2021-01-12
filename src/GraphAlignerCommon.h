@@ -33,8 +33,8 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0) {}
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0), forceCalculation(false) {}
+		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice), forceCalculation(false) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -48,6 +48,7 @@ public:
 		WordSlice<LengthType, ScoreType, Word> incoming;
 		bool skipFirst;
 		size_t slice;
+		bool forceCalculation;
 	};
 	class AlignerGraphsizedState
 	{
@@ -58,7 +59,8 @@ public:
 		evenNodesliceMap(),
 		oddNodesliceMap(),
 		currentBand(),
-		previousBand()
+		previousBand(),
+		hasSeedStart()
 		{
 			if (!lowMemory)
 			{
@@ -69,6 +71,7 @@ public:
 			calculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
+			hasSeedStart.resize(graph.NodeSize(), false);
 		}
 		void clear()
 		{
@@ -79,6 +82,7 @@ public:
 			dijkstraQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
+			hasSeedStart.assign(hasSeedStart.size(), false);
 		}
 		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
@@ -87,12 +91,13 @@ public:
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
+		std::vector<bool> hasSeedStart;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff) :
+		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, bool forceGlobal, bool preciseClipping, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
 		initialBandwidth(initialBandwidth),
 		rampBandwidth(rampBandwidth),
 		graph(graph),
@@ -105,8 +110,9 @@ public:
 		minSeedClusterSize(minSeedClusterSize),
 		seedExtendDensity(seedExtendDensity),
 		nondeterministicOptimizations(nondeterministicOptimizations),
-		XscoreErrorCost(preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0),
-		Xdropcutoff(Xdropcutoff)
+		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
+		Xdropcutoff(Xdropcutoff),
+		multimapScoreFraction(multimapScoreFraction)
 		{
 		}
 		const LengthType initialBandwidth;
@@ -121,8 +127,9 @@ public:
 		const size_t minSeedClusterSize;
 		const double seedExtendDensity;
 		const bool nondeterministicOptimizations;
-		const double XscoreErrorCost;
+		const ScoreType XscoreErrorCost;
 		const int Xdropcutoff;
+		const double multimapScoreFraction;
 	};
 	struct TraceItem
 	{
@@ -315,7 +322,9 @@ public:
 		elapsedMilliseconds(0),
 		alignmentStart(0),
 		alignmentEnd(0),
-		alignmentScore(std::numeric_limits<size_t>::max())
+		alignmentScore(std::numeric_limits<size_t>::max()),
+		alignmentXScore(-1),
+		mappingQuality(255)
 		{}
 		AlignmentItem(GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace&& trace, size_t cellsProcessed, size_t ms) :
 		corrected(),
@@ -325,7 +334,9 @@ public:
 		elapsedMilliseconds(ms),
 		alignmentStart(0),
 		alignmentEnd(0),
-		alignmentScore(std::numeric_limits<size_t>::max())
+		alignmentScore(std::numeric_limits<size_t>::max()),
+		alignmentXScore(-1),
+		mappingQuality(255)
 		{
 			this->trace = std::make_shared<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace>();
 			*this->trace = std::move(trace);
@@ -348,6 +359,8 @@ public:
 		size_t alignmentStart;
 		size_t alignmentEnd;
 		size_t alignmentScore;
+		double alignmentXScore;
+		int mappingQuality;
 	};
 	std::vector<AlignmentItem> alignments;
 	size_t seedsExtended;

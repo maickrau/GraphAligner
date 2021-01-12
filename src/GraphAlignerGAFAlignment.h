@@ -34,7 +34,7 @@ class GraphAlignerGAFAlignment
 	};
 public:
 
-	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, const Params& params, bool cigarMatchMismatchMerge)
+	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params, bool cigarMatchMismatchMerge)
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;
@@ -50,7 +50,6 @@ public:
 		size_t nodePathEnd = 0;
 		size_t matches = 0;
 		size_t blockLength = trace.size();
-		int mappingQuality = 255;
 
 		MergedNodePos currentPos;
 		currentPos.nodeId = trace[0].DPposition.node;
@@ -193,6 +192,7 @@ public:
 		std::stringstream sstr;
 		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath.str() << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality;
 		sstr << "\t" << "NM:i:" << (mismatches + deletions + insertions);
+		if (alignmentXScore != -1) sstr << "\t" << "AS:f:" << alignmentXScore;
 		sstr << "\t" << "dv:f:" << 1.0-((double)matches / (double)(matches + mismatches + deletions + insertions));
 		sstr << "\t" << "id:f:" << ((double)matches / (double)(matches + mismatches + deletions + insertions));
 		sstr << "\t" << "cg:Z:" << cigar.str();
