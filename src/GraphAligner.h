@@ -561,13 +561,20 @@ private:
 	{
 		if (trace.trace.size() == 0) return;
 		trace.score = 0;
-		trace.trace[0].sequenceCharacter = sequence[trace.trace[0].DPposition.seqPos];
 		for (size_t i = 0; i < trace.trace.size(); i++)
 		{
 			trace.trace[i].DPposition.seqPos += start;
 			auto nodeIndex = trace.trace[i].DPposition.node;
 			trace.trace[i].DPposition.node = params.graph.nodeIDs[nodeIndex];
 			trace.trace[i].DPposition.nodeOffset += params.graph.nodeOffset[nodeIndex];
+			assert(trace.trace[i].DPposition.seqPos >= 0);
+			assert(trace.trace[i].DPposition.seqPos < sequence.size());
+			if (trace.trace[i].DPposition.seqPos == start-1)
+			{
+				assert(trace.trace[i].sequenceCharacter == '-');
+				trace.trace[i].sequenceCharacter = sequence[trace.trace[i].DPposition.seqPos];
+			}
+			assert(trace.trace[i].sequenceCharacter == sequence[trace.trace[i].DPposition.seqPos]);
 			if (i == 0 && !Common::characterMatch(trace.trace[0].sequenceCharacter, trace.trace[0].graphCharacter)) trace.score += 1;
 			if (i > 0)
 			{
@@ -717,6 +724,8 @@ private:
 		auto timeEnd = std::chrono::system_clock::now();
 		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		result.elapsedMilliseconds = time;
+		result.alignmentXScore = (ScoreType)result.alignmentLength()*100 - params.XscoreErrorCost * (ScoreType)result.alignmentScore;
+		result.alignmentXScore /= 100.0;
 		return result;
 	}
 
