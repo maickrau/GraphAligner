@@ -379,7 +379,6 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 	std::unordered_set<size_t> visited;
 	std::vector<size_t> stack;
 	stack.push_back(start);
-	visited.insert(start);
 	merge(chainNumber, rank, start, bubbleEnd);
 	while (stack.size() > 0)
 	{
