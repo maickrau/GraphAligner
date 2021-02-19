@@ -429,6 +429,7 @@ private:
 		timeEnd = std::chrono::system_clock::now();
 		auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
 		alnItem.elapsedMilliseconds = time;
+		alnItem.alignmentXScore = (ScoreType)alnItem.alignmentLength()*100 - params.XscoreErrorCost * (ScoreType)alnItem.alignmentScore;
 		return alnItem;
 	}
 
