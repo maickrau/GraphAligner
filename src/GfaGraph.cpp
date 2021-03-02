@@ -266,9 +266,9 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			assert(fromstart == "+" || fromstart == "-");
 			assert(toend == "+" || toend == "-");
 			sstr >> overlap;
-			char dummyc;
+			char dummyc = 0;
 			sstr >> dummyc;
-			assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
+			assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0) || (dummyc == 0 && overlap == 0));
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
 			if (result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
