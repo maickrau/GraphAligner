@@ -1,3 +1,4 @@
+#include <map>
 #include <iostream>
 #include <cassert>
 #include <unordered_set>
@@ -25,8 +26,8 @@ std::vector<size_t> getLengths(const std::unordered_map<NodePos, size_t>& nodeMa
 	result.resize(nodeMapping.size(), 0);
 	for (auto node : graph.nodes)
 	{
-		result[nodeMapping.at(NodePos{ node.first, true })] = node.second.size() - graph.edgeOverlap;
-		result[nodeMapping.at(NodePos{ node.first, false })] = node.second.size() - graph.edgeOverlap;
+		result[nodeMapping.at(NodePos{ node.first, true })] = node.second.size();
+		result[nodeMapping.at(NodePos{ node.first, false })] = node.second.size();
 	}
 	return result;
 }
@@ -53,7 +54,7 @@ std::vector<std::vector<size_t>> getOutEdges(const std::unordered_map<NodePos, s
 	return result;
 }
 
-std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& componentNodes, const std::vector<size_t>& nodeLengths, const std::vector<std::vector<size_t>>& edges)
+std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& componentNodes, const std::vector<size_t>& nodeLengths, const std::vector<std::vector<size_t>>& edges, const std::map<std::pair<size_t, size_t>, size_t>& overlaps, const size_t dbgOverlap)
 {
 	std::vector<size_t> result;
 	result.resize(nodeLengths.size(), 0);
@@ -82,7 +83,12 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 					result[node] = std::numeric_limits<size_t>::max();
 					break;
 				}
-				result[node] = std::max(result[node], result[neighbor] + nodeLengths[node]);
+				size_t overlap = dbgOverlap;
+				if (overlaps.count(std::make_pair(node, neighbor)) == 1)
+				{
+					overlap = overlaps.at(std::make_pair(node, neighbor));
+				}
+				result[node] = std::max(result[node], result[neighbor] + nodeLengths[node] - overlap);
 			}
 		}
 	}
@@ -235,13 +241,29 @@ std::vector<std::vector<size_t>> topologicalSort(const std::vector<std::vector<s
 	return result;
 }
 
+std::map<std::pair<size_t, size_t>, size_t> getOverlaps(const std::unordered_map<NodePos, size_t>& nodeMapping, const GfaGraph& graph)
+{
+	std::map<std::pair<size_t, size_t>, size_t> result;
+	for (auto pair : graph.varyingOverlaps)
+	{
+		auto fromGfa = pair.first.first;
+		auto toGfa = pair.first.second;
+		auto overlap = pair.second;
+		auto from = nodeMapping.at(fromGfa);
+		auto to = nodeMapping.at(toGfa);
+		result[std::make_pair(from, to)] = overlap;
+	}
+	return result;
+}
+
 std::unordered_set<int> filterNodes(const GfaGraph& graph, const int maxRemovableLen, const int minSafeLen, const double fraction)
 {
 	auto nodeMapping = getNodeMapping(graph);
 	auto lengths = getLengths(nodeMapping, graph);
+	auto overlaps = getOverlaps(nodeMapping, graph);
 	auto edges = getOutEdges(nodeMapping, graph);
 	auto order = topologicalSort(edges);
-	auto depths = getNodeDepths(order, lengths, edges);
+	auto depths = getNodeDepths(order, lengths, edges, overlaps, graph.edgeOverlap);
 	auto keepers = getKeepers(depths, edges, maxRemovableLen, minSafeLen, fraction);
 	std::unordered_set<int> result;
 	for (auto node : graph.nodes)
@@ -259,7 +281,7 @@ int main(int argc, char** argv)
 	int maxRemovableLen = std::stoi(argv[1]);
 	int minSafeLen = std::stoi(argv[2]);
 	double fraction = std::stod(argv[3]);
-	auto graph = GfaGraph::LoadFromStream(std::cin);
+	auto graph = GfaGraph::LoadFromStream(std::cin, true);
 	//write to cout
 
 	auto keptNodes = filterNodes(graph, maxRemovableLen, minSafeLen, fraction);
