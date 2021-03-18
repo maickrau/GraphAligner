@@ -112,11 +112,17 @@ void GfaGraph::SaveToFile(std::string filename) const
 	SaveToStream(file);
 }
 
+std::string GfaGraph::nodeName(int nodeId) const
+{
+	if (originalNodeName.count(nodeId) == 1) return originalNodeName.at(nodeId);
+	return std::to_string(nodeId);
+}
+
 void GfaGraph::SaveToStream(std::ostream& file) const
 {
 	for (auto node : nodes)
 	{
-		file << "S\t" << node.first << "\t" << node.second;
+		file << "S\t" << nodeName(node.first) << "\t" << node.second;
 		if (tags.count(node.first) == 1) file << "\t" << tags.at(node.first);
 		file << std::endl;
 	}
@@ -129,7 +135,7 @@ void GfaGraph::SaveToStream(std::ostream& file) const
 			{
 				overlap = varyingOverlaps.at(std::make_pair(edge.first, target));
 			}
-			file << "L\t" << edge.first.id << "\t" << (edge.first.end ? "+" : "-") << "\t" << target.id << "\t" << (target.end ? "+" : "-") << "\t" << overlap << "M" << std::endl;
+			file << "L\t" << nodeName(edge.first.id) << "\t" << (edge.first.end ? "+" : "-") << "\t" << nodeName(target.id) << "\t" << (target.end ? "+" : "-") << "\t" << overlap << "M" << std::endl;
 		}
 	}
 }

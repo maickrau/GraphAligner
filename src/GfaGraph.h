@@ -67,6 +67,7 @@ public:
 	std::unordered_map<int, std::string> originalNodeName;
 private:
 	void numberBackToIntegers();
+	std::string nodeName(int nodeid) const;
 };
 
 #endif
