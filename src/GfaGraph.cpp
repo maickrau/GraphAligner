@@ -316,10 +316,15 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 		result.originalNodeName[pair.second] = pair.first;
 		if (allIdsIntegers)
 		{
-			char* p;
-			strtol(pair.first.c_str(), &p, 10);
-			if (*p) {
+			char* p = (char*)pair.first.c_str();
+			long int test = strtol(pair.first.c_str(), &p, 10);
+			if (*p != '\0')
+			{
 				allIdsIntegers = false;
+			}
+			else
+			{
+				if (test <= std::numeric_limits<int>::min() || test >= std::numeric_limits<int>::max()) allIdsIntegers = false;
 			}
 		}
 	}
