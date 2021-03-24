@@ -220,6 +220,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 	std::unordered_map<std::string, int> nameMapping;
 	GfaGraph result;
 	bool hasVaryingOverlaps = false;
+	bool hasUnspecifiedOverlaps = false;
 	while (file.good())
 	{
 		std::string line;
@@ -260,7 +261,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			std::string fromstart;
 			std::string toend;
 			std::string dummy;
-			int overlap;
+			int overlap = 0;
 			sstr >> dummy;
 			assert(dummy == "L");
 			sstr >> fromstr;
@@ -271,10 +272,21 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			sstr >> toend;
 			assert(fromstart == "+" || fromstart == "-");
 			assert(toend == "+" || toend == "-");
-			sstr >> overlap;
-			char dummyc;
-			sstr >> dummyc;
-			assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
+			char test = sstr.get();
+			assert(test == '\t');
+			test = sstr.peek();
+			if (test == '*')
+			{
+				overlap = 0;
+				hasUnspecifiedOverlaps = true;
+			}
+			else
+			{
+				sstr >> overlap;
+				char dummyc = 'z';
+				sstr >> dummyc;
+				assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
+			}
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
 			assert(overlap >= 0);
 			if (result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
@@ -360,6 +372,10 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 				edge.second.erase(edge.second.begin()+i);
 			}
 		}
+	}
+	if (hasUnspecifiedOverlaps)
+	{
+		std::cerr << "WARNING: Graph has edges with unspecified overlaps (*). Assuming that unspecified overlaps have zero overlap." << std::endl;
 	}
 	if (warnAboutMissingNodes && hasNonexistant)
 	{
