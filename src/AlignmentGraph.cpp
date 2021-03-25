@@ -835,7 +835,6 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t offset) const
 {
 	assert(nodeLookup.count(nodeId) == 1);
-	const auto& nodes = nodeLookup.at(nodeId);
 	size_t originalSize = originalNodeSize.at(nodeId);
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;

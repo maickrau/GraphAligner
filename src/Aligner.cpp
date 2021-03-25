@@ -311,7 +311,7 @@ void writeGAFToQueue(moodycamel::ProducerToken& token, const AlignerParams& para
 void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
-	zstr::ostream *compressed;
+	zstr::ostream *compressed = nullptr;
 	if (params.compressCorrected)
 	{
 		compressed = new zstr::ostream(strstr);
@@ -327,7 +327,7 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 		corrections.back().corrected = alignments.alignments[i].corrected;
 	}
 	std::string corrected = getCorrected(original, corrections, maxOverlap);
-	if (params.compressCorrected)
+	if (compressed != nullptr)
 	{
 		(*compressed) << ">" << readName << std::endl;
 		(*compressed) << corrected << std::endl;
@@ -344,7 +344,7 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
-	zstr::ostream *compressed;
+	zstr::ostream *compressed = nullptr;
 	if (params.compressClipped)
 	{
 		compressed = new zstr::ostream(strstr);
@@ -353,7 +353,7 @@ void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const Aligne
 	{
 		assert(!alignments.alignments[i].alignmentFailed());
 		assert(alignments.alignments[i].corrected.size() > 0);
-		if (params.compressClipped)
+		if (compressed != nullptr)
 		{
 			(*compressed) << ">" << alignments.readName << "_" << i << "_" << alignments.alignments[i].alignmentStart << "_" << alignments.alignments[i].alignmentEnd << std::endl;
 			(*compressed) << alignments.alignments[i].corrected << std::endl;
@@ -364,7 +364,7 @@ void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const Aligne
 			strstr << alignments.alignments[i].corrected << std::endl;
 		}
 	}
-	if (params.compressClipped)
+	if (compressed != nullptr)
 	{
 		delete compressed;
 	}
@@ -426,7 +426,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		AlignmentResult alignments;
 
 		size_t alntimems = 0;
-		size_t clustertimems = 0;
 		try
 		{
 			if (seeder.mode != Seeder::Mode::None)

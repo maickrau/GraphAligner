@@ -13,8 +13,6 @@ namespace AlignmentSelection
 	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
 	{
 		auto minOverlapLen = std::min((left.alignmentEnd - left.alignmentStart), (right.alignmentEnd - right.alignmentStart)) * OverlapIncompatibleFractionCutoff;
-		assert(left.alignmentStart >= 0);
-		assert(right.alignmentStart >= 0);
 		size_t leftStart = left.alignmentStart;
 		size_t leftEnd = left.alignmentEnd;
 		size_t rightStart = right.alignmentStart;

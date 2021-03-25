@@ -90,7 +90,7 @@ void EValueCalculator::initializeK()
 		pascalsTriangle = newTriangle;
 		assert(pascalsTriangle[0] == 1);
 		assert(pascalsTriangle.back() == 1);
-		assert(pascalsTriangle.size() == k+1);
+		assert(pascalsTriangle.size() == (size_t)k+1);
 		size_t triangleSum = 0;
 		for (auto n : pascalsTriangle) triangleSum += n;
 		double negativeExpectation = 0;

@@ -353,7 +353,7 @@ public:
 		result.scoreEnd = oldSeedScore;
 		result.VP &= ~((Word)1);
 		result.VN |= (Word)1;
-		assert(result.getScoreBeforeStart() < j + WordConfiguration<Word>::WordSize);
+		assert(result.getScoreBeforeStart() < (ScoreType)j + (ScoreType)WordConfiguration<Word>::WordSize);
 		return result;
 	}
 
@@ -587,7 +587,7 @@ public:
 		std::vector<WordSlice> nodeSlices;
 		EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 		WordSlice extraSlice;
-		ScoreType lastScore;
+		ScoreType lastScore = std::numeric_limits<ScoreType>::max()-1;
 		while (result.trace.back().DPposition.seqPos != (size_t)-1)
 		{
 			size_t newSlice = result.trace.back().DPposition.seqPos / WordConfiguration<Word>::WordSize + 1;
@@ -1384,8 +1384,8 @@ public:
 				assert(scoreComparison == previousSlice.endSlice.scoreEnd);
 				assert(adjustScore <= extraSlice.getScoreBeforeStart());
 				assert(adjustScore <= previousSlice.endSlice.scoreEnd);
-				assert(adjustScore <= ws.getScoreBeforeStart() + nodeLength - 1);
-				assert(adjustScore == previousSlice.endSlice.scoreEnd || adjustScore == extraSlice.getScoreBeforeStart() || adjustScore == ws.getScoreBeforeStart() + nodeLength - 1);
+				assert(adjustScore <= ws.getScoreBeforeStart() + (ScoreType)nodeLength - 1);
+				assert(adjustScore == previousSlice.endSlice.scoreEnd || adjustScore == extraSlice.getScoreBeforeStart() || adjustScore == ws.getScoreBeforeStart() + (ScoreType)nodeLength - 1);
 			}
 			else if (scoreBefore < scoreComparison)
 			{

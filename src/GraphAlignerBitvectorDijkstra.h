@@ -176,9 +176,9 @@ private:
 				reusableState.dijkstraQueue.pop();
 				continue;
 			}
-			if (edge.priority != zeroScore)
+			if (edge.priority != (ScoreType)zeroScore)
 			{
-				assert(edge.priority > zeroScore);
+				assert(edge.priority > (ScoreType)zeroScore);
 				reusableState.dijkstraQueue.increaseScore(edge.priority - zeroScore);
 				zeroScore = edge.priority;
 			}
@@ -228,7 +228,7 @@ private:
 			}
 			if (tableSlice == numSlices)
 			{
-				if (nodeCalc.minScore < lastRowScore)
+				if (nodeCalc.minScore < (ScoreType)lastRowScore)
 				{
 					lastRowScore = nodeCalc.minScore;
 				}
@@ -241,7 +241,7 @@ private:
 			}
 			reusableState.dijkstraQueue.pop();
 			reusableState.dijkstraQueue.removeExtras(slice, i);
-			assert(nodeCalc.minScore <= zeroScore + params.graph.SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize);
+			assert(nodeCalc.minScore <= (ScoreType)(zeroScore + params.graph.SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize));
 			table.slices[tableSlice].scores.setMinScoreIfSmaller(i, nodeCalc.minScore);
 #ifdef SLICEVERBOSE
 			volatile size_t firstslices = table.slices[tableSlice].scores.node(i).firstSlicesCalcedWhenCalced;
@@ -258,14 +258,14 @@ private:
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newHP != oldHP || newHN != oldHN)
 			{
 				ScoreType newEndMinScore = changedHorizontal(newEnd, newHP, newHN, oldEnd, oldHP, oldHN, params.graph.NodeLength(i));
-				assert(newEndMinScore >= zeroScore);
+				assert(newEndMinScore >= (ScoreType)zeroScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				reusableState.dijkstraQueue.insert(newEndMinScore, EdgeWithPriority { i, newEndMinScore, BV::getSourceSliceFromScore(thisNode.startSlice.scoreEnd), true, slice+1 });
 			}
 			if (newEnd.scoreEnd != oldEnd.scoreEnd)
 			{
 				ScoreType newEndMinScore = newEnd.scoreEnd;
-				assert(newEndMinScore >= zeroScore);
+				assert(newEndMinScore >= (ScoreType)zeroScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				for (auto neighbor : params.graph.outNeighbors[i])
 				{
@@ -275,7 +275,7 @@ private:
 			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
-				assert(newEndMinScore >= zeroScore);
+				assert(newEndMinScore >= (ScoreType)zeroScore);
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				for (auto neighbor : params.graph.outNeighbors[i])
 				{

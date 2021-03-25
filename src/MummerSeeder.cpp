@@ -291,7 +291,9 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 	result.reserve(fwmatches.size() + bwmatches.size());
 	for (auto match : fwmatches)
 	{
-		assert(match.ref + match.len <= nodePositions.back());
+		assert(match.ref >= 0);
+		assert(match.len >= 0);
+		assert((size_t)match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];
@@ -301,7 +303,9 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 	}
 	for (auto match : bwmatches)
 	{
-		assert(match.ref + match.len <= nodePositions.back());
+		assert(match.ref >= 0);
+		assert(match.len >= 0);
+		assert((size_t)match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];

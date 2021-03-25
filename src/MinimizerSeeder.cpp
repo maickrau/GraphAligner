@@ -356,7 +356,6 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 				}
 				if (iter == graph.nodeLookup.end()) break;
 				int nodeId = iter->first;
-				int firstNode = iter->second[0];
 				std::string sequence;
 				sequence.resize(graph.originalNodeSize.at(nodeId));
 				for (size_t pos = 0; pos < sequence.size(); pos++)
@@ -545,10 +544,11 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, doub
 
 SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const
 {
-	assert(nodeId < graph.nodeIDs.size());
-	assert(nodeId < graph.nodeOffset.size());
-	assert(nodeId < graph.reverse.size());
-	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[nodeId] };
+	assert(nodeId >= 0);
+	assert((size_t)nodeId < graph.nodeIDs.size());
+	assert((size_t)nodeId < graph.nodeOffset.size());
+	assert((size_t)nodeId < graph.reverse.size());
+	SeedHit result { graph.nodeIDs[(size_t)nodeId]/2, nodeOffset + graph.nodeOffset[(size_t)nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
 	result.alignmentGraphNodeId = nodeId;
 	result.alignmentGraphNodeOffset = nodeOffset;
 	return result;
