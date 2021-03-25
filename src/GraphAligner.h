@@ -852,7 +852,11 @@ private:
 			assert(newpos.seqPos != oldpos.seqPos || newpos.node != oldpos.node || newpos.nodeOffset != oldpos.nodeOffset);
 			if (oldNodeIndex == newNodeIndex)
 			{
-				assert((newpos.nodeOffset >= oldpos.nodeOffset && newpos.seqPos >= oldpos.seqPos) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
+				// this check doesn't allow a backwards alignment through a self-looping node with overlap, which is a thing that happens
+				// problem: the original backwards trace is fine, aligning to node of size |n| oldpos is at |n|-1 and newpos at 0
+				// but when it gets oriented forwards, overlap x, oldpos is at 0 and newpos is at n-x-1 which this check doesn't allow
+				// so disable for now
+				// assert((newpos.nodeOffset >= oldpos.nodeOffset && newpos.seqPos >= oldpos.seqPos) || (oldpos.nodeOffset == params.graph.NodeLength(newNodeIndex)-1 && newpos.nodeOffset == 0 && (newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1)));
 				continue;
 			}
 			assert(oldNodeIndex != newNodeIndex);
