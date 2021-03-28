@@ -159,7 +159,7 @@ int main(int argc, char** argv)
 	params.seedExtendDensity = 0.002;
 	params.nondeterministicOptimizations = false;
 	params.preciseClippingIdentityCutoff = 0.66;
-	params.Xdropcutoff = 0;
+	params.Xdropcutoff = 50;
 	params.DPRestartStride = 0;
 	params.multiseedDP = false;
 	params.multimapScoreFraction = 0;
@@ -274,13 +274,17 @@ int main(int argc, char** argv)
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("global-alignment")) params.forceGlobal = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
+
 	if (vm.count("X-drop"))
 	{
 		params.Xdropcutoff = vm["X-drop"].as<int>();
-		if (params.Xdropcutoff < 1)
+	}
+	else
+	{
+		// by default pick x-drop so that a block of 50 mismatches breaks an alignment
+		if (params.preciseClippingIdentityCutoff >= 0.501)
 		{
-			std::cerr << "X-drop score cutoff must be > 1" << std::endl;
-			paramError = true;
+			params.Xdropcutoff = std::max((double)params.Xdropcutoff, (double)50 * (100 * (params.preciseClippingIdentityCutoff / (1.0 - params.preciseClippingIdentityCutoff) + 1.0)));
 		}
 	}
 	if (params.graphFile == "")
@@ -381,6 +385,11 @@ int main(int argc, char** argv)
 	if (params.preciseClippingIdentityCutoff < 0.501 || params.preciseClippingIdentityCutoff > 0.999)
 	{
 		std::cerr << "precise clipping identity cutoff must be between 0.501 and 0.999" << std::endl;
+		paramError = true;
+	}
+	if (params.Xdropcutoff < 1)
+	{
+		std::cerr << "X-drop score cutoff must be > 1" << std::endl;
 		paramError = true;
 	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);

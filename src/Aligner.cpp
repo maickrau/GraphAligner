@@ -709,6 +709,7 @@ void alignReads(AlignerParams params)
 
 	if (params.selectionECutoff != -1) std::cout << "Discard alignments with an E-value > " << params.selectionECutoff << std::endl;
 	std::cout << "Clip alignment ends with identity < " << params.preciseClippingIdentityCutoff * 100 << "%" << std::endl;
+	std::cout << "X-drop DP score cutoff " << params.Xdropcutoff << std::endl;
 
 	if (params.outputGAMFile != "") std::cout << "write alignments to " << params.outputGAMFile << std::endl;
 	if (params.outputJSONFile != "") std::cout << "write alignments to " << params.outputJSONFile << std::endl;
