@@ -261,9 +261,6 @@ void AlignmentGraph::Finalize(int wordSize)
 	findLinearizable();
 	doComponentOrder();
 	findChains();
-	std::cout << nodeLookup.size() << " original nodes" << std::endl;
-	std::cout << nodeLength.size() << " split nodes" << std::endl;
-	std::cout << ambiguousNodeSequences.size() << " ambiguous split nodes" << std::endl;
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
@@ -274,8 +271,6 @@ void AlignmentGraph::Finalize(int wordSize)
 		if (inNeighbors[i].size() >= 2) specialNodes++;
 		edges += inNeighbors[i].size();
 	}
-	std::cout << edges << " edges" << std::endl;
-	std::cout << specialNodes << " nodes with in-degree >= 2" << std::endl;
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
 	assert(inNeighbors.size() == nodeLength.size());
 	assert(outNeighbors.size() == nodeLength.size());
