@@ -112,21 +112,13 @@ public:
 			table.slices[i].minScoreNodeOffset = 0;
 		}
 		fillTable(table, alignableSequence, reusableState);
-		if (!params.preciseClipping && !forceGlobal) BV::removeWronglyAlignedEnd(table);
 		if (table.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
 		OnewayTrace result;
-		if (params.preciseClipping)
-		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState, false, false);
-		}
-		else
-		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, table, reusableState, false, false);
-		}
+		result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, table, reusableState, false, false);
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{
 			result.trace[i].DPposition.seqPos += 1;
@@ -141,7 +133,8 @@ private:
 
 	void fillTable(DPTable& table, const std::string_view& sequence, AlignerGraphsizedState& reusableState) const
 	{
-		assert(!params.preciseClipping);
+		// todo: remove whole thingy?
+		// assert(!params.preciseClipping);
 		assert(reusableState.dijkstraQueue.size() == 0);
 		assert(table.slices.size() > 0);
 		for (auto node : table.slices[0].scores)

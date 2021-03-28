@@ -385,15 +385,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
 	selectionOptions.ECutoff = params.selectionECutoff;
 	selectionOptions.minAlignmentScore = params.minAlignmentScore;
-	if (params.preciseClipping)
-	{
-		selectionOptions.EValueCalc = EValueCalculator { params.preciseClippingIdentityCutoff };
-	}
-	else
-	{
-		// default 70% min identity threshold
-		selectionOptions.EValueCalc = EValueCalculator { .7 };
-	}
+	selectionOptions.EValueCalc = EValueCalculator { params.preciseClippingIdentityCutoff };
 	selectionOptions.AlignmentScoreFractionCutoff = params.multimapScoreFraction;
 	BufferedWriter cerroutput;
 	BufferedWriter coutoutput;
@@ -463,12 +455,12 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto alntimeStart = std::chrono::system_clock::now();
 				if (params.multiseedDP)
 				{
-					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
+					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
 					AlignmentSelection::AddMappingQualities(alignments.alignments);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, !params.highMemory, params.forceGlobal, params.seedClusterMinSize, params.seedExtendDensity, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
 				}
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
@@ -476,14 +468,14 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			else if (params.optimalDijkstra)
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, !params.verboseMode, reusableState, params.forceGlobal, params.preciseClipping);
+				alignments = AlignOneWayDijkstra(alignmentGraph, fastq->seq_id, fastq->sequence, !params.verboseMode, reusableState, params.forceGlobal);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
 			else
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.preciseClipping, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.DPRestartStride);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.rampBandwidth, !params.verboseMode, reusableState, !params.highMemory, params.forceGlobal, params.nondeterministicOptimizations, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.DPRestartStride);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
@@ -730,7 +722,7 @@ void alignReads(AlignerParams params)
 	std::cout << std::endl;
 
 	if (params.selectionECutoff != -1) std::cout << "Discard alignments with an E-value > " << params.selectionECutoff << std::endl;
-	if (params.preciseClipping) std::cout << "Clip alignment ends with identity < " << params.preciseClippingIdentityCutoff * 100 << "%" << std::endl;
+	std::cout << "Clip alignment ends with identity < " << params.preciseClippingIdentityCutoff * 100 << "%" << std::endl;
 
 	if (params.outputGAMFile != "") std::cout << "write alignments to " << params.outputGAMFile << std::endl;
 	if (params.outputJSONFile != "") std::cout << "write alignments to " << params.outputJSONFile << std::endl;

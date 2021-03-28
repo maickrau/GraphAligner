@@ -61,7 +61,7 @@ int main(int argc, char** argv)
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends more precisely with arg as the identity cutoff between correct / wrong alignments (float)")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
 	;
 	boost::program_options::options_description seeding("Seeding");
@@ -152,7 +152,6 @@ int main(int argc, char** argv)
 	params.forceGlobal = false;
 	params.compressCorrected = false;
 	params.compressClipped = false;
-	params.preciseClipping = false;
 	params.minimizerSeedDensity = 0;
 	params.minimizerLength = 19;
 	params.minimizerWindowSize = 30;
@@ -161,7 +160,7 @@ int main(int argc, char** argv)
 	params.seedExtendDensity = 0.002;
 	params.nondeterministicOptimizations = false;
 	params.optimalDijkstra = false;
-	params.preciseClippingIdentityCutoff = 0.5;
+	params.preciseClippingIdentityCutoff = 0.66;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
 	params.multiseedDP = false;
@@ -278,7 +277,6 @@ int main(int argc, char** argv)
 	if (vm.count("global-alignment")) params.forceGlobal = true;
 	if (vm.count("precise-clipping"))
 	{
-		params.preciseClipping = true;
 		params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 		if (params.preciseClippingIdentityCutoff < 0.001 || params.preciseClippingIdentityCutoff > 0.999)
 		{
@@ -438,12 +436,6 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
-	}
-	if (params.Xdropcutoff > 0 && !params.preciseClipping)
-	{
-		std::cerr << "--X-drop is set but --precise-clipping is not, using default value of --precise-clipping .66" << std::endl;
-		params.preciseClipping = true;
-		params.preciseClippingIdentityCutoff = 0.66;
 	}
 	if (params.tryAllSeeds && vm.count("seeds-extend-density") && vm["seeds-extend-density"].as<double>() != -1)
 	{

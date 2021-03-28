@@ -62,7 +62,6 @@ public:
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
 		auto slice = getSlices(sequence, initialBandwidth, numSlices, forceGlobal, Xdropcutoff, reusableState);
-		if (!params.preciseClipping && !forceGlobal) BV::removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -72,14 +71,7 @@ public:
 		assert(slice.slices.back().minScore <= (ScoreType)sequence.size() + (ScoreType)WordConfiguration<Word>::WordSize * 2);
 
 		OnewayTrace result;
-		if (params.preciseClipping)
-		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, sequence, slice, reusableState, true, false);
-		}
-		else
-		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, sequence, slice, reusableState, true, false);
-		}
+		result = BV::getReverseTraceFromTableExactEndPos(params, sequence, slice, reusableState, true, false);
 
 		return result;
 	}
@@ -131,21 +123,13 @@ public:
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto slice = getSlices(alignableSequence, startSlice, numSlices, forceGlobal, Xdropcutoff, reusableState);
-		if (!params.preciseClipping && !forceGlobal) BV::removeWronglyAlignedEnd(slice);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
 		}
 
 		OnewayTrace result;
-		if (params.preciseClipping)
-		{
-			result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, slice, reusableState, true, false);
-		}
-		else
-		{
-			result = BV::getReverseTraceFromTableStartLastRow(params, alignableSequence, slice, reusableState, true, false);
-		}
+		result = BV::getReverseTraceFromTableExactEndPos(params, alignableSequence, slice, reusableState, true, false);
 		for (size_t i = 0; i < result.trace.size(); i++)
 		{
 			result.trace[i].DPposition.seqPos += 1;
@@ -431,27 +415,13 @@ private:
 			NodeCalculationResult nodeCalc;
 			if (i < params.graph.firstAmbiguous)
 			{
-				if (params.preciseClipping)
-				{
-					nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i), extraSlice, j);
-					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
-				}
-				else
-				{
-					nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i), extraSlice, j);
-				}
+				nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i), extraSlice, j);
+				assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
 			}
 			else
 			{
-				if (params.preciseClipping)
-				{
-					nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i), extraSlice, j);
-					assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
-				}
-				else
-				{
-					nodeCalc = BV::calculateNodeClipApprox(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i), extraSlice, j);
-				}
+				nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i), extraSlice, j);
+				assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
 			}
 			calculableQueue.pop();
 			if (!calculableQueue.IsComponentPriorityQueue())
@@ -506,7 +476,7 @@ private:
 				result.minScoreNode = nodeCalc.minScoreNode;
 				result.minScoreNodeOffset = nodeCalc.minScoreNodeOffset;
 			}
-			if (params.preciseClipping && nodeCalc.maxExactEndposScore > result.maxExactEndposScore)
+			if (nodeCalc.maxExactEndposScore > result.maxExactEndposScore)
 			{
 				result.maxExactEndposScore = nodeCalc.maxExactEndposScore;
 				result.maxExactEndposNode = nodeCalc.maxExactEndposNode;
@@ -531,11 +501,6 @@ private:
 		}
 
 		assert(result.minScoreNode != std::numeric_limits<LengthType>::max() || (seedhitStart == seedhitEnd && seedhitStart != std::numeric_limits<size_t>::max()));
-
-		if (!params.preciseClipping && j + WordConfiguration<Word>::WordSize > sequence.size())
-		{
-			BV::flattenLastSliceEnd(params, currentSlice, previousSlice, result, j, sequence, true, seedstartSlice);
-		}
 
 #ifdef SLICEVERBOSE
 		std::cerr << "prefilternodes " << currentSlice.size() << " ";
@@ -577,11 +542,11 @@ private:
 		slice.maxExactEndposScore = sliceResult.maxExactEndposScore;
 		slice.maxExactEndposNode = sliceResult.maxExactEndposNode;
 		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.minScore <= (ScoreType)slice.j + (ScoreType)WordConfiguration<Word>::WordSize);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)sliceResult.maxExactEndposScore >= -((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)sliceResult.maxExactEndposScore <= ((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore <= ((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
-		assert(!params.preciseClipping || (seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore >= -((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || sliceResult.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)sliceResult.maxExactEndposScore >= -((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)sliceResult.maxExactEndposScore <= ((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore <= ((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
+		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore >= -((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(slice.minScore >= previousSlice.minScore || slice.minScore >= extraSlice.getValue(0) || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
 		ScoreType diff = slice.minScore - previousSlice.minScore;
 		if (previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1) diff = 0;
@@ -828,7 +793,6 @@ private:
 
 	DPTable getXdropSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, double Xdropcutoff, AlignerGraphsizedState& reusableState) const
 	{
-		assert(params.preciseClipping);
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		DPTable result;
@@ -977,7 +941,6 @@ private:
 	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<SeedHit>& seedHits) const
 	{
 		assert(reusableState.componentQueue.valid());
-		assert(params.preciseClipping);
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + (numSlices-1) * WordConfiguration<Word>::WordSize <= sequence.size());

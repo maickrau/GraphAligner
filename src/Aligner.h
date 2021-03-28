@@ -34,7 +34,6 @@ struct AlignerParams
 	bool forceGlobal;
 	bool compressCorrected;
 	bool compressClipped;
-	bool preciseClipping;
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
 	double minimizerSeedDensity;
