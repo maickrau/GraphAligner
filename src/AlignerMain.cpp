@@ -58,7 +58,7 @@ int main(int argc, char** argv)
 		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double) (default 0.9)")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
+		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (double)")
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
 	;
 	boost::program_options::options_description seeding("Seeding");
