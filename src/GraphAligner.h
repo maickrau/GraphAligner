@@ -354,7 +354,7 @@ private:
 		{
 			std::string_view backwardPart { bwSequence.data() + bwSequence.size() - fwTrace.trace[0].DPposition.seqPos, fwTrace.trace[0].DPposition.seqPos };
 			auto reversePos = params.graph.GetReversePosition(fwTrace.trace[0].DPposition.node, fwTrace.trace[0].DPposition.nodeOffset);
-			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.forceGlobal, params.Xdropcutoff, reusableState);
+			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.Xdropcutoff, reusableState);
 			if (!bwTrace.failed())
 			{
 				std::reverse(bwTrace.trace.begin(), bwTrace.trace.end());
@@ -464,7 +464,7 @@ private:
 
 	OnewayTrace getBacktraceFullStart(const std::string_view& seq, AlignerGraphsizedState& reusableState) const
 	{
-		return bvAligner.getBacktraceFullStart(seq, params.forceGlobal, params.Xdropcutoff, reusableState);
+		return bvAligner.getBacktraceFullStart(seq, params.Xdropcutoff, reusableState);
 	}
 
 	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
@@ -496,13 +496,13 @@ private:
 			std::string_view backwardPart { revSequence.data() + revSequence.size() - seedHit.seqPos, seedHit.seqPos };
 			auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
 			assert(reversePos.first == backwardNodeId);
-			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, params.forceGlobal, params.Xdropcutoff, reusableState);
+			result.backward = bvAligner.getReverseTraceFromSeed(backwardPart, backwardNodeId, reversePos.second, params.Xdropcutoff, reusableState);
 		}
 		if (seedHit.seqPos < sequence.size()-1)
 		{
 			std::string_view forwardPart { sequence.data() + seedHit.seqPos + 1, sequence.size() - seedHit.seqPos - 1 };
 			size_t offset = seedHit.nodeOffset;
-			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, params.forceGlobal, params.Xdropcutoff, reusableState);
+			result.forward = bvAligner.getReverseTraceFromSeed(forwardPart, forwardNodeId, offset, params.Xdropcutoff, reusableState);
 		}
 
 		if (!result.backward.failed())

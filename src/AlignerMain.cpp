@@ -58,7 +58,6 @@ int main(int argc, char** argv)
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
 		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
-		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
@@ -148,7 +147,6 @@ int main(int argc, char** argv)
 	params.seederCachePrefix = "";
 	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
 	params.selectionECutoff = -1;
-	params.forceGlobal = false;
 	params.compressCorrected = false;
 	params.compressClipped = false;
 	params.minimizerSeedDensity = 0;
@@ -272,7 +270,6 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
-	if (vm.count("global-alignment")) params.forceGlobal = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 
 	if (vm.count("X-drop"))

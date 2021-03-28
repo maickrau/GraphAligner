@@ -31,7 +31,6 @@ struct AlignerParams
 	std::string seederCachePrefix;
 	AlignmentSelection::SelectionMethod alignmentSelectionMethod;
 	double selectionECutoff;
-	bool forceGlobal;
 	bool compressCorrected;
 	bool compressClipped;
 	size_t minimizerLength;

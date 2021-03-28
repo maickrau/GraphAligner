@@ -57,11 +57,11 @@ public:
 		return results;
 	}
 
-	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, bool forceGlobal, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
-		auto slice = getSlices(sequence, initialBandwidth, numSlices, forceGlobal, Xdropcutoff, reusableState);
+		auto slice = getSlices(sequence, initialBandwidth, numSlices, Xdropcutoff, reusableState);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -76,7 +76,7 @@ public:
 		return result;
 	}
 
-	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, bool forceGlobal, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
+	OnewayTrace getBacktraceFullStart(const std::string_view& originalSequence, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
 	{
 		assert(originalSequence.size() > 1);
 		DPSlice startSlice;
@@ -122,7 +122,7 @@ public:
 		std::string_view alignableSequence { originalSequence.data()+1, originalSequence.size() - 1 };
 		assert(alignableSequence.size() > 0);
 		size_t numSlices = (alignableSequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto slice = getSlices(alignableSequence, startSlice, numSlices, forceGlobal, Xdropcutoff, reusableState);
+		auto slice = getSlices(alignableSequence, startSlice, numSlices, Xdropcutoff, reusableState);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -586,9 +586,8 @@ private:
 		}
 	}
 
-	DPTable getSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, bool forceGlobal, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
+	DPTable getSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
 	{
-		assert(!forceGlobal);
 		return getXdropSlices(sequence, initialSlice, numSlices, Xdropcutoff, reusableState);
 	}
 
