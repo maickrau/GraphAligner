@@ -52,20 +52,13 @@ public:
 	class AlignerGraphsizedState
 	{
 	public:
-		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth, bool lowMemory) :
+		AlignerGraphsizedState(const AlignmentGraph& graph, size_t maxBandwidth) :
 		componentQueue(),
 		calculableQueue(),
-		evenNodesliceMap(),
-		oddNodesliceMap(),
 		currentBand(),
 		previousBand(),
 		hasSeedStart()
 		{
-			if (!lowMemory)
-			{
-				evenNodesliceMap.resize(graph.NodeSize(), {});
-				oddNodesliceMap.resize(graph.NodeSize(), {});
-			}
 			componentQueue.initialize(graph.ComponentSize());
 			calculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			currentBand.resize(graph.NodeSize(), false);
@@ -74,8 +67,6 @@ public:
 		}
 		void clear()
 		{
-			evenNodesliceMap.assign(evenNodesliceMap.size(), {});
-			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
 			componentQueue.clear();
 			calculableQueue.clear();
 			currentBand.assign(currentBand.size(), false);
@@ -84,8 +75,6 @@ public:
 		}
 		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
-		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
-		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 		std::vector<bool> hasSeedStart;
@@ -94,13 +83,12 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, size_t minSeedClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
+		Params(LengthType initialBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, size_t minSeedClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
 		initialBandwidth(initialBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
 		sloppyOptimizations(sloppyOptimizations),
-		lowMemory(lowMemory),
 		minSeedClusterSize(minSeedClusterSize),
 		seedExtendDensity(seedExtendDensity),
 		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
@@ -113,7 +101,6 @@ public:
 		const size_t maxCellsPerSlice;
 		const bool quietMode;
 		const bool sloppyOptimizations;
-		const bool lowMemory;
 		const size_t minSeedClusterSize;
 		const double seedExtendDensity;
 		const ScoreType XscoreErrorCost;

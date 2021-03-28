@@ -81,7 +81,6 @@ int main(int argc, char** argv)
 	alignment.add_options()
 		("bandwidth,b", boost::program_options::value<size_t>(), "alignment bandwidth (int)")
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
-		("high-memory", "use slightly less CPU but a lot more memory")
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
@@ -137,7 +136,6 @@ int main(int argc, char** argv)
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
 	params.tryAllSeeds = false;
-	params.highMemory = false;
 	params.mxmLength = 20;
 	params.mumCount = 0;
 	params.memCount = 0;
@@ -218,7 +216,6 @@ int main(int argc, char** argv)
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
-	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 
@@ -260,7 +257,6 @@ int main(int argc, char** argv)
 	}
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
-	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 
 	if (vm.count("X-drop"))

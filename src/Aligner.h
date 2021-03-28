@@ -23,7 +23,6 @@ struct AlignerParams
 	std::string outputCorrectedClippedFile;
 	bool verboseMode;
 	bool tryAllSeeds;
-	bool highMemory;
 	size_t mxmLength;
 	size_t mumCount;
 	size_t memCount;
