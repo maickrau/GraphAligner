@@ -94,9 +94,8 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, LengthType rampBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
+		Params(LengthType initialBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, bool lowMemory, size_t minSeedClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
 		initialBandwidth(initialBandwidth),
-		rampBandwidth(rampBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
@@ -111,7 +110,6 @@ public:
 		{
 		}
 		const LengthType initialBandwidth;
-		const LengthType rampBandwidth;
 		const AlignmentGraph& graph;
 		const size_t maxCellsPerSlice;
 		const bool quietMode;

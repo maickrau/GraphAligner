@@ -81,7 +81,6 @@ int main(int argc, char** argv)
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
 		("bandwidth,b", boost::program_options::value<size_t>(), "alignment bandwidth (int)")
-		("ramp-bandwidth,B", boost::program_options::value<size_t>(), "ramp bandwidth (int)")
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit, higher results in slower but more accurate alignments (int) (-1 for unlimited)")
 		("high-memory", "use slightly less CPU but a lot more memory")
 	;
@@ -135,7 +134,6 @@ int main(int argc, char** argv)
 	params.outputCorrectedClippedFile = "";
 	params.numThreads = 1;
 	params.initialBandwidth = 0;
-	params.rampBandwidth = 0;
 	params.dynamicRowStart = false;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
@@ -178,7 +176,6 @@ int main(int argc, char** argv)
 			params.seedExtendDensity = 0.002;
 			params.nondeterministicOptimizations = true;
 			params.initialBandwidth = 5;
-			params.rampBandwidth = 10;
 			params.maxCellsPerSlice = 10000;
 		}
 		else if (preset == "vg")
@@ -223,7 +220,6 @@ int main(int argc, char** argv)
 	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();
 
 	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
-	if (vm.count("ramp-bandwidth")) params.rampBandwidth = vm["ramp-bandwidth"].as<size_t>();
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
@@ -337,11 +333,6 @@ int main(int argc, char** argv)
 	if (params.initialBandwidth < 1)
 	{
 		std::cerr << "default bandwidth must be >= 1" << std::endl;
-		paramError = true;
-	}
-	if (params.rampBandwidth != 0 && params.rampBandwidth <= params.initialBandwidth)
-	{
-		std::cerr << "ramp bandwidth must be higher than default bandwidth" << std::endl;
 		paramError = true;
 	}
 	if (params.mxmLength < 2)

@@ -13,7 +13,6 @@ struct AlignerParams
 	std::vector<std::string> fastqFiles;
 	size_t numThreads;
 	size_t initialBandwidth;
-	size_t rampBandwidth;
 	bool dynamicRowStart;
 	size_t maxCellsPerSlice;
 	std::vector<std::string> seedFiles;
