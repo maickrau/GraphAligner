@@ -273,19 +273,7 @@ int main(int argc, char** argv)
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("high-memory")) params.highMemory = true;
 	if (vm.count("global-alignment")) params.forceGlobal = true;
-	if (vm.count("precise-clipping"))
-	{
-		params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
-		if (params.preciseClippingIdentityCutoff < 0.001 || params.preciseClippingIdentityCutoff > 0.999)
-		{
-			std::cerr << "precise clipping identity cutoff must be between 0.001 and 0.999" << std::endl;
-			paramError = true;
-		}
-		if (params.preciseClippingIdentityCutoff >= 0.001 && params.preciseClippingIdentityCutoff < 0.501)
-		{
-			std::cerr << "Warning: precise clipping identity cutoff set below 0.501. Output will almost certainly contain spurious alignments." << std::endl;
-		}
-	}
+	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 	if (vm.count("X-drop"))
 	{
 		params.Xdropcutoff = vm["X-drop"].as<int>();
@@ -388,6 +376,11 @@ int main(int argc, char** argv)
 	if (params.multimapScoreFraction > 1)
 	{
 		std::cerr << "--multimap-score-fraction cannot be more than 1" << std::endl;
+		paramError = true;
+	}
+	if (params.preciseClippingIdentityCutoff < 0.501 || params.preciseClippingIdentityCutoff > 0.999)
+	{
+		std::cerr << "precise clipping identity cutoff must be between 0.501 and 0.999" << std::endl;
 		paramError = true;
 	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
