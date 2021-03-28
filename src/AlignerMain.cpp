@@ -55,7 +55,7 @@ int main(int argc, char** argv)
 		("verbose", "print progress messages")
 		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg")
 		("min-alignment-score", boost::program_options::value<double>(), "discard alignments whose alignment score is < arg (default 0)")
-		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
+		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double) (default 0.9)")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
@@ -84,15 +84,7 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
-		("schedule-inverse-E-sum", "optimally select a non-overlapping set based on the sum of inverse E-values")
-		("schedule-inverse-E-product", "optimally select a non-overlapping set based on the product of inverse E-values")
-		("schedule-score", "optimally select a non-overlapping set based on the alignment score")
-		("schedule-length", "optimally select a non-overlapping set based on the alignment length")
-		("greedy-length", "greedily select a non-overlapping alignment set based on alignment length")
-		("greedy-E", "greedily select a non-overlapping alignment set based on E-value")
-		("greedy-score", "greedily select a non-overlapping alignment set based on alignment score")
 		("multiseed-DP", boost::program_options::value<bool>(), "simultaneously extend all seeds (1/0)")
-		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double)")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -140,7 +132,6 @@ int main(int argc, char** argv)
 	params.mumCount = 0;
 	params.memCount = 0;
 	params.seederCachePrefix = "";
-	params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength; //todo pick better default
 	params.selectionECutoff = -1;
 	params.compressCorrected = false;
 	params.compressClipped = false;
@@ -154,7 +145,7 @@ int main(int argc, char** argv)
 	params.Xdropcutoff = 50;
 	params.DPRestartStride = 0;
 	params.multiseedDP = false;
-	params.multimapScoreFraction = 0;
+	params.multimapScoreFraction = 0.9;
 	params.cigarMatchMismatchMerge = false;
 	params.minAlignmentScore = 0;
 
@@ -219,42 +210,6 @@ int main(int argc, char** argv)
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 
-	int resultSelectionMethods = 0;
-	if (vm.count("all-alignments"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::All;
-		params.tryAllSeeds = true;
-		resultSelectionMethods += 1;
-	}
-	if (vm.count("greedy-length"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::GreedyLength;
-		resultSelectionMethods += 1;
-	}
-	if (vm.count("E-cutoff"))
-	{
-		params.selectionECutoff = vm["E-cutoff"].as<double>();
-	}
-	if (vm.count("schedule-inverse-E-sum"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseESum;
-		resultSelectionMethods += 1;
-	}
-	if (vm.count("schedule-inverse-E-product"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleInverseEProduct;
-		resultSelectionMethods += 1;
-	}
-	if (vm.count("schedule-score"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleScore;
-		resultSelectionMethods += 1;
-	}
-	if (vm.count("schedule-length"))
-	{
-		params.alignmentSelectionMethod = AlignmentSelection::SelectionMethod::ScheduleLength;
-		resultSelectionMethods += 1;
-	}
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
@@ -372,16 +327,6 @@ int main(int argc, char** argv)
 		paramError = true;
 	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
-	if (params.multiseedDP && vm.count("multimap-score-fraction") == 0)
-	{
-		params.multimapScoreFraction = 0.9;
-		std::cerr << "--multiseed-DP set but --multimap-score-fraction missing, using default --multimap-score-fraction " << params.multimapScoreFraction << std::endl;
-	}
-	if (vm.count("multimap-score-fraction") && !params.multiseedDP)
-	{
-		std::cerr << "--multimap-score-fraction set but --multiseed-DP is off, ignoring --multimap-score-fraction" << std::endl;
-		params.multimapScoreFraction = 0;
-	}
 	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;
@@ -396,11 +341,6 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "WARNING: --try-all-seeds and --seeds-extend-density are both set! --seeds-extend-density will be ignored" << std::endl;
 		params.seedExtendDensity = -1;
-	}
-	if (resultSelectionMethods > 1)
-	{
-		std::cerr << "pick only one method for selecting outputted alignments" << std::endl;
-		paramError = true;
 	}
 
 	if (paramError)

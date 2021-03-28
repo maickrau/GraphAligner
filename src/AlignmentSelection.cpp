@@ -28,26 +28,6 @@ namespace AlignmentSelection
 		return overlap > minOverlapLen;
 	}
 
-	//lower E-value is better
-	bool alignmentECompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right, size_t m, size_t n, const EValueCalculator& EValueCalc)
-	{
-		return EValueCalc.getEValue(m, n, left.alignmentLength(), left.alignmentScore) < EValueCalc.getEValue(m, n, right.alignmentLength(), right.alignmentScore);
-	}
-
-	bool alignmentScoreCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right, const EValueCalculator& EValueCalc)
-	{
-		return EValueCalc.getAlignmentScore(left.alignmentLength(), left.alignmentScore) > EValueCalc.getAlignmentScore(right.alignmentLength(), right.alignmentScore);
-	}
-
-	//longer is better, after that lower score is better
-	bool alignmentLengthCompare(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
-	{
-		if ((left.alignmentEnd - left.alignmentStart) > (right.alignmentEnd - right.alignmentStart)) return true;
-		if ((right.alignmentEnd - right.alignmentStart) > (left.alignmentEnd - left.alignmentStart)) return false;
-		if (left.alignmentScore < right.alignmentScore) return true;
-		return false;
-	}
-
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& allAlignments, SelectionOptions options)
 	{
 		// roundabout to fit the signature of const ref while allowing filtering
@@ -69,27 +49,6 @@ namespace AlignmentSelection
 			wasFiltered = true;
 		}
 		const std::vector<AlignmentResult::AlignmentItem>& alignments { wasFiltered ? filtered : allAlignments };
-		switch(options.method)
-		{
-			case GreedyLength:
-				return GreedySelectAlignments(alignments, alignmentLengthCompare);
-			case GreedyScore:
-				return GreedySelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return alignmentScoreCompare(left, right, options.EValueCalc); });
-			case GreedyE:
-				return GreedySelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) {return alignmentECompare(left, right, options.graphSize, options.readSize, options.EValueCalc); });
-			case ScheduleInverseESum:
-				return ScheduleSelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem aln) { return 1.0 / options.EValueCalc.getEValue(options.graphSize, options.readSize, aln.alignmentLength(), aln.alignmentScore); });
-			case ScheduleInverseEProduct:
-				return ScheduleSelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem aln) { return -log(options.EValueCalc.getEValue(options.graphSize, options.readSize, aln.alignmentLength(), aln.alignmentScore)); });
-			case ScheduleScore:
-				return ScheduleSelectAlignments(alignments, [options](const AlignmentResult::AlignmentItem aln) { return options.EValueCalc.getAlignmentScore(aln.alignmentLength(), aln.alignmentScore); });
-			case ScheduleLength:
-				return ScheduleSelectAlignments(alignments, [](const AlignmentResult::AlignmentItem aln) { return (aln.alignmentEnd - aln.alignmentStart) + 0.5 - 0.5 / (aln.alignmentScore); });
-			default:
-			case All:
-				return alignments;
-		}
-		assert(false);
 		return alignments;
 	}
 

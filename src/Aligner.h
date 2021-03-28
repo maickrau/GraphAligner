@@ -27,7 +27,6 @@ struct AlignerParams
 	size_t mumCount;
 	size_t memCount;
 	std::string seederCachePrefix;
-	AlignmentSelection::SelectionMethod alignmentSelectionMethod;
 	double selectionECutoff;
 	bool compressCorrected;
 	bool compressClipped;

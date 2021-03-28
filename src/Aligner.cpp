@@ -381,7 +381,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	assertSetNoRead("Before any read");
 	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, params.alignmentBandwidth };
 	AlignmentSelection::SelectionOptions selectionOptions;
-	selectionOptions.method = params.alignmentSelectionMethod;
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
 	selectionOptions.ECutoff = params.selectionECutoff;
 	selectionOptions.minAlignmentScore = params.minAlignmentScore;
