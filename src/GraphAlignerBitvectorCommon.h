@@ -10,7 +10,6 @@
 #include "NodeSlice.h"
 #include "CommonUtils.h"
 #include "GraphAlignerWrapper.h"
-#include "AlignmentCorrectnessEstimation.h"
 #include "ThreadReadAssertion.h"
 #include "WordSlice.h"
 #include "GraphAlignerCommon.h"
@@ -146,7 +145,6 @@ public:
 		maxExactEndposNode(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(),
 		scores(),
-		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
 		bandwidth(0),
@@ -165,7 +163,6 @@ public:
 		maxExactEndposNode(std::numeric_limits<LengthType>::max()),
 		scoresVectorMap(vectorMap),
 		scores(),
-		correctness(),
 		j(std::numeric_limits<LengthType>::max()),
 		cellsProcessed(0),
 		bandwidth(0),
@@ -182,7 +179,6 @@ public:
 		LengthType maxExactEndposNode;
 		NodeSlice<LengthType, ScoreType, Word, true> scoresVectorMap;
 		NodeSlice<LengthType, ScoreType, Word, false> scores;
-		AlignmentCorrectnessEstimationState correctness;
 		LengthType j;
 		size_t cellsProcessed;
 		size_t bandwidth;
@@ -202,7 +198,6 @@ public:
 			result.maxExactEndposNode = maxExactEndposNode;
 			result.maxExactEndposScore = maxExactEndposScore;
 			result.scores = scores;
-			result.correctness = correctness;
 			result.j = j;
 			result.cellsProcessed = cellsProcessed;
 			result.bandwidth = bandwidth;
@@ -1541,18 +1536,6 @@ public:
 		assert(sliceCalc.minScore != std::numeric_limits<ScoreType>::max());
 		assert(sliceCalc.minScoreNode < params.graph.NodeSize());
 		assert(sliceCalc.minScoreNodeOffset < params.graph.NodeLength(sliceCalc.minScoreNode));
-	}
-
-	static void removeWronglyAlignedEnd(DPTable& table)
-	{
-		if (table.slices.size() == 0) return;
-		bool currentlyCorrect = table.slices.back().correctness.CurrentlyCorrect();
-		while (!currentlyCorrect)
-		{
-			currentlyCorrect = table.slices.back().correctness.FalseFromCorrect();
-			table.slices.pop_back();
-			if (table.slices.size() == 0) break;
-		}
 	}
 
 	static DPSlice getInitialEmptySlice()
