@@ -59,7 +59,6 @@ int main(int argc, char** argv)
 		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("global-alignment", "force the read to be aligned end-to-end even if the alignment score is poor")
-		("optimal-alignment", "calculate the optimal alignment (VERY SLOW)")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
@@ -159,7 +158,6 @@ int main(int argc, char** argv)
 	params.minimizerDiscardMostNumerousFraction = 0.0002;
 	params.seedExtendDensity = 0.002;
 	params.nondeterministicOptimizations = false;
-	params.optimalDijkstra = false;
 	params.preciseClippingIdentityCutoff = 0.66;
 	params.Xdropcutoff = 0;
 	params.DPRestartStride = 0;
@@ -297,8 +295,6 @@ int main(int argc, char** argv)
 			paramError = true;
 		}
 	}
-	if (vm.count("optimal-alignment")) params.optimalDijkstra = true;
-
 	if (params.graphFile == "")
 	{
 		std::cerr << "graph file must be given" << std::endl;
@@ -349,7 +345,7 @@ int main(int argc, char** argv)
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
 	}
-	if (params.initialBandwidth < 1 && !params.optimalDijkstra)
+	if (params.initialBandwidth < 1)
 	{
 		std::cerr << "default bandwidth must be >= 1" << std::endl;
 		paramError = true;
@@ -395,18 +391,6 @@ int main(int argc, char** argv)
 		paramError = true;
 	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
-	if (params.optimalDijkstra && (params.initialBandwidth > 0))
-	{
-		std::cerr << "--optimal-alignment set, ignoring parameter --bandwidth" << std::endl;
-	}
-	if (params.optimalDijkstra && (params.rampBandwidth > 0))
-	{
-		std::cerr << "--optimal-alignment set, ignoring parameter --ramp-bandwidth" << std::endl;
-	}
-	if (params.optimalDijkstra && (params.maxCellsPerSlice != std::numeric_limits<decltype(params.maxCellsPerSlice)>::max()))
-	{
-		std::cerr << "--optimal-alignment set, ignoring parameter --tangle-effort" << std::endl;
-	}
 	if (params.multiseedDP && vm.count("multimap-score-fraction") == 0)
 	{
 		params.multimapScoreFraction = 0.9;
@@ -417,17 +401,7 @@ int main(int argc, char** argv)
 		std::cerr << "--multimap-score-fraction set but --multiseed-DP is off, ignoring --multimap-score-fraction" << std::endl;
 		params.multimapScoreFraction = 0;
 	}
-	if (params.optimalDijkstra && pickedSeedingMethods > 0)
-	{
-		if (params.dynamicRowStart) std::cerr << "--optimal-alignment cannot be combined with --first-rows-DP" << std::endl;
-		if (params.seedFiles.size() > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-file" << std::endl;
-		if (params.mumCount > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-mum-count" << std::endl;
-		if (params.memCount > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-mem-count" << std::endl;
-		if (params.minimizerSeedDensity > 0) std::cerr << "--optimal-alignment cannot be combined with --seeds-minimizer-density" << std::endl;
-		std::cerr << "pick only one seeding method" << std::endl;
-		paramError = true;
-	}
-	if (pickedSeedingMethods == 0 && !params.optimalDijkstra)
+	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;
 		paramError = true;

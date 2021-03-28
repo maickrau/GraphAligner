@@ -7,7 +7,6 @@
 #include "ComponentPriorityQueue.h"
 #include "NodeSlice.h"
 #include "WordSlice.h"
-#include "DijkstraQueue.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAlignerCommon
@@ -79,14 +78,12 @@ public:
 			oddNodesliceMap.assign(oddNodesliceMap.size(), {});
 			componentQueue.clear();
 			calculableQueue.clear();
-			dijkstraQueue.clear();
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 			hasSeedStart.assign(hasSeedStart.size(), false);
 		}
 		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
-		DijkstraPriorityQueue<EdgeWithPriority> dijkstraQueue;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> evenNodesliceMap;
 		std::vector<typename NodeSlice<LengthType, ScoreType, Word, true>::MapItem> oddNodesliceMap;
 		std::vector<bool> currentBand;

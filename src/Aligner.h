@@ -41,7 +41,6 @@ struct AlignerParams
 	double minimizerDiscardMostNumerousFraction;
 	double seedExtendDensity;
 	bool nondeterministicOptimizations;
-	bool optimalDijkstra;
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;

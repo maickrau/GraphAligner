@@ -14,7 +14,6 @@
 #include "GraphAlignerVGAlignment.h"
 #include "GraphAlignerGAFAlignment.h"
 #include "GraphAlignerBitvectorBanded.h"
-#include "GraphAlignerBitvectorDijkstra.h"
 
 template <typename LengthType, typename ScoreType, typename Word>
 class GraphAligner
@@ -23,7 +22,6 @@ private:
 	using VGAlignment = GraphAlignerVGAlignment<LengthType, ScoreType, Word>;
 	using GAFAlignment = GraphAlignerGAFAlignment<LengthType, ScoreType, Word>;
 	using BitvectorAligner = GraphAlignerBitvectorBanded<LengthType, ScoreType, Word>;
-	using DijkstraAligner = GraphAlignerBitvectorDijkstra<LengthType, ScoreType, Word>;
 	using Common = GraphAlignerCommon<LengthType, ScoreType, Word>;
 	using Params = typename Common::Params;
 	using MatrixPosition = typename Common::MatrixPosition;
@@ -33,14 +31,12 @@ private:
 	using TraceItem = typename Common::TraceItem;
 	const Params& params;
 	BitvectorAligner bvAligner;
-	DijkstraAligner dijkstraAligner;
 	mutable BufferedWriter logger;
 public:
 
 	GraphAligner(const Params& params) :
 	params(params),
 	bvAligner(params),
-	dijkstraAligner(params),
 	logger()
 	{
 		if (!params.quietMode) logger = { std::cerr };
@@ -75,35 +71,6 @@ public:
 				}
 			}
 		}
-		return result;
-	}
-
-	AlignmentResult AlignOneWayDijkstra(const std::string& seq_id, const std::string& sequence, AlignerGraphsizedState& reusableState) const
-	{
-		AlignmentResult result;
-		result.readName = seq_id;
-		auto timeStart = std::chrono::system_clock::now();
-		assert(params.graph.finalized);
-		auto trace = getBacktraceDijkstra(sequence, reusableState);
-		auto timeEnd = std::chrono::system_clock::now();
-		size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		//failed alignment, don't output
-		if (trace.score == std::numeric_limits<ScoreType>::max()) return result;
-		if (trace.trace.size() == 0) return result;
-#ifndef NDEBUG
-		if (trace.trace.size() > 0) verifyTrace(trace.trace, sequence, trace.score);
-#endif
-		fixForwardTraceSeqPos(trace, 0, sequence);
-
-		AlignmentResult::AlignmentItem alnItem { std::move(trace), 0, std::numeric_limits<size_t>::max() };
-
-		alnItem.alignmentScore = alnItem.trace->score;
-		alnItem.alignmentStart = alnItem.trace->trace[0].DPposition.seqPos;
-		alnItem.alignmentEnd = alnItem.trace->trace.back().DPposition.seqPos + 1;
-		timeEnd = std::chrono::system_clock::now();
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-		alnItem.elapsedMilliseconds = time;
-		result.alignments.emplace_back(std::move(alnItem));
 		return result;
 	}
 
@@ -487,12 +454,6 @@ private:
 			if (up == trace.size()) break;
 		}
 		return false;
-	}
-
-	OnewayTrace getBacktraceDijkstra(const std::string& sequence, AlignerGraphsizedState& reusableState) const
-	{
-		std::string_view seq { sequence.data(), sequence.size() };
-		return dijkstraAligner.getBacktraceFullStart(seq, params.forceGlobal, reusableState);
 	}
 
 	OnewayTrace getBacktraceFullStart(const std::string& sequence, AlignerGraphsizedState& reusableState) const
