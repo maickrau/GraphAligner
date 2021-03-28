@@ -38,31 +38,10 @@ $(ODIR)/vg.pb.o: $(SRCDIR)/vg.pb.cc
 $(SRCDIR)/%.pb.cc $(SRCDIR)/%.pb.h: $(SRCDIR)/%.proto
 	protoc -I=$(SRCDIR) --cpp_out=$(SRCDIR) $<
 
-$(BINDIR)/FusionFinder: $(SRCDIR)/FusionFinder.cpp $(OBJ)
-	$(GPP) -o $@ $^ $(LINKFLAGS) -DVERSION="\"$(VERSION)\""
-
-$(BINDIR)/ExtractPathSequence: $(SRCDIR)/ExtractPathSequence.cpp $(ODIR)/CommonUtils.o $(ODIR)/GfaGraph.o $(ODIR)/ThreadReadAssertion.o $(ODIR)/fastqloader.o $(ODIR)/vg.pb.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/SelectLongestAlignment: $(SRCDIR)/SelectLongestAlignment.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/Postprocess: $(SRCDIR)/Postprocess.cpp $(ODIR)/AlignmentSelection.o $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/fastqloader.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/AlignmentSubsequenceIdentity: $(SRCDIR)/AlignmentSubsequenceIdentity.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
 $(BINDIR)/UntipRelative: $(SRCDIR)/UntipRelative.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
 	$(GPP) -o $@ $^ $(LINKFLAGS)
 
-$(BINDIR)/PickAdjacentAlnPairs: $(SRCDIR)/PickAdjacentAlnPairs.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-$(BINDIR)/ExtractCorrectedReads: $(SRCDIR)/ExtractCorrectedReads.cpp $(ODIR)/ReadCorrection.o $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-all: $(BINDIR)/GraphAligner $(BINDIR)/ExtractPathSequence $(BINDIR)/SelectLongestAlignment $(BINDIR)/AlignmentSubsequenceIdentity $(BINDIR)/PickAdjacentAlnPairs $(BINDIR)/ExtractCorrectedReads $(BINDIR)/UntipRelative
+all: $(BINDIR)/GraphAligner $(BINDIR)/UntipRelative
 
 clean:
 	rm -f $(ODIR)/*
