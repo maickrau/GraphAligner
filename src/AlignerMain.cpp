@@ -56,7 +56,6 @@ int main(int argc, char** argv)
 		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg")
 		("min-alignment-score", boost::program_options::value<double>(), "discard alignments whose alignment score is < arg (default 0)")
 		("all-alignments", "return all alignments instead of the best non-overlapping alignments")
-		("extra-heuristic", "use heuristics to discard more seed hits")
 		("try-all-seeds", "don't use heuristics to discard seed hits")
 		("X-drop", boost::program_options::value<int>(), "use X-drop heuristic to end alignment with score cutoff arg (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (float)")
@@ -153,7 +152,6 @@ int main(int argc, char** argv)
 	params.seedClusterMinSize = 1;
 	params.minimizerDiscardMostNumerousFraction = 0.0002;
 	params.seedExtendDensity = 0.002;
-	params.nondeterministicOptimizations = false;
 	params.preciseClippingIdentityCutoff = 0.66;
 	params.Xdropcutoff = 50;
 	params.DPRestartStride = 0;
@@ -174,7 +172,6 @@ int main(int argc, char** argv)
 			params.minimizerLength = 19;
 			params.minimizerWindowSize = 30;
 			params.seedExtendDensity = 0.002;
-			params.nondeterministicOptimizations = true;
 			params.initialBandwidth = 5;
 			params.maxCellsPerSlice = 10000;
 		}
@@ -185,7 +182,6 @@ int main(int argc, char** argv)
 			params.minimizerWindowSize = 20;
 			params.seedExtendDensity = -1;
 			params.minimizerDiscardMostNumerousFraction = 0.001;
-			params.nondeterministicOptimizations = false;
 			params.initialBandwidth = 10;
 		}
 		else
@@ -219,7 +215,6 @@ int main(int argc, char** argv)
 	if (vm.count("multiseed-DP")) params.multiseedDP = vm["multiseed-DP"].as<bool>();
 	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();
 
-	if (vm.count("extra-heuristic")) params.nondeterministicOptimizations = true;
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;

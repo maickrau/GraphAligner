@@ -38,7 +38,6 @@ struct AlignerParams
 	size_t seedClusterMinSize;
 	double minimizerDiscardMostNumerousFraction;
 	double seedExtendDensity;
-	bool nondeterministicOptimizations;
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;

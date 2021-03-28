@@ -5,58 +5,58 @@
 #include "GraphAligner.h"
 #include "ThreadReadAssertion.h"
 
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff, size_t DPRestartStride)
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, bool quietMode, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, double preciseClippingIdentityCutoff, int Xdropcutoff, size_t DPRestartStride)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, false, lowMemory, 1, 0, nondeterministicOptimizations, preciseClippingIdentityCutoff, Xdropcutoff, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, false, lowMemory, 1, 0, preciseClippingIdentityCutoff, Xdropcutoff, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, reusableState, DPRestartStride);
 }
 
-AlignmentResult AlignMultiseed(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, size_t minClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction)
+AlignmentResult AlignMultiseed(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, size_t minClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, maxCellsPerSlice, quietMode, sloppyOptimizations, lowMemory, minClusterSize, seedExtendDensity, nondeterministicOptimizations, preciseClippingIdentityCutoff, Xdropcutoff, multimapScoreFraction};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, maxCellsPerSlice, quietMode, sloppyOptimizations, lowMemory, minClusterSize, seedExtendDensity, preciseClippingIdentityCutoff, Xdropcutoff, multimapScoreFraction};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignMultiseed(seq_id, sequence, seedHits, reusableState);
 }
 
-AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, size_t minClusterSize, double seedExtendDensity, bool nondeterministicOptimizations, double preciseClippingIdentityCutoff, int Xdropcutoff)
+AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t initialBandwidth, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, const std::vector<SeedHit>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, bool lowMemory, size_t minClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, maxCellsPerSlice, quietMode, sloppyOptimizations, lowMemory, minClusterSize, seedExtendDensity, nondeterministicOptimizations, preciseClippingIdentityCutoff, Xdropcutoff, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {initialBandwidth, graph, maxCellsPerSlice, quietMode, sloppyOptimizations, lowMemory, minClusterSize, seedExtendDensity, preciseClippingIdentityCutoff, Xdropcutoff, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, seedHits, reusableState);
 }
 
 void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, true, true, 1, 0, false, .5, 0, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, true, true, 1, 0, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	aligner.AddAlignment(seq_id, sequence, alignment);
 }
 
 void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, false, .5, 0, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	aligner.AddGAFLine(seq_id, sequence, alignment, cigarMatchMismatchMerge);
 }
 
 void AddCorrected(AlignmentResult::AlignmentItem& alignment)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, true, true, 1, 0, false, .5, 0, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, true, true, 1, 0, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	aligner.AddCorrected(alignment);
 }
 
 void OrderSeeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, false, .5, 0, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	aligner.orderSeedsByChaining(seedHits);
 }
 
 void PrepareMultiseeds(const AlignmentGraph& graph, std::vector<SeedHit>& seedHits, const size_t seqLen)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, false, .5, 0, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {1, graph, 1, true, true, true, 1, 0, .5, 0, 0};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	seedHits = aligner.prepareSeedsForMultiseeding(seedHits, seqLen);
 }

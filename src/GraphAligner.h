@@ -104,12 +104,12 @@ public:
 		std::string revSequence = CommonUtils::ReverseComplement(sequence);
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			if (params.sloppyOptimizations && ((params.nondeterministicOptimizations && seedHits[i].seedGoodness == seedScoreForEndToEndAln) || seedHits[i].seedGoodness < seedScoreForEndToEndAln))
+			if (params.sloppyOptimizations && (seedHits[i].seedGoodness == seedScoreForEndToEndAln || seedHits[i].seedGoodness < seedScoreForEndToEndAln))
 			{
 				logger << "Read " << seq_id << " aligned end-to-end, skip rest of the seeds" << BufferedWriter::Flush;
 				break;
 			}
-			if (result.seedsExtended >= extendSeeds && (params.nondeterministicOptimizations || seedHits[i].seedGoodness < worstExtendedSeedScore))
+			if (result.seedsExtended >= extendSeeds && (seedHits[i].seedGoodness < worstExtendedSeedScore))
 			{
 				logger << "Read " << seq_id << " enough seeds extended, skip rest" << BufferedWriter::Flush;
 				break;
@@ -127,7 +127,7 @@ public:
 				bool found = false;
 				for (const auto& aln : result.alignments)
 				{
-					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos && (params.nondeterministicOptimizations || aln.seedGoodness > seedHits[i].seedGoodness))
+					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos && aln.seedGoodness > seedHits[i].seedGoodness)
 					{
 						logger << " skipped (overlap)";
 						logger << BufferedWriter::Flush;
