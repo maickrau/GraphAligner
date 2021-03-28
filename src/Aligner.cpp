@@ -117,6 +117,7 @@ struct AlignmentStats
 	alignments(0),
 	fullLengthAlignments(0),
 	readsWithAnAlignment(0),
+	bpFromReadsAligned(0),
 	bpInReads(0),
 	bpInReadsWithASeed(0),
 	bpInAlignments(0),
@@ -133,6 +134,7 @@ struct AlignmentStats
 	std::atomic<size_t> alignments;
 	std::atomic<size_t> fullLengthAlignments;
 	std::atomic<size_t> readsWithAnAlignment;
+	std::atomic<size_t> bpFromReadsAligned;
 	std::atomic<size_t> bpInReads;
 	std::atomic<size_t> bpInReadsWithASeed;
 	std::atomic<size_t> bpInAlignments;
@@ -515,6 +517,21 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		
 		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 
+		size_t bpAligned = 0;
+		size_t lastEnd = 0;
+		for (size_t i = 0; i < alignments.alignments.size(); i++)
+		{
+			size_t countStart = std::max(lastEnd, alignments.alignments[i].alignmentStart);
+			if (alignments.alignments[i].alignmentEnd > countStart)
+			{
+				bpAligned += alignments.alignments[i].alignmentEnd - countStart;
+				lastEnd = alignments.alignments[i].alignmentEnd;
+			}
+		}
+		stats.bpFromReadsAligned += bpAligned;
+
+		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentXScore > right.alignmentXScore; });
+
 		if (params.outputGAMFile != "" || params.outputJSONFile != "")
 		{
 			for (size_t i = 0; i < alignments.alignments.size(); i++)
@@ -532,8 +549,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			}
 		}
 		
-		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
-
 		std::string alignmentpositions;
 
 		for (size_t i = 0; i < alignments.alignments.size(); i++)
@@ -777,7 +792,7 @@ void alignReads(AlignerParams params)
 	std::cout << "Seeds found: " << stats.seedsFound << std::endl;
 	std::cout << "Seeds extended: " << stats.seedsExtended << std::endl;
 	std::cout << "Reads with a seed: " << stats.readsWithASeed << " (" << stats.bpInReadsWithASeed << "bp)" << std::endl;
-	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << std::endl;
+	std::cout << "Reads with an alignment: " << stats.readsWithAnAlignment << " (" << stats.bpFromReadsAligned << "bp)" << std::endl;
 	std::cout << "Alignments: " << stats.alignments << " (" << stats.bpInAlignments << "bp)";
 	if (stats.allAlignmentsCount > stats.alignments) std::cout << " (" << (stats.allAlignmentsCount - stats.alignments) << " additional alignments discarded)";
 	std::cout << std::endl;
