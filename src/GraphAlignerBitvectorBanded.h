@@ -59,8 +59,8 @@ public:
 	OnewayTrace getReverseTraceFromSeed(const std::string_view& sequence, int bigraphNodeId, size_t nodeOffset, int Xdropcutoff, AlignerGraphsizedState& reusableState) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
-		auto initialBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
-		auto slice = getSlices(sequence, initialBandwidth, numSlices, Xdropcutoff, reusableState);
+		auto alignmentBandwidth = BV::getInitialSliceExactPosition(params, bigraphNodeId, nodeOffset);
+		auto slice = getSlices(sequence, alignmentBandwidth, numSlices, Xdropcutoff, reusableState);
 		if (slice.slices.size() <= 1)
 		{
 			return OnewayTrace::TraceFailed();
@@ -608,7 +608,7 @@ private:
 		WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = params.initialBandwidth;
+			int bandwidth = params.alignmentBandwidth;
 #ifndef NDEBUG
 			debugLastProcessedSlice = slice;
 			debugLastRowMinScore = lastSlice.minScore;
@@ -738,7 +738,7 @@ private:
 		size_t lastSeedHit = 0;
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
-			int bandwidth = params.initialBandwidth;
+			int bandwidth = params.alignmentBandwidth;
 #ifdef SLICEVERBOSE
 			auto timeStart = std::chrono::system_clock::now();
 #endif

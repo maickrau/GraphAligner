@@ -131,7 +131,7 @@ int main(int argc, char** argv)
 	params.outputCorrectedFile = "";
 	params.outputCorrectedClippedFile = "";
 	params.numThreads = 1;
-	params.initialBandwidth = 0;
+	params.alignmentBandwidth = 0;
 	params.dynamicRowStart = false;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
@@ -170,7 +170,7 @@ int main(int argc, char** argv)
 			params.minimizerLength = 19;
 			params.minimizerWindowSize = 30;
 			params.seedExtendDensity = 0.002;
-			params.initialBandwidth = 5;
+			params.alignmentBandwidth = 5;
 			params.maxCellsPerSlice = 10000;
 		}
 		else if (preset == "vg")
@@ -180,7 +180,7 @@ int main(int argc, char** argv)
 			params.minimizerWindowSize = 20;
 			params.seedExtendDensity = -1;
 			params.minimizerDiscardMostNumerousFraction = 0.001;
-			params.initialBandwidth = 10;
+			params.alignmentBandwidth = 10;
 		}
 		else
 		{
@@ -195,7 +195,7 @@ int main(int argc, char** argv)
 	if (vm.count("corrected-out")) params.outputCorrectedFile = vm["corrected-out"].as<std::string>();
 	if (vm.count("corrected-clipped-out")) params.outputCorrectedClippedFile = vm["corrected-clipped-out"].as<std::string>();
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
-	if (vm.count("bandwidth")) params.initialBandwidth = vm["bandwidth"].as<size_t>();
+	if (vm.count("bandwidth")) params.alignmentBandwidth = vm["bandwidth"].as<size_t>();
 
 	if (vm.count("seeds-extend-density")) params.seedExtendDensity = vm["seeds-extend-density"].as<double>();
 	if (vm.count("seeds-minimizer-ignore-frequent")) params.minimizerDiscardMostNumerousFraction = vm["seeds-minimizer-ignore-frequent"].as<double>();
@@ -321,9 +321,9 @@ int main(int argc, char** argv)
 		std::cerr << "number of threads must be >= 1" << std::endl;
 		paramError = true;
 	}
-	if (params.initialBandwidth < 1)
+	if (params.alignmentBandwidth < 1)
 	{
-		std::cerr << "default bandwidth must be >= 1" << std::endl;
+		std::cerr << "alignment bandwidth must be >= 1" << std::endl;
 		paramError = true;
 	}
 	if (params.mxmLength < 2)

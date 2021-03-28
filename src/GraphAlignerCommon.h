@@ -83,8 +83,8 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType initialBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, size_t minSeedClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
-		initialBandwidth(initialBandwidth),
+		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, size_t minSeedClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
+		alignmentBandwidth(alignmentBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
@@ -96,7 +96,7 @@ public:
 		multimapScoreFraction(multimapScoreFraction)
 		{
 		}
-		const LengthType initialBandwidth;
+		const LengthType alignmentBandwidth;
 		const AlignmentGraph& graph;
 		const size_t maxCellsPerSlice;
 		const bool quietMode;

@@ -379,7 +379,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	moodycamel::ProducerToken correctedToken { correctedOut };
 	moodycamel::ProducerToken clippedToken { correctedClippedOut };
 	assertSetNoRead("Before any read");
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, params.initialBandwidth };
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, params.alignmentBandwidth };
 	AlignmentSelection::SelectionOptions selectionOptions;
 	selectionOptions.method = params.alignmentSelectionMethod;
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
@@ -455,12 +455,12 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto alntimeStart = std::chrono::system_clock::now();
 				if (params.multiseedDP)
 				{
-					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
+					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
 					AlignmentSelection::AddMappingQualities(alignments.alignments);
 				}
 				else
 				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
 				}
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
@@ -468,7 +468,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			else
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.initialBandwidth, !params.verboseMode, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.DPRestartStride);
+				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, !params.verboseMode, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.DPRestartStride);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
@@ -702,7 +702,7 @@ void alignReads(AlignerParams params)
 	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;
 	if (seeder.mode != Seeder::Mode::None && params.seedExtendDensity != -1) std::cout << "Extend up to best " << params.seedExtendDensity << " fraction of seeds" << std::endl;
 
-	std::cout << "Initial bandwidth " << params.initialBandwidth;
+	std::cout << "Alignment bandwidth " << params.alignmentBandwidth;
 	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
 	std::cout << std::endl;
 
