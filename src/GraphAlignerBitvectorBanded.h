@@ -547,8 +547,6 @@ private:
 		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore <= ((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert((seedHits.size() != 0 && seedhitEnd == seedhitStart) || (double)slice.maxExactEndposScore >= -((double)slice.j + WordConfiguration<Word>::WordSize) * params.XscoreErrorCost);
 		assert(slice.minScore >= previousSlice.minScore || slice.minScore >= extraSlice.getValue(0) || previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1);
-		ScoreType diff = slice.minScore - previousSlice.minScore;
-		if (previousSlice.minScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1) diff = 0;
 		slice.bandwidth = bandwidth;
 #ifdef SLICEVERBOSE
 		slice.nodesProcessed = sliceResult.nodesProcessed;
