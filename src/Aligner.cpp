@@ -438,9 +438,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
 					continue;
 				}
-				stats.seedsFound += seeds.size();
-				stats.readsWithASeed += 1;
-				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto clusterTimeStart = std::chrono::system_clock::now();
 				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds, params.seedClusterMinSize);
 				if (processedSeeds.size() > params.maxClusterExtend)
@@ -451,6 +448,18 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto clusterTimeEnd = std::chrono::system_clock::now();
 				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
 				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
+				if (processedSeeds.size() == 0)
+				{
+					coutoutput << "Read " << fastq->seq_id << " has no seed clusters" << BufferedWriter::Flush;
+					cerroutput << "Read " << fastq->seq_id << " has no seed clusters" << BufferedWriter::Flush;
+					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
+					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+					continue;
+				}
+				stats.seedsFound += seeds.size();
+				stats.readsWithASeed += 1;
+				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto alntimeStart = std::chrono::system_clock::now();
 				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
 				AlignmentSelection::AddMappingQualities(alignments.alignments);
