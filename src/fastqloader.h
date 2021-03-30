@@ -53,8 +53,8 @@ public:
 			newread.sequence = "";
 			do
 			{
+				line.clear();
 				std::getline(file, line);
-				if (!file.good()) break;
 				if (line.size() == 0) continue;
 				if (line[0] == '>') break;
 				if (line.back() == '\r') line.pop_back();
