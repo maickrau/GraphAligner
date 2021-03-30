@@ -83,14 +83,11 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, bool sloppyOptimizations, size_t minSeedClusterSize, double seedExtendDensity, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
+		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
 		alignmentBandwidth(alignmentBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
 		quietMode(quietMode),
-		sloppyOptimizations(sloppyOptimizations),
-		minSeedClusterSize(minSeedClusterSize),
-		seedExtendDensity(seedExtendDensity),
 		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
 		Xdropcutoff(Xdropcutoff),
 		multimapScoreFraction(multimapScoreFraction)
@@ -100,9 +97,6 @@ public:
 		const AlignmentGraph& graph;
 		const size_t maxCellsPerSlice;
 		const bool quietMode;
-		const bool sloppyOptimizations;
-		const size_t minSeedClusterSize;
-		const double seedExtendDensity;
 		const ScoreType XscoreErrorCost;
 		const int Xdropcutoff;
 		const double multimapScoreFraction;

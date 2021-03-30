@@ -59,8 +59,8 @@ int main(int argc, char** argv)
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
+		("max-cluster-extend", boost::program_options::value<size_t>(), "extend up to arg seed clusters (int) (-1 for all) (default 10)")
 		("seeds-clustersize", boost::program_options::value<size_t>(), "discard seed clusters with fewer than arg seeds (int)")
-		("seeds-extend-density", boost::program_options::value<double>(), "extend up to approximately the best (arg * sequence length) seeds (double) (-1 for all)")
 		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
 		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
 		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (arg * sequence length) least frequent minimizers (double) (-1 for all)")
@@ -68,7 +68,6 @@ int main(int argc, char** argv)
 		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches (int) (-1 for all)")
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
-		("try-all-seeds", "don't use heuristics to discard seed hits")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -80,7 +79,6 @@ int main(int argc, char** argv)
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
-		("multiseed-DP", boost::program_options::value<bool>(), "simultaneously extend all seeds (1/0)")
 		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
 		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
@@ -127,7 +125,6 @@ int main(int argc, char** argv)
 	params.dynamicRowStart = false;
 	params.maxCellsPerSlice = std::numeric_limits<decltype(params.maxCellsPerSlice)>::max();
 	params.verboseMode = false;
-	params.tryAllSeeds = false;
 	params.mxmLength = 20;
 	params.mumCount = 0;
 	params.memCount = 0;
@@ -140,11 +137,10 @@ int main(int argc, char** argv)
 	params.minimizerWindowSize = 30;
 	params.seedClusterMinSize = 1;
 	params.minimizerDiscardMostNumerousFraction = 0.0002;
-	params.seedExtendDensity = 0.002;
+	params.maxClusterExtend = 10;
 	params.preciseClippingIdentityCutoff = 0.66;
 	params.Xdropcutoff = 50;
 	params.DPRestartStride = 0;
-	params.multiseedDP = false;
 	params.multimapScoreFraction = 0.9;
 	params.cigarMatchMismatchMerge = false;
 	params.minAlignmentScore = 0;
@@ -160,7 +156,7 @@ int main(int argc, char** argv)
 			params.minimizerSeedDensity = 5;
 			params.minimizerLength = 19;
 			params.minimizerWindowSize = 30;
-			params.seedExtendDensity = 0.002;
+			params.maxClusterExtend = 10;
 			params.alignmentBandwidth = 5;
 			params.maxCellsPerSlice = 10000;
 		}
@@ -169,7 +165,7 @@ int main(int argc, char** argv)
 			params.minimizerSeedDensity = 10;
 			params.minimizerLength = 15;
 			params.minimizerWindowSize = 20;
-			params.seedExtendDensity = -1;
+			params.maxClusterExtend = 10;
 			params.minimizerDiscardMostNumerousFraction = 0.001;
 			params.alignmentBandwidth = 10;
 		}
@@ -188,7 +184,7 @@ int main(int argc, char** argv)
 	if (vm.count("threads")) params.numThreads = vm["threads"].as<size_t>();
 	if (vm.count("bandwidth")) params.alignmentBandwidth = vm["bandwidth"].as<size_t>();
 
-	if (vm.count("seeds-extend-density")) params.seedExtendDensity = vm["seeds-extend-density"].as<double>();
+	if (vm.count("max-cluster-extend")) params.maxClusterExtend = vm["max-cluster-extend"].as<size_t>();
 	if (vm.count("seeds-minimizer-ignore-frequent")) params.minimizerDiscardMostNumerousFraction = vm["seeds-minimizer-ignore-frequent"].as<double>();
 	if (vm.count("seeds-clustersize")) params.seedClusterMinSize = vm["seeds-clustersize"].as<size_t>();
 	if (vm.count("seeds-minimizer-density")) params.minimizerSeedDensity = vm["seeds-minimizer-density"].as<double>();
@@ -201,17 +197,14 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
-	if (vm.count("multiseed-DP")) params.multiseedDP = vm["multiseed-DP"].as<bool>();
 	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();
 
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("verbose")) params.verboseMode = true;
-	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 
 	if (vm.count("verbose")) params.verboseMode = true;
-	if (vm.count("try-all-seeds")) params.tryAllSeeds = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 
 	if (vm.count("X-drop"))
@@ -301,11 +294,6 @@ int main(int argc, char** argv)
 		std::cerr << "Minimizer density can't be negative" << std::endl;
 		paramError = true;
 	}
-	if (params.seedExtendDensity <= 0 && params.seedExtendDensity != -1)
-	{
-		std::cerr << "Seed extension density can't be negative" << std::endl;
-		paramError = true;
-	}
 	if (params.multimapScoreFraction < 0)
 	{
 		std::cerr << "--multimap-score-fraction cannot be less than 0" << std::endl;
@@ -336,11 +324,6 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "pick only one seeding method" << std::endl;
 		paramError = true;
-	}
-	if (params.tryAllSeeds && vm.count("seeds-extend-density") && vm["seeds-extend-density"].as<double>() != -1)
-	{
-		std::cerr << "WARNING: --try-all-seeds and --seeds-extend-density are both set! --seeds-extend-density will be ignored" << std::endl;
-		params.seedExtendDensity = -1;
 	}
 
 	if (paramError)

@@ -22,7 +22,6 @@ struct AlignerParams
 	std::string outputCorrectedFile;
 	std::string outputCorrectedClippedFile;
 	bool verboseMode;
-	bool tryAllSeeds;
 	size_t mxmLength;
 	size_t mumCount;
 	size_t memCount;
@@ -35,11 +34,10 @@ struct AlignerParams
 	double minimizerSeedDensity;
 	size_t seedClusterMinSize;
 	double minimizerDiscardMostNumerousFraction;
-	double seedExtendDensity;
+	size_t maxClusterExtend;
 	double preciseClippingIdentityCutoff;
 	int Xdropcutoff;
 	size_t DPRestartStride;
-	bool multiseedDP;
 	double multimapScoreFraction;
 	bool cigarMatchMismatchMerge;
 	double minAlignmentScore;

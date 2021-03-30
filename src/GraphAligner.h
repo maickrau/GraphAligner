@@ -99,12 +99,6 @@ public:
 			// }
 			// assertSetRead(seq_id, seedHits[i].nodeID, seedHits[i].reverse, seedHits[i].seqPos, seedHits[i].matchLen, seedHits[i].nodeOffset);
 			if (!logger.inputDiscarded()) logger << seq_id << " cluster " << i << "/" << seedClusters.size() << " " << seedClusters[i].clusterGoodness;
-			if (seedClusters[i].size() < params.minSeedClusterSize)
-			{
-				logger << " skipped (cluster size)";
-				logger << BufferedWriter::Flush;
-				continue;
-			}
 			logger << BufferedWriter::Flush;
 			worstExtendedSeedScore = seedClusters[i].clusterGoodness;
 			result.seedsExtended += 1;
@@ -116,24 +110,24 @@ public:
 				item.seedGoodness = seedClusters[i].clusterGoodness;
 				result.alignments.emplace_back(std::move(item));
 			}
-			if (params.sloppyOptimizations)
-			{
-				std::sort(result.alignments.begin(), result.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
-				if (result.alignments[0].alignmentStart == 0)
-				{
-					size_t minSeedGoodness = result.alignments[0].seedGoodness;
-					size_t contiguousEnd = result.alignments[0].alignmentEnd;
-					for (size_t i = 1; i < result.alignments.size(); i++)
-					{
-						if (result.alignments[i].alignmentStart <= contiguousEnd)
-						{
-							minSeedGoodness = std::min(minSeedGoodness, result.alignments[i].seedGoodness);
-							contiguousEnd = std::max(contiguousEnd, result.alignments[i].alignmentEnd);
-						}
-					}
-					if (contiguousEnd == sequence.size()) seedScoreForEndToEndAln = minSeedGoodness;
-				}
-			}
+			// if (params.sloppyOptimizations)
+			// {
+			// 	std::sort(result.alignments.begin(), result.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
+			// 	if (result.alignments[0].alignmentStart == 0)
+			// 	{
+			// 		size_t minSeedGoodness = result.alignments[0].seedGoodness;
+			// 		size_t contiguousEnd = result.alignments[0].alignmentEnd;
+			// 		for (size_t i = 1; i < result.alignments.size(); i++)
+			// 		{
+			// 			if (result.alignments[i].alignmentStart <= contiguousEnd)
+			// 			{
+			// 				minSeedGoodness = std::min(minSeedGoodness, result.alignments[i].seedGoodness);
+			// 				contiguousEnd = std::max(contiguousEnd, result.alignments[i].alignmentEnd);
+			// 			}
+			// 		}
+			// 		if (contiguousEnd == sequence.size()) seedScoreForEndToEndAln = minSeedGoodness;
+			// 	}
+			// }
 		}
 		assertSetNoRead(seq_id);
 
@@ -168,7 +162,7 @@ public:
 		}
 	}
 
-	std::vector<SeedCluster> clusterSeeds(const std::vector<SeedHit>& seedHits) const
+	std::vector<SeedCluster> clusterSeeds(const std::vector<SeedHit>& seedHits, const size_t seedClusterMinSize) const
 	{
 		phmap::flat_hash_map<size_t, std::vector<std::tuple<size_t, size_t, size_t>>> seedPoses;
 		for (size_t i = 0; i < seedHits.size(); i++)
@@ -198,6 +192,11 @@ public:
 				assert(i == pair.second.size() || std::get<1>(pair.second[i]) >= std::get<1>(pair.second[i-1]));
 				if (i < pair.second.size() && std::get<1>(pair.second[i]) <= std::get<1>(pair.second[i-1]) + 100) continue;
 				assert(i > clusterStart);
+				if (i - clusterStart < seedClusterMinSize)
+				{
+					clusterStart = i;
+					continue;
+				}
 				clusters.emplace_back();
 				std::sort(pair.second.begin()+clusterStart, pair.second.begin()+i, [&seedHits](std::tuple<size_t, size_t, size_t> left, std::tuple<size_t, size_t, size_t> right) { return seedHits[std::get<0>(left)].seqPos < seedHits[std::get<0>(right)].seqPos; });
 				size_t matchingBps = 0;

@@ -442,12 +442,17 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto clusterTimeStart = std::chrono::system_clock::now();
-				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds);
+				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds, params.seedClusterMinSize);
+				if (processedSeeds.size() > params.maxClusterExtend)
+				{
+					cerroutput << "Read " << fastq->seq_id << " has " << processedSeeds.size() << " seed clusters, cutting down to " << params.maxClusterExtend << BufferedWriter::Flush;
+					processedSeeds.erase(processedSeeds.begin() + params.maxClusterExtend, processedSeeds.end());
+				}
 				auto clusterTimeEnd = std::chrono::system_clock::now();
 				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
 				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, processedSeeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
 				AlignmentSelection::AddMappingQualities(alignments.alignments);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
@@ -700,7 +705,8 @@ void alignReads(AlignerParams params)
 			break;
 	}
 	if (seeder.mode != Seeder::Mode::None) std::cout << "Seed cluster size " << params.seedClusterMinSize << std::endl;
-	if (seeder.mode != Seeder::Mode::None && params.seedExtendDensity != -1) std::cout << "Extend up to best " << params.seedExtendDensity << " fraction of seeds" << std::endl;
+	if (seeder.mode != Seeder::Mode::None && params.maxClusterExtend != std::numeric_limits<size_t>::max()) std::cout << "Extend up to " << params.maxClusterExtend << " seed clusters" << std::endl;
+	if (seeder.mode != Seeder::Mode::None && params.maxClusterExtend == std::numeric_limits<size_t>::max()) std::cout << "Extend all seed clusters" << std::endl;
 
 	std::cout << "Alignment bandwidth " << params.alignmentBandwidth;
 	if (params.maxCellsPerSlice != std::numeric_limits<size_t>::max()) std::cout << ", tangle effort " << params.maxCellsPerSlice;
