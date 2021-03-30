@@ -42,7 +42,7 @@ public:
 	{
 	}
 
-	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::vector<SeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialSlice = BV::getInitialEmptySlice();
@@ -227,7 +227,7 @@ private:
 #endif
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	void addSeedHitToScoresAndQueue(const SeedHit& seedHit, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, const WordSlice extraSlice, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
+	void addSeedHitToScoresAndQueue(const ProcessedSeedHit& seedHit, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, const WordSlice extraSlice, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
 	{
 #ifdef SLICEVERBOSE
 		std::cerr << " " << seedHit.alignmentGraphNodeId << "(" << seedHit.nodeID << ")";
@@ -252,7 +252,7 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
+	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
 	{
 		if (previousMinScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1)
 		{
@@ -511,7 +511,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -563,7 +563,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<SeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
 	{
 		DPSlice bandTest;
 		bandTest.scores.addEmptyNodeMap(previous.scores.size());
@@ -604,7 +604,7 @@ private:
 		// useless self-assignment to prevent unused variable compilation warning
 		debugLastProcessedSlice = debugLastProcessedSlice;
 #endif
-		std::vector<SeedHit> fakeSeeds;
+		std::vector<ProcessedSeedHit> fakeSeeds;
 		WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
@@ -724,7 +724,7 @@ private:
 		return result;
 	}
 
-	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<SeedHit>& seedHits) const
+	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<ProcessedSeedHit>& seedHits) const
 	{
 		assert(reusableState.componentQueue.valid());
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);

@@ -442,27 +442,13 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto clusterTimeStart = std::chrono::system_clock::now();
-				if (params.multiseedDP)
-				{
-					PrepareMultiseeds(alignmentGraph, seeds, fastq->sequence.size());
-				}
-				else
-				{
-					OrderSeeds(alignmentGraph, seeds);
-				}
+				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds);
 				auto clusterTimeEnd = std::chrono::system_clock::now();
 				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
 				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
 				auto alntimeStart = std::chrono::system_clock::now();
-				if (params.multiseedDP)
-				{
-					alignments = AlignMultiseed(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
-					AlignmentSelection::AddMappingQualities(alignments.alignments);
-				}
-				else
-				{
-					alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, seeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
-				}
+				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, !params.tryAllSeeds, processedSeeds, reusableState, params.seedClusterMinSize, params.seedExtendDensity, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				AlignmentSelection::AddMappingQualities(alignments.alignments);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
