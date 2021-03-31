@@ -20,6 +20,7 @@ namespace AlignmentSelection
 		double AlignmentScoreFractionCutoff;
 		int minAlignmentScore;
 	};
+	void RemoveDuplicateAlignments(const AlignmentGraph& graph, std::vector<AlignmentResult::AlignmentItem>& alignments);
 	std::vector<AlignmentResult::AlignmentItem> SelectAlignments(const std::vector<AlignmentResult::AlignmentItem>& alignments, SelectionOptions options);
 	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right);
 

@@ -103,6 +103,7 @@ public:
 	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
 	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::string OriginalNodeName(int nodeId) const;
+	size_t OriginalNodeSize(int nodeId) const;
 	size_t ComponentSize() const;
 	static AlignmentGraph DummyGraph();
 	size_t getDBGoverlap() const;

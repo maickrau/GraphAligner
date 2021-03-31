@@ -486,6 +486,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		stats.allAlignmentsCount += alignments.alignments.size();
 
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
+		AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
 		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions);
 
 		//failed alignment, don't output

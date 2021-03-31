@@ -895,6 +895,11 @@ std::vector<T> reorder(const std::vector<T>& vec, const std::vector<size_t>& ren
 	return result;
 }
 
+size_t AlignmentGraph::OriginalNodeSize(int nodeId) const
+{
+	return originalNodeSize.at(nodeId);
+}
+
 void AlignmentGraph::RenumberAmbiguousToEnd()
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
