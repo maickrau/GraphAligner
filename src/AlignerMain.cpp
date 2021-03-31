@@ -314,6 +314,11 @@ int main(int argc, char** argv)
 		std::cerr << "X-drop score cutoff must be > 1" << std::endl;
 		paramError = true;
 	}
+	if (params.maxClusterExtend == 0)
+	{
+		std::cerr << "--max-cluster-extend cannot be 0" << std::endl;
+		paramError = true;
+	}
 	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
