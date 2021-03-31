@@ -122,7 +122,7 @@ namespace AlignmentSelection
 	void RemoveDuplicateAlignments(const AlignmentGraph& graph, std::vector<AlignmentResult::AlignmentItem>& alignments)
 	{
 		if (alignments.size() <= 1) return;
-		std::sort(alignments.begin(), alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
+		std::sort(alignments.begin(), alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart || (left.alignmentStart == right.alignmentStart && left.alignmentEnd < right.alignmentEnd); });
 		std::vector<bool> remove;
 		remove.resize(alignments.size(), false);
 		size_t blockStart = 0;
@@ -145,7 +145,7 @@ namespace AlignmentSelection
 			size_t pathOrderBlockStart = 0;
 			for (size_t j = 1; j <= pathOrder.size(); j++)
 			{
-				if (j < pathOrder.size() && paths[j-1] == paths[j]) continue;
+				if (j < pathOrder.size() && paths[pathOrder[j-1]] == paths[pathOrder[j]]) continue;
 				size_t maxAlignmentScoreIndex = pathOrderBlockStart;
 				for (size_t k = pathOrderBlockStart+1; k < j; k++)
 				{
