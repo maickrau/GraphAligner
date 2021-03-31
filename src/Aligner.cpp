@@ -442,7 +442,13 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds, params.seedClusterMinSize);
 				if (processedSeeds.size() > params.maxClusterExtend)
 				{
-					cerroutput << "Read " << fastq->seq_id << " has " << processedSeeds.size() << " seed clusters, cutting down to " << params.maxClusterExtend << BufferedWriter::Flush;
+					cerroutput << "Read " << fastq->seq_id << " has " << processedSeeds.size() << " seed clusters, flattening down to " << params.maxClusterExtend << BufferedWriter::Flush;
+					for (size_t i = params.maxClusterExtend; i < processedSeeds.size(); i++)
+					{
+						processedSeeds[params.maxClusterExtend-1].hits.insert(processedSeeds[params.maxClusterExtend-1].hits.end(), processedSeeds[i].hits.begin(), processedSeeds[i].hits.end());
+					}
+					processedSeeds[params.maxClusterExtend-1].clusterGoodness = 0;
+					std::sort(processedSeeds[params.maxClusterExtend-1].hits.begin(), processedSeeds[params.maxClusterExtend-1].hits.end(), [](const ProcessedSeedHit& left, const ProcessedSeedHit& right) { return left.seqPos < right.seqPos; });
 					processedSeeds.erase(processedSeeds.begin() + params.maxClusterExtend, processedSeeds.end());
 				}
 				auto clusterTimeEnd = std::chrono::system_clock::now();
