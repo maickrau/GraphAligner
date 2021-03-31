@@ -137,7 +137,7 @@ int main(int argc, char** argv)
 	params.minimizerWindowSize = 30;
 	params.seedClusterMinSize = 1;
 	params.minimizerDiscardMostNumerousFraction = 0.0002;
-	params.maxClusterExtend = 10;
+	params.maxClusterExtend = 5;
 	params.preciseClippingIdentityCutoff = 0.66;
 	params.Xdropcutoff = 50;
 	params.DPRestartStride = 0;
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 			params.minimizerSeedDensity = 5;
 			params.minimizerLength = 19;
 			params.minimizerWindowSize = 30;
-			params.maxClusterExtend = 10;
+			params.maxClusterExtend = 5;
 			params.alignmentBandwidth = 5;
 			params.maxCellsPerSlice = 10000;
 		}
@@ -165,7 +165,7 @@ int main(int argc, char** argv)
 			params.minimizerSeedDensity = 10;
 			params.minimizerLength = 15;
 			params.minimizerWindowSize = 20;
-			params.maxClusterExtend = 10;
+			params.maxClusterExtend = 5;
 			params.minimizerDiscardMostNumerousFraction = 0.001;
 			params.alignmentBandwidth = 10;
 		}
