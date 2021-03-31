@@ -462,6 +462,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto alntimeStart = std::chrono::system_clock::now();
 				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
 				AlignmentSelection::AddMappingQualities(alignments.alignments);
 				auto alntimeEnd = std::chrono::system_clock::now();
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
@@ -483,10 +484,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			continue;
 		}
 
+		stats.allAlignmentsCount += alignments.alignments.size();
 
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
-		AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
-		stats.allAlignmentsCount += alignments.alignments.size();
 		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions);
 
 		//failed alignment, don't output
