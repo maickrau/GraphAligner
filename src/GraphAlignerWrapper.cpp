@@ -17,9 +17,9 @@ AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_
 	return aligner.AlignOneWay(seq_id, sequence, reusableState, DPRestartStride);
 }
 
-AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff)
+AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction)
 {
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {alignmentBandwidth, graph, maxCellsPerSlice, quietMode, preciseClippingIdentityCutoff, Xdropcutoff, 0};
+	GraphAlignerCommon<size_t, int32_t, uint64_t>::Params params {alignmentBandwidth, graph, maxCellsPerSlice, quietMode, preciseClippingIdentityCutoff, Xdropcutoff, multimapScoreFraction};
 	GraphAligner<size_t, int32_t, uint64_t> aligner {params};
 	return aligner.AlignClusters(seq_id, sequence, seedHits, reusableState);
 }

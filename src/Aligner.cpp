@@ -467,7 +467,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff);
+				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction);
 				AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
 				AlignmentSelection::AddMappingQualities(alignments.alignments);
 				auto alntimeEnd = std::chrono::system_clock::now();
