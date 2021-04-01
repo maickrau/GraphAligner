@@ -349,6 +349,7 @@ private:
 #endif
 			for (size_t i = seedhitStart; i < seedhitEnd; i++)
 			{
+				if (hasSeedStart[seedHits[i].alignmentGraphNodeId]) continue;
 				addSeedHitToScoresAndQueue(seedHits[i], currentSlice, previousSlice, currentBand, previousBand, calculableQueue, seedstartSlice, nodeMaxExactEndposScore, storeNodeExactEndposScores);
 				assert(!hasSeedStart[seedHits[i].alignmentGraphNodeId]);
 				hasSeedStart[seedHits[i].alignmentGraphNodeId] = true;
