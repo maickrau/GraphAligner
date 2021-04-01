@@ -252,9 +252,10 @@ private:
 			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.Xdropcutoff, reusableState);
 			if (!bwTrace.failed())
 			{
+#ifdef EXTRACORRECTNESSASSERTIONS
 				std::reverse(bwTrace.trace.begin(), bwTrace.trace.end());
-#ifndef NDEBUG
 				verifyTrace(bwTrace.trace, backwardPart, bwTrace.score);
+				std::reverse(bwTrace.trace.begin(), bwTrace.trace.end());
 #endif
 				fixReverseTraceSeqPosAndOrder(bwTrace, fwTrace.trace[0].DPposition.seqPos-1, fwSequence);
 			}
@@ -457,7 +458,6 @@ private:
 	void fixReverseTraceSeqPosAndOrder(OnewayTrace& trace, LengthType end, const std::string& sequence) const
 	{
 		if (trace.trace.size() == 0) return;
-		std::reverse(trace.trace.begin(), trace.trace.end());
 		trace.score = 0;
 		for (size_t i = 0; i < trace.trace.size() - 1; i++)
 		{
