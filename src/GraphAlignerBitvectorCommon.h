@@ -352,17 +352,18 @@ public:
 		return result;
 	}
 
-	static std::vector<OnewayTrace> getLocalMaximaTracesFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency, bool multiseed)
+	static std::vector<OnewayTrace> getLocalMaximaTracesFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency, bool multiseed, std::vector<ScoreType>& sliceMaxScores)
 	{
 		std::vector<OnewayTrace> result;
 		assert(slice.slices.size() > 1);
 		assert(slice.slices[0].scores.size() == 0);
-		std::vector<ScoreType> sliceMaxScores;
-		sliceMaxScores.resize(slice.slices.size());
+		std::vector<ScoreType> localSliceMaxScores;
+		localSliceMaxScores.resize(slice.slices.size());
 		for (size_t i = 0; i < slice.slices.size(); i++)
 		{
-			sliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
+			localSliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
 		}
+		assert(localSliceMaxScores.size() <= sliceMaxScores.size());
 		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
 		{
 			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
@@ -374,6 +375,7 @@ public:
 				assert(slice.slices[currentSlice].nodeMaxExactEndposScore.count(node) == 1);
 				ScoreType score = slice.slices[currentSlice].nodeMaxExactEndposScore.at(node);
 				if (score <= 0) continue;
+				if (score < localSliceMaxScores[currentSlice] * params.multimapScoreFraction) continue;
 				if (score < sliceMaxScores[currentSlice] * params.multimapScoreFraction) continue;
 				assert(currentSlice > 0);
 				if (slice.slices[currentSlice-1].nodeMaxExactEndposScore.count(node) == 1)
@@ -486,9 +488,13 @@ public:
 				size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
 				for (size_t i = startSlice; i < currentSlice; i++)
 				{
-					sliceMaxScores[i] = std::max(sliceMaxScores[i], score);
+					localSliceMaxScores[i] = std::max(localSliceMaxScores[i], score);
 				}
 			}
+		}
+		for (size_t i = 0; i < localSliceMaxScores.size(); i++)
+		{
+			sliceMaxScores[i] = std::max(sliceMaxScores[i], (ScoreType)(localSliceMaxScores[i] * 0.5));
 		}
 		return result;
 	}

@@ -81,12 +81,14 @@ public:
 		result.readName = seq_id;
 		assert(seedClusters.size() > 0);
 		std::string revSequence = CommonUtils::ReverseComplement(sequence);
+		std::vector<ScoreType> sliceMaxScores;
+		sliceMaxScores.resize(sequence.size() / WordConfiguration<Word>::WordSize + 2, 0);
 		for (size_t i = 0; i < seedClusters.size(); i++)
 		{
 			if (!logger.inputDiscarded()) logger << seq_id << " cluster " << i << "/" << seedClusters.size() << " " << seedClusters[i].clusterGoodness;
 			logger << BufferedWriter::Flush;
 			result.seedsExtended += 1;
-			auto alns = getAlignmentsFromMultiseeds(sequence, revSequence, seedClusters[i].hits, reusableState);
+			auto alns = getAlignmentsFromMultiseeds(sequence, revSequence, seedClusters[i].hits, reusableState, sliceMaxScores);
 			if (alns.size() == 0) continue;
 			for (auto& item : alns)
 			{
@@ -363,9 +365,9 @@ private:
 		return bvAligner.getBacktraceFullStart(seq, params.Xdropcutoff, reusableState);
 	}
 
-	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
 	{
-		return bvAligner.getMultiseedTraces(sequence, seedHits, reusableState);
+		return bvAligner.getMultiseedTraces(sequence, seedHits, reusableState, sliceMaxScores);
 	}
 
 	// Trace getTwoDirectionalTrace(const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -495,9 +497,9 @@ private:
 		}
 	}
 
-	std::vector<AlignmentResult::AlignmentItem> getAlignmentsFromMultiseeds(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	std::vector<AlignmentResult::AlignmentItem> getAlignmentsFromMultiseeds(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
 	{
-		auto traces = getMultiseedTraces(sequence, revSequence, seedHits, reusableState);
+		auto traces = getMultiseedTraces(sequence, revSequence, seedHits, reusableState, sliceMaxScores);
 		std::vector<AlignmentResult::AlignmentItem> result;
 		for (size_t i = 0; i < traces.size(); i++)
 		{

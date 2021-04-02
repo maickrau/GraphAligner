@@ -42,12 +42,12 @@ public:
 	{
 	}
 
-	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState) const
+	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialSlice = BV::getInitialEmptySlice();
-		auto slice = getMultiseedSlices(sequence, initialSlice, numSlices, reusableState, seedHits);
-		std::vector<OnewayTrace> results = BV::getLocalMaximaTracesFromTable(params, sequence, slice, reusableState, true, true);
+		auto slice = getMultiseedSlices(sequence, initialSlice, numSlices, reusableState, seedHits, sliceMaxScores);
+		std::vector<OnewayTrace> results = BV::getLocalMaximaTracesFromTable(params, sequence, slice, reusableState, true, true, sliceMaxScores);
 		removeDuplicateTraces(results);
 		for (size_t i = 0; i < results.size(); i++)
 		{
@@ -723,7 +723,7 @@ private:
 		return result;
 	}
 
-	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<ProcessedSeedHit>& seedHits) const
+	DPTable getMultiseedSlices(const std::string_view& sequence, const DPSlice& initialSlice, size_t numSlices, AlignerGraphsizedState& reusableState, const std::vector<ProcessedSeedHit>& seedHits, const std::vector<ScoreType>& sliceMaxScores) const
 	{
 		assert(reusableState.componentQueue.valid());
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
@@ -752,6 +752,10 @@ private:
 			WordSlice seedSlice = BV::getSeedSlice(seqOffset, sequence.size(), params);
 			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) >= -(ScoreType)WordConfiguration<Word>::WordSize*100);
 			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) <= (ScoreType)WordConfiguration<Word>::WordSize*100);
+			ScoreType possibleScoreRemaining = sequence.size() - seqOffset;
+			assert(possibleScoreRemaining > 0);
+			// can't get an alignment which would be backtraced. fake set the seed set to be empty
+			if (possibleScoreRemaining < sliceMaxScores[slice]) lastSeedHit = nextSeedHit;
 			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, true);
 			lastSeedHit = nextSeedHit;
 #ifdef SLICEVERBOSE
