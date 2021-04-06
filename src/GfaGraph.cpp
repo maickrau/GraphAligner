@@ -398,7 +398,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 std::string GfaGraph::OriginalNodeName(int nodeId) const
 {
 	auto found = originalNodeName.find(nodeId);
-	if (found == originalNodeName.end()) return "";
+	if (found == originalNodeName.end()) return std::to_string(nodeId);
 	return found->second;
 }
 

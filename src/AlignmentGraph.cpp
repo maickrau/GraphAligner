@@ -866,7 +866,7 @@ bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosi
 std::string AlignmentGraph::OriginalNodeName(int nodeId) const
 {
 	auto found = originalNodeName.find(nodeId);
-	if (found == originalNodeName.end()) return "";
+	if (found == originalNodeName.end()) return std::to_string(nodeId);
 	return found->second;
 }
 
