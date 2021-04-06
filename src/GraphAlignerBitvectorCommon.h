@@ -620,7 +620,7 @@ public:
 				extraSlice.VN = WordConfiguration<Word>::AllZeros;
 				extraSlice.scoreEnd = std::numeric_limits<ScoreType>::max();
 				if (slice.slices[currentSlice].seedstartNodes.count(currentNode) == 1) extraSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
-				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
+				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency && !slice.slices[currentSlice].scoresNotValid && !slice.slices[currentSlice-1].scoresNotValid, extraSlice, slice.slices[currentSlice].j);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
