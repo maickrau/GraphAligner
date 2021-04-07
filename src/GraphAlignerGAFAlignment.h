@@ -34,7 +34,7 @@ class GraphAlignerGAFAlignment
 	};
 public:
 
-	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params, bool cigarMatchMismatchMerge)
+	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params, bool cigarMatchMismatchMerge, const bool includecigar)
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;
@@ -115,7 +115,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Deletion;
 				if (currentEdit != Deletion)
 				{
-					addCigarItem(cigar, editLength, currentEdit);
+					if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Deletion;
 					editLength = 0;
 				}
@@ -127,7 +127,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Insertion;
 				if (currentEdit != Insertion)
 				{
-					addCigarItem(cigar, editLength, currentEdit);
+					if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Insertion;
 					editLength = 0;
 				}
@@ -139,7 +139,7 @@ public:
 				if (currentEdit == Empty) currentEdit = MatchOrMismatch;
 				if (currentEdit != MatchOrMismatch)
 				{
-					addCigarItem(cigar, editLength, currentEdit);
+					if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = MatchOrMismatch;
 					editLength = 0;
 				}
@@ -158,7 +158,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Match;
 				if (currentEdit != Match)
 				{
-					addCigarItem(cigar, editLength, currentEdit);
+					if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Match;
 					editLength = 0;
 				}
@@ -170,7 +170,7 @@ public:
 				if (currentEdit == Empty) currentEdit = Mismatch;
 				if (currentEdit != Mismatch)
 				{
-					addCigarItem(cigar, editLength, currentEdit);
+					if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 					currentEdit = Mismatch;
 					editLength = 0;
 				}
@@ -185,7 +185,7 @@ public:
 		}
 
 		assert(matches + mismatches + deletions + insertions == trace.size());
-		addCigarItem(cigar, editLength, currentEdit);
+		if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 
 		nodePathEnd = nodePathLen - (params.graph.originalNodeSize.at(trace.back().DPposition.node) - 1 - trace.back().DPposition.nodeOffset);
 
@@ -195,7 +195,7 @@ public:
 		if (alignmentXScore != -1) sstr << "\t" << "AS:f:" << alignmentXScore;
 		sstr << "\t" << "dv:f:" << 1.0-((double)matches / (double)(matches + mismatches + deletions + insertions));
 		sstr << "\t" << "id:f:" << ((double)matches / (double)(matches + mismatches + deletions + insertions));
-		sstr << "\t" << "cg:Z:" << cigar.str();
+		if (includecigar) sstr << "\t" << "cg:Z:" << cigar.str();
 		return sstr.str();
 	}
 

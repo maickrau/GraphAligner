@@ -61,7 +61,7 @@ AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_
 AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction);
 
 void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment);
-void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge);
+void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge, bool includeCigar);
 void AddCorrected(AlignmentResult::AlignmentItem& alignment);
 std::vector<SeedCluster> ClusterSeeds(const AlignmentGraph& graph, const std::vector<SeedHit>& seedHits, const size_t seedClusterMinSize);
 

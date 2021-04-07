@@ -42,6 +42,7 @@ struct AlignerParams
 	bool cigarMatchMismatchMerge;
 	double minAlignmentScore;
 	bool hpcCollapse;
+	bool includeCigar;
 };
 
 void alignReads(AlignerParams params);

@@ -90,7 +90,8 @@ public:
 		quietMode(quietMode),
 		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
 		Xdropcutoff(Xdropcutoff),
-		multimapScoreFraction(multimapScoreFraction)
+		multimapScoreFraction(multimapScoreFraction),
+		discardCigar(false)
 		{
 		}
 		const LengthType alignmentBandwidth;
@@ -100,6 +101,7 @@ public:
 		const ScoreType XscoreErrorCost;
 		const int Xdropcutoff;
 		const double multimapScoreFraction;
+		bool discardCigar;
 	};
 	struct TraceItem
 	{
