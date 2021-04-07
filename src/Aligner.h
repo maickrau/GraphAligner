@@ -41,6 +41,7 @@ struct AlignerParams
 	double multimapScoreFraction;
 	bool cigarMatchMismatchMerge;
 	double minAlignmentScore;
+	bool hpcCollapse;
 };
 
 void alignReads(AlignerParams params);

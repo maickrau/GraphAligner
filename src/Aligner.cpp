@@ -373,6 +373,20 @@ void writeCorrectedClippedToQueue(moodycamel::ProducerToken& token, const Aligne
 	QueueInsertSlowly(token, correctedClippedOut, strstr.str());
 }
 
+std::string hpcCollapse(const std::string& read)
+{
+	std::string result;
+	if (read.size() == 0) return result;
+	result.reserve(read.size());
+	result = read[0];
+	for (size_t i = 1; i < read.size(); i++)
+	{
+		if (read[i] == read[i-1]) continue;
+		result += read[i];
+	}
+	return result;
+}
+
 void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& GAFOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	moodycamel::ProducerToken GAMToken { GAMOut };
@@ -411,6 +425,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		}
 		if (fastq == nullptr) break;
 		assertSetNoRead(fastq->seq_id);
+		assert(fastq->quality.size() == 0);
+		if (params.hpcCollapse) fastq->sequence = hpcCollapse(fastq->sequence);
 		coutoutput << "Read " << fastq->seq_id << " size " << fastq->sequence.size() << "bp" << BufferedWriter::Flush;
 		selectionOptions.readSize = fastq->sequence.size();
 		stats.reads += 1;

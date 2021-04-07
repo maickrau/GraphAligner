@@ -83,6 +83,7 @@ int main(int argc, char** argv)
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
 		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("hpc-collapse-reads", "Collapse homopolymer runs in input reads")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -144,6 +145,7 @@ int main(int argc, char** argv)
 	params.multimapScoreFraction = 0.9;
 	params.cigarMatchMismatchMerge = false;
 	params.minAlignmentScore = 0;
+	params.hpcCollapse = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -206,6 +208,7 @@ int main(int argc, char** argv)
 
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
+	if (vm.count("hpc-collapse-reads")) params.hpcCollapse = true;
 
 	if (vm.count("X-drop"))
 	{
