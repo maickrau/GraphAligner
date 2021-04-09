@@ -728,7 +728,8 @@ private:
 		assert(reusableState.componentQueue.valid());
 		assert(initialSlice.j == (size_t)-WordConfiguration<Word>::WordSize);
 		assert(initialSlice.j + numSlices * WordConfiguration<Word>::WordSize <= sequence.size() + WordConfiguration<Word>::WordSize);
-		assert(initialSlice.j + (numSlices-1) * WordConfiguration<Word>::WordSize <= sequence.size());
+		assert(numSlices >= 1);
+		assert(numSlices == 1 || initialSlice.j + (numSlices-1) * WordConfiguration<Word>::WordSize <= sequence.size());
 		DPTable result;
 		result.slices.reserve(numSlices + 1);
 		size_t cellsProcessed = 0;
