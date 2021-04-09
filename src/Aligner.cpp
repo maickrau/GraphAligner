@@ -431,6 +431,11 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		selectionOptions.readSize = fastq->sequence.size();
 		stats.reads += 1;
 		stats.bpInReads += fastq->sequence.size();
+		if (params.minAlignmentScore > fastq->sequence.size())
+		{
+			coutoutput << "Read " << fastq->seq_id << " smaller than min alignment score, skipping." << BufferedWriter::Flush;
+			continue;
+		}
 
 		AlignmentResult alignments;
 
