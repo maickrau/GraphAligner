@@ -328,6 +328,7 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 		corrections.back().endIndex = alignments.alignments[i].alignmentEnd;
 		corrections.back().corrected = alignments.alignments[i].corrected;
 	}
+	std::sort(corrections.begin(), corrections.end(), [](const Correction& left, const Correction& right) { return left.startIndex < right.startIndex; });
 	std::string corrected = getCorrected(original, corrections, maxOverlap);
 	if (compressed != nullptr)
 	{
