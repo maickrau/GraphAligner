@@ -149,19 +149,19 @@ private:
 		return score;
 	}
 
-	void removeDifferentTraceSuffix(OnewayTrace& removeFrom, const OnewayTrace& removeWith) const
+	void removeDifferentTracePrefix(OnewayTrace& removeFrom, const OnewayTrace& removeWith) const
 	{
-		size_t lastEqual = 0;
+		size_t lastEqualOffset = 0;
 		assert(removeFrom.trace.size() > 0);
 		assert(removeWith.trace.size() > 0);
 		assert(removeFrom.trace.back() == removeWith.trace.back());
-		while (lastEqual+1 < removeFrom.trace.size() && lastEqual+1 < removeWith.trace.size() && removeFrom.trace[removeFrom.trace.size()-1-(lastEqual+1)] == removeWith.trace[removeWith.trace.size()-1-(lastEqual+1)])
+		while (lastEqualOffset+1 < removeFrom.trace.size() && lastEqualOffset+1 < removeWith.trace.size() && removeFrom.trace[removeFrom.trace.size()-1-(lastEqualOffset+1)] == removeWith.trace[removeWith.trace.size()-1-(lastEqualOffset+1)])
 		{
-			lastEqual += 1;
+			lastEqualOffset += 1;
 		}
-		assert(lastEqual < removeFrom.trace.size());
-		assert(lastEqual > 0);
-		removeFrom.trace.erase(removeFrom.trace.begin(), removeFrom.trace.end() - lastEqual);
+		assert(lastEqualOffset < removeFrom.trace.size());
+		assert(lastEqualOffset > 0);
+		removeFrom.trace.erase(removeFrom.trace.begin(), removeFrom.trace.end() - lastEqualOffset);
 	}
 
 	void removeDuplicateTraces(std::vector<OnewayTrace>& traces) const
@@ -179,7 +179,7 @@ private:
 					// times 100 because int scores are 1/100ths
 					if (params.clipAmbiguousEnds >= 0 && traceAlignmentScore(traces[i]) >= traceAlignmentScore(traces[j]) - params.clipAmbiguousEnds * 100)
 					{
-						removeDifferentTraceSuffix(traces[j], traces[i]);
+						removeDifferentTracePrefix(traces[j], traces[i]);
 					}
 					std::swap(traces[i], traces.back());
 					traces.pop_back();
