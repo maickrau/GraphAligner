@@ -43,6 +43,7 @@ struct AlignerParams
 	double minAlignmentScore;
 	bool hpcCollapse;
 	bool includeCigar;
+	int clipAmbiguousEnds;
 };
 
 void alignReads(AlignerParams params);

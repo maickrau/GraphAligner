@@ -83,7 +83,7 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction) :
+		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds) :
 		alignmentBandwidth(alignmentBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
@@ -91,6 +91,7 @@ public:
 		XscoreErrorCost(100 * (preciseClippingIdentityCutoff / (1.0 - preciseClippingIdentityCutoff) + 1.0)),
 		Xdropcutoff(Xdropcutoff),
 		multimapScoreFraction(multimapScoreFraction),
+		clipAmbiguousEnds(clipAmbiguousEnds),
 		discardCigar(false)
 		{
 		}
@@ -101,6 +102,7 @@ public:
 		const ScoreType XscoreErrorCost;
 		const int Xdropcutoff;
 		const double multimapScoreFraction;
+		const int clipAmbiguousEnds;
 		bool discardCigar;
 	};
 	struct TraceItem
@@ -129,6 +131,10 @@ public:
 		sequenceCharacter(DPposition.seqPos < seq.size() ? seq[DPposition.seqPos] : '-'),
 		graphCharacter(graph.NodeSequences(DPposition.node, DPposition.nodeOffset))
 		{}
+		bool operator==(const TraceItem& other) const
+		{
+			return DPposition == other.DPposition && nodeSwitch == other.nodeSwitch && sequenceCharacter == other.sequenceCharacter && graphCharacter == other.graphCharacter;
+		}
 		MatrixPosition DPposition;
 		bool nodeSwitch;
 		char sequenceCharacter;

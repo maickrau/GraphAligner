@@ -141,16 +141,34 @@ public:
 
 private:
 
+	int traceAlignmentScore(const OnewayTrace& trace) const
+	{
+		assert(trace.trace[0].DPposition.seqPos >= trace.trace.back().DPposition.seqPos);
+		ScoreType score = (trace.trace[0].DPposition.seqPos - trace.trace.back().DPposition.seqPos + 1)*100;
+		score -= (ScoreType)trace.score * params.XscoreErrorCost;
+		return score;
+	}
+
+	void removeDifferentTraceSuffix(OnewayTrace& removeFrom, const OnewayTrace& removeWith) const
+	{
+		size_t lastEqual = 0;
+		assert(removeFrom.trace.size() > 0);
+		assert(removeWith.trace.size() > 0);
+		assert(removeFrom.trace.back() == removeWith.trace.back());
+		while (lastEqual+1 < removeFrom.trace.size() && lastEqual+1 < removeWith.trace.size() && removeFrom.trace[removeFrom.trace.size()-1-(lastEqual+1)] == removeWith.trace[removeWith.trace.size()-1-(lastEqual+1)])
+		{
+			lastEqual += 1;
+		}
+		assert(lastEqual < removeFrom.trace.size());
+		assert(lastEqual > 0);
+		removeFrom.trace.erase(removeFrom.trace.begin(), removeFrom.trace.end() - lastEqual);
+	}
+
 	void removeDuplicateTraces(std::vector<OnewayTrace>& traces) const
 	{
 		if (traces.size() == 0) return;
 		std::sort(traces.begin(), traces.end(), [this](const OnewayTrace& left, const OnewayTrace& right) {
-			assert(left.trace[0].DPposition.seqPos >= left.trace.back().DPposition.seqPos);
-			ScoreType leftScore = (left.trace[0].DPposition.seqPos - left.trace.back().DPposition.seqPos + 1)*100;
-			leftScore -= (ScoreType)left.score * params.XscoreErrorCost;
-			ScoreType rightScore = (right.trace[0].DPposition.seqPos - right.trace.back().DPposition.seqPos + 1)*100;
-			rightScore -= (ScoreType)right.score * params.XscoreErrorCost;
-			return leftScore > rightScore;
+			return traceAlignmentScore(left) > traceAlignmentScore(right);
 		});
 		for (size_t i = traces.size()-1; i > 0; i--)
 		{
@@ -158,6 +176,11 @@ private:
 			{
 				if (traces[i].trace.back().DPposition == traces[j].trace.back().DPposition)
 				{
+					// times 100 because int scores are 1/100ths
+					if (params.clipAmbiguousEnds >= 0 && traceAlignmentScore(traces[i]) >= traceAlignmentScore(traces[j]) - params.clipAmbiguousEnds * 100)
+					{
+						removeDifferentTraceSuffix(traces[j], traces[i]);
+					}
 					std::swap(traces[i], traces.back());
 					traces.pop_back();
 					break;

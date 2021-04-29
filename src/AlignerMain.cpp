@@ -85,6 +85,7 @@ int main(int argc, char** argv)
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("hpc-collapse-reads", "Collapse homopolymer runs in input reads")
 		("discard-cigar", "Don't include CIGAR string in gaf output")
+		("clip-ambiguous-ends", boost::program_options::value<int>(), "clip ambiguous alignment ends with alignment score cutoff arg")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -148,6 +149,7 @@ int main(int argc, char** argv)
 	params.minAlignmentScore = 0;
 	params.hpcCollapse = false;
 	params.includeCigar = true;
+	params.clipAmbiguousEnds = -1;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -212,6 +214,7 @@ int main(int argc, char** argv)
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 	if (vm.count("hpc-collapse-reads")) params.hpcCollapse = true;
 	if (vm.count("discard-cigar")) params.includeCigar = false;
+	if (vm.count("clip-ambiguous-ends")) params.clipAmbiguousEnds = vm["clip-ambiguous-ends"].as<int>();
 
 	if (vm.count("X-drop"))
 	{
