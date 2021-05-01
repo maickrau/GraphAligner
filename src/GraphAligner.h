@@ -210,6 +210,108 @@ public:
 
 private:
 
+	void fixOverlapTrace(OnewayTrace& trace) const
+	{
+		fixOverlapTraceStart(trace);
+		fixOverlapTraceEnd(trace);
+	}
+
+	void fixOverlapTraceEnd(OnewayTrace& trace) const
+	{
+		size_t fixyStart = trace.trace.size()-1;
+		size_t seqAfterHere = 0;
+		for (size_t i = trace.trace.size()-1; i > 0; i--)
+		{
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
+			{
+				seqAfterHere += 1;
+			}
+			if (trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && !trace.trace[i].nodeSwitch) continue;
+			if (seqAfterHere > params.graph.originalNodeSize.at(trace.trace[i-1].DPposition.node) - trace.trace[i-1].DPposition.nodeOffset) break;
+			fixyStart = i-1;
+		}
+		if (fixyStart == trace.trace.size()-1) return;
+		assert(fixyStart < trace.trace.size());
+		std::vector<AlignmentGraph::MatrixPosition> fixyPart;
+		fixyPart.reserve(trace.trace.size());
+		AlignmentGraph::MatrixPosition graphPos = trace.trace[fixyStart].DPposition;
+		for (size_t i = fixyStart+1; i < trace.trace.size(); i++)
+		{
+			if (trace.trace[i].DPposition.seqPos != trace.trace[i-1].DPposition.seqPos)
+			{
+				assert(trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos+1);
+				graphPos.seqPos += 1;
+			}
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
+			{
+				assert(graphPos.nodeOffset > 0);
+				graphPos.nodeOffset += 1;
+			}
+			size_t unitigNode = params.graph.GetUnitigNode(graphPos.node, graphPos.nodeOffset);
+			size_t nodeOffset = params.graph.nodeOffset[unitigNode];
+			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i-1].graphCharacter)
+			{
+				// imperfect overlap, can't be correctly fixed
+				fixyPart.clear();
+				break;
+			}
+			fixyPart.push_back(graphPos);
+		}
+		if (fixyPart.size() != trace.trace.size()-1-fixyStart) return;
+		for (size_t i = 0; i < fixyPart.size(); i++)
+		{
+			trace.trace[fixyStart+1+i].DPposition = fixyPart[i];
+		}
+	}
+
+	void fixOverlapTraceStart(OnewayTrace& trace) const
+	{
+		size_t fixyStart = 0;
+		size_t seqBeforeHere = 0;
+		for (size_t i = 1; i < trace.trace.size(); i++)
+		{
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
+			{
+				seqBeforeHere += 1;
+			}
+			if (trace.trace[i].DPposition.nodeOffset < seqBeforeHere) break;
+			if (trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && !trace.trace[i].nodeSwitch) continue;
+			fixyStart = i;
+		}
+		if (fixyStart == 0) return;
+		assert(fixyStart < trace.trace.size());
+		std::vector<AlignmentGraph::MatrixPosition> fixyPart;
+		fixyPart.reserve(trace.trace.size());
+		AlignmentGraph::MatrixPosition graphPos = trace.trace[fixyStart].DPposition;
+		for (size_t i = fixyStart; i > 0; i--)
+		{
+			if (trace.trace[i].DPposition.seqPos != trace.trace[i-1].DPposition.seqPos)
+			{
+				assert(trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos+1);
+				graphPos.seqPos -= 1;
+			}
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].nodeSwitch || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node)
+			{
+				assert(graphPos.nodeOffset != 0);
+				graphPos.nodeOffset -= 1;
+			}
+			size_t unitigNode = params.graph.GetUnitigNode(graphPos.node, graphPos.nodeOffset);
+			size_t nodeOffset = params.graph.nodeOffset[unitigNode];
+			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i-1].graphCharacter)
+			{
+				// imperfect overlap, can't be correctly fixed
+				fixyPart.clear();
+				break;
+			}
+			fixyPart.push_back(graphPos);
+		}
+		if (fixyPart.size() != fixyStart) return;
+		for (size_t i = 0; i < fixyPart.size(); i++)
+		{
+			trace.trace[fixyStart-1-i].DPposition = fixyPart[i];
+		}
+	}
+
 	OnewayTrace mergeTraces(OnewayTrace&& bwTrace, OnewayTrace&& fwTrace) const
 	{
 		assert(!fwTrace.failed() || !bwTrace.failed());
@@ -285,6 +387,7 @@ private:
 #endif
 		OnewayTrace mergedTrace = clipAndAddBackwardTrace(std::move(fwTrace), reusableState, fwSequence, bwSequence, offset);
 		if (mergedTrace.trace.size() == 0) return AlignmentResult::AlignmentItem {};
+		fixOverlapTrace(mergedTrace);
 
 		AlignmentResult::AlignmentItem alnItem { std::move(mergedTrace), 0, std::numeric_limits<size_t>::max() };
 
@@ -506,6 +609,7 @@ private:
 			assert(!traces[i].failed());
 			auto mergedTrace = clipAndAddBackwardTrace(std::move(traces[i]), reusableState, sequence, revSequence, 0);
 			if (mergedTrace.failed()) continue;
+			fixOverlapTrace(mergedTrace);
 			ScoreType alignmentXScore = (ScoreType)(mergedTrace.trace.back().DPposition.seqPos - mergedTrace.trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)mergedTrace.score;
 			if (alignmentXScore <= 0) continue;
 			result.emplace_back(std::move(mergedTrace), 0, std::numeric_limits<size_t>::max());
