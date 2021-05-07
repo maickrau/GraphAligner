@@ -227,7 +227,7 @@ private:
 				seqAfterHere += 1;
 			}
 			if (trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && !trace.trace[i].nodeSwitch) continue;
-			if (seqAfterHere > params.graph.originalNodeSize.at(trace.trace[i-1].DPposition.node) - trace.trace[i-1].DPposition.nodeOffset) break;
+			if (seqAfterHere > params.graph.originalNodeSize.at(trace.trace[i-1].DPposition.node) - trace.trace[i-1].DPposition.nodeOffset-1) break;
 			fixyStart = i-1;
 		}
 		if (fixyStart == trace.trace.size()-1) return;
@@ -244,7 +244,7 @@ private:
 			}
 			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
 			{
-				assert(graphPos.nodeOffset > 0);
+				assert(graphPos.nodeOffset < params.graph.originalNodeSize.at(graphPos.node)-1);
 				graphPos.nodeOffset += 1;
 			}
 			size_t unitigNode = params.graph.GetUnitigNode(graphPos.node, graphPos.nodeOffset);
