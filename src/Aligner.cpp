@@ -396,7 +396,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	moodycamel::ProducerToken correctedToken { correctedOut };
 	moodycamel::ProducerToken clippedToken { correctedClippedOut };
 	assertSetNoRead("Before any read");
-	GraphAlignerCommon<size_t, int32_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, params.alignmentBandwidth };
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState reusableState { alignmentGraph, params.alignmentBandwidth };
 	AlignmentSelection::SelectionOptions selectionOptions;
 	selectionOptions.graphSize = alignmentGraph.SizeInBP();
 	selectionOptions.ECutoff = params.selectionECutoff;

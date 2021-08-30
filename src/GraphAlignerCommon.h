@@ -15,7 +15,7 @@ public:
 	class NodeWithPriority
 	{
 	public:
-		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, int priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
+		NodeWithPriority(LengthType node, size_t offset, size_t endOffset, ScoreType priority) : node(node), offset(offset), endOffset(endOffset), priority(priority) {}
 		bool operator>(const NodeWithPriority& other) const
 		{
 		return priority > other.priority;
@@ -27,13 +27,13 @@ public:
 		LengthType node;
 		size_t offset;
 		size_t endOffset;
-		int priority;
+		ScoreType priority;
 	};
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0), forceCalculation(false) {}
-		EdgeWithPriority(LengthType target, int priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice), forceCalculation(false) {}
+		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0), forceCalculation(false) {}
+		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice), forceCalculation(false) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -43,7 +43,7 @@ public:
 			return priority < other.priority;
 		}
 		LengthType target;
-		int priority;
+		ScoreType priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
 		bool skipFirst;
 		size_t slice;
@@ -83,7 +83,7 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds) :
+		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, ScoreType Xdropcutoff, double multimapScoreFraction, ScoreType clipAmbiguousEnds) :
 		alignmentBandwidth(alignmentBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
@@ -100,9 +100,9 @@ public:
 		const size_t maxCellsPerSlice;
 		const bool quietMode;
 		const ScoreType XscoreErrorCost;
-		const int Xdropcutoff;
+		const ScoreType Xdropcutoff;
 		const double multimapScoreFraction;
-		const int clipAmbiguousEnds;
+		const ScoreType clipAmbiguousEnds;
 		bool discardCigar;
 	};
 	struct TraceItem
@@ -304,7 +304,7 @@ public:
 		alignmentXScore(-1),
 		mappingQuality(255)
 		{}
-		AlignmentItem(GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace&& trace, size_t cellsProcessed, size_t ms) :
+		AlignmentItem(GraphAlignerCommon<size_t, int64_t, uint64_t>::OnewayTrace&& trace, size_t cellsProcessed, size_t ms) :
 		corrected(),
 		alignment(),
 		trace(),
@@ -316,7 +316,7 @@ public:
 		alignmentXScore(-1),
 		mappingQuality(255)
 		{
-			this->trace = std::make_shared<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace>();
+			this->trace = std::make_shared<GraphAlignerCommon<size_t, int64_t, uint64_t>::OnewayTrace>();
 			*this->trace = std::move(trace);
 		}
 		bool alignmentFailed() const
@@ -330,7 +330,7 @@ public:
 		std::string corrected;
 		std::string GAFline;
 		std::shared_ptr<vg::Alignment> alignment;
-		std::shared_ptr<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace> trace;
+		std::shared_ptr<GraphAlignerCommon<size_t, int64_t, uint64_t>::OnewayTrace> trace;
 		size_t seedGoodness;
 		size_t cellsProcessed;
 		size_t elapsedMilliseconds;

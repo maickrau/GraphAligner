@@ -64,7 +64,7 @@ public:
 	{
 		return numItems;
 	}
-	void insert(size_t component, int score, const T& item)
+	void insert(size_t component, int64_t score, const T& item)
 	{
 		assert(false);
 	}

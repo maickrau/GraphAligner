@@ -94,7 +94,7 @@ namespace AlignmentSelection
 		return result;
 	}
 
-	std::tuple<size_t, size_t, std::vector<int>> getAlignmentPath(const AlignmentGraph& graph, const std::vector<GraphAlignerCommon<size_t, int32_t, uint64_t>::TraceItem>& trace)
+	std::tuple<size_t, size_t, std::vector<int>> getAlignmentPath(const AlignmentGraph& graph, const std::vector<GraphAlignerCommon<size_t, int64_t, uint64_t>::TraceItem>& trace)
 	{
 		size_t leftClip = 0;
 		size_t rightClip = 0;

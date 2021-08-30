@@ -34,7 +34,7 @@ class GraphAlignerGAFAlignment
 	};
 public:
 
-	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params, bool cigarMatchMismatchMerge, const bool includecigar)
+	static std::string traceToAlignment(const std::string& seq_id, const std::string& sequence, const GraphAlignerCommon<size_t, int64_t, uint64_t>::OnewayTrace& tracePair, double alignmentXScore, int mappingQuality, const Params& params, bool cigarMatchMismatchMerge, const bool includecigar)
 	{
 		auto& trace = tracePair.trace;
 		if (trace.size() == 0) return nullptr;

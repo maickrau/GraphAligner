@@ -10,9 +10,9 @@ class ComponentPriorityQueue
 {
 	struct PrioritizedItem
 	{
-		PrioritizedItem(size_t component, int score, size_t index) : component(component), score(score), index(index) {}
+		PrioritizedItem(size_t component, int64_t score, size_t index) : component(component), score(score), index(index) {}
 		size_t component;
-		int score;
+		int64_t score;
 		size_t index;
 		bool operator<(const PrioritizedItem& other) const { return component < other.component || (component == other.component && score < other.score); }
 		bool operator>(const PrioritizedItem& other) const { return component > other.component || (component == other.component && score > other.score); }
@@ -81,7 +81,7 @@ public:
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-	void insert(size_t component, int score, const T& item)
+	void insert(size_t component, int64_t score, const T& item)
 	{
 		size_t index = getId(item);
 		assert(SparseStorage || index < extras.size());
