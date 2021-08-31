@@ -481,14 +481,30 @@ public:
 				assert(slice.slices[currentSlice].j + bvOffset < sequence.size());
 				ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
 				MatrixPosition startPos { node, nodeOffset, slice.slices[currentSlice].j + bvOffset };
-				result.push_back(getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed));
-				size_t traceEnd = result.back().trace[0].DPposition.seqPos;
-				size_t traceStart = result.back().trace.back().DPposition.seqPos;
-				assert(traceEnd >= traceStart);
-				size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
-				for (size_t i = startSlice; i < currentSlice; i++)
+				auto oneTrace = getReverseTraceFromTable(params, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed);
+				bool skip = false;
+				for (size_t i = 0; i < result.size(); i++)
 				{
-					localSliceMaxScores[i] = std::max(localSliceMaxScores[i], score);
+					if (result[i].trace.back().DPposition != oneTrace.trace.back().DPposition) continue;
+					if (result[i].score < oneTrace.score)
+					{
+						std::swap(result[i], result.back());
+						result.pop_back();
+						break;
+					}
+					if (result[i].score >= oneTrace.score) skip = true;
+				}
+				if (!skip)
+				{
+					result.emplace_back(std::move(oneTrace));
+					size_t traceEnd = result.back().trace[0].DPposition.seqPos;
+					size_t traceStart = result.back().trace.back().DPposition.seqPos;
+					assert(traceEnd >= traceStart);
+					size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
+					for (size_t i = startSlice; i < currentSlice; i++)
+					{
+						localSliceMaxScores[i] = std::max(localSliceMaxScores[i], score);
+					}
 				}
 			}
 		}
