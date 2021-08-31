@@ -275,7 +275,7 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, int bandwidth, ScoreType previousMinScore, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
+	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, ScoreType bandwidth, ScoreType previousMinScore, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
 	{
 		if (previousMinScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1)
 		{
@@ -336,6 +336,8 @@ private:
 			for (auto node : previousSlice)
 			{
 				assert(node.second.exists);
+				assert(node.second.minScore <= node.second.startSlice.scoreEnd);
+				assert(node.second.minScore <= node.second.endSlice.scoreEnd);
 				if (node.second.minScore > previousQuitScore) continue;
 				if (params.graph.linearizable[node.first])
 				{
@@ -446,6 +448,7 @@ private:
 				nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.AmbiguousNodeChunks(i), extraSlice, j);
 				assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());
 			}
+			assert(nodeCalc.minScore != std::numeric_limits<ScoreType>::max());
 			calculableQueue.pop();
 			if (!calculableQueue.IsComponentPriorityQueue())
 			{
@@ -504,6 +507,8 @@ private:
 				result.maxExactEndposScore = nodeCalc.maxExactEndposScore;
 				result.maxExactEndposNode = nodeCalc.maxExactEndposNode;
 			}
+			assert(currentSlice.node(i).minScore <= currentSlice.node(i).startSlice.scoreEnd);
+			assert(currentSlice.node(i).minScore <= currentSlice.node(i).endSlice.scoreEnd);
 			assert(result.minScore == currentMinScoreAtEndRow);
 			result.cellsProcessed += nodeCalc.cellsProcessed;
 			assert(nodeCalc.cellsProcessed > 0);
@@ -516,6 +521,12 @@ private:
 #ifdef EXTRACORRECTNESSASSERTIONS
 		checkNodeBoundaryCorrectness<HasVectorMap, PreviousHasVectorMap>(currentSlice, previousSlice, sequence, j, currentMinScoreAtEndRow + bandwidth, previousQuitScore, hasSeedStart, seedstartSlice, fakeSlice);
 #endif
+		for (auto node : currentSlice)
+		{
+			assert(node.second.exists);
+			assert(node.second.minScore <= node.second.startSlice.scoreEnd);
+			assert(node.second.minScore <= node.second.endSlice.scoreEnd);
+		}
 
 		for (auto node : clearSeedStarts)
 		{
@@ -535,7 +546,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -585,7 +596,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, int bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
 	{
 		DPSlice bandTest;
 		bandTest.scores.addEmptyNodeMap(previous.scores.size());

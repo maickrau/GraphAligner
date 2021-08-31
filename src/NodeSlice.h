@@ -329,16 +329,16 @@ public:
 			(*nodes)[item.first] = item.second;
 		}
 	}
-	int minScore(size_t nodeIndex) const
+	ScoreType minScore(size_t nodeIndex) const
 	{
 		return node(nodeIndex).minScore;
 	}
-	void setMinScoreIfSmaller(size_t nodeIndex, int score)
+	void setMinScoreIfSmaller(size_t nodeIndex, ScoreType score)
 	{
 		auto oldScore = minScore(nodeIndex);
 		if (score < oldScore) setMinScore(nodeIndex, score);
 	}
-	void setMinScore(size_t nodeIndex, int score)
+	void setMinScore(size_t nodeIndex, ScoreType score)
 	{
 		node(nodeIndex).minScore = score;
 	}
