@@ -163,6 +163,13 @@ public:
 		{
 			return score == std::numeric_limits<ScoreType>::max();
 		}
+		ScoreType alignmentXScore(ScoreType XscoreErrorCost) const
+		{
+			if (failed()) return 0;
+			assert(trace.size() > 0);
+			assert(trace[0].DPposition.seqPos >= trace.back().DPposition.seqPos);
+			return (ScoreType)(trace[0].DPposition.seqPos - trace.back().DPposition.seqPos + 1)*100 - XscoreErrorCost * (ScoreType)score;
+		}
 		std::vector<TraceItem> trace;
 		ScoreType score;
 	};

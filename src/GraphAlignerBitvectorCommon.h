@@ -364,6 +364,7 @@ public:
 			localSliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
 		}
 		assert(localSliceMaxScores.size() <= sliceMaxScores.size());
+		std::vector<std::pair<size_t, size_t>> possibleStarts;
 		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
 		{
 			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
@@ -427,86 +428,93 @@ public:
 					}
 				}
 				if (notLocalMaximum) continue;
-				typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem previous;
-				assert(currentSlice > 0);
-				if (slice.slices[currentSlice-1].scores.hasNode(node))
+				possibleStarts.emplace_back(currentSlice, node);
+			}
+		}
+		std::sort(possibleStarts.begin(), possibleStarts.end(), [&slice](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return slice.slices[left.first].nodeMaxExactEndposScore.at(left.second) > slice.slices[right.first].nodeMaxExactEndposScore.at(right.second); });
+		std::vector<OnewayTrace> fakeTraces;
+		for (size_t starti = 0; starti < possibleStarts.size(); starti++)
+		{
+			assert(starti == 0 || slice.slices[possibleStarts[starti].first].nodeMaxExactEndposScore.at(possibleStarts[starti].second) <= slice.slices[possibleStarts[starti-1].first].nodeMaxExactEndposScore.at(possibleStarts[starti-1].second));
+			size_t currentSlice = possibleStarts[starti].first;
+			size_t node = possibleStarts[starti].second;
+			ScoreType score = slice.slices[currentSlice].nodeMaxExactEndposScore.at(node);
+			if (score < localSliceMaxScores[currentSlice] * params.multimapScoreFraction) continue;
+			typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem previous;
+			assert(currentSlice > 0);
+			if (slice.slices[currentSlice-1].scores.hasNode(node))
+			{
+				previous = slice.slices[currentSlice-1].scores.node(node);
+			}
+			else
+			{
+				for (size_t i = 0; i < previous.NUM_CHUNKS; i++)
 				{
-					previous = slice.slices[currentSlice-1].scores.node(node);
+					previous.HP[i] = WordConfiguration<Word>::AllOnes;
+					previous.HN[i] = WordConfiguration<Word>::AllZeros;
 				}
-				else
+			}
+			EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
+			WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
+			WordSlice seedstartSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
+			WordSlice extraSlice = slice.slices[currentSlice].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
+			const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& nodeInfo = slice.slices[currentSlice].scores.node(node);
+			std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, nodeInfo, EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
+			assert(nodeSlices[0].scoreEnd == nodeInfo.startSlice.scoreEnd);
+			assert(nodeSlices[0].VP == nodeInfo.startSlice.VP);
+			assert(nodeSlices[0].VN == nodeInfo.startSlice.VN);
+			assert(nodeSlices.back().scoreEnd == nodeInfo.endSlice.scoreEnd);
+			assert(nodeSlices.back().VP == nodeInfo.endSlice.VP);
+			assert(nodeSlices.back().VN == nodeInfo.endSlice.VN);
+			size_t nodeOffset = std::numeric_limits<size_t>::max();
+			size_t bvOffset = std::numeric_limits<size_t>::max();
+			for (size_t i = 0; i < nodeSlices.size(); i++)
+			{
+				auto maxScore = nodeSlices[i].maxXScoreFirstSlices(slice.slices[currentSlice].j, params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[currentSlice].j)));
+				assert(maxScore <= score);
+				if (maxScore == score)
 				{
-					for (size_t i = 0; i < previous.NUM_CHUNKS; i++)
+					for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
 					{
-						previous.HP[i] = WordConfiguration<Word>::AllOnes;
-						previous.HN[i] = WordConfiguration<Word>::AllZeros;
-					}
-				}
-				EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
-				WordSlice fakeSlice { WordConfiguration<Word>::AllZeros, WordConfiguration<Word>::AllZeros, std::numeric_limits<ScoreType>::max() };
-				WordSlice seedstartSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
-				WordSlice extraSlice = slice.slices[currentSlice].seedstartNodes.count(node) == 1 ? seedstartSlice : fakeSlice;
-				std::vector<WordSlice> nodeSlices = recalcNodeWordslice(params, node, pair.second, EqV, previous, sliceConsistency, extraSlice, slice.slices[currentSlice].j);
-				assert(nodeSlices[0].scoreEnd == pair.second.startSlice.scoreEnd);
-				assert(nodeSlices[0].VP == pair.second.startSlice.VP);
-				assert(nodeSlices[0].VN == pair.second.startSlice.VN);
-				assert(nodeSlices.back().scoreEnd == pair.second.endSlice.scoreEnd);
-				assert(nodeSlices.back().VP == pair.second.endSlice.VP);
-				assert(nodeSlices.back().VN == pair.second.endSlice.VN);
-				size_t nodeOffset = std::numeric_limits<size_t>::max();
-				size_t bvOffset = std::numeric_limits<size_t>::max();
-				for (size_t i = 0; i < nodeSlices.size(); i++)
-				{
-					auto maxScore = nodeSlices[i].maxXScoreFirstSlices(slice.slices[currentSlice].j, params.XscoreErrorCost, std::min((size_t)WordConfiguration<Word>::WordSize, (size_t)(sequence.size() - slice.slices[currentSlice].j)));
-					assert(maxScore <= score);
-					if (maxScore == score)
-					{
-						for (size_t off = WordConfiguration<Word>::WordSize-1; off < WordConfiguration<Word>::WordSize; off--)
+						if (slice.slices[currentSlice].j + off >= sequence.size()) continue;
+						auto scoreHere = nodeSlices[i].getXScore(slice.slices[currentSlice].j, off, params.XscoreErrorCost);
+						assert(scoreHere <= score);
+						if (scoreHere == score)
 						{
-							if (slice.slices[currentSlice].j + off >= sequence.size()) continue;
-							auto scoreHere = nodeSlices[i].getXScore(slice.slices[currentSlice].j, off, params.XscoreErrorCost);
-							assert(scoreHere <= score);
-							if (scoreHere == score)
+							if (nodeOffset == std::numeric_limits<size_t>::max() || off > bvOffset)
 							{
-								if (nodeOffset == std::numeric_limits<size_t>::max() || off > bvOffset)
-								{
-									nodeOffset = i;
-									bvOffset = off;
-								}
+								nodeOffset = i;
+								bvOffset = off;
 							}
 						}
 					}
 				}
-				assert(nodeOffset != std::numeric_limits<size_t>::max());
-				assert(bvOffset != std::numeric_limits<size_t>::max());
-				assert(slice.slices[currentSlice].j + bvOffset < sequence.size());
-				ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
-				MatrixPosition startPos { node, nodeOffset, slice.slices[currentSlice].j + bvOffset };
-				auto oneTrace = getReverseTraceFromTable(params, result, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed);
-				if (!oneTrace.failed())
+			}
+			assert(nodeOffset != std::numeric_limits<size_t>::max());
+			assert(bvOffset != std::numeric_limits<size_t>::max());
+			assert(slice.slices[currentSlice].j + bvOffset < sequence.size());
+			ScoreType startScore = nodeSlices[nodeOffset].getValue(bvOffset);
+			MatrixPosition startPos { node, nodeOffset, slice.slices[currentSlice].j + bvOffset };
+			auto oneTrace = getReverseTraceFromTable(params, result, fakeTraces, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed);
+			if (!oneTrace.failed())
+			{
+				bool skip = false;
+				for (size_t i = 0; i < result.size(); i++)
 				{
-					bool skip = false;
-					for (size_t i = 0; i < result.size(); i++)
+					if (result[i].trace.back().DPposition != oneTrace.trace.back().DPposition) continue;
+					assert(result[i].alignmentXScore(params.XscoreErrorCost) >= oneTrace.alignmentXScore(params.XscoreErrorCost));
+					skip = true;
+				}
+				if (!skip)
+				{
+					result.emplace_back(std::move(oneTrace));
+					size_t traceEnd = result.back().trace[0].DPposition.seqPos;
+					size_t traceStart = result.back().trace.back().DPposition.seqPos;
+					assert(traceEnd >= traceStart);
+					size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
+					for (size_t i = startSlice; i < currentSlice; i++)
 					{
-						if (result[i].trace.back().DPposition != oneTrace.trace.back().DPposition) continue;
-						if (result[i].score < oneTrace.score)
-						{
-							std::swap(result[i], result.back());
-							result.pop_back();
-							break;
-						}
-						if (result[i].score >= oneTrace.score) skip = true;
-					}
-					if (!skip)
-					{
-						result.emplace_back(std::move(oneTrace));
-						size_t traceEnd = result.back().trace[0].DPposition.seqPos;
-						size_t traceStart = result.back().trace.back().DPposition.seqPos;
-						assert(traceEnd >= traceStart);
-						size_t startSlice = ((traceEnd - traceStart)*0.05 + traceStart + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize + 1;
-						for (size_t i = startSlice; i < currentSlice; i++)
-						{
-							localSliceMaxScores[i] = std::max(localSliceMaxScores[i], score);
-						}
+						localSliceMaxScores[i] = std::max(localSliceMaxScores[i], score);
 					}
 				}
 			}
@@ -596,21 +604,17 @@ public:
 	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency, bool multiseed)
 	{
 		std::vector<OnewayTrace> empty;
-		return getReverseTraceFromTable(params, empty, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed);
+		std::vector<OnewayTrace> fakes;
+		return getReverseTraceFromTable(params, empty, fakes, sequence, slice, reusableState, startPos, startScore, sliceConsistency, multiseed);
 	}
 
-	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::vector<OnewayTrace>& otherTraces, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency, bool multiseed)
+	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::vector<OnewayTrace>& otherTraces, std::vector<OnewayTrace>& fakeTraces, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency, bool multiseed)
 	{
 		assert(slice.slices.size() > 0);
 		size_t currentSlice = startPos.seqPos / WordConfiguration<Word>::WordSize + 1;
 		assert(currentSlice < slice.slices.size());
 		assert(slice.slices[currentSlice].minScoreNode != std::numeric_limits<LengthType>::max());
 		assert(slice.slices[currentSlice].minScoreNodeOffset != std::numeric_limits<LengthType>::max());
-		std::vector<size_t> otherTracePoses;
-		for (size_t i = 0; i < otherTraces.size(); i++)
-		{
-			otherTracePoses.push_back(0);
-		}
 		OnewayTrace result;
 		result.score = startScore;
 		result.trace.emplace_back(startPos, false, sequence, params.graph);
@@ -619,17 +623,37 @@ public:
 		EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 		WordSlice extraSlice;
 		ScoreType lastScore = std::numeric_limits<ScoreType>::max()-1;
+		std::vector<size_t> otherTracePoses;
+		std::vector<size_t> fakeTracePoses;
+		for (size_t i = 0; i < otherTraces.size(); i++)
+		{
+			otherTracePoses.push_back(0);
+		}
+		for (size_t i = 0; i < fakeTraces.size(); i++)
+		{
+			fakeTracePoses.push_back(0);
+		}
 		while (result.trace.back().DPposition.seqPos != (size_t)-1)
 		{
 			for (size_t i = 0; i < otherTraces.size(); i++)
 			{
-				if (otherTraces[i].score > result.score) continue;
 				if (otherTracePoses[i] >= otherTraces[i].trace.size()) continue;
-				assert(otherTraces[i].trace[otherTracePoses[i]].DPposition.seqPos >= result.trace.back().DPposition.seqPos);
 				while (otherTracePoses[i] < otherTraces[i].trace.size() && otherTraces[i].trace[otherTracePoses[i]].DPposition.seqPos > result.trace.back().DPposition.seqPos) otherTracePoses[i] += 1;
 				if (otherTracePoses[i] >= otherTraces[i].trace.size()) continue;
 				if (otherTraces[i].trace[otherTracePoses[i]].DPposition == result.trace.back().DPposition)
 				{
+					fakeTraces.emplace_back(std::move(result));
+					return OnewayTrace::TraceFailed();
+				}
+			}
+			for (size_t i = 0; i < fakeTraces.size(); i++)
+			{
+				if (fakeTracePoses[i] >= fakeTraces[i].trace.size()) continue;
+				while (fakeTracePoses[i] < fakeTraces[i].trace.size() && fakeTraces[i].trace[fakeTracePoses[i]].DPposition.seqPos > result.trace.back().DPposition.seqPos) fakeTracePoses[i] += 1;
+				if (fakeTracePoses[i] >= fakeTraces[i].trace.size()) continue;
+				if (fakeTraces[i].trace[fakeTracePoses[i]].DPposition == result.trace.back().DPposition)
+				{
+					fakeTraces.emplace_back(std::move(result));
 					return OnewayTrace::TraceFailed();
 				}
 			}
