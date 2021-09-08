@@ -502,8 +502,16 @@ public:
 				for (size_t i = 0; i < result.size(); i++)
 				{
 					if (result[i].trace.back().DPposition != oneTrace.trace.back().DPposition) continue;
-					assert(result[i].alignmentXScore(params.XscoreErrorCost) >= oneTrace.alignmentXScore(params.XscoreErrorCost));
-					skip = true;
+					if (result[i].alignmentXScore(params.XscoreErrorCost) >= oneTrace.alignmentXScore(params.XscoreErrorCost))
+					{
+						skip = true;
+					}
+					else
+					{
+						std::swap(result[i], result.back());
+						result.pop_back();
+						break;
+					}
 				}
 				if (!skip)
 				{
