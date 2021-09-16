@@ -70,7 +70,7 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 		else
 		{
 			auto node = componentNodes[i][0];
-			result[node] = nodeLengths[node];
+			result[node] = 0;
 			for (auto neighbor : edges[node])
 			{
 				if (result[neighbor] == std::numeric_limits<size_t>::max())
@@ -88,7 +88,8 @@ std::vector<size_t> getNodeDepths(const std::vector<std::vector<size_t>>& compon
 				{
 					overlap = overlaps.at(std::make_pair(node, neighbor));
 				}
-				result[node] = std::max(result[node], result[neighbor] + nodeLengths[node] - overlap);
+				assert(nodeLengths[neighbor] > overlap);
+				result[node] = std::max(result[node], result[neighbor] + nodeLengths[neighbor] - overlap);
 			}
 		}
 	}
@@ -105,7 +106,7 @@ void removeRec(std::vector<bool>& keepers, size_t pos, const std::vector<std::ve
 	}
 }
 
-std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vector<std::vector<size_t>>& edges, const size_t maxRemovableLen, const size_t minSafeLen, const double fraction)
+std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vector<std::vector<size_t>>& edges, const size_t maxRemovableLen, const size_t minSafeLen, const double fraction, const std::map<std::pair<size_t, size_t>, size_t>& overlaps, const size_t dbgOverlap, const std::vector<size_t>& nodeLengths)
 {
 	std::vector<bool> result;
 	result.resize(depths.size(), true);
@@ -115,14 +116,32 @@ std::vector<bool> getKeepers(const std::vector<size_t>& depths, const std::vecto
 		size_t bigLength = 0;
 		for (auto neighbor : edges[i])
 		{
-			bigLength = std::max(bigLength, depths[neighbor]);
+			if (depths[neighbor] == std::numeric_limits<size_t>::max())
+			{
+				bigLength = std::numeric_limits<size_t>::max();
+				break;
+			}
+			size_t overlap = dbgOverlap;
+			if (overlaps.count(std::make_pair(i, neighbor)) == 1)
+			{
+				overlap = overlaps.at(std::make_pair(i, neighbor));
+			}
+			assert(nodeLengths[neighbor] > overlap);
+			bigLength = std::max(bigLength, depths[neighbor] + nodeLengths[neighbor] - overlap);
 		}
 		if (bigLength < minSafeLen) continue;
 		size_t removableLen = bigLength * fraction;
 		removableLen = std::min(removableLen, maxRemovableLen);
 		for (auto neighbor : edges[i])
 		{
-			if (depths[neighbor] <= removableLen)
+			if (depths[neighbor] == std::numeric_limits<size_t>::max()) continue;
+			size_t overlap = dbgOverlap;
+			if (overlaps.count(std::make_pair(i, neighbor)) == 1)
+			{
+				overlap = overlaps.at(std::make_pair(i, neighbor));
+			}
+			assert(nodeLengths[neighbor] > overlap);
+			if (depths[neighbor] + nodeLengths[neighbor] - overlap <= removableLen)
 			{
 				removeRec(result, neighbor, edges);
 			}
@@ -264,7 +283,7 @@ std::unordered_set<int> filterNodes(const GfaGraph& graph, const int maxRemovabl
 	auto edges = getOutEdges(nodeMapping, graph);
 	auto order = topologicalSort(edges);
 	auto depths = getNodeDepths(order, lengths, edges, overlaps, graph.edgeOverlap);
-	auto keepers = getKeepers(depths, edges, maxRemovableLen, minSafeLen, fraction);
+	auto keepers = getKeepers(depths, edges, maxRemovableLen, minSafeLen, fraction, overlaps, graph.edgeOverlap, lengths);
 	std::unordered_set<int> result;
 	for (auto node : graph.nodes)
 	{
