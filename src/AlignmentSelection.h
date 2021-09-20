@@ -11,6 +11,7 @@
 
 namespace AlignmentSelection
 {
+	extern double OverlapIncompatibleFractionCutoff;
 	struct SelectionOptions
 	{
 		size_t graphSize;

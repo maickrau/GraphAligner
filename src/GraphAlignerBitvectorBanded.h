@@ -789,8 +789,8 @@ private:
 			assert(seedSlice.maxXScore(seqOffset, params.XscoreErrorCost) <= (ScoreType)WordConfiguration<Word>::WordSize*100);
 			ScoreType possibleScoreRemaining = sequence.size() - seqOffset;
 			assert(possibleScoreRemaining > 0);
-			// can't get an alignment which would be backtraced. fake set the seed set to be empty
-			if (possibleScoreRemaining < sliceMaxScores[slice]) lastSeedHit = nextSeedHit;
+			// // can't get an alignment which would be backtraced. fake set the seed set to be empty
+			// if (possibleScoreRemaining < sliceMaxScores[slice]) lastSeedHit = nextSeedHit;
 			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, true);
 			lastSeedHit = nextSeedHit;
 #ifdef SLICEVERBOSE

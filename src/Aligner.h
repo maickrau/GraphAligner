@@ -44,6 +44,7 @@ struct AlignerParams
 	bool hpcCollapse;
 	bool includeCigar;
 	int clipAmbiguousEnds;
+	double overlapIncompatibleCutoff;
 };
 
 void alignReads(AlignerParams params);

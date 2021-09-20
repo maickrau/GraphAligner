@@ -86,6 +86,7 @@ int main(int argc, char** argv)
 		("hpc-collapse-reads", "Collapse homopolymer runs in input reads")
 		("discard-cigar", "Don't include CIGAR string in gaf output")
 		("clip-ambiguous-ends", boost::program_options::value<int>(), "clip ambiguous alignment ends with alignment score cutoff arg")
+		("overlap-incompatible-cutoff", boost::program_options::value<double>(), "consider two partial alignments incompatible if they overlap by arg% of the length of the shorter one")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -215,6 +216,7 @@ int main(int argc, char** argv)
 	if (vm.count("hpc-collapse-reads")) params.hpcCollapse = true;
 	if (vm.count("discard-cigar")) params.includeCigar = false;
 	if (vm.count("clip-ambiguous-ends")) params.clipAmbiguousEnds = vm["clip-ambiguous-ends"].as<int>();
+	if (vm.count("overlap-incompatible-cutoff")) params.overlapIncompatibleCutoff = vm["overlap-incompatible-cutoff"].as<double>();
 
 	if (vm.count("X-drop"))
 	{

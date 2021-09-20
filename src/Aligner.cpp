@@ -678,6 +678,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 void alignReads(AlignerParams params)
 {
 	assertSetNoRead("Preprocessing");
+	AlignmentSelection::OverlapIncompatibleFractionCutoff = params.overlapIncompatibleCutoff;
 
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;

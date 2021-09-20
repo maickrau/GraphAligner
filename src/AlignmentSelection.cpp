@@ -4,12 +4,11 @@
 #include "AlignmentSelection.h"
 #include "EValue.h"
 
-//an overlap which is larger than the fraction cutoff of the smaller alignment means the alignments are incompatible
-//eg alignments 12000bp and 15000bp, overlap of 12000*0.05 = 600bp means they are incompatible
-const float OverlapIncompatibleFractionCutoff = 0.05;
-
 namespace AlignmentSelection
 {
+	//an overlap which is larger than the fraction cutoff of the smaller alignment means the alignments are incompatible
+	//eg alignments 12000bp and 15000bp, overlap of 12000*0.05 = 600bp means they are incompatible
+	double OverlapIncompatibleFractionCutoff = 0.05;
 	bool alignmentIncompatible(const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right)
 	{
 		auto minOverlapLen = std::min((left.alignmentEnd - left.alignmentStart), (right.alignmentEnd - right.alignmentStart)) * OverlapIncompatibleFractionCutoff;
