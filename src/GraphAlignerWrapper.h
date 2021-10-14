@@ -60,7 +60,7 @@ public:
 };
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, bool quietMode, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, size_t DPRestartStride, int clipAmbiguousEnds);
-AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds);
+AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds, size_t maxTraceCount);
 
 void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment);
 void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge, bool includeCigar);

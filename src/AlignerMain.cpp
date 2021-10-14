@@ -75,6 +75,7 @@ int main(int argc, char** argv)
 		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit (int) (-1 for unlimited)")
 		("X-drop", boost::program_options::value<int>(), "X-drop alignment ending score cutoff (int)")
 		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (double) (default 0.66)")
+		("max-trace-count", boost::program_options::value<size_t>(), "backtrace from up to arg highest scoring local maxima per cluster (int) (-1 for all)")
 	;
 	boost::program_options::options_description hidden("hidden");
 	hidden.add_options()
@@ -151,6 +152,7 @@ int main(int argc, char** argv)
 	params.hpcCollapse = false;
 	params.includeCigar = true;
 	params.clipAmbiguousEnds = -1;
+	params.maxTraceCount = 10;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -210,6 +212,7 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
+	if (vm.count("max-trace-extend")) params.maxTraceCount = vm["max-trace-extend"].as<size_t>();
 
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();

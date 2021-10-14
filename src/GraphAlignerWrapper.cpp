@@ -12,42 +12,42 @@ size_t SeedCluster::size() const
 
 AlignmentResult AlignOneWay(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, bool quietMode, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, size_t DPRestartStride, int clipAmbiguousEnds)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {alignmentBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, preciseClippingIdentityCutoff, Xdropcutoff, 0, clipAmbiguousEnds};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {alignmentBandwidth, graph, std::numeric_limits<size_t>::max(), quietMode, preciseClippingIdentityCutoff, Xdropcutoff, 0, clipAmbiguousEnds, std::numeric_limits<size_t>::max()};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	return aligner.AlignOneWay(seq_id, sequence, reusableState, DPRestartStride);
 }
 
-AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds)
+AlignmentResult AlignClusters(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, size_t alignmentBandwidth, size_t maxCellsPerSlice, bool quietMode, const std::vector<SeedCluster>& seedHits, ReusableStateType& reusableState, double preciseClippingIdentityCutoff, int Xdropcutoff, double multimapScoreFraction, int clipAmbiguousEnds, size_t maxTraceCount)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {alignmentBandwidth, graph, maxCellsPerSlice, quietMode, preciseClippingIdentityCutoff, Xdropcutoff, multimapScoreFraction, clipAmbiguousEnds};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {alignmentBandwidth, graph, maxCellsPerSlice, quietMode, preciseClippingIdentityCutoff, Xdropcutoff, multimapScoreFraction, clipAmbiguousEnds, maxTraceCount};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	return aligner.AlignClusters(seq_id, sequence, seedHits, reusableState);
 }
 
 void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, .5, 0, 0, 0};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, .5, 0, 0, 0, 0};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	aligner.AddAlignment(seq_id, sequence, alignment);
 }
 
 void AddGAFLine(const AlignmentGraph& graph, const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment, bool cigarMatchMismatchMerge, bool includeCigar)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, graph, 1, true, .5, 0, 0, 0};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, graph, 1, true, .5, 0, 0, 0, 0};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	aligner.AddGAFLine(seq_id, sequence, alignment, cigarMatchMismatchMerge, includeCigar);
 }
 
 void AddCorrected(AlignmentResult::AlignmentItem& alignment)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, .5, 0, 0, 0};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, AlignmentGraph::DummyGraph(), 1, true, .5, 0, 0, 0, 0};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	aligner.AddCorrected(alignment);
 }
 
 std::vector<SeedCluster> ClusterSeeds(const AlignmentGraph& graph, const std::vector<SeedHit>& seedHits, const size_t seedClusterMinSize)
 {
-	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, graph, 1, true, .5, 0, 0, 0};
+	GraphAlignerCommon<size_t, int64_t, uint64_t>::Params params {1, graph, 1, true, .5, 0, 0, 0, 0};
 	GraphAligner<size_t, int64_t, uint64_t> aligner {params};
 	return aligner.clusterSeeds(seedHits, seedClusterMinSize);
 }

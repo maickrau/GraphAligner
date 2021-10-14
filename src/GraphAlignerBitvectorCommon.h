@@ -352,6 +352,21 @@ public:
 		return result;
 	}
 
+	class StartComparer
+	{
+	public:
+		StartComparer(const DPTable& slice) :
+		slice(slice)
+		{
+		}
+		bool operator()(const std::pair<size_t, size_t> left, const std::pair<size_t, size_t> right) const
+		{
+			return slice.slices[left.first].nodeMaxExactEndposScore.at(left.second) > slice.slices[right.first].nodeMaxExactEndposScore.at(right.second);
+		}
+	private:
+		const DPTable& slice;
+	};
+
 	static std::vector<OnewayTrace> getLocalMaximaTracesFromTable(const Params& params, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, bool sliceConsistency, bool multiseed, std::vector<ScoreType>& sliceMaxScores)
 	{
 		std::vector<OnewayTrace> result;
@@ -364,7 +379,7 @@ public:
 			localSliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
 		}
 		assert(localSliceMaxScores.size() <= sliceMaxScores.size());
-		std::vector<std::pair<size_t, size_t>> possibleStarts;
+		std::priority_queue<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>, StartComparer> possibleStartsQueue { StartComparer { slice } };
 		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
 		{
 			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
@@ -428,10 +443,28 @@ public:
 					}
 				}
 				if (notLocalMaximum) continue;
-				possibleStarts.emplace_back(currentSlice, node);
+				if (possibleStartsQueue.size() < params.maxTraceCount)
+				{
+					possibleStartsQueue.emplace(currentSlice, node);
+				}
+				else
+				{
+					if (slice.slices[currentSlice].nodeMaxExactEndposScore.at(node) > slice.slices[possibleStartsQueue.top().first].nodeMaxExactEndposScore.at(possibleStartsQueue.top().second))
+					{
+						possibleStartsQueue.pop();
+						possibleStartsQueue.emplace(currentSlice, node);
+					}
+				}
 			}
 		}
-		std::sort(possibleStarts.begin(), possibleStarts.end(), [&slice](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return slice.slices[left.first].nodeMaxExactEndposScore.at(left.second) > slice.slices[right.first].nodeMaxExactEndposScore.at(right.second); });
+		assert(possibleStartsQueue.size() <= params.maxTraceCount);
+		std::vector<std::pair<size_t, size_t>> possibleStarts;
+		possibleStarts.resize(possibleStartsQueue.size());
+		for (size_t i = possibleStartsQueue.size()-1; possibleStartsQueue.size() > 0; i--)
+		{
+			possibleStarts[i] = possibleStartsQueue.top();
+			possibleStartsQueue.pop();
+		}
 		std::vector<OnewayTrace> fakeTraces;
 		for (size_t starti = 0; starti < possibleStarts.size(); starti++)
 		{

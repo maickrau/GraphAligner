@@ -45,6 +45,7 @@ struct AlignerParams
 	bool includeCigar;
 	int clipAmbiguousEnds;
 	double overlapIncompatibleCutoff;
+	size_t maxTraceCount;
 };
 
 void alignReads(AlignerParams params);

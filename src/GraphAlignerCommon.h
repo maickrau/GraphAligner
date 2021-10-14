@@ -83,7 +83,7 @@ public:
 	class Params
 	{
 	public:
-		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, ScoreType Xdropcutoff, double multimapScoreFraction, ScoreType clipAmbiguousEnds) :
+		Params(LengthType alignmentBandwidth, const AlignmentGraph& graph, size_t maxCellsPerSlice, bool quietMode, double preciseClippingIdentityCutoff, ScoreType Xdropcutoff, double multimapScoreFraction, ScoreType clipAmbiguousEnds, size_t maxTraceCount) :
 		alignmentBandwidth(alignmentBandwidth),
 		graph(graph),
 		maxCellsPerSlice(maxCellsPerSlice),
@@ -92,7 +92,8 @@ public:
 		Xdropcutoff(Xdropcutoff),
 		multimapScoreFraction(multimapScoreFraction),
 		clipAmbiguousEnds(clipAmbiguousEnds),
-		discardCigar(false)
+		discardCigar(false),
+		maxTraceCount(maxTraceCount)
 		{
 		}
 		const LengthType alignmentBandwidth;
@@ -103,6 +104,7 @@ public:
 		const ScoreType Xdropcutoff;
 		const double multimapScoreFraction;
 		const ScoreType clipAmbiguousEnds;
+		const size_t maxTraceCount;
 		bool discardCigar;
 	};
 	struct TraceItem
