@@ -212,7 +212,7 @@ int main(int argc, char** argv)
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("cigar-match-mismatch")) params.cigarMatchMismatchMerge = true;
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
-	if (vm.count("max-trace-extend")) params.maxTraceCount = vm["max-trace-extend"].as<size_t>();
+	if (vm.count("max-trace-count")) params.maxTraceCount = vm["max-trace-count"].as<size_t>();
 
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
