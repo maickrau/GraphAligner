@@ -470,7 +470,7 @@ private:
 
 	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
 	{
-		return bvAligner.getMultiseedTraces(sequence, seedHits, reusableState, sliceMaxScores);
+		return bvAligner.getMultiseedTraces(sequence, revSequence, seedHits, reusableState, sliceMaxScores);
 	}
 
 	// Trace getTwoDirectionalTrace(const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
@@ -607,12 +607,11 @@ private:
 		for (size_t i = 0; i < traces.size(); i++)
 		{
 			assert(!traces[i].failed());
-			auto mergedTrace = clipAndAddBackwardTrace(std::move(traces[i]), reusableState, sequence, revSequence, 0);
-			if (mergedTrace.failed()) continue;
-			fixOverlapTrace(mergedTrace);
-			ScoreType alignmentXScore = (ScoreType)(mergedTrace.trace.back().DPposition.seqPos - mergedTrace.trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)mergedTrace.score;
+			fixReverseTraceSeqPosAndOrder(traces[i], sequence.size()-1, sequence);
+			fixOverlapTrace(traces[i]);
+			ScoreType alignmentXScore = (ScoreType)(traces[i].trace.back().DPposition.seqPos - traces[i].trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)traces[i].score;
 			if (alignmentXScore <= 0) continue;
-			result.emplace_back(std::move(mergedTrace), 0, std::numeric_limits<size_t>::max());
+			result.emplace_back(std::move(traces[i]), 0, std::numeric_limits<size_t>::max());
 			LengthType seqstart = 0;
 			LengthType seqend = 0;
 			assert(result.back().trace->trace.size() > 0);

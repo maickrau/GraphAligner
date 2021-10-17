@@ -42,17 +42,44 @@ public:
 	{
 	}
 
-	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
+	std::vector<OnewayTrace> getMultiseedTraces(const std::string_view& sequence, const std::string_view& bwSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
+	{
+		std::vector<OnewayTrace> traces = getMultiseedTracesOneWay(sequence, seedHits, reusableState, sliceMaxScores);
+		std::vector<OnewayTrace> revTraces;
+		for (const auto& fwTrace : traces)
+		{
+			auto fwNodeIndex = fwTrace.trace[0].DPposition.node;
+			size_t bigraphNodeId = params.graph.nodeIDs[fwNodeIndex];
+			size_t bigraphOffset = fwTrace.trace[0].DPposition.nodeOffset + params.graph.nodeOffset[fwNodeIndex];
+			auto reversePos = params.graph.GetReversePosition(bigraphNodeId, bigraphOffset);
+
+			assert(reversePos.second < params.graph.originalNodeSize.at(reversePos.first));
+			size_t nodeIndex = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
+			assert(fwTrace.trace[0].DPposition.seqPos < sequence.size());
+			size_t seqPos = sequence.size() - 1 - fwTrace.trace[0].DPposition.seqPos;
+			assert(seqPos < sequence.size());
+
+			std::vector<ProcessedSeedHit> fakeBwSeeds;
+			fakeBwSeeds.emplace_back(seqPos, nodeIndex);
+
+			std::vector<ScoreType> fakeMaxScores;
+			fakeMaxScores.resize(sliceMaxScores.size(), 0);
+			auto bwTraces = getMultiseedTracesOneWay(bwSequence, fakeBwSeeds, reusableState, fakeMaxScores);
+			for (size_t i = 0; i < bwTraces.size(); i++)
+			{
+				revTraces.emplace_back(std::move(bwTraces[i]));
+			}
+		}
+		return revTraces;
+	}
+
+	std::vector<OnewayTrace> getMultiseedTracesOneWay(const std::string_view& sequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
 	{
 		size_t numSlices = (sequence.size() + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 		auto initialSlice = BV::getInitialEmptySlice();
 		auto slice = getMultiseedSlices(sequence, initialSlice, numSlices, reusableState, seedHits, sliceMaxScores);
 		std::vector<OnewayTrace> results = BV::getLocalMaximaTracesFromTable(params, sequence, slice, reusableState, true, true, sliceMaxScores);
 		removeDuplicateTraces(results);
-		for (size_t i = 0; i < results.size(); i++)
-		{
-			std::reverse(results[i].trace.begin(), results[i].trace.end());
-		}
 		return results;
 	}
 
