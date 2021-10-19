@@ -361,7 +361,7 @@ private:
 				verifyTrace(bwTrace.trace, backwardPart, bwTrace.score);
 				std::reverse(bwTrace.trace.begin(), bwTrace.trace.end());
 #endif
-				fixReverseTraceSeqPosAndOrder(bwTrace, fwTrace.trace[0].DPposition.seqPos-1, fwSequence);
+				fixReverseTraceSeqPosAndOrder(bwTrace, fwTrace.trace[0].DPposition.seqPos-1, fwSequence, bwSequence);
 			}
 		}
 
@@ -560,10 +560,32 @@ private:
 	}
 
 	//end is the (fw) index of the last alignable base pair, not one beyond
-	void fixReverseTraceSeqPosAndOrder(OnewayTrace& trace, LengthType end, const std::string& sequence) const
+	void fixReverseTraceSeqPosAndOrder(OnewayTrace& trace, LengthType end, const std::string& sequence, const std::string& revSequence) const
 	{
 		if (trace.trace.size() == 0) return;
-		trace.score = 0;
+		std::vector<bool> diagonalIndices;
+		diagonalIndices.resize(trace.trace.size(), false);
+		for (size_t i = 0; i < trace.trace.size(); i++)
+		{
+			bool diagonal = false;
+			if (i == trace.trace.size()-1)
+			{
+				diagonal = true;
+			}
+			else
+			{
+				if (trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos)
+				{
+					if (trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset || trace.trace[i+1].nodeSwitch)
+					{
+						diagonal = true;
+					}
+				}
+			}
+			diagonalIndices[i] = diagonal;
+		}
+		assert(diagonalIndices[0]);
+		assert(diagonalIndices.back());
 		for (size_t i = 0; i < trace.trace.size() - 1; i++)
 		{
 			trace.trace[i].nodeSwitch = trace.trace[i+1].nodeSwitch;
@@ -581,21 +603,41 @@ private:
 			assert(trace.trace[i].DPposition.seqPos < sequence.size());
 			trace.trace[i].sequenceCharacter = sequence[trace.trace[i].DPposition.seqPos];
 			trace.trace[i].graphCharacter = CommonUtils::Complement(trace.trace[i].graphCharacter);
-			if (i == 0 && !Common::characterMatch(trace.trace[0].sequenceCharacter, trace.trace[0].graphCharacter)) trace.score += 1;
-			if (i > 0)
+		}
+		trace.score = 0;
+		size_t lastDiagonalPos;
+		bool lastNodeSwitch;
+		for (size_t i = 0; i < trace.trace.size(); i++)
+		{
+			if (diagonalIndices[i])
 			{
-				if (trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos)
+				lastDiagonalPos = i;
+				lastNodeSwitch = trace.trace[i].nodeSwitch;
+				if (!Common::characterMatch(trace.trace[i].sequenceCharacter, trace.trace[i].graphCharacter)) trace.score += 1;
+			}
+			else
+			{
+				assert(i < trace.trace.size()-1);
+				assert((trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos && trace.trace[i].DPposition.node == trace.trace[i+1].DPposition.node && trace.trace[i].DPposition.nodeOffset == trace.trace[i+1].DPposition.nodeOffset && !trace.trace[i].nodeSwitch) || (trace.trace[i].DPposition.seqPos == trace.trace[i+1].DPposition.seqPos && (trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset || trace.trace[i].nodeSwitch)));
+				if (trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos)
 				{
-					trace.score += 1;
+					trace.trace[i].DPposition.node = trace.trace[lastDiagonalPos].DPposition.node;
+					trace.trace[i].DPposition.nodeOffset = trace.trace[lastDiagonalPos].DPposition.nodeOffset;
+					trace.trace[lastDiagonalPos].nodeSwitch = false;
+					if (!diagonalIndices[i+1])
+					{
+						trace.trace[i].nodeSwitch = false;
+					}
+					else
+					{
+						trace.trace[i].nodeSwitch = lastNodeSwitch;
+					}
 				}
-				else if (!trace.trace[i-1].nodeSwitch && trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && trace.trace[i].DPposition.nodeOffset == trace.trace[i-1].DPposition.nodeOffset)
+				else
 				{
-					trace.score += 1;
+					trace.trace[i].DPposition.seqPos = trace.trace[lastDiagonalPos].DPposition.seqPos;
 				}
-				else if (!Common::characterMatch(trace.trace[i].sequenceCharacter, trace.trace[i].graphCharacter))
-				{
-					trace.score += 1;
-				}
+				trace.score += 1;
 			}
 		}
 	}
@@ -607,7 +649,7 @@ private:
 		for (size_t i = 0; i < traces.size(); i++)
 		{
 			assert(!traces[i].failed());
-			fixReverseTraceSeqPosAndOrder(traces[i], sequence.size()-1, sequence);
+			fixReverseTraceSeqPosAndOrder(traces[i], sequence.size()-1, sequence, revSequence);
 			fixOverlapTrace(traces[i]);
 			ScoreType alignmentXScore = (ScoreType)(traces[i].trace.back().DPposition.seqPos - traces[i].trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)traces[i].score;
 			if (alignmentXScore <= 0) continue;
