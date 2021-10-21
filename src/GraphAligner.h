@@ -576,6 +576,7 @@ private:
 			{
 				if (trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos)
 				{
+					assert(trace.trace[i].DPposition.seqPos == trace.trace[i+1].DPposition.seqPos+1);
 					if (trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset || trace.trace[i+1].nodeSwitch)
 					{
 						diagonal = true;
@@ -640,6 +641,70 @@ private:
 				trace.score += 1;
 			}
 		}
+		for (size_t i = 1; i < trace.trace.size(); i++)
+		{
+			assert(trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos || trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos+1);
+		}
+	}
+
+	void fixTraceConsecutiveIndels(OnewayTrace& trace) const
+	{
+		size_t skipped = 0;
+		for (size_t i = 1; i < trace.trace.size()-1; i++)
+		{
+			size_t previousI = i - skipped - 1;
+			bool prevDel = false;
+			bool prevIns = false;
+			bool nextDel = false;
+			bool nextIns = false;
+			if (trace.trace[i].DPposition.seqPos == trace.trace[previousI].DPposition.seqPos)
+			{
+				prevDel = true;
+				assert(trace.trace[previousI].nodeSwitch || trace.trace[i].DPposition.node != trace.trace[previousI].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[previousI].DPposition.nodeOffset);
+			}
+			if (!trace.trace[previousI].nodeSwitch && trace.trace[previousI].DPposition.node == trace.trace[i].DPposition.node && trace.trace[previousI].DPposition.nodeOffset == trace.trace[i].DPposition.nodeOffset)
+			{
+				prevIns = true;
+				assert(trace.trace[previousI].DPposition.seqPos != trace.trace[i].DPposition.seqPos);
+			}
+			assert(!prevDel || !prevIns);
+			if (trace.trace[i].DPposition.seqPos == trace.trace[i+1].DPposition.seqPos)
+			{
+				nextDel = true;
+				assert(trace.trace[i].nodeSwitch || trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset);
+			}
+			if (!trace.trace[i].nodeSwitch && trace.trace[i].DPposition.node == trace.trace[i+1].DPposition.node && trace.trace[i].DPposition.nodeOffset == trace.trace[i+1].DPposition.nodeOffset)
+			{
+				nextIns = true;
+				assert(trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos);
+			}
+			assert(!nextIns || !nextDel);
+			if (prevDel && nextIns)
+			{
+				skipped += 1;
+				if (trace.trace[i].nodeSwitch) trace.trace[previousI].nodeSwitch = true;
+			}
+			else if (prevIns && nextDel)
+			{
+				skipped += 1;
+				if (trace.trace[i].nodeSwitch) trace.trace[previousI].nodeSwitch = true;
+			}
+			else
+			{
+				if (skipped > 0)
+				{
+					trace.trace[i-skipped] = trace.trace[i];
+				}
+			}
+		}
+		if (skipped > 0)
+		{
+			trace.trace[trace.trace.size()-1-skipped] = trace.trace[trace.trace.size()-1];
+			for (size_t i = 0; i < skipped; i++)
+			{
+				trace.trace.pop_back();
+			}
+		}
 	}
 
 	std::vector<AlignmentResult::AlignmentItem> getAlignmentsFromMultiseeds(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const
@@ -649,6 +714,7 @@ private:
 		for (size_t i = 0; i < traces.size(); i++)
 		{
 			assert(!traces[i].failed());
+			fixTraceConsecutiveIndels(traces[i]);
 			fixReverseTraceSeqPosAndOrder(traces[i], sequence.size()-1, sequence, revSequence);
 			fixOverlapTrace(traces[i]);
 			ScoreType alignmentXScore = (ScoreType)(traces[i].trace.back().DPposition.seqPos - traces[i].trace[0].DPposition.seqPos + 1)*100 - params.XscoreErrorCost * (ScoreType)traces[i].score;
