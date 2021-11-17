@@ -406,6 +406,19 @@ public:
 	{
 		return vectorMap != nullptr;
 	}
+	void clear()
+	{
+		assert(!hasVectorMapCurrently());
+		assert(activeVectorMapIndices.size() == 0);
+		if (nodes != nullptr)
+		{
+			nodes->clear();
+		}
+		else
+		{
+			addEmptyNodeMap(1);
+		}
+	}
 private:
 	template <bool HasVectorMap = UseVectorMap>
 	typename std::enable_if<HasVectorMap>::type clearVectorMap()

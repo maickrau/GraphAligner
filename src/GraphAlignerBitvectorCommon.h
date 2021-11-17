@@ -379,11 +379,12 @@ public:
 			localSliceMaxScores[i] = slice.slices[i].maxExactEndposScore;
 		}
 		assert(localSliceMaxScores.size() <= sliceMaxScores.size());
-		std::priority_queue<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>, StartComparer> possibleStartsQueue { StartComparer { slice } };
+		std::vector<std::pair<size_t, size_t>> possibleStarts;
 		for (size_t currentSlice = slice.slices.size()-1; currentSlice > 0; currentSlice--)
 		{
 			assert(slice.slices[currentSlice].nodeMaxExactEndposScore.size() == slice.slices[currentSlice].scores.size());
 			if (slice.slices[currentSlice].maxExactEndposScore <= 0) continue;
+			std::priority_queue<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>, StartComparer> possibleStartsQueue { StartComparer { slice } };
 			for (auto pair : slice.slices[currentSlice].scores)
 			{
 				if (!pair.second.exists) continue;
@@ -456,15 +457,14 @@ public:
 					}
 				}
 			}
+			assert(possibleStartsQueue.size() <= params.maxTraceCount);
+			while (possibleStartsQueue.size() > 0)
+			{
+				possibleStarts.emplace_back(possibleStartsQueue.top());
+				possibleStartsQueue.pop();
+			}
 		}
-		assert(possibleStartsQueue.size() <= params.maxTraceCount);
-		std::vector<std::pair<size_t, size_t>> possibleStarts;
-		possibleStarts.resize(possibleStartsQueue.size());
-		for (size_t i = possibleStartsQueue.size()-1; possibleStartsQueue.size() > 0; i--)
-		{
-			possibleStarts[i] = possibleStartsQueue.top();
-			possibleStartsQueue.pop();
-		}
+		std::sort(possibleStarts.begin(), possibleStarts.end(), [&slice](const std::pair<size_t, size_t> left, const std::pair<size_t, size_t> right) { return slice.slices[left.first].nodeMaxExactEndposScore.at(left.second) > slice.slices[right.first].nodeMaxExactEndposScore.at(right.second); } );
 		std::vector<OnewayTrace> fakeTraces;
 		for (size_t starti = 0; starti < possibleStarts.size(); starti++)
 		{

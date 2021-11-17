@@ -797,6 +797,8 @@ private:
 		DPSlice lastSlice = initialSlice;
 		result.slices.push_back(initialSlice);
 		size_t lastSeedHit = 0;
+		ScoreType XDropCurrentBest = 0;
+		assert(params.Xdropcutoff > 0);
 		for (size_t slice = 0; slice < numSlices; slice++)
 		{
 			int bandwidth = params.alignmentBandwidth;
@@ -820,6 +822,22 @@ private:
 			// if (possibleScoreRemaining < sliceMaxScores[slice]) lastSeedHit = nextSeedHit;
 			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, true);
 			lastSeedHit = nextSeedHit;
+			XDropCurrentBest = std::max(XDropCurrentBest, newSlice.maxExactEndposScore);
+			if (newSlice.maxExactEndposScore < XDropCurrentBest - params.Xdropcutoff)
+			{
+				for (auto node : newSlice.scores)
+				{
+					reusableState.currentBand[node.first] = false;
+				}
+				newSlice.minScore = seedSlice.getScoreBeforeStart();
+				newSlice.minScoreNode = std::numeric_limits<LengthType>::max();
+				newSlice.maxExactEndposScore = std::numeric_limits<ScoreType>::min();
+				newSlice.maxExactEndposNode = std::numeric_limits<LengthType>::max();
+				newSlice.nodeMaxExactEndposScore.clear();
+				newSlice.seedstartNodes.clear();
+				newSlice.scores.clear();
+				XDropCurrentBest = 0;
+			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
 			auto time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
