@@ -153,6 +153,7 @@ int main(int argc, char** argv)
 	params.includeCigar = true;
 	params.clipAmbiguousEnds = -1;
 	params.maxTraceCount = 10;
+	params.overlapIncompatibleCutoff = 0.3;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
