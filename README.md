@@ -35,9 +35,9 @@ See [Parameters](#parameters), the option `GraphAligner --help` and the subsecti
 
 The command above outputs the following alignment in `test/aln.gaf`:
 
-`read	71	0	71	+	>1>2>4	87	3	73	66	72	255	NM:i:6	dv:f:0.0833333	id:f:0.916667	cg:Z:4M1M2M1M1I37M1D5M1I5M1M13M`
+`read	71	0	71	+	>1>2>4	87	3	73	67	72	60	NM:i:5	AS:f:56.3	dv:f:0.0694444	id:f:0.930556	cg:Z:4=1X2=1I38=1D5=1I5=1X13=`
 
-which aligned the read to the nodes 1,2,4 with an identity of 91.66%. See [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf) for more information about the output format. Alternatively try `-a aln.gam` for output compatible with [vg](https://github.com/vgteam/vg/).
+which aligned the read to the nodes 1,2,4 with an identity of 93%. See [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf) for more information about the output format. Alternatively try `-a aln.gam` for output compatible with [vg](https://github.com/vgteam/vg/).
 
 The parameter `-x vg` uses a parameter preset for aligning reads to a variation graph. Other options are `-x dbg` for aligning to a de Bruijn graph.
 
@@ -65,10 +65,13 @@ The algorithm starts using the initial bandwidth. Should it detect that the alig
 - `-f` input reads. Format .fasta / .fastq / .fasta.gz / .fastq.gz. You can input multiple files with `-f file1 -f file2 ...` or `-f file1 file2 ...`
 - `-t` number of aligner threads. The program also uses two IO threads in addition to these.
 - `-a` output file name. Format .gam or .json
-- `--try-all-seeds` extend from all seeds. Normally a seed is not extended if it looks like a false positive.
-- `--all-alignments` output all alignments. Normally only a set of non-overlapping partial alignments is returned. Use this to also include partial alignments which overlap each others. This also forces `--try-all-seeds`.
-- `--global-alignment` force the read to be aligned end-to-end. Normally the alignment is stopped if the score gets too poor. This forces the alignment to continue to the end of the read regardless of score. If you use this you should do some other filtering on the alignments to remove false alignments.
 - `-x` parameter preset. Use `-x vg` for aligning to variation graphs and other simple graphs, and `-x dbg` for aligning to de Bruijn graphs.
+
+All parameters below are optional.
+
+- `--precise-clipping` use arg as the identity threshold for a valid alignment. Recommended to be less than the accuracy of the reads, for example 0.75 for ONT, 0.9 for HiFi, 0.95 for assembly-to-assembly.
+- `--min-alignment-score` discard alignments whose score is less than this.
+- `--multimap-score-fraction` alignment score fraction for including secondary alignments. Alignments whose alignment score is less than arg as a fraction of the best scoring overlapping alignment per read are discarded. Lower values include more poor secondary alignments and higher values less.
 
 Seeding:
 
@@ -85,6 +88,4 @@ Seeding:
 Extension:
 
 - `-b` alignment bandwidth. Unlike in linear alignment, this is the score difference between the minimum score in a row and the score where a cell falls out of the band. Values recommended to be between 1-35.
-- `-B` ramp bandwidth. If a read cannot be aligned with the alignment bandwidth, switch to the ramp bandwidth at the problematic location. Values recommended to be between 1-35.
 - `-C` tangle effort. Determines how much effort GraphAligner spends on tangled areas. Higher values use more CPU and memory and have a higher chance of aligning through tangles. Lower values are faster but might return an inoptimal or a partial alignment. Use for complex graphs (eg. de Bruijn graphs of mammalian genomes) to limit the runtime in difficult areas. Values recommended to be between 1'000 - 500'000.
-- `--high-memory` high memory mode. Runs a bit faster but uses a LOT more memory
