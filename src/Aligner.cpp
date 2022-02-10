@@ -310,7 +310,7 @@ void writeGAFToQueue(moodycamel::ProducerToken& token, const AlignerParams& para
 	QueueInsertSlowly(token, alignmentsOut, strstr.str());
 }
 
-void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, size_t maxOverlap, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
+void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams& params, const std::string& readName, const std::string& original, moodycamel::ConcurrentQueue<std::string*>& correctedOut, const AlignmentResult& alignments)
 {
 	std::stringstream strstr;
 	zstr::ostream *compressed = nullptr;
@@ -329,7 +329,7 @@ void writeCorrectedToQueue(moodycamel::ProducerToken& token, const AlignerParams
 		corrections.back().corrected = alignments.alignments[i].corrected;
 	}
 	std::sort(corrections.begin(), corrections.end(), [](const Correction& left, const Correction& right) { return left.startIndex < right.startIndex; });
-	std::string corrected = getCorrected(original, corrections, maxOverlap);
+	std::string corrected = getCorrected(original, corrections, 1000); // todo better maxOverlap?
 	if (compressed != nullptr)
 	{
 		(*compressed) << ">" << readName << std::endl;
@@ -457,7 +457,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
 					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
 					continue;
 				}
 				auto clusterTimeStart = std::chrono::system_clock::now();
@@ -482,7 +482,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 					cerroutput << "Read " << fastq->seq_id << " has no seed clusters" << BufferedWriter::Flush;
 					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
 					continue;
 				}
 				stats.seedsFound += seeds.size();
@@ -524,7 +524,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 			try
 			{
-				if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+				if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
 			}
 			catch (const ThreadReadAssertion::AssertionFailure& a)
 			{
@@ -603,7 +603,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			if (params.outputGAMFile != "") writeGAMToQueue(GAMToken, params, GAMOut, alignments);
 			if (params.outputJSONFile != "") writeJSONToQueue(JSONToken, params, JSONOut, alignments);
 			if (params.outputGAFFile != "") writeGAFToQueue(GAFToken, params, GAFOut, alignments);
-			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, alignmentGraph.getDBGoverlap(), correctedOut, alignments);
+			if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
 			if (params.outputCorrectedClippedFile != "") writeCorrectedClippedToQueue(clippedToken, params, correctedClippedOut, alignments);
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -651,7 +651,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 		}
 		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
 		{
-			auto graph = GfaGraph::LoadFromFile(graphFile, true);
+			auto graph = GfaGraph::LoadFromFile(graphFile);
 			if (loadMxmSeeder)
 			{
 				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;

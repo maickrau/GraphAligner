@@ -6,6 +6,21 @@
 #include "ThreadReadAssertion.h"
 #include "CommonUtils.h"
 
+bool operator<(const NodePos& left, const NodePos& right)
+{
+	if (left.id < right.id) return true;
+	if (right.id > left.id) return false;
+	if (!left.end && right.end) return true;
+	if (left.end && !right.end) return false;
+	assert(left == right);
+	return false;
+}
+
+bool operator>(const NodePos& left, const NodePos& right)
+{
+	return right < left;
+}
+
 NodePos::NodePos() :
 id(0),
 end(false)
@@ -35,192 +50,38 @@ NodePos NodePos::Reverse() const
 
 GfaGraph::GfaGraph() :
 nodes(),
-edges(),
-varyingOverlaps(),
-edgeOverlap(std::numeric_limits<size_t>::max())
+edges()
 {
 }
 
-GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& ids) const
-{
-	GfaGraph result;
-	result.edgeOverlap = edgeOverlap;
-	for (auto node : ids)
-	{
-		if (nodes.count(node) == 0) continue;
-		result.nodes[node] = nodes.at(node);
-		if (originalNodeName.count(node) == 1) result.originalNodeName[node] = originalNodeName.at(node);
-		if (tags.count(node) == 1) result.tags[node] = tags.at(node);
-		NodePos end {node, true};
-		if (edges.count(end) == 1)
-		{
-			for (auto target : edges.at(end))
-			{
-				if (ids.count(target.id) == 0) continue;
-				if (varyingOverlaps.count(std::make_pair(end, target)) == 1) result.varyingOverlaps[std::make_pair(end, target)] = varyingOverlaps.at(std::make_pair(end, target));
-				result.edges[end].push_back(target);
-			}
-		}
-		NodePos start {node, false};
-		if (edges.count(start) == 1)
-		{
-			for (auto target : edges.at(start))
-			{
-				if (ids.count(target.id) == 0) continue;
-				if (varyingOverlaps.count(std::make_pair(start, target)) == 1) result.varyingOverlaps[std::make_pair(start, target)] = varyingOverlaps.at(std::make_pair(start, target));
-				result.edges[start].push_back(target);
-			}
-		}
-	}
-	return result;
-}
-
-GfaGraph GfaGraph::GetSubgraph(const std::unordered_set<int>& nodeids, const std::unordered_set<std::pair<NodePos, NodePos>>& selectedEdges) const
-{
-	GfaGraph result;
-	result.edgeOverlap = edgeOverlap;
-	for (auto node : nodeids)
-	{
-		if (nodes.count(node) == 0) continue;
-		result.nodes[node] = nodes.at(node);
-		if (tags.count(node) == 1) result.tags[node] = tags.at(node);
-		NodePos end {node, true};
-		if (edges.count(end) == 1)
-		{
-			for (auto target : edges.at(end))
-			{
-				if (nodeids.count(target.id) == 0) continue;
-				if (selectedEdges.count({end, target}) == 1 || selectedEdges.count({target, end}) == 1) result.edges[end].push_back(target);
-			}
-		}
-		NodePos start {node, false};
-		if (edges.count(start) == 1)
-		{
-			for (auto target : edges.at(start))
-			{
-				if (nodeids.count(target.id) == 0) continue;
-				if (selectedEdges.count({start, target}) == 1 || selectedEdges.count({target, start}) == 1) result.edges[start].push_back(target);
-			}
-		}
-	}
-	return result;
-}
-
-void GfaGraph::SaveToFile(std::string filename) const
-{
-	std::ofstream file {filename};
-	SaveToStream(file);
-}
-
-std::string GfaGraph::nodeName(int nodeId) const
-{
-	if (originalNodeName.count(nodeId) == 1) return originalNodeName.at(nodeId);
-	return std::to_string(nodeId);
-}
-
-void GfaGraph::SaveToStream(std::ostream& file) const
-{
-	for (auto node : nodes)
-	{
-		file << "S\t" << nodeName(node.first) << "\t" << node.second;
-		if (tags.count(node.first) == 1) file << "\t" << tags.at(node.first);
-		file << std::endl;
-	}
-	for (auto edge : edges)
-	{
-		for (auto target : edge.second)
-		{
-			auto overlap = edgeOverlap;
-			if (varyingOverlaps.count(std::make_pair(edge.first, target)) == 1)
-			{
-				overlap = varyingOverlaps.at(std::make_pair(edge.first, target));
-			}
-			file << "L\t" << nodeName(edge.first.id) << "\t" << (edge.first.end ? "+" : "-") << "\t" << nodeName(target.id) << "\t" << (target.end ? "+" : "-") << "\t" << overlap << "M" << std::endl;
-		}
-	}
-}
-
-void GfaGraph::AddSubgraph(const GfaGraph& other)
-{
-	for (auto node : other.nodes)
-	{
-		assert(nodes.count(node.first) == 0 || nodes.at(node.first) == node.second);
-		nodes[node.first] = node.second;
-		if (other.tags.count(node.first) == 1) tags[node.first] = other.tags.at(node.first);
-	}
-	for (auto edge : other.edges)
-	{
-		for (auto target : edge.second)
-		{
-			edges[edge.first].push_back(target);
-			if (other.varyingOverlaps.count(std::make_pair(edge.first, target)) == 1)
-			{
-				varyingOverlaps[std::make_pair(edge.first, target)] = other.varyingOverlaps.at(std::make_pair(edge.first, target));
-			}
-		}
-	}
-}
-
-GfaGraph GfaGraph::LoadFromFile(std::string filename, bool allowVaryingOverlaps, bool warnAboutMissingNodes)
+GfaGraph GfaGraph::LoadFromFile(std::string filename)
 {
 	std::ifstream file {filename};
-	return LoadFromStream(file, allowVaryingOverlaps, warnAboutMissingNodes);
+	return LoadFromStream(file);
 }
 
-int getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name)
+size_t getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name, std::vector<std::string>& nodeSeqs, std::vector<std::string>& originalNodeName)
 {
 	auto found = assigned.find(name);
 	if (found == assigned.end())
 	{
+		assert(assigned.size() == nodeSeqs.size());
+		assert(assigned.size() == originalNodeName.size());
 		int result = assigned.size();
 		assigned[name] = result;
+		originalNodeName.emplace_back(name);
+		nodeSeqs.push_back("*");
 		return result;
 	}
+	assert(found->second < originalNodeName.size());
+	assert(name == originalNodeName[found->second]);
 	return found->second;
 }
 
-void GfaGraph::numberBackToIntegers()
+GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 {
-	std::unordered_map<int, std::string> newNodes;
-	std::unordered_map<NodePos, std::vector<NodePos>> newEdges;
-	std::unordered_map<std::pair<NodePos, NodePos>, size_t> newVaryingOverlaps;
-	std::unordered_map<int, std::string> newTags;
-	for (auto pair : varyingOverlaps)
-	{
-		auto key = pair.first;
-		key.first.id = std::stoi(originalNodeName[key.first.id]);
-		key.second.id = std::stoi(originalNodeName[key.second.id]);
-		newVaryingOverlaps[key] = pair.second;
-	}
-	for (auto pair : nodes)
-	{
-		assert(originalNodeName.count(pair.first) == 1);
-		newNodes[std::stoi(originalNodeName[pair.first])] = pair.second;
-	}
-	for (auto edge : edges)
-	{
-		for (auto target : edge.second)
-		{
-			newEdges[NodePos { std::stoi(originalNodeName[edge.first.id]), edge.first.end }].push_back(NodePos { std::stoi(originalNodeName[target.id]), target.end });
-		}
-	}
-	for (auto tag : tags)
-	{
-		newTags[std::stoi(originalNodeName[tag.first])] = tag.second;
-	}
-	varyingOverlaps = std::move(newVaryingOverlaps);
-	nodes = std::move(newNodes);
-	edges = std::move(newEdges);
-	tags = std::move(newTags);
-	originalNodeName.clear();
-}
-
-GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps, bool warnAboutMissingNodes)
-{
-	std::unordered_map<std::string, int> nameMapping;
+	std::unordered_map<std::string, size_t> nameMapping;
 	GfaGraph result;
-	bool hasVaryingOverlaps = false;
-	bool hasUnspecifiedOverlaps = false;
 	while (file.good())
 	{
 		std::string line;
@@ -237,21 +98,11 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			sstr >> dummy;
 			assert(dummy == "S");
 			sstr >> idstr;
-			int id = getNameId(nameMapping, idstr);
+			size_t id = getNameId(nameMapping, idstr, result.nodes, result.originalNodeName);
 			sstr >> seq;
 			if (seq == "*") throw CommonUtils::InvalidGraphException { std::string { "Nodes without sequence (*) are not currently supported (nodeid " + idstr + ")" } };
 			assert(seq.size() >= 1);
-			std::string tags;
-			while (sstr.good())
-			{
-				char c = sstr.get();
-				if (sstr.good() && c != '\r' && c != '\n' && (c != '\t' || tags.size() > 0))
-				{
-					tags += c;
-				}
-			}
 			result.nodes[id] = seq;
-			if (tags.size() > 0) result.tags[id] = tags;
 		}
 		if (line[0] == 'L')
 		{
@@ -265,10 +116,10 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			sstr >> dummy;
 			assert(dummy == "L");
 			sstr >> fromstr;
-			int from = getNameId(nameMapping, fromstr);
+			size_t from = getNameId(nameMapping, fromstr, result.nodes, result.originalNodeName);
 			sstr >> fromstart;
 			sstr >> tostr;
-			int to = getNameId(nameMapping, tostr);
+			size_t to = getNameId(nameMapping, tostr, result.nodes, result.originalNodeName);
 			sstr >> toend;
 			assert(fromstart == "+" || fromstart == "-");
 			assert(toend == "+" || toend == "-");
@@ -277,8 +128,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 			test = sstr.peek();
 			if (test == '*')
 			{
-				overlap = 0;
-				hasUnspecifiedOverlaps = true;
+				throw CommonUtils::InvalidGraphException { "Unspecified edge overlaps (*) are not supported" };
 			}
 			else
 			{
@@ -287,173 +137,63 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file, bool allowVaryingOverlaps,
 				sstr >> dummyc;
 				assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
 			}
-			if (overlap < 0) throw CommonUtils::InvalidGraphException { "Edge overlap cannot be negative. Fix the graph" };
+			if (overlap < 0) throw CommonUtils::InvalidGraphException { std::string { "Edge overlap between nodes " + std::to_string(from.id) + " and " + std::to_string(to.id) + " is negative" } };
 			assert(overlap >= 0);
-			if (result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
-			{
-				hasVaryingOverlaps = true;
-			}
-			if (!allowVaryingOverlaps && result.edgeOverlap != std::numeric_limits<size_t>::max() && (size_t)overlap != result.edgeOverlap)
-			{
-				throw CommonUtils::InvalidGraphException { "Varying edge overlaps are not allowed" };
-			}
-			result.edgeOverlap = overlap;
 			NodePos frompos {from, fromstart == "+"};
 			NodePos topos {to, toend == "+"};
-			result.edges[frompos].push_back(topos);
-			if (allowVaryingOverlaps)
-			{
-				result.varyingOverlaps[std::make_pair(frompos, topos)] = overlap;
-			}
+			result.edges.emplace_back(frompos, topos, overlap);
+			result.edges.emplace_back(topos.Reverse(), frompos.Reverse(), overlap);
 		}
 	}
-	if (hasVaryingOverlaps) result.edgeOverlap = 0;
-	if (result.edges.size() == 0) result.edgeOverlap = 0;
-	bool allIdsIntegers = true;
-	for (auto pair : nameMapping)
+	for (size_t i = 0; i < result.nodes.size(); i++)
 	{
-		assert(result.originalNodeName.count(pair.second) == 0);
-		result.originalNodeName[pair.second] = pair.first;
-		if (allIdsIntegers)
+		if (result.nodes[i] != "*") continue;
+		throw CommonUtils::InvalidGraphException { std::string { "Node " + result.originalNodeName[i] + " is present in edges but missing in nodes" } };
+	}
+	for (auto t : result.edges)
+	{
+		auto from = std::get<0>(t);
+		auto to = std::get<1>(t);
+		auto overlap = std::get<2>(t);
+		assert(from.id < result.nodes.size());
+		assert(to.id < result.nodes.size());
+		if (result.nodes.at(from.id).size() <= overlap || result.nodes.at(to.id).size() <= overlap)
 		{
-			char* p = (char*)pair.first.c_str();
-			long int test = strtol(pair.first.c_str(), &p, 10);
-			if (*p != '\0')
-			{
-				allIdsIntegers = false;
-			}
-			else
-			{
-				if (test <= std::numeric_limits<int>::min() || test >= std::numeric_limits<int>::max()) allIdsIntegers = false;
-			}
+			throw CommonUtils::InvalidGraphException { std::string { "Overlap between nodes " + result.originalNodeName.at(from.id) + " and " + result.originalNodeName.at(to.id) + " fully contains one of the nodes. Fix the overlap to be strictly smaller than both nodes" } };
 		}
 	}
-	if (allowVaryingOverlaps)
+	for (const auto& t : result.edges)
 	{
-		for (auto pair : result.varyingOverlaps)
+		if (std::get<0>(t).id >= result.nodes.size() || result.nodes[std::get<0>(t).id] == "*")
 		{
-			auto from = pair.first.first;
-			auto to = pair.first.second;
-			auto overlap = pair.second;
-			assert(result.nodes.count(from.id) == 1);
-			assert(result.nodes.count(to.id) == 1);
-			if (result.nodes.at(from.id).size() <= overlap || result.nodes.at(to.id).size() <= overlap)
-			{
-				throw CommonUtils::InvalidGraphException { std::string{"Overlap between nodes "} + result.originalNodeName.at(from.id) + " and " + result.originalNodeName.at(to.id) + " is too big. Fix the overlap to be smaller than both nodes" };
-			}
+			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}
-	}
-	// todo: similar check when constant overlaps are used
-	if (allIdsIntegers)
-	{
-		result.numberBackToIntegers();
-	}
-	std::vector<NodePos> nonexistantEdges;
-	bool hasNonexistant = false;
-	for (auto& edge : result.edges)
-	{
-		if (result.nodes.count(edge.first.id) == 0)
+		if (std::get<1>(t).id >= result.nodes.size() || result.nodes[std::get<1>(t).id] == "*")
 		{
-			nonexistantEdges.push_back(edge.first);
-			if (warnAboutMissingNodes)
-			{
-				for (auto target : edge.second)
-				{
-					std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(target.id) == 1 ? result.originalNodeName.at(target.id) : std::to_string(target.id)) << (target.end ? "+" : "-") << std::endl;
-					hasNonexistant = true;
-				}
-			}
-			continue;
-		}
-		for (size_t i = edge.second.size()-1; i < edge.second.size()+1; i--)
-		{
-			if (result.nodes.count(edge.second[i].id) == 0)
-			{
-				if (warnAboutMissingNodes)
-				{
-					std::cerr << "WARNING: The graph has an edge between non-existant node(s) " << (result.originalNodeName.count(edge.first.id) == 1 ? result.originalNodeName.at(edge.first.id) : std::to_string(edge.first.id)) << (edge.first.end ? "+" : "-") << " and " << (result.originalNodeName.count(edge.second[i].id) == 1 ? result.originalNodeName.at(edge.second[i].id) : std::to_string(edge.second[i].id)) << (edge.second[i].end ? "+" : "-") << std::endl;
-					hasNonexistant = true;
-				}
-				edge.second.erase(edge.second.begin()+i);
-			}
+			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}
 	}
-	if (hasUnspecifiedOverlaps)
+	std::sort(result.edges.begin(), result.edges.end(), [](std::tuple<NodePos, NodePos, size_t> left, std::tuple<NodePos, NodePos, size_t> right){
+		if (std::get<0>(left) < std::get<0>(right)) return true;
+		if (std::get<0>(left) > std::get<0>(right)) return false;
+		if (std::get<1>(left) < std::get<1>(right)) return true;
+		if (std::get<1>(left) > std::get<1>(right)) return false;
+		if (std::get<2>(left) < std::get<2>(right)) return true;
+		if (std::get<2>(left) > std::get<2>(right)) return false;
+		return false;
+	});
+	for (size_t i = result.edges.size()-1; i > 0; i--)
 	{
-		std::cerr << "WARNING: Graph has edges with unspecified overlaps (*). Assuming that unspecified overlaps have zero overlap." << std::endl;
+		if (result.edges[i] != result.edges[i-1]) continue;
+		std::swap(result.edges[i], result.edges.back());
+		result.edges.pop_back();
 	}
-	if (warnAboutMissingNodes && hasNonexistant)
-	{
-		std::cerr << "WARNING: Edges between non-existant nodes have been removed." << std::endl;
-		std::cout << "WARNING: The graph has edges between non-existant nodes. Check the stderr output." << std::endl;
-	}
-	for (auto nonexistant : nonexistantEdges)
-	{
-		assert(result.edges.find(nonexistant) != result.edges.end());
-		result.edges.erase(result.edges.find(nonexistant));
-	}
+	// edges are not sorted anymore but doesn't matter as long as the order is deterministic
 	return result;
 }
 
 std::string GfaGraph::OriginalNodeName(int nodeId) const
 {
-	auto found = originalNodeName.find(nodeId);
-	if (found == originalNodeName.end()) return std::to_string(nodeId);
-	return found->second;
-}
-
-void GfaGraph::confirmDoublesidedEdges()
-{
-	for (auto node : nodes)
-	{
-		NodePos source;
-		source.id = node.first;
-		source.end = true;
-		NodePos revSource = source;
-		revSource.end = false;
-		if (edges.count(source) == 1)
-		{
-			auto targets = edges[source];
-			for (auto target : targets)
-			{
-				bool found = false;
-				auto revTarget = target;
-				revTarget.end = !revTarget.end;
-				for (auto check : edges[revTarget])
-				{
-					if (check == revSource)
-					{
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-				{
-					edges[revTarget].emplace_back(revSource);
-				}
-			}
-		}
-		if (edges.count(revSource) == 1)
-		{
-			auto targets = edges[revSource];
-			for (auto target : targets)
-			{
-				bool found = false;
-				auto revTarget = target;
-				revTarget.end = !revTarget.end;
-				for (auto check : edges[revTarget])
-				{
-					if (check == source)
-					{
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-				{
-					edges[revTarget].emplace_back(source);
-				}
-			}
-		}
-	}
+	assert(nodeId < originalNodeName.size());
+	return originalNodeName[nodeId];
 }

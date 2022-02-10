@@ -1,7 +1,6 @@
 #include <fstream>
 #include <sstream>
 #include <cassert>
-#include <unordered_map>
 #include "CommonUtils.h"
 #include "vg.pb.h"
 #include "fastqloader.h"
@@ -215,52 +214,44 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 {
 	AlignmentGraph result;
-	result.DBGoverlap = graph.edgeOverlap;
-	std::unordered_map<int, std::vector<size_t>> breakpoints;
-	for (auto pair : graph.varyingOverlaps)
+	std::vector<std::vector<size_t>> breakpoints;
+	breakpoints.resize(graph.nodes.size() * 2);
+	for (const auto& t : graph.edges)
 	{
-		int to = pair.first.second.id * 2;
-		if (!pair.first.second.end) to += 1;
-		int from = pair.first.first.Reverse().id * 2;
-		if (!pair.first.first.Reverse().end) from += 1;
-		breakpoints[from].push_back(pair.second);
-		breakpoints[to].push_back(pair.second);
+		int to = std::get<1>(t).id * 2;
+		if (!std::get<1>(t).end) to += 1;
+		int from = std::get<0>(t).Reverse().id * 2;
+		if (!std::get<0>(t).Reverse().end) from += 1;
+		breakpoints[from].push_back(std::get<2>(t));
+		breakpoints[to].push_back(std::get<2>(t));
 	}
-	for (auto node : graph.nodes)
+	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
-		for (size_t j = 0; j < node.second.size(); j++)
+		for (size_t j = 0; j < graph.nodes[i].size(); j++)
 		{
-			if (!allowed[node.second[j]])
+			if (!allowed[graph.nodes[i][j]])
 			{
-				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + node.second[j]);
+				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + graph.nodes[i][j]);
 			}
 		}
-		std::string name = graph.OriginalNodeName(node.first);
-		auto nodes = ConvertGFANodeToNodes(node.first, node.second, name);
-		std::vector<size_t> breakpointsFw = breakpoints[node.first * 2];
-		std::vector<size_t> breakpointsBw = breakpoints[node.first * 2 + 1];
+		std::string name = graph.OriginalNodeName(i);
+		auto nodes = ConvertGFANodeToNodes(i, graph.nodes[i], name);
+		std::vector<size_t> breakpointsFw = breakpoints[i * 2];
+		std::vector<size_t> breakpointsBw = breakpoints[i * 2 + 1];
 		breakpointsFw.push_back(0);
-		breakpointsFw.push_back(node.second.size());
+		breakpointsFw.push_back(graph.nodes[i].size());
 		breakpointsBw.push_back(0);
-		breakpointsBw.push_back(node.second.size());
+		breakpointsBw.push_back(graph.nodes[i].size());
 		std::sort(breakpointsFw.begin(), breakpointsFw.end());
 		std::sort(breakpointsBw.begin(), breakpointsBw.end());
 		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
 		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpointsBw);
 	}
-	for (auto edge : graph.edges)
+	for (const auto& t : graph.edges)
 	{
-		for (auto target : edge.second)
-		{
-			auto overlap = graph.edgeOverlap;
-			if (graph.varyingOverlaps.count(std::make_pair(edge.first, target)) == 1)
-			{
-				overlap = graph.varyingOverlaps.at(std::make_pair(edge.first, target));
-			}
-			auto pair = ConvertGFAEdgeToEdges(edge.first.id, edge.first.end ? "+" : "-", target.id, target.end ? "+" : "-", overlap);
-			result.AddEdgeNodeId(pair.first.fromId, pair.first.toId, pair.first.overlap);
-			result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
-		}
+		auto pair = ConvertGFAEdgeToEdges(std::get<0>(t).id, std::get<0>(t).end ? "+" : "-", std::get<1>(t).id, std::get<1>(t).end ? "+" : "-", std::get<2>(t));
+		result.AddEdgeNodeId(pair.first.fromId, pair.first.toId, pair.first.overlap);
+		result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
 	}
 	result.Finalize(64);
 	return result;

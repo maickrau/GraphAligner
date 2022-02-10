@@ -22,21 +22,17 @@ nodeSequences(),
 bpSize(0),
 ambiguousNodeSequences(),
 firstAmbiguous(std::numeric_limits<size_t>::max()),
-DBGoverlap(0),
 finalized(false)
 {
-}
-
-size_t AlignmentGraph::getDBGoverlap() const
-{
-	return DBGoverlap;
 }
 
 void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 {
 	nodeSequences.reserve(numSplitNodes);
 	ambiguousNodeSequences.reserve(numSplitNodes);
-	nodeLookup.reserve(numNodes);
+	nodeLookup.resize(numNodes);
+	originalNodeSize.resize(numNodes, std::numeric_limits<size_t>::max());
+	originalNodeName.resize(numNodes, "");
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
 	inNeighbors.reserve(numSplitNodes);
@@ -49,9 +45,12 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	//subgraph extraction might produce different subgraphs with common nodes
-	//don't add duplicate nodes
-	if (nodeLookup.count(nodeId) != 0) return;
+	assert(nodeId < nodeLookup.size());
+	assert(nodeId < originalNodeSize.size());
+	assert(nodeId < originalNodeName.size());
+	assert(nodeLookup[nodeId].size() == 0);
+	assert(originalNodeSize[nodeId] == std::numeric_limits<size_t>::max());
+	assert(originalNodeName[nodeId].size() == 0);
 	originalNodeSize[nodeId] = sequence.size();
 	originalNodeName[nodeId] = name;
 	assert(breakpoints.size() >= 2);
@@ -231,8 +230,8 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(nodeLookup.count(node_id_from) > 0);
-	assert(nodeLookup.count(node_id_to) > 0);
+	assert(node_id_from < nodeLookup.size());
+	assert(node_id_to < nodeLookup.size());
 	size_t from = nodeLookup.at(node_id_from).back();
 	size_t to = std::numeric_limits<size_t>::max();
 	assert(nodeOffset[from] + nodeLength[from] == originalNodeSize[node_id_from]);
@@ -256,6 +255,15 @@ void AlignmentGraph::Finalize(int wordSize)
 	assert(outNeighbors.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
+	assert(nodeLookup.size() == originalNodeSize.size());
+	assert(nodeLookup.size() == originalNodeName.size());
+	for (size_t i = 0; i < nodeLookup.size(); i++)
+	{
+		assert(nodeLookup[i].size() > 0);
+		assert(originalNodeName[i] != "");
+		assert(originalNodeSize[i] != std::numeric_limits<size_t>::max());
+		assert(originalNodeSize[i] != 0);
+	}
 	RenumberAmbiguousToEnd();
 	ambiguousNodes.clear();
 	findLinearizable();
@@ -285,11 +293,11 @@ void AlignmentGraph::Finalize(int wordSize)
 	nodeSequences.shrink_to_fit();
 	ambiguousNodeSequences.shrink_to_fit();
 #ifndef NDEBUG
-	for (auto pair : nodeLookup)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		for (size_t i = 1; i < pair.second.size(); i++)
+		for (size_t j = 1; i < nodeLookup[i].size(); j++)
 		{
-			assert(nodeOffset[pair.second[i-1]] < nodeOffset[pair.second[i]]);
+			assert(nodeOffset[nodeLookup[i][j-1]] < nodeOffset[nodeLookup[i][j]]);
 		}
 	}
 #endif
@@ -579,19 +587,19 @@ void AlignmentGraph::findChains()
 	ignorableTip.resize(nodeLength.size(), false);
 	std::vector<size_t> rank;
 	rank.resize(nodeLength.size(), 0);
-	for (const auto& pair : nodeLookup)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		assert(pair.second.size() > 0);
-		for (size_t i = 1; i < pair.second.size(); i++)
+		assert(nodeLookup[i].size() > 0);
+		for (size_t j = 1; j < nodeLookup[i].size(); j++)
 		{
-			merge(chainNumber, rank, pair.second[0], pair.second[i]);
+			merge(chainNumber, rank, nodeLookup[i][0], nodeLookup[i][j]);
 		}
 	}
 	auto tipChainers = chainTips(rank, ignorableTip);
 	chainCycles(rank, ignorableTip);
-	for (const auto& pair : nodeLookup)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		chainBubble(pair.second.back(), ignorableTip, rank);
+		chainBubble(nodeLookup[i].back(), ignorableTip, rank);
 	}
 	for (auto& pair : tipChainers)
 	{
@@ -811,16 +819,15 @@ public:
 
 size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 {
-	const auto& nodes = nodeLookup.at(nodeId);
-	assert(nodes.size() > 0);
+	assert(nodeLookup[nodeId].size() > 0);
 	//guess the index
-	size_t index = nodes.size() * ((double)offset / (double)originalNodeSize.at(nodeId));
-	if (index >= nodes.size()) index = nodes.size()-1;
+	size_t index = nodeLookup[nodeId].size() * ((double)offset / (double)originalNodeSize.at(nodeId));
+	if (index >= nodeLookup[nodeId].size()) index = nodeLookup[nodeId].size()-1;
 	//go to the exact index
-	while (index < nodes.size()-1 && (nodeOffset[nodes[index]] + NodeLength(nodes[index]) <= offset)) index++;
-	while (index > 0 && (nodeOffset[nodes[index]] > offset)) index--;
-	assert(index != nodes.size());
-	size_t result = nodes[index];
+	while (index < nodeLookup[nodeId].size()-1 && (nodeOffset[nodeLookup[nodeId][index]] + NodeLength(nodeLookup[nodeId][index]) <= offset)) index++;
+	while (index > 0 && (nodeOffset[nodeLookup[nodeId][index]] > offset)) index--;
+	assert(index != nodeLookup[nodeId].size());
+	size_t result = nodeLookup[nodeId][index];
 	assert(nodeIDs[result] == nodeId);
 	assert(nodeOffset[result] <= offset);
 	assert(nodeOffset[result] + NodeLength(result) > offset);
@@ -829,8 +836,8 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 
 std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t offset) const
 {
-	assert(nodeLookup.count(nodeId) == 1);
-	size_t originalSize = originalNodeSize.at(nodeId);
+	assert(nodeId < nodeLookup.size());
+	size_t originalSize = originalNodeSize[nodeId];
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);
@@ -865,9 +872,9 @@ bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosi
 
 std::string AlignmentGraph::OriginalNodeName(int nodeId) const
 {
-	auto found = originalNodeName.find(nodeId);
-	if (found == originalNodeName.end()) return std::to_string(nodeId);
-	return found->second;
+	assert(nodeId < originalNodeName.size());
+	assert(originalNodeName[nodeId] != "");
+	return originalNodeName[nodeId];
 }
 
 std::vector<size_t> renumber(const std::vector<size_t>& vec, const std::vector<size_t>& renumbering)
@@ -897,7 +904,9 @@ std::vector<T> reorder(const std::vector<T>& vec, const std::vector<size_t>& ren
 
 size_t AlignmentGraph::OriginalNodeSize(int nodeId) const
 {
-	return originalNodeSize.at(nodeId);
+	assert(nodeId < originalNodeSize.size());
+	assert(originalNodeSize[nodeId] != std::numeric_limits<size_t>::max());
+	return originalNodeSize[nodeId];
 }
 
 void AlignmentGraph::RenumberAmbiguousToEnd()
@@ -946,9 +955,9 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 	inNeighbors = reorder(inNeighbors, renumbering);
 	outNeighbors = reorder(outNeighbors, renumbering);
 	reverse = reorder(reverse, renumbering);
-	for (auto& pair : nodeLookup)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		pair.second = renumber(pair.second, renumbering);
+		nodeLookup[i] = renumber(nodeLookup[i], renumbering);
 	}
 	assert(inNeighbors.size() == outNeighbors.size());
 	for (size_t i = 0; i < inNeighbors.size(); i++)
@@ -970,21 +979,21 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 			assert(std::find(inNeighbors[neighbor].begin(), inNeighbors[neighbor].end(), i) != inNeighbors[neighbor].end());
 		}
 	}
-	for (auto pair : nodeLookup)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
 		size_t foundSize = 0;
 		std::set<size_t> offsets;
 		size_t lastOffset = 0;
-		for (auto node : pair.second)
+		for (auto node : nodeLookup[i])
 		{
 			assert(offsets.count(nodeOffset[node]) == 0);
 			assert(offsets.size() == 0 || nodeOffset[node] > lastOffset);
 			lastOffset = nodeOffset[node];
 			offsets.insert(nodeOffset[node]);
-			assert(nodeIDs[node] == pair.first);
+			assert(nodeIDs[node] == i);
 			foundSize += nodeLength[node];
 		}
-		assert(foundSize == originalNodeSize[pair.first]);
+		assert(foundSize == originalNodeSize[i]);
 	}
 #endif
 }
