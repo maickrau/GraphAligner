@@ -244,8 +244,14 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 	}
 	assert(matcher != nullptr);
 	std::priority_queue<MatchWithOrientation, std::vector<MatchWithOrientation>, std::greater<MatchWithOrientation>> matches;
-	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
+		size_t realSize = strncmp((const char*)sequence.data() + match.query, (const char*)seq.data() + match.ref, match.len);
+		if (realSize < match.len)
+		{
+			match.len = realSize;
+			if (realSize < minLen) return;
+		}
 		if (matches.size() < maxCount)
 		{
 			matches.emplace(match, false);
@@ -258,8 +264,14 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 		}
 	});
 	revcompInPlace(sequence);
-	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
+		size_t realSize = strncmp((const char*)sequence.data() + match.query, (const char*)seq.data() + match.ref, match.len);
+		if (realSize < match.len)
+		{
+			match.len = realSize;
+			if (realSize < minLen) return;
+		}
 		if (matches.size() < maxCount)
 		{
 			matches.emplace(match, true);
