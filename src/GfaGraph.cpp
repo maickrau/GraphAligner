@@ -9,7 +9,7 @@
 bool operator<(const NodePos& left, const NodePos& right)
 {
 	if (left.id < right.id) return true;
-	if (right.id > left.id) return false;
+	if (right.id < left.id) return false;
 	if (!left.end && right.end) return true;
 	if (left.end && !right.end) return false;
 	assert(left == right);
