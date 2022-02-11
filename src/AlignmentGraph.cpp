@@ -295,7 +295,7 @@ void AlignmentGraph::Finalize(int wordSize)
 #ifndef NDEBUG
 	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		for (size_t j = 1; i < nodeLookup[i].size(); j++)
+		for (size_t j = 1; j < nodeLookup[i].size(); j++)
 		{
 			assert(nodeOffset[nodeLookup[i][j-1]] < nodeOffset[nodeLookup[i][j]]);
 		}

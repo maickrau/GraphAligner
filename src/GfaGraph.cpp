@@ -60,7 +60,7 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 	return LoadFromStream(file);
 }
 
-size_t getNameId(std::unordered_map<std::string, int>& assigned, const std::string& name, std::vector<std::string>& nodeSeqs, std::vector<std::string>& originalNodeName)
+size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::string& name, std::vector<std::string>& nodeSeqs, std::vector<std::string>& originalNodeName)
 {
 	auto found = assigned.find(name);
 	if (found == assigned.end())
@@ -137,7 +137,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 				sstr >> dummyc;
 				assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
 			}
-			if (overlap < 0) throw CommonUtils::InvalidGraphException { std::string { "Edge overlap between nodes " + std::to_string(from.id) + " and " + std::to_string(to.id) + " is negative" } };
+			if (overlap < 0) throw CommonUtils::InvalidGraphException { std::string { "Edge overlap between nodes " + std::to_string(from) + " and " + std::to_string(to) + " is negative" } };
 			assert(overlap >= 0);
 			NodePos frompos {from, fromstart == "+"};
 			NodePos topos {to, toend == "+"};
