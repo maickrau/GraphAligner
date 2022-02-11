@@ -236,6 +236,13 @@ std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxC
 	return seeds;
 }
 
+size_t matchLength(const std::string& left, const std::string& right, size_t leftstart, size_t rightstart)
+{
+	size_t result = 0;
+	while (leftstart+result < left.size() && rightstart+result < right.size() && left[leftstart+result] == right[rightstart+result]) result++;
+	return result;
+}
+
 std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxCount, size_t minLen) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
@@ -246,7 +253,7 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 	std::priority_queue<MatchWithOrientation, std::vector<MatchWithOrientation>, std::greater<MatchWithOrientation>> matches;
 	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
-		size_t realSize = strncmp((const char*)sequence.data() + match.query, (const char*)seq.data() + match.ref, match.len);
+		size_t realSize = matchLength(sequence, seq, match.query, match.ref);
 		if (realSize < match.len)
 		{
 			match.len = realSize;
@@ -266,7 +273,7 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 	revcompInPlace(sequence);
 	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
-		size_t realSize = strncmp((const char*)sequence.data() + match.query, (const char*)seq.data() + match.ref, match.len);
+		size_t realSize = matchLength(sequence, seq, match.query, match.ref);
 		if (realSize < match.len)
 		{
 			match.len = realSize;
