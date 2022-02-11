@@ -84,9 +84,9 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 	GfaGraph result;
 	while (file.good())
 	{
-		std::string line;
+		std::string line = "";
 		std::getline(file, line);
-		if (!file.good()) break;
+		if (line.size() == 0 && !file.good()) break;
 		if (line.size() == 0) continue;
 		if (line[0] != 'S' && line[0] != 'L') continue;
 		if (line[0] == 'S')
@@ -112,6 +112,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			std::string fromstart;
 			std::string toend;
 			std::string dummy;
+			std::string overlapstr;
 			int overlap = 0;
 			sstr >> dummy;
 			assert(dummy == "L");
@@ -123,19 +124,21 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			sstr >> toend;
 			assert(fromstart == "+" || fromstart == "-");
 			assert(toend == "+" || toend == "-");
-			char test = sstr.get();
-			assert(test == '\t');
-			test = sstr.peek();
-			if (test == '*')
+			sstr >> overlapstr;
+			if (overlapstr == "*")
 			{
 				throw CommonUtils::InvalidGraphException { "Unspecified edge overlaps (*) are not supported" };
 			}
-			else
+			if (overlapstr == "")
 			{
-				sstr >> overlap;
-				char dummyc = 'z';
-				sstr >> dummyc;
-				assert(dummyc == 'M' || (dummyc == 'S' && overlap == 0));
+				throw CommonUtils::InvalidGraphException { "Edge overlap missing between edges " + fromstr + " and " + tostr };
+			}
+			assert(overlapstr.size() >= 1);
+			size_t charAfterIndex = 0;
+			overlap = std::stol(overlapstr, &charAfterIndex, 10);
+			if (charAfterIndex != overlapstr.size() - 1 || overlapstr.back() != 'M')
+			{
+				throw CommonUtils::InvalidGraphException { "Edge overlaps other than exact match are not supported (non supported overlap: " + overlapstr + ")" };
 			}
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { std::string { "Edge overlap between nodes " + std::to_string(from) + " and " + std::to_string(to) + " is negative" } };
 			assert(overlap >= 0);
@@ -182,11 +185,14 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		if (std::get<2>(left) > std::get<2>(right)) return false;
 		return false;
 	});
-	for (size_t i = result.edges.size()-1; i > 0; i--)
+	if (result.edges.size() > 0)
 	{
-		if (result.edges[i] != result.edges[i-1]) continue;
-		std::swap(result.edges[i], result.edges.back());
-		result.edges.pop_back();
+		for (size_t i = result.edges.size()-1; i > 0; i--)
+		{
+			if (result.edges[i] != result.edges[i-1]) continue;
+			std::swap(result.edges[i], result.edges.back());
+			result.edges.pop_back();
+		}
 	}
 	// edges are not sorted anymore but doesn't matter as long as the order is deterministic
 	return result;
