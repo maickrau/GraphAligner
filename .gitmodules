@@ -10,3 +10,6 @@
 [submodule "BBHash"]
 	path = BBHash
 	url = https://github.com/maickrau/BBHash.git
+[submodule "MEMfinder"]
+	path = MEMfinder
+	url = https://github.com/maickrau/MEMfinder.git
