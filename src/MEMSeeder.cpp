@@ -1,15 +1,58 @@
 #include <fstream>
 #include "CommonUtils.h"
 #include "MEMSeeder.h"
+#include "Serialize.h"
+
+bool fileExists(const std::string& fileName)
+{
+	std::ifstream file { fileName };
+	return file.good();
+}
 
 MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix)
 {
-	initTree(graph);
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
+	{
+		loadFrom(cachePrefix);
+		for (size_t i = 0; i < nodeIDs.size(); i++)
+		{
+			assert(nodePositions[i+1] - nodePositions[i] == graph.nodes.at(nodeIDs[i]).size()+1);
+		}
+	}
+	else
+	{
+		initTree(graph);
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
 }
 
 MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix)
 {
-	initTree(graph);
+	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
+	{
+		loadFrom(cachePrefix);
+	}
+	else
+	{
+		initTree(graph);
+		if (cachePrefix.size() > 0) saveTo(cachePrefix);
+	}
+}
+
+void MEMSeeder::saveTo(const std::string& prefix) const
+{
+	std::ofstream file { prefix + ".index", std::ios::binary };
+	index.save(file);
+	serialize(file, nodePositions);
+	serialize(file, nodeIDs);
+}
+
+void MEMSeeder::loadFrom(const std::string& prefix)
+{
+	std::ifstream file { prefix + ".index", std::ios::binary };
+	index.load(file);
+	deserialize(file, nodePositions);
+	deserialize(file, nodeIDs);
 }
 
 void MEMSeeder::initTree(const GfaGraph& graph)
@@ -106,7 +149,18 @@ size_t MEMSeeder::getNodeIndex(size_t indexPos) const
 
 std::vector<SeedHit> MEMSeeder::getMumSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const
 {
-	assert(false);
+	assert(index.initialized());
+	std::vector<SeedHit> result;
+	auto matches = MEMfinder::getBestFwBwMUMs(index, sequence, minLen, maxCount);
+	assert(matches.size() <= maxCount);
+	result.reserve(matches.size());
+	for (size_t i = 0; i < matches.size(); i++)
+	{
+		result.push_back(matchToSeed(matches[i]));
+	}
+	assert(result.size() == matches.size());
+	assert(result.size() <= maxCount);
+	return result;
 }
 
 std::vector<SeedHit> MEMSeeder::getMemSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const

@@ -17,6 +17,8 @@ public:
 	std::vector<SeedHit> getMemSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const;
 	std::vector<SeedHit> getMumSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const;
 private:
+	void saveTo(const std::string& filename) const;
+	void loadFrom(const std::string& filename);
 	SeedHit matchToSeed(MEMfinder::Match match) const;
 	size_t getNodeIndex(size_t indexPos) const;
 	size_t nodeLength(size_t indexPos) const;
@@ -24,7 +26,7 @@ private:
 	void initTree(const vg::Graph& graph);
 	FMIndex index;
 	std::vector<size_t> nodePositions;
-	std::vector<int> nodeIDs;
+	std::vector<size_t> nodeIDs;
 };
 
 #endif
