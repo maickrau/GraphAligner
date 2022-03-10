@@ -111,7 +111,7 @@ std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertVGEdge
 
 std::pair<DirectedGraph::Node, DirectedGraph::Node> DirectedGraph::ConvertGFANodeToNodes(int id, const std::string& sequence, const std::string& name)
 {
-	return std::make_pair(DirectedGraph::Node { id * 2, true, sequence, name }, DirectedGraph::Node { id * 2 + 1, false, CommonUtils::ReverseComplement(sequence), name });
+	return std::make_pair(DirectedGraph::Node { (size_t)(id * 2), true, sequence, name }, DirectedGraph::Node { (size_t)(id * 2 + 1), false, CommonUtils::ReverseComplement(sequence), name });
 }
 
 std::pair<DirectedGraph::Edge, DirectedGraph::Edge> DirectedGraph::ConvertGFAEdgeToEdges(int from, const std::string& fromstart, int to, const std::string& toend, size_t overlap)
