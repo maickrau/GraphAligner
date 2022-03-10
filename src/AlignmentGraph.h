@@ -3,10 +3,8 @@
 
 #include <functional>
 #include <vector>
-#include <set>
-#include <unordered_map>
-#include <unordered_set>
 #include <tuple>
+#include <unordered_set>
 #include <phmap.h>
 #include "ThreadReadAssertion.h"
 
@@ -90,7 +88,6 @@ public:
 	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
 	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
 	void Finalize(int wordSize);
-	AlignmentGraph GetSubgraph(const std::unordered_map<size_t, size_t>& nodeMapping) const;
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
@@ -100,13 +97,10 @@ public:
 	NodeChunkSequence NodeChunks(size_t node) const;
 	AmbiguousChunkSequence AmbiguousNodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
-	// size_t MinDistance(size_t pos, const std::vector<size_t>& targets) const;
-	// std::set<size_t> ProjectForward(const std::set<size_t>& startpositions, size_t amount) const;
 	std::string OriginalNodeName(int nodeId) const;
 	size_t OriginalNodeSize(int nodeId) const;
 	size_t ComponentSize() const;
 	static AlignmentGraph DummyGraph();
-	size_t getDBGoverlap() const;
 
 private:
 	void fixChainApproxPos(const size_t start);
@@ -120,9 +114,9 @@ private:
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
 	std::vector<size_t> nodeLength;
-	std::unordered_map<int, std::vector<size_t>> nodeLookup;
-	std::unordered_map<int, size_t> originalNodeSize;
-	std::unordered_map<int, std::string> originalNodeName;
+	std::vector<std::vector<size_t>> nodeLookup;
+	std::vector<size_t> originalNodeSize;
+	std::vector<std::string> originalNodeName;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;
@@ -137,7 +131,6 @@ private:
 	std::vector<size_t> chainNumber;
 	std::vector<size_t> chainApproxPos;
 	size_t firstAmbiguous;
-	size_t DBGoverlap;
 	bool finalized;
 
 	template <typename LengthType, typename ScoreType, typename Word>

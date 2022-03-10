@@ -3,7 +3,6 @@
 
 #include <memory>
 #include <limits>
-#include <unordered_map>
 #include <vector>
 #include <type_traits>
 #include <phmap.h>

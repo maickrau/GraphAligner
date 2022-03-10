@@ -770,7 +770,7 @@ public:
 					continue;
 				}
 				auto crossing = pickBacktraceVerticalCrossing(params, slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, nodeSlices, slice.slices[currentSlice].j, currentNode, result.trace.back().DPposition, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid, extraSlice);
-				if (result.trace.size() > 0 && crossing.second.first.seqPos == result.trace.back().DPposition.seqPos && nodeSlices[crossing.second.first.nodeOffset].getValue(crossing.second.first.seqPos % WordConfiguration<Word>::WordSize) == extraSlice.getValue(crossing.second.first.seqPos % WordConfiguration<Word>::WordSize))
+				if (result.trace.size() > 0 && crossing.second.first.seqPos == result.trace.back().DPposition.seqPos && crossing.second.first.node == result.trace.back().DPposition.node && nodeSlices[crossing.second.first.nodeOffset].getValue(crossing.second.first.seqPos % WordConfiguration<Word>::WordSize) == extraSlice.getValue(crossing.second.first.seqPos % WordConfiguration<Word>::WordSize))
 				{
 					break;
 				}

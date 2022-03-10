@@ -44,10 +44,7 @@ $(ODIR)/vg.pb.o: $(SRCDIR)/vg.pb.cc
 $(SRCDIR)/%.pb.cc $(SRCDIR)/%.pb.h: $(SRCDIR)/%.proto
 	protoc -I=$(SRCDIR) --cpp_out=$(SRCDIR) $<
 
-$(BINDIR)/UntipRelative: $(SRCDIR)/UntipRelative.cpp $(ODIR)/CommonUtils.o $(ODIR)/vg.pb.o $(ODIR)/GfaGraph.o $(ODIR)/fastqloader.o $(ODIR)/ThreadReadAssertion.o
-	$(GPP) -o $@ $^ $(LINKFLAGS)
-
-all: $(BINDIR)/GraphAligner $(BINDIR)/UntipRelative
+all: $(BINDIR)/GraphAligner
 
 clean:
 	rm -f $(ODIR)/*

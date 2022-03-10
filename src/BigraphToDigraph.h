@@ -13,9 +13,8 @@ class DirectedGraph
 public:
 	struct Node
 	{
-		Node(int nodeId, int originalNodeId, bool rightEnd, std::string sequence, std::string name);
-		int nodeId;
-		int originalNodeId;
+		Node(size_t nodeId, bool rightEnd, std::string sequence, std::string name);
+		size_t nodeId;
 		bool rightEnd;
 		std::string sequence;
 		std::string name;
@@ -27,8 +26,8 @@ public:
 		size_t toId;
 		size_t overlap;
 	};
-	static std::pair<Node, Node> ConvertVGNodeToNodes(const vg::Node& node);
-	static std::pair<Edge, Edge> ConvertVGEdgeToEdges(const vg::Edge& edge);
+	static std::pair<Node, Node> ConvertVGNodeToNodes(const vg::Node& node, std::unordered_map<int, size_t>& nameMapping);
+	static std::pair<Edge, Edge> ConvertVGEdgeToEdges(const vg::Edge& edge, std::unordered_map<int, size_t>& nameMapping);
 	static std::pair<Node, Node> ConvertGFANodeToNodes(int id, const std::string& seq, const std::string& name);
 	static std::pair<Edge, Edge> ConvertGFAEdgeToEdges(int from, const std::string& fromStart, int to, const std::string& toEnd, size_t overlap);
 	static AlignmentGraph BuildFromVG(const vg::Graph& graph);

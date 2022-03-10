@@ -50,24 +50,13 @@ class GfaGraph
 {
 public:
 	GfaGraph();
-	static GfaGraph LoadFromFile(std::string filename, bool allowVaryingOverlaps=false, bool warnAboutMissingNodes=false);
-	static GfaGraph LoadFromStream(std::istream& stream, bool allowVaryingOverlaps=false, bool warnAboutMissingNodes=false);
-	void SaveToFile(std::string filename) const;
-	void SaveToStream(std::ostream& stream) const;
-	void AddSubgraph(const GfaGraph& subgraph);
-	GfaGraph GetSubgraph(const std::unordered_set<int>& ids) const;
-	GfaGraph GetSubgraph(const std::unordered_set<int>& nodes, const std::unordered_set<std::pair<NodePos, NodePos>>& edges) const;
+	static GfaGraph LoadFromFile(std::string filename);
+	static GfaGraph LoadFromStream(std::istream& stream);
 	std::string OriginalNodeName(int nodeId) const;
-	void confirmDoublesidedEdges();
-	std::unordered_map<int, std::string> nodes;
-	std::unordered_map<NodePos, std::vector<NodePos>> edges;
-	std::unordered_map<std::pair<NodePos, NodePos>, size_t> varyingOverlaps;
-	size_t edgeOverlap;
-	std::unordered_map<int, std::string> tags;
-	std::unordered_map<int, std::string> originalNodeName;
+	std::vector<std::string> nodes;
+	std::vector<std::tuple<NodePos, NodePos, size_t>> edges;
+	std::vector<std::string> originalNodeName;
 private:
-	void numberBackToIntegers();
-	std::string nodeName(int nodeid) const;
 };
 
 #endif

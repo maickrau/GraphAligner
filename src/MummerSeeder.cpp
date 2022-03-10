@@ -67,6 +67,10 @@ MummerSeeder::MummerSeeder(const GfaGraph& graph, const std::string& cachePrefix
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".aux"))
 	{
 		loadFrom(cachePrefix);
+		for (size_t i = 0; i < nodeIDs.size(); i++)
+		{
+			assert(nodePositions[i+1] - nodePositions[i] == graph.nodes.at(nodeIDs[i]).size()+1);
+		}
 	}
 	else
 	{
@@ -90,11 +94,11 @@ MummerSeeder::MummerSeeder(const vg::Graph& graph, const std::string& cachePrefi
 
 void MummerSeeder::initTree(const GfaGraph& graph)
 {
-	for (auto node : graph.nodes)
+	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
 		nodePositions.push_back(seq.size());
-		nodeIDs.push_back(node.first);
-		seq += node.second;
+		nodeIDs.push_back(i);
+		seq += graph.nodes[i];
 		seq += '`';
 	}
 	nodePositions.push_back(seq.size());
@@ -131,6 +135,8 @@ size_t MummerSeeder::getNodeIndex(size_t indexPos) const
 	assert(next != nodePositions.begin());
 	size_t index = (next - nodePositions.begin()) - 1;
 	assert(index < nodePositions.size()-1);
+	assert(nodePositions[index+1] > indexPos);
+	assert(nodePositions[index] <= indexPos);
 	return index;
 }
 
@@ -230,6 +236,13 @@ std::vector<SeedHit> MummerSeeder::getMumSeeds(std::string sequence, size_t maxC
 	return seeds;
 }
 
+size_t matchLength(const std::string& left, const std::string& right, size_t leftstart, size_t rightstart)
+{
+	size_t result = 0;
+	while (leftstart+result < left.size() && rightstart+result < right.size() && left[leftstart+result] == right[rightstart+result]) result++;
+	return result;
+}
+
 std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxCount, size_t minLen) const
 {
 	for (size_t i = 0; i < sequence.size(); i++)
@@ -238,8 +251,14 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 	}
 	assert(matcher != nullptr);
 	std::priority_queue<MatchWithOrientation, std::vector<MatchWithOrientation>, std::greater<MatchWithOrientation>> matches;
-	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
+		size_t realSize = matchLength(sequence, seq, match.query, match.ref);
+		if (realSize < match.len)
+		{
+			match.len = realSize;
+			if (realSize < minLen) return;
+		}
 		if (matches.size() < maxCount)
 		{
 			matches.emplace(match, false);
@@ -252,8 +271,14 @@ std::vector<SeedHit> MummerSeeder::getMemSeeds(std::string sequence, size_t maxC
 		}
 	});
 	revcompInPlace(sequence);
-	matcher->findMEM_each(sequence, minLen, false, [&matches, maxCount](const mummer::mummer::match_t& match)
+	matcher->findMEM_each(sequence, minLen, false, [this, &sequence, &matches, maxCount, minLen](mummer::mummer::match_t match)
 	{
+		size_t realSize = matchLength(sequence, seq, match.query, match.ref);
+		if (realSize < match.len)
+		{
+			match.len = realSize;
+			if (realSize < minLen) return;
+		}
 		if (matches.size() < maxCount)
 		{
 			matches.emplace(match, true);
@@ -295,6 +320,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 		assert(match.len >= 0);
 		assert((size_t)match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
+		assert(getNodeIndex(match.ref + match.len) == index);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];
 		size_t seqPos = match.query;
@@ -307,6 +333,7 @@ std::vector<SeedHit> MummerSeeder::matchesToSeeds(size_t seqLen, const std::vect
 		assert(match.len >= 0);
 		assert((size_t)match.ref + match.len <= nodePositions.back());
 		auto index = getNodeIndex(match.ref);
+		assert(getNodeIndex(match.ref + match.len) == index);
 		int nodeID = nodeIDs[index];
 		size_t nodeOffset = match.ref - nodePositions[index];
 		size_t seqPos = match.query;

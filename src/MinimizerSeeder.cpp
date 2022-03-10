@@ -301,7 +301,6 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	size_t positionSize = log2(graph.nodeIDs.size()) + 1;
 	assert(positionSize + 6 < 64);
 	assert(minimizerLength * 2 < 64);
-	auto nodeIter = graph.nodeLookup.begin();
 	std::mutex nodeMutex;
 	std::vector<std::thread> threads;
 	std::vector<sdsl::int_vector<0>> kmerPerBucket;
@@ -339,23 +338,23 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		}
 	}
 
+	size_t nodeI = 0;
 	for (size_t thread = 0; thread < numThreads; thread++)
 	{
-		threads.emplace_back([this, &nodeMinimizerStart, &positionDistributor, &threadsDone, &kmerPerBucket, &positionPerBucket, thread, numThreads, &nodeMutex, &nodeIter, positionSize](){
+		threads.emplace_back([this, &nodeMinimizerStart, &positionDistributor, &threadsDone, &kmerPerBucket, &positionPerBucket, thread, numThreads, &nodeMutex, &nodeI, positionSize](){
 			size_t vecPos = 0;
 			kmerPerBucket[thread].resize(10);
 			positionPerBucket[thread].resize(10);
 			std::pair<uint64_t, uint64_t> readThis;
 			while (true)
 			{
-				auto iter = graph.nodeLookup.end();
+				size_t nodeId = graph.nodeLookup.size();
 				{
 					std::lock_guard<std::mutex> guard { nodeMutex };
-					iter = nodeIter;
-					if (nodeIter != graph.nodeLookup.end()) ++nodeIter;
+					nodeId = nodeI;
+					if (nodeI != graph.nodeLookup.size()) ++nodeI;
 				}
-				if (iter == graph.nodeLookup.end()) break;
-				int nodeId = iter->first;
+				if (nodeId == graph.nodeLookup.size()) break;
 				std::string sequence;
 				sequence.resize(graph.originalNodeSize.at(nodeId));
 				for (size_t pos = 0; pos < sequence.size(); pos++)
