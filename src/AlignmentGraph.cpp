@@ -853,6 +853,13 @@ std::pair<int, size_t> AlignmentGraph::GetReversePosition(int nodeId, size_t off
 	return std::make_pair(reverseNodeId, newOffset);
 }
 
+AlignmentGraph::MatrixPosition::MatrixPosition() :
+	node(0),
+	nodeOffset(0),
+	seqPos(0)
+{
+}
+
 AlignmentGraph::MatrixPosition::MatrixPosition(size_t node, size_t nodeOffset, size_t seqPos) :
 	node(node),
 	nodeOffset(nodeOffset),

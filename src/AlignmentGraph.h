@@ -67,6 +67,7 @@ public:
 
 	struct MatrixPosition
 	{
+		MatrixPosition();
 		MatrixPosition(size_t node, size_t nodeOffset, size_t seqPos);
 		bool operator==(const MatrixPosition& other) const;
 		bool operator!=(const MatrixPosition& other) const;
