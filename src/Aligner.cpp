@@ -14,7 +14,7 @@
 #include "BigraphToDigraph.h"
 #include "ThreadReadAssertion.h"
 #include "GraphAlignerWrapper.h"
-#include "MummerSeeder.h"
+#include "MEMSeeder.h"
 #include "ReadCorrection.h"
 #include "MinimizerSeeder.h"
 #include "AlignmentSelection.h"
@@ -32,17 +32,17 @@ struct Seeder
 	size_t minimizerLength;
 	size_t minimizerWindowSize;
 	double minimizerSeedDensity;
-	const MummerSeeder* mummerSeeder;
+	const MEMSeeder* memSeeder;
 	const MinimizerSeeder* minimizerSeeder;
 	const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds;
-	Seeder(const AlignerParams& params, const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds, const MummerSeeder* mummerSeeder, const MinimizerSeeder* minimizerSeeder) :
+	Seeder(const AlignerParams& params, const std::unordered_map<std::string, std::vector<SeedHit>>* fileSeeds, const MEMSeeder* memSeeder, const MinimizerSeeder* minimizerSeeder) :
 		mumCount(params.mumCount),
 		memCount(params.memCount),
 		mxmLength(params.mxmLength),
 		minimizerLength(params.minimizerLength),
 		minimizerWindowSize(params.minimizerWindowSize),
 		minimizerSeedDensity(params.minimizerSeedDensity),
-		mummerSeeder(mummerSeeder),
+		memSeeder(memSeeder),
 		minimizerSeeder(minimizerSeeder),
 		fileSeeds(fileSeeds)
 	{
@@ -50,7 +50,7 @@ struct Seeder
 		if (fileSeeds != nullptr)
 		{
 			assert(minimizerSeeder == nullptr);
-			assert(mummerSeeder == nullptr);
+			assert(memSeeder == nullptr);
 			assert(mumCount == 0);
 			assert(memCount == 0);
 			assert(minimizerSeedDensity == 0);
@@ -58,13 +58,13 @@ struct Seeder
 		}
 		if (minimizerSeeder != nullptr)
 		{
-			assert(mummerSeeder == nullptr);
+			assert(memSeeder == nullptr);
 			assert(mumCount == 0);
 			assert(memCount == 0);
 			assert(minimizerSeedDensity != 0);
 			mode = Mode::Minimizer;
 		}
-		if (mummerSeeder != nullptr)
+		if (memSeeder != nullptr)
 		{
 			assert(minimizerSeeder == nullptr);
 			assert(fileSeeds == nullptr);
@@ -91,11 +91,11 @@ struct Seeder
 				if (fileSeeds->count(seqName) == 0) return std::vector<SeedHit>{};
 				return fileSeeds->at(seqName);
 			case Mode::Mum:
-				assert(mummerSeeder != nullptr);
-				return mummerSeeder->getMumSeeds(seq, mumCount, mxmLength);
+				assert(memSeeder != nullptr);
+				return memSeeder->getMumSeeds(seq, mumCount, mxmLength);
 			case Mode::Mem:
-				assert(mummerSeeder != nullptr);
-				return mummerSeeder->getMemSeeds(seq, memCount, mxmLength);
+				assert(memSeeder != nullptr);
+				return memSeeder->getMemSeeds(seq, memCount, mxmLength);
 			case Mode::Minimizer:
 				assert(minimizerSeeder != nullptr);
 				return minimizerSeeder->getSeeds(seq, minimizerSeedDensity);
@@ -618,7 +618,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 	coutoutput << "Thread " << threadnum << " finished" << BufferedWriter::Flush;
 }
 
-AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const AlignerParams& params)
+AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const AlignerParams& params)
 {
 	bool loadMxmSeeder = params.mumCount > 0 || params.memCount > 0;
 	if (is_file_exist(graphFile)){
@@ -638,7 +638,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 				if (loadMxmSeeder)
 				{
 					std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
-					*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
+					*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix };
 				}
 				std::cout << "Build alignment graph" << std::endl;
 				auto result = DirectedGraph::BuildFromVG(graph);
@@ -655,7 +655,7 @@ AlignmentGraph getGraph(std::string graphFile, MummerSeeder** mxmSeeder, const A
 			if (loadMxmSeeder)
 			{
 				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
-				*mxmSeeder = new MummerSeeder { graph, params.seederCachePrefix };
+				*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix };
 			}
 			std::cout << "Build alignment graph" << std::endl;
 			auto result = DirectedGraph::BuildFromGFA(graph);
@@ -682,8 +682,8 @@ void alignReads(AlignerParams params)
 
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
-	MummerSeeder* mummerseeder = nullptr;
-	auto alignmentGraph = getGraph(params.graphFile, &mummerseeder, params);
+	MEMSeeder* memseeder = nullptr;
+	auto alignmentGraph = getGraph(params.graphFile, &memseeder, params);
 	bool loadMinimizerSeeder = params.minimizerSeedDensity != 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
 	if (loadMinimizerSeeder)
@@ -719,7 +719,7 @@ void alignReads(AlignerParams params)
 		seedHitsToThreads = &seedHits;
 	}
 
-	Seeder seeder { params, seedHitsToThreads, mummerseeder, minimizerseeder };
+	Seeder seeder { params, seedHitsToThreads, memseeder, minimizerseeder };
 
 	switch(seeder.mode)
 	{
@@ -810,7 +810,7 @@ void alignReads(AlignerParams params)
 	correctedClippedWriterThread.join();
 	fastqThread.join();
 
-	if (mummerseeder != nullptr) delete mummerseeder;
+	if (memseeder != nullptr) delete memseeder;
 	if (minimizerseeder != nullptr) delete minimizerseeder;
 
 	std::string* dealloc;
