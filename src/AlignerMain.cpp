@@ -1,4 +1,3 @@
-#include <omp.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <unistd.h>
@@ -361,8 +360,6 @@ int main(int argc, char** argv)
 	{
 		params.compressClipped = true;
 	}
-
-	omp_set_num_threads(params.numThreads);
 
 	alignReads(params);
 
