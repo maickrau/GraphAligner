@@ -142,8 +142,8 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 			}
 			if (overlap < 0) throw CommonUtils::InvalidGraphException { std::string { "Edge overlap between nodes " + std::to_string(from) + " and " + std::to_string(to) + " is negative" } };
 			assert(overlap >= 0);
-			NodePos frompos {from, fromstart == "+"};
-			NodePos topos {to, toend == "+"};
+			NodePos frompos {(int)from, fromstart == "+"};
+			NodePos topos {(int)to, toend == "+"};
 			result.edges.emplace_back(frompos, topos, overlap);
 			result.edges.emplace_back(topos.Reverse(), frompos.Reverse(), overlap);
 		}
