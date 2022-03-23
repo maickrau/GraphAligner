@@ -25,8 +25,8 @@ private:
 	void initTree(const GfaGraph& graph);
 	void initTree(const vg::Graph& graph);
 	FMIndex index;
-	std::vector<size_t> nodePositions;
-	std::vector<size_t> nodeIDs;
+	std::vector<uint64_t> nodePositions;
+	std::vector<uint64_t> nodeIDs;
 };
 
 #endif
