@@ -1,5 +1,5 @@
 GPP=$(CXX)
-CPPFLAGS=-Wall -Wextra -std=c++17 -O3 -g -Iconcurrentqueue -IBBHash -Izstr/src -Iparallel-hashmap/parallel_hashmap/ `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash` -fopenmp -Wno-unused-parameter -IMEMfinder/src
+CPPFLAGS=-Wall -Wextra -std=c++17 -O3 -g -Iconcurrentqueue -IBBHash -Izstr/src -Iparallel-hashmap/parallel_hashmap/ `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash` -Wno-unused-parameter -IMEMfinder/src
 
 ODIR=obj
 BINDIR=bin
