@@ -75,7 +75,6 @@ All parameters below are optional.
 
 Seeding:
 
-- `-s` External seeds. Load seeds from a .gam file. You can input multiple files with `-s file1 -s file2 ...` or `-s file1 file2 ...`
 - `--seeds-minimizer-density` For a read of length `n`, use the `arg * n` most unique seeds
 - `--seeds-minimizer-length` k-mer size for minimizer seeds
 - `--seeds-minimizer-windowsize` Window size for minimizer seeds
@@ -83,7 +82,6 @@ Seeding:
 - `--seeds-mem-count` MEM seeds. Use the n longest maximal exact matches. -1 for all MEMs
 - `--seeds-mxm-length` MUM/MEM minimum length. Don't use MUMs/MEMs shorter than n
 - `--seeds-mxm-cache-prefix` MUM/MEM file cache prefix. Store the MUM/MEM index into disk for reuse. Recommended unless you are sure you won't align to the same graph multiple times
-- `--seeds-first-full-rows` Don't use seeds. Instead use the DP alignment on the first row. The runtime depends on the size of the graph so this is very slow. Not recommended
 
 Extension:
 
