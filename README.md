@@ -23,7 +23,7 @@ Bioconda is the recommended installation method. If you however want to compile 
 
 Note that miniconda is only required during compilation and not during runtime. After compilation you can run the binary without the miniconda environment or copy the binary elsewhere.
 
-If you want to compile without miniconda, you will need to install [boost](https://www.boost.org/), [mummer](https://github.com/mummer4/mummer), [protobuf and protoc](https://developers.google.com/protocol-buffers), [sdsl](https://github.com/simongog/sdsl-lite), [jemalloc](https://github.com/jemalloc/jemalloc) and [sparsehash](https://github.com/sparsehash/sparsehash).
+If you want to compile without miniconda, you will need to install [boost](https://www.boost.org/), [protobuf and protoc](https://developers.google.com/protocol-buffers), [sdsl](https://github.com/simongog/sdsl-lite), [jemalloc](https://github.com/jemalloc/jemalloc) and [sparsehash](https://github.com/sparsehash/sparsehash).
 
 ### Running
 
