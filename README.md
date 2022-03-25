@@ -17,7 +17,7 @@ Bioconda is the recommended installation method. If you however want to compile 
 - `git clone https://github.com/maickrau/GraphAligner.git`
 - `cd GraphAligner`
 - `git submodule update --init --recursive`
-- `conda env create -f CondaEnvironment.yml`
+- `conda env create -f CondaEnvironment_linux.yml` or `conda env create -f CondaEnvironment_osx.yml`
 - `source activate GraphAligner`
 - `make bin/GraphAligner`
 
