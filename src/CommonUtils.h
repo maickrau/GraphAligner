@@ -22,7 +22,7 @@ namespace CommonUtils
 	std::vector<vg::Alignment> LoadVGAlignments(std::string filename);
 }
 
-class BufferedWriter : std::ostream
+class BufferedWriter
 {
 public:
 	class FlushClass {};
