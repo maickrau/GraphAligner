@@ -193,6 +193,12 @@ void consumeBytesAndWrite(const std::string& filename, moodycamel::ConcurrentQue
 	if (!textMode) openmode |= std::ios::binary;
 	std::ofstream outfile { filename, openmode };
 
+	if (!outfile.good())
+	{
+		std::cerr << "Cannot write results to file: " << filename << std::endl;
+		std::abort();
+	}
+
 	bool wroteAny = false;
 
 	std::string* alns[100] {};
@@ -205,6 +211,11 @@ void consumeBytesAndWrite(const std::string& filename, moodycamel::ConcurrentQue
 
 	while (true)
 	{
+		if (!outfile.good())
+		{
+			std::cerr << "Cannot write results to file: " << filename << std::endl;
+			std::abort();
+		}
 		size_t gotAlns = writequeue.try_dequeue_bulk(alns, 100);
 		if (gotAlns == 0)
 		{
@@ -679,6 +690,23 @@ void alignReads(AlignerParams params)
 {
 	assertSetNoRead("Preprocessing");
 	AlignmentSelection::OverlapIncompatibleFractionCutoff = params.overlapIncompatibleCutoff;
+	{
+		std::ifstream graph { params.graphFile };
+		if (!graph.good())
+		{
+			std::cerr << "Input graph cannot be read: " << params.graphFile << std::endl;
+			std::abort();
+		}
+	}
+	for (const auto& filename : params.fastqFiles)
+	{
+		std::ifstream file { filename };
+		if (!file.good())
+		{
+			std::cerr << "Input sequence file cannot be read: " << filename << std::endl;
+			std::abort();
+		}
+	}
 
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
