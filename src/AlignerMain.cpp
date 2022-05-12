@@ -68,7 +68,6 @@ int main(int argc, char** argv)
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
-		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -88,6 +87,7 @@ int main(int argc, char** argv)
 		("discard-cigar", "Don't include CIGAR string in gaf output")
 		("clip-ambiguous-ends", boost::program_options::value<int>(), "clip ambiguous alignment ends with alignment score cutoff arg")
 		("overlap-incompatible-cutoff", boost::program_options::value<double>(), "consider two partial alignments incompatible if they overlap by arg% of the length of the shorter one")
+		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
 	;
 
 	boost::program_options::options_description cmdline_options;
