@@ -68,6 +68,7 @@ int main(int argc, char** argv)
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -153,6 +154,7 @@ int main(int argc, char** argv)
 	params.clipAmbiguousEnds = -1;
 	params.maxTraceCount = 10;
 	params.overlapIncompatibleCutoff = 0.3;
+	params.realignFile = "";
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -207,6 +209,7 @@ int main(int argc, char** argv)
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
 	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();
+	if (vm.count("realign")) params.realignFile = vm["realign"].as<std::string>();
 
 	if (vm.count("tangle-effort")) params.maxCellsPerSlice = vm["tangle-effort"].as<size_t>();
 	if (vm.count("verbose")) params.verboseMode = true;
@@ -333,7 +336,7 @@ int main(int argc, char** argv)
 		std::cerr << "--max-cluster-extend cannot be 0" << std::endl;
 		paramError = true;
 	}
-	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0);
+	int pickedSeedingMethods = ((params.dynamicRowStart) ? 1 : 0) + ((params.seedFiles.size() > 0) ? 1 : 0) + ((params.mumCount != 0) ? 1 : 0) + ((params.memCount != 0) ? 1 : 0) + ((params.minimizerSeedDensity != 0) ? 1 : 0) + ((params.realignFile.size() > 0) ? 1 : 0);
 	if (pickedSeedingMethods == 0)
 	{
 		std::cerr << "pick a seeding method" << std::endl;

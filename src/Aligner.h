@@ -46,6 +46,7 @@ struct AlignerParams
 	int clipAmbiguousEnds;
 	double overlapIncompatibleCutoff;
 	size_t maxTraceCount;
+	std::string realignFile;
 };
 
 void alignReads(AlignerParams params);

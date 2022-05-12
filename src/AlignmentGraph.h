@@ -102,6 +102,7 @@ public:
 	size_t OriginalNodeSize(int nodeId) const;
 	size_t ComponentSize() const;
 	static AlignmentGraph DummyGraph();
+	std::vector<std::string> originalNodeName;
 
 private:
 	void fixChainApproxPos(const size_t start);
@@ -117,7 +118,6 @@ private:
 	std::vector<size_t> nodeLength;
 	std::vector<std::vector<size_t>> nodeLookup;
 	std::vector<size_t> originalNodeSize;
-	std::vector<std::string> originalNodeName;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<std::vector<size_t>> inNeighbors;

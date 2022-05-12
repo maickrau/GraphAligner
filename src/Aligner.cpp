@@ -686,6 +686,49 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 	}
 }
 
+std::unordered_map<std::string, std::vector<SeedHit>> loadGafSeeds(const AlignmentGraph& alignmentGraph, const std::string& gafFile)
+{
+	std::unordered_map<std::string, size_t> nodeNameMap;
+	for (size_t i = 0; i < alignmentGraph.originalNodeName.size(); i++)
+	{
+		nodeNameMap[alignmentGraph.OriginalNodeName(i)] = i/2; // because of duplicating fw / bw
+	}
+	std::unordered_map<std::string, std::vector<SeedHit>> result;
+	std::ifstream file { gafFile };
+	while (file.good())
+	{
+		std::string line;
+		std::getline(file, line);
+		if (line.size() == 0) continue;
+		if (!file.good()) break;
+		size_t tabPoses[9];
+		tabPoses[0] = 0;
+		for (size_t i = 0; i < 9; i++)
+		{
+			while (tabPoses[i] < line.size() && line[tabPoses[i]] != '\t') tabPoses[i] += 1;
+			if (i < 8) tabPoses[i+1] = tabPoses[i]+1;
+		}
+		if (tabPoses[8] >= line.size()) continue;
+		std::string readName = line.substr(0, tabPoses[0]);
+		size_t readLength = std::stoi(line.substr(tabPoses[0]+1, tabPoses[1] - tabPoses[0] - 1));
+		size_t readStart = std::stoi(line.substr(tabPoses[1]+1, tabPoses[2] - tabPoses[1] - 1));
+		size_t readEnd = std::stoi(line.substr(tabPoses[2]+1, tabPoses[3] - tabPoses[2] - 1));
+		std::string path = line.substr(tabPoses[4]+1, tabPoses[5] - tabPoses[4] - 1);
+		size_t pathLength = std::stoi(line.substr(tabPoses[5]+1, tabPoses[6] - tabPoses[5] - 1));
+		size_t pathStart = std::stoi(line.substr(tabPoses[6]+1, tabPoses[7] - tabPoses[6] - 1));
+		size_t pathEnd = std::stoi(line.substr(tabPoses[7]+1, tabPoses[8] - tabPoses[7] - 1));
+		size_t secondNodeStart = 1;
+		assert(path.size() >= 2);
+		assert(path[0] == '>' || path[0] == '<');
+		while (secondNodeStart < path.size() && path[secondNodeStart] != '>' && path[secondNodeStart] != '<') secondNodeStart += 1;
+		assert(secondNodeStart >= 2);
+		std::string firstNodeName = path.substr(1, secondNodeStart - 1);
+		bool reverse = path[0] == '<';
+		result[readName].emplace_back(nodeNameMap.at(firstNodeName), pathStart, readStart, readEnd - readStart, readEnd - readStart, reverse);
+	}
+	return result;
+}
+
 void alignReads(AlignerParams params)
 {
 	assertSetNoRead("Preprocessing");
@@ -744,6 +787,11 @@ void alignReads(AlignerParams params)
 				std::exit(0);
 			}
 		}
+		seedHitsToThreads = &seedHits;
+	}
+	if (params.realignFile.size() > 0)
+	{
+		seedHits = loadGafSeeds(alignmentGraph, params.realignFile);
 		seedHitsToThreads = &seedHits;
 	}
 
