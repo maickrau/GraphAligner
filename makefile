@@ -34,7 +34,7 @@ $(BINDIR)/GraphAligner: $(ODIR)/AlignerMain.o $(OBJ) MEMfinder/lib/memfinder.a
 
 $(ODIR)/GraphAlignerWrapper.o: $(SRCDIR)/GraphAlignerWrapper.cpp $(SRCDIR)/GraphAligner.h $(SRCDIR)/NodeSlice.h $(SRCDIR)/WordSlice.h $(SRCDIR)/ArrayPriorityQueue.h $(SRCDIR)/ComponentPriorityQueue.h $(SRCDIR)/GraphAlignerVGAlignment.h $(SRCDIR)/GraphAlignerGAFAlignment.h $(SRCDIR)/GraphAlignerBitvectorBanded.h $(SRCDIR)/GraphAlignerBitvectorCommon.h $(SRCDIR)/GraphAlignerCommon.h $(DEPS)
 
-$(ODIR)/AlignerMain.o: $(SRCDIR)/AlignerMain.cpp $(DEPS)
+$(ODIR)/AlignerMain.o: $(SRCDIR)/AlignerMain.cpp $(DEPS) $(OBJ)
 	$(GPP) -c -o $@ $< $(CPPFLAGS) -DVERSION="\"$(VERSION)\""
 
 $(ODIR)/%.o: $(SRCDIR)/%.cpp $(DEPS)
