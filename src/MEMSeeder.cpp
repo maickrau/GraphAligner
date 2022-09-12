@@ -9,7 +9,8 @@ bool fileExists(const std::string& fileName)
 	return file.good();
 }
 
-MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix)
+MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, const double uniqueBonusFactor) :
+	uniqueBonusFactor(uniqueBonusFactor)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
 	{
@@ -26,7 +27,8 @@ MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix)
 	}
 }
 
-MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix)
+MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, const double uniqueBonusFactor) :
+	uniqueBonusFactor(uniqueBonusFactor)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
 	{
@@ -167,7 +169,7 @@ std::vector<SeedHit> MEMSeeder::getMemSeeds(const std::string& sequence, size_t 
 {
 	assert(index.initialized());
 	std::vector<SeedHit> result;
-	auto matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount);
+	auto matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor);
 	assert(matches.size() <= maxCount);
 	result.reserve(matches.size());
 	for (size_t i = 0; i < matches.size(); i++)

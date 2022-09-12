@@ -47,6 +47,7 @@ struct AlignerParams
 	double overlapIncompatibleCutoff;
 	size_t maxTraceCount;
 	std::string realignFile;
+	double uniqueMemBonusFactor;
 };
 
 void alignReads(AlignerParams params);

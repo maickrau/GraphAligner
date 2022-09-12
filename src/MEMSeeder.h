@@ -12,8 +12,8 @@
 class MEMSeeder
 {
 public:
-	MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix);
-	MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix);
+	MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, double uniqueBonusFactor);
+	MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, double uniqueBonusFactor);
 	std::vector<SeedHit> getMemSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const;
 	std::vector<SeedHit> getMumSeeds(const std::string& sequence, size_t maxCount, size_t minLen) const;
 private:
@@ -27,6 +27,7 @@ private:
 	FMIndex index;
 	std::vector<uint64_t> nodePositions;
 	std::vector<uint64_t> nodeIDs;
+	const double uniqueBonusFactor;
 };
 
 #endif

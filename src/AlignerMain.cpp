@@ -88,6 +88,7 @@ int main(int argc, char** argv)
 		("clip-ambiguous-ends", boost::program_options::value<int>(), "clip ambiguous alignment ends with alignment score cutoff arg")
 		("overlap-incompatible-cutoff", boost::program_options::value<double>(), "consider two partial alignments incompatible if they overlap by arg% of the length of the shorter one")
 		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
+		("unique-mem-bonus-factor", boost::program_options::value<double>(), "bonus priority factor for unique MEMs")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -155,6 +156,7 @@ int main(int argc, char** argv)
 	params.maxTraceCount = 10;
 	params.overlapIncompatibleCutoff = 0.3;
 	params.realignFile = "";
+	params.uniqueMemBonusFactor = 1.0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -223,6 +225,7 @@ int main(int argc, char** argv)
 	if (vm.count("discard-cigar")) params.includeCigar = false;
 	if (vm.count("clip-ambiguous-ends")) params.clipAmbiguousEnds = vm["clip-ambiguous-ends"].as<int>();
 	if (vm.count("overlap-incompatible-cutoff")) params.overlapIncompatibleCutoff = vm["overlap-incompatible-cutoff"].as<double>();
+	if (vm.count("unique-mem-bonus-factor")) params.uniqueMemBonusFactor = vm["unique-mem-bonus-factor"].as<double>();
 
 	if (vm.count("X-drop"))
 	{
