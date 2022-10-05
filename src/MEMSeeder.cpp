@@ -9,7 +9,7 @@ bool fileExists(const std::string& fileName)
 	return file.good();
 }
 
-MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, const double uniqueBonusFactor) :
+MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction) :
 	uniqueBonusFactor(uniqueBonusFactor)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
@@ -22,12 +22,12 @@ MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, cons
 	}
 	else
 	{
-		initTree(graph);
+		initTree(graph, lowMemoryMEMIndexConstruction);
 		if (cachePrefix.size() > 0) saveTo(cachePrefix);
 	}
 }
 
-MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, const double uniqueBonusFactor) :
+MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction) :
 	uniqueBonusFactor(uniqueBonusFactor)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
@@ -36,7 +36,7 @@ MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, con
 	}
 	else
 	{
-		initTree(graph);
+		initTree(graph, lowMemoryMEMIndexConstruction);
 		if (cachePrefix.size() > 0) saveTo(cachePrefix);
 	}
 }
@@ -57,7 +57,7 @@ void MEMSeeder::loadFrom(const std::string& prefix)
 	deserialize(file, nodeIDs);
 }
 
-void MEMSeeder::initTree(const GfaGraph& graph)
+void MEMSeeder::initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexConstruction)
 {
 	std::string seq;
 	for (size_t i = 0; i < graph.nodes.size(); i++)
@@ -94,10 +94,17 @@ void MEMSeeder::initTree(const GfaGraph& graph)
 	}
 	nodePositions.push_back(seq.size());
 	seq.push_back(0);
-	index.initialize(std::move(seq), 16);
+	if (lowMemoryMEMIndexConstruction)
+	{
+		index.initializeLowMemory(std::move(seq), 16);
+	}
+	else
+	{
+		index.initialize(std::move(seq), 16);
+	}
 }
 
-void MEMSeeder::initTree(const vg::Graph& graph)
+void MEMSeeder::initTree(const vg::Graph& graph, const bool lowMemoryMEMIndexConstruction)
 {
 	std::string seq;
 	for (int i = 0; i < graph.node_size(); i++)
@@ -134,7 +141,14 @@ void MEMSeeder::initTree(const vg::Graph& graph)
 	}
 	nodePositions.push_back(seq.size());
 	seq.push_back(0);
-	index.initialize(std::move(seq), 16);
+	if (lowMemoryMEMIndexConstruction)
+	{
+		index.initializeLowMemory(std::move(seq), 16);
+	}
+	else
+	{
+		index.initialize(std::move(seq), 16);
+	}
 }
 
 size_t MEMSeeder::getNodeIndex(size_t indexPos) const

@@ -48,6 +48,7 @@ struct AlignerParams
 	size_t maxTraceCount;
 	std::string realignFile;
 	double uniqueMemBonusFactor;
+	bool lowMemoryMEMIndexConstruction;
 };
 
 void alignReads(AlignerParams params);
