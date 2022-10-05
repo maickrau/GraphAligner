@@ -115,7 +115,7 @@ private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
-	std::vector<size_t> nodeLength;
+	std::vector<uint8_t> nodeLength;
 	std::vector<std::vector<size_t>> nodeLookup;
 	std::vector<size_t> originalNodeSize;
 	std::vector<size_t> nodeOffset;

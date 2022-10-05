@@ -73,7 +73,7 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 				assert(nodeIDs.size() == outNeighbors.size());
 				assert(nodeOffset.size() == outNeighbors.size());
 				assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-				assert(nodeOffset[outNeighbors.size()-2] + nodeLength[outNeighbors.size()-2] == nodeOffset[outNeighbors.size()-1]);
+				assert(nodeOffset[outNeighbors.size()-2] + NodeLength(outNeighbors.size()-2) == nodeOffset[outNeighbors.size()-1]);
 				outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
 				inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
 			}
@@ -234,7 +234,7 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	assert(node_id_to < nodeLookup.size());
 	size_t from = nodeLookup.at(node_id_from).back();
 	size_t to = std::numeric_limits<size_t>::max();
-	assert(nodeOffset[from] + nodeLength[from] == originalNodeSize[node_id_from]);
+	assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[node_id_from]);
 	for (auto node : nodeLookup[node_id_to])
 	{
 		if (nodeOffset[node] == startOffset)
@@ -420,15 +420,15 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 		{
 			if (chainNumber[u] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
-			assert(std::numeric_limits<size_t>::max() - nodeLength[u] > dist);
-			stack.emplace_back(u, dist + nodeLength[u]);
+			assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
+			stack.emplace_back(u, dist + NodeLength(u));
 		}
 		for (const size_t u : inNeighbors[v])
 		{
 			if (chainNumber[u] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
-			assert(dist > nodeLength[v]);
-			stack.emplace_back(u, dist - nodeLength[v]);
+			assert(dist > NodeLength(v));
+			stack.emplace_back(u, dist - NodeLength(v));
 		}
 	}
 }
@@ -741,7 +741,7 @@ size_t AlignmentGraph::NodeLength(size_t index) const
 
 char AlignmentGraph::NodeSequences(size_t node, size_t pos) const
 {
-	assert(pos < nodeLength[node]);
+	assert(pos < NodeLength(node));
 	if (node < firstAmbiguous)
 	{
 		assert(node < nodeSequences.size());
@@ -998,7 +998,7 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 			lastOffset = nodeOffset[node];
 			offsets.insert(nodeOffset[node]);
 			assert(nodeIDs[node] == i);
-			foundSize += nodeLength[node];
+			foundSize += NodeLength(node);
 		}
 		assert(foundSize == originalNodeSize[i]);
 	}
