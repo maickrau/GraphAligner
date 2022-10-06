@@ -93,6 +93,7 @@ public:
 	size_t GetReverseNode(size_t node) const;
 	size_t NodeSize() const;
 	size_t SizeInBP() const;
+	size_t BigraphNodeID(size_t directedNodeId) const;
 	size_t NodeLength(size_t nodeIndex) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;

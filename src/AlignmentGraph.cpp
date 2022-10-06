@@ -828,7 +828,7 @@ size_t AlignmentGraph::GetUnitigNode(int nodeId, size_t offset) const
 	while (index > 0 && (nodeOffset[nodeLookup[nodeId][index]] > offset)) index--;
 	assert(index != nodeLookup[nodeId].size());
 	size_t result = nodeLookup[nodeId][index];
-	assert(nodeIDs[result] == nodeId);
+	assert(BigraphNodeID(result) == nodeId);
 	assert(nodeOffset[result] <= offset);
 	assert(nodeOffset[result] + NodeLength(result) > offset);
 	return result;
@@ -997,7 +997,7 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 			assert(offsets.size() == 0 || nodeOffset[node] > lastOffset);
 			lastOffset = nodeOffset[node];
 			offsets.insert(nodeOffset[node]);
-			assert(nodeIDs[node] == i);
+			assert(BigraphNodeID(node) == i);
 			foundSize += NodeLength(node);
 		}
 		assert(foundSize == originalNodeSize[i]);
@@ -1122,4 +1122,9 @@ size_t AlignmentGraph::ComponentSize() const
 size_t AlignmentGraph::SizeInBP() const
 {
 	return bpSize;
+}
+
+size_t AlignmentGraph::BigraphNodeID(size_t directedNodeId) const
+{
+	return nodeIDs[directedNodeId];
 }

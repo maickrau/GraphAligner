@@ -509,12 +509,12 @@ private:
 	// 	if (!result.backward.failed())
 	// 	{
 	// 		auto reversePos = params.graph.GetReversePosition(forwardNodeId, seedHit.nodeOffset);
-	// 		assert(result.backward.trace.back().DPposition.seqPos == (size_t)-1 && params.graph.nodeIDs[result.backward.trace.back().DPposition.node] == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().DPposition.node] + result.backward.trace.back().DPposition.nodeOffset == reversePos.second);
+	// 		assert(result.backward.trace.back().DPposition.seqPos == (size_t)-1 && params.graph.BigraphNodeID(result.backward.trace.back().DPposition.node) == backwardNodeId && params.graph.nodeOffset[result.backward.trace.back().DPposition.node] + result.backward.trace.back().DPposition.nodeOffset == reversePos.second);
 	// 		std::reverse(result.backward.trace.begin(), result.backward.trace.end());
 	// 	}
 	// 	if (!result.forward.failed())
 	// 	{
-	// 		assert(result.forward.trace.back().DPposition.seqPos == (size_t)-1 && params.graph.nodeIDs[result.forward.trace.back().DPposition.node] == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().DPposition.node] + result.forward.trace.back().DPposition.nodeOffset == seedHit.nodeOffset);
+	// 		assert(result.forward.trace.back().DPposition.seqPos == (size_t)-1 && params.graph.BigraphNodeID(result.forward.trace.back().DPposition.node) == forwardNodeId && params.graph.nodeOffset[result.forward.trace.back().DPposition.node] + result.forward.trace.back().DPposition.nodeOffset == seedHit.nodeOffset);
 	// 		std::reverse(result.forward.trace.begin(), result.forward.trace.end());
 	// 	}
 	// 	return result;
@@ -528,7 +528,7 @@ private:
 		{
 			trace.trace[i].DPposition.seqPos += start;
 			auto nodeIndex = trace.trace[i].DPposition.node;
-			trace.trace[i].DPposition.node = params.graph.nodeIDs[nodeIndex];
+			trace.trace[i].DPposition.node = params.graph.BigraphNodeID(nodeIndex);
 			trace.trace[i].DPposition.nodeOffset += params.graph.nodeOffset[nodeIndex];
 			assert(trace.trace[i].DPposition.seqPos >= 0);
 			assert(trace.trace[i].DPposition.seqPos < sequence.size());
@@ -597,8 +597,8 @@ private:
 			assert(trace.trace[i].DPposition.seqPos <= end || trace.trace[i].DPposition.seqPos == (size_t)-1);
 			trace.trace[i].DPposition.seqPos = end - trace.trace[i].DPposition.seqPos;
 			size_t offset = params.graph.nodeOffset[trace.trace[i].DPposition.node] + trace.trace[i].DPposition.nodeOffset;
-			auto reversePos = params.graph.GetReversePosition(params.graph.nodeIDs[trace.trace[i].DPposition.node], offset);
-			assert(reversePos.second < params.graph.originalNodeSize.at(params.graph.nodeIDs[trace.trace[i].DPposition.node]));
+			auto reversePos = params.graph.GetReversePosition(params.graph.BigraphNodeID(trace.trace[i].DPposition.node), offset);
+			assert(reversePos.second < params.graph.originalNodeSize.at(params.graph.BigraphNodeID(trace.trace[i].DPposition.node)));
 			trace.trace[i].DPposition.node = reversePos.first;
 			trace.trace[i].DPposition.nodeOffset = reversePos.second;
 			assert(trace.trace[i].DPposition.seqPos < sequence.size());

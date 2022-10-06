@@ -49,7 +49,7 @@ public:
 		for (const auto& fwTrace : traces)
 		{
 			auto fwNodeIndex = fwTrace.trace[0].DPposition.node;
-			size_t bigraphNodeId = params.graph.nodeIDs[fwNodeIndex];
+			size_t bigraphNodeId = params.graph.BigraphNodeID(fwNodeIndex);
 			size_t bigraphOffset = fwTrace.trace[0].DPposition.nodeOffset + params.graph.nodeOffset[fwNodeIndex];
 			auto reversePos = params.graph.GetReversePosition(bigraphNodeId, bigraphOffset);
 

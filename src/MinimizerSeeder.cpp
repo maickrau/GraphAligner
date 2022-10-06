@@ -298,7 +298,7 @@ maxCount(0)
 
 void MinimizerSeeder::initMinimizers(size_t numThreads)
 {
-	size_t positionSize = log2(graph.nodeIDs.size()) + 1;
+	size_t positionSize = log2(graph.NodeSize()) + 1;
 	assert(positionSize + 6 < 64);
 	assert(minimizerLength * 2 < 64);
 	std::mutex nodeMutex;
@@ -322,11 +322,11 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	std::unordered_map<size_t, size_t> nodeMinimizerStart;
 	for (size_t i = 0; i < graph.NodeSize(); i++)
 	{
-		nodeMinimizerStart[graph.nodeIDs[i]] = std::max(nodeMinimizerStart[graph.nodeIDs[i]], (size_t)0);
+		nodeMinimizerStart[graph.BigraphNodeID(i)] = std::max(nodeMinimizerStart[graph.BigraphNodeID(i)], (size_t)0);
 		bool skipStart = false;
 		for (auto n : graph.inNeighbors[i])
 		{
-			if (graph.nodeIDs[n] != graph.nodeIDs[i])
+			if (graph.BigraphNodeID(n) != graph.BigraphNodeID(i))
 			{
 				skipStart = true;
 				break;
@@ -334,7 +334,7 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		}
 		if (skipStart)
 		{
-			nodeMinimizerStart[graph.nodeIDs[i]] = std::max(nodeMinimizerStart[graph.nodeIDs[i]], graph.nodeOffset[i]);
+			nodeMinimizerStart[graph.BigraphNodeID(i)] = std::max(nodeMinimizerStart[graph.BigraphNodeID(i)], graph.nodeOffset[i]);
 		}
 	}
 
@@ -544,10 +544,10 @@ std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, doub
 SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t seqPos, int count) const
 {
 	assert(nodeId >= 0);
-	assert((size_t)nodeId < graph.nodeIDs.size());
+	assert((size_t)nodeId < graph.NodeSize());
 	assert((size_t)nodeId < graph.nodeOffset.size());
 	assert((size_t)nodeId < graph.reverse.size());
-	SeedHit result { graph.nodeIDs[(size_t)nodeId]/2, nodeOffset + graph.nodeOffset[(size_t)nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
+	SeedHit result { graph.BigraphNodeID((size_t)nodeId)/2, nodeOffset + graph.nodeOffset[(size_t)nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
 	return result;
 }
 
