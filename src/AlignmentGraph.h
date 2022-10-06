@@ -1,6 +1,7 @@
 #ifndef AlignmentGraph_h
 #define AlignmentGraph_h
 
+#include <iterator>
 #include <functional>
 #include <vector>
 #include <tuple>
@@ -8,10 +9,38 @@
 #include <phmap.h>
 #include "ThreadReadAssertion.h"
 
-
 class AlignmentGraph
 {
 public:
+	class EdgeIterator : public std::iterator<std::input_iterator_tag, size_t>
+	{
+	public:
+		EdgeIterator(size_t implicitEdge, const size_t* vecPointer);
+		EdgeIterator& operator=(const EdgeIterator& other) = default;
+		bool operator!=(const EdgeIterator& other) const;
+		bool operator==(const EdgeIterator& other) const;
+		size_t operator*() const;
+		EdgeIterator& operator++();
+		EdgeIterator operator++(int);
+	private:
+		size_t implicitEdge;
+		const size_t* vecPointer;
+	};
+	class NodeEdgeIterator
+	{
+	public:
+		using iterator = EdgeIterator;
+		NodeEdgeIterator(size_t implicitEdge, const size_t* startPointer, const size_t* endPointer);
+		NodeEdgeIterator& operator=(const NodeEdgeIterator& other) = default;
+		EdgeIterator begin() const;
+		EdgeIterator end() const;
+		size_t size() const;
+		size_t operator[](size_t index) const;
+	private:
+		size_t implicitEdge;
+		const size_t* startPointer;
+		const size_t* endPointer;
+	};
 	//determines extra band size, shouldn't be too high because of extra slices
 	//should be 0 mod (wordsize/2 == 32), otherwise storage has overhead
 	//64 is the fastest out of 32, 64, 96
@@ -102,10 +131,12 @@ public:
 	std::string OriginalNodeName(int nodeId) const;
 	size_t OriginalNodeSize(int nodeId) const;
 	size_t ComponentSize() const;
+	NodeEdgeIterator OutNeighbors(size_t nodeId) const;
+	NodeEdgeIterator InNeighbors(size_t nodeId) const;
 	static AlignmentGraph DummyGraph();
 	std::vector<std::string> originalNodeName;
-
 private:
+	void buildEdges();
 	void fixChainApproxPos(const size_t start);
 	std::pair<bool, size_t> findBubble(const size_t start, const std::vector<bool>& ignorableTip);
 	void chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank);
@@ -121,8 +152,10 @@ private:
 	std::vector<size_t> originalNodeSize;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
-	std::vector<std::vector<size_t>> inNeighbors;
-	std::vector<std::vector<size_t>> outNeighbors;
+	std::vector<bool> hasImplicitOutEdge;
+	std::vector<std::vector<size_t>> tempConstructionOutEdges;
+	std::vector<size_t> explicitEdges;
+	std::vector<size_t> edgeStorage;
 	std::vector<bool> reverse;
 	std::vector<bool> linearizable;
 	std::vector<NodeChunkSequence> nodeSequences;

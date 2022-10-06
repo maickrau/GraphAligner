@@ -404,7 +404,7 @@ public:
 					if (slice.slices[currentSlice+1].nodeMaxExactEndposScore.at(node) >= score) continue;
 				}
 				bool notLocalMaximum = false;
-				for (auto neighbor : params.graph.inNeighbors[node])
+				for (auto neighbor : params.graph.InNeighbors(node))
 				{
 					if (slice.slices[currentSlice].nodeMaxExactEndposScore.count(neighbor) == 1)
 					{
@@ -424,7 +424,7 @@ public:
 						}
 					}
 				}
-				for (auto neighbor : params.graph.outNeighbors[node])
+				for (auto neighbor : params.graph.OutNeighbors(node))
 				{
 					if (slice.slices[currentSlice].nodeMaxExactEndposScore.count(neighbor) == 1)
 					{
@@ -855,7 +855,7 @@ public:
 			if (result.trace.back().DPposition.nodeOffset == 0 && beforeSliceScores[result.trace.back().DPposition.nodeOffset] != 0)
 			{
 				bool found = false;
-				for (auto neighbor : params.graph.inNeighbors[result.trace.back().DPposition.node])
+				for (auto neighbor : params.graph.InNeighbors(result.trace.back().DPposition.node))
 				{
 					if (slice.slices[0].scores.hasNode(neighbor) && slice.slices[0].scores.node(neighbor).endSlice.getScoreBeforeStart() == beforeSliceScores[result.trace.back().DPposition.nodeOffset] - 1)
 					{
@@ -950,7 +950,7 @@ public:
 			ScoreType smallestFound = startSlice.getValue(offset-1);
 			MatrixPosition smallestPos { node, 0, pos.seqPos-1 };
 			bool nodeChange = false;
-			for (auto neighbor : params.graph.inNeighbors[node])
+			for (auto neighbor : params.graph.InNeighbors(node))
 			{
 				if (current.hasNode(neighbor))
 				{
@@ -975,7 +975,7 @@ public:
 			}
 			return std::make_pair(std::make_pair(pos, false), std::make_pair(smallestPos, nodeChange));
 		}
-		for (auto neighbor : params.graph.inNeighbors[node])
+		for (auto neighbor : params.graph.InNeighbors(node))
 		{
 			if (current.hasNode(neighbor))
 			{
@@ -1067,7 +1067,7 @@ public:
 				smallestPos = MatrixPosition { node, 0, j-1 };
 				nodeChange = false;
 			}
-			for (auto neighbor : params.graph.inNeighbors[node])
+			for (auto neighbor : params.graph.InNeighbors(node))
 			{
 				if (previous.hasNode(neighbor))
 				{
@@ -1098,7 +1098,7 @@ public:
 		MatrixPosition bestInvalidBacktrace { std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max() };
 		ScoreType bestInvalidBacktraceScore = scoreHere+1;
 		bool bestInvalidNodeSwitch = false;
-		for (auto neighbor : params.graph.inNeighbors[node])
+		for (auto neighbor : params.graph.InNeighbors(node))
 		{
 			if (previous.hasNode(neighbor))
 			{
@@ -1327,7 +1327,7 @@ public:
 
 		if (!forceCalculation && slice.exists)
 		{
-			if (hasSkipless && params.graph.inNeighbors[i].size() == 1 && bandCheck(params.graph.inNeighbors[i][0]))
+			if (hasSkipless && params.graph.InNeighbors(i).size() == 1 && bandCheck(params.graph.InNeighbors(i)[0]))
 			{
 				if (ws.scoreEnd > slice.startSlice.scoreEnd)
 				{

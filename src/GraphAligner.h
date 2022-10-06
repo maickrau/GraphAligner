@@ -866,7 +866,7 @@ private:
 				continue;
 			}
 			assert(oldNodeIndex != newNodeIndex);
-			assert(std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end());
+			assert(std::find(params.graph.OutNeighbors(oldpos.node).begin(), params.graph.OutNeighbors(oldpos.node).end(), newpos.node) != params.graph.OutNeighbors(oldpos.node).end());
 			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
 			assert(oldpos.nodeOffset == params.graph.NodeLength(oldNodeIndex)-1);
 			assert(newpos.nodeOffset == 0);
@@ -930,7 +930,7 @@ private:
 			}
 			assert(oldNodeIndex != newNodeIndex);
 			assert(newpos.seqPos == oldpos.seqPos || newpos.seqPos == oldpos.seqPos+1);
-			bool foundSimple = std::find(params.graph.outNeighbors[oldpos.node].begin(), params.graph.outNeighbors[oldpos.node].end(), newpos.node) != params.graph.outNeighbors[oldpos.node].end();
+			bool foundSimple = std::find(params.graph.OutNeighbors(oldpos.node).begin(), params.graph.OutNeighbors(oldpos.node).end(), newpos.node) != params.graph.OutNeighbors(oldpos.node).end();
 			if (foundSimple)
 			{
 				assert(newpos.nodeOffset == 0);
@@ -946,7 +946,7 @@ private:
 				auto revNewNodeIndex = params.graph.GetUnitigNode(revNewNode, revNewOffset);
 				auto revOldNodeOffset = revOldOffset - params.graph.nodeOffset[revOldNodeIndex];
 				auto revNewNodeOffset = revNewOffset - params.graph.nodeOffset[revNewNodeIndex];
-				bool foundReverse = std::find(params.graph.outNeighbors[revNewNodeIndex].begin(), params.graph.outNeighbors[revNewNodeIndex].end(), revOldNodeIndex) != params.graph.outNeighbors[revNewNodeIndex].end();
+				bool foundReverse = std::find(params.graph.OutNeighbors(revNewNodeIndex).begin(), params.graph.OutNeighbors(revNewNodeIndex).end(), revOldNodeIndex) != params.graph.OutNeighbors(revNewNodeIndex).end();
 				assert(foundReverse);
 				assert(revOldNodeOffset == 0);
 				assert(revNewNodeOffset == params.graph.NodeLength(revNewNodeIndex)-1);

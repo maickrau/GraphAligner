@@ -324,7 +324,7 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 	{
 		nodeMinimizerStart[graph.BigraphNodeID(i)] = std::max(nodeMinimizerStart[graph.BigraphNodeID(i)], (size_t)0);
 		bool skipStart = false;
-		for (auto n : graph.inNeighbors[i])
+		for (auto n : graph.InNeighbors(i))
 		{
 			if (graph.BigraphNodeID(n) != graph.BigraphNodeID(i))
 			{

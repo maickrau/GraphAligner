@@ -13,11 +13,82 @@ AlignmentGraph AlignmentGraph::DummyGraph()
 	return dummy;
 }
 
+AlignmentGraph::NodeEdgeIterator::NodeEdgeIterator(size_t implicitEdge, const size_t* startPointer, const size_t* endPointer) :
+	implicitEdge(implicitEdge),
+	startPointer(startPointer),
+	endPointer(endPointer)
+{
+}
+
+AlignmentGraph::EdgeIterator::EdgeIterator(size_t implicitEdge, const size_t* vecPointer) :
+	implicitEdge(implicitEdge),
+	vecPointer(vecPointer)
+{
+}
+
+AlignmentGraph::EdgeIterator AlignmentGraph::NodeEdgeIterator::begin() const
+{
+	return AlignmentGraph::EdgeIterator { implicitEdge, startPointer };
+}
+
+AlignmentGraph::EdgeIterator AlignmentGraph::NodeEdgeIterator::end() const
+{
+	return AlignmentGraph::EdgeIterator { std::numeric_limits<size_t>::max(), endPointer };
+}
+
+size_t AlignmentGraph::NodeEdgeIterator::size() const
+{
+	return endPointer - startPointer + (implicitEdge != std::numeric_limits<size_t>::max() ? 1 : 0);
+}
+
+size_t AlignmentGraph::NodeEdgeIterator::operator[](size_t index) const
+{
+	if (implicitEdge != std::numeric_limits<size_t>::max())
+	{
+		if (index == 0) return implicitEdge;
+		index -= 1;
+	}
+	return *(startPointer+index);
+}
+
+bool AlignmentGraph::EdgeIterator::operator==(const AlignmentGraph::EdgeIterator& other) const
+{
+	return implicitEdge == other.implicitEdge && vecPointer == other.vecPointer;
+}
+
+bool AlignmentGraph::EdgeIterator::operator!=(const AlignmentGraph::EdgeIterator& other) const
+{
+	return !(*this == other);
+}
+
+size_t AlignmentGraph::EdgeIterator::operator*() const
+{
+	if (implicitEdge != std::numeric_limits<size_t>::max()) return implicitEdge;
+	return *vecPointer;
+}
+
+AlignmentGraph::EdgeIterator& AlignmentGraph::EdgeIterator::operator++()
+{
+	if (implicitEdge != std::numeric_limits<size_t>::max())
+	{
+		implicitEdge = std::numeric_limits<size_t>::max();
+		return *this;
+	}
+	vecPointer += 1;
+	return *this;
+}
+
+AlignmentGraph::EdgeIterator AlignmentGraph::EdgeIterator::operator++(int)
+{
+	auto result = *this;
+	++*this;
+	return result;
+}
+
 AlignmentGraph::AlignmentGraph() :
 nodeLength(),
 nodeLookup(),
 nodeIDs(),
-inNeighbors(),
 nodeSequences(),
 bpSize(0),
 ambiguousNodeSequences(),
@@ -35,8 +106,7 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	originalNodeName.resize(numNodes, "");
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
-	inNeighbors.reserve(numSplitNodes);
-	outNeighbors.reserve(numSplitNodes);
+	tempConstructionOutEdges.reserve(numSplitNodes);
 	reverse.reserve(numSplitNodes);
 	nodeOffset.reserve(numSplitNodes);
 }
@@ -68,14 +138,12 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
 			if (offset > 0)
 			{
-				assert(outNeighbors.size() >= 2);
-				assert(outNeighbors.size() == inNeighbors.size());
-				assert(nodeIDs.size() == outNeighbors.size());
-				assert(nodeOffset.size() == outNeighbors.size());
-				assert(nodeIDs[outNeighbors.size()-2] == nodeIDs[outNeighbors.size()-1]);
-				assert(nodeOffset[outNeighbors.size()-2] + NodeLength(outNeighbors.size()-2) == nodeOffset[outNeighbors.size()-1]);
-				outNeighbors[outNeighbors.size()-2].push_back(outNeighbors.size()-1);
-				inNeighbors[inNeighbors.size()-1].push_back(inNeighbors.size()-2);
+				assert(tempConstructionOutEdges.size() >= 2);
+				assert(nodeIDs.size() == tempConstructionOutEdges.size());
+				assert(nodeOffset.size() == nodeIDs.size());
+				assert(nodeIDs[nodeIDs.size()-2] == nodeIDs[nodeIDs.size()-1]);
+				assert(nodeOffset[nodeIDs.size()-2] + NodeLength(nodeIDs.size()-2) == nodeOffset[nodeIDs.size()-1]);
+				tempConstructionOutEdges[nodeIDs.size()-2].push_back(nodeIDs.size()-1);
 			}
 		}
 	}
@@ -91,8 +159,7 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	nodeLookup[nodeId].push_back(nodeLength.size());
 	nodeLength.push_back(sequence.size());
 	nodeIDs.push_back(nodeId);
-	inNeighbors.emplace_back();
-	outNeighbors.emplace_back();
+	tempConstructionOutEdges.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeOffset.push_back(offset);
 	NodeChunkSequence normalSeq;
@@ -222,8 +289,7 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 		nodeSequences.emplace_back(normalSeq);
 	}
 	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeLength.size() == inNeighbors.size());
-	assert(inNeighbors.size() == outNeighbors.size());
+	assert(nodeLength.size() == tempConstructionOutEdges.size());
 }
 
 void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset)
@@ -244,15 +310,80 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	}
 	assert(to != std::numeric_limits<size_t>::max());
 	//don't add double edges
-	if (std::find(inNeighbors[to].begin(), inNeighbors[to].end(), from) == inNeighbors[to].end()) inNeighbors[to].push_back(from);
-	if (std::find(outNeighbors[from].begin(), outNeighbors[from].end(), to) == outNeighbors[from].end()) outNeighbors[from].push_back(to);
+	if (std::find(tempConstructionOutEdges[from].begin(), tempConstructionOutEdges[from].end(), to) == tempConstructionOutEdges[from].end()) tempConstructionOutEdges[from].push_back(to);
+}
+
+void AlignmentGraph::buildEdges()
+{
+	assert(nodeLength.size() == tempConstructionOutEdges.size());
+	hasImplicitOutEdge.resize(nodeLength.size(), false);
+	std::vector<uint16_t> explicitInEdgeCount;
+	std::vector<uint16_t> explicitOutEdgeCount;
+	explicitInEdgeCount.resize(nodeLength.size(), 0);
+	explicitOutEdgeCount.resize(nodeLength.size(), 0);
+	size_t totalExplicitEdges = 0;
+	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
+	{
+		for (auto edge : tempConstructionOutEdges[i])
+		{
+			if (edge == i+1)
+			{
+				hasImplicitOutEdge[i] = true;
+			}
+			else
+			{
+				explicitOutEdgeCount[i] += 1;
+				explicitInEdgeCount[edge] += 1;
+				totalExplicitEdges += 2;
+				assert(explicitInEdgeCount[edge] < 1024);
+				assert(explicitOutEdgeCount[i] < 1024);
+			}
+		}
+	}
+	assert(totalExplicitEdges < 17592186044416ll); // 2^44, 44 bits for start index, 10 bits for in-edge count, 10 for out-edge count
+	size_t start = 0;
+	explicitEdges.resize(nodeLength.size());
+	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
+	{
+		assert(explicitOutEdgeCount[i] < 1024);
+		assert(explicitInEdgeCount[i] < 1024);
+		explicitEdges[i] = (start << 20) + (explicitInEdgeCount[i] << 10) + explicitOutEdgeCount[i];
+		start += explicitInEdgeCount[i] + explicitOutEdgeCount[i];
+	}
+	assert(start == totalExplicitEdges);
+	edgeStorage.resize(totalExplicitEdges, std::numeric_limits<size_t>::max());
+	for (size_t from = 0; from < tempConstructionOutEdges.size(); from++)
+	{
+		for (size_t to : tempConstructionOutEdges[from])
+		{
+			if (to == from+1) continue;
+			assert(explicitOutEdgeCount[from] >= 1);
+			explicitOutEdgeCount[from] -= 1;
+			size_t outIndex = (explicitEdges[from] >> 20) + explicitOutEdgeCount[from];
+			assert(outIndex < edgeStorage.size());
+			assert(edgeStorage[outIndex] == std::numeric_limits<size_t>::max());
+			edgeStorage[outIndex] = to;
+			assert(explicitInEdgeCount[to] >= 1);
+			explicitInEdgeCount[to] -= 1;
+			size_t inIndex = (explicitEdges[to] >> 20) + (explicitEdges[to] & 1023) + explicitInEdgeCount[to];
+			assert(inIndex < edgeStorage.size());
+			assert(edgeStorage[inIndex] == std::numeric_limits<size_t>::max());
+			edgeStorage[inIndex] = from;
+		}
+	}
+	for (size_t i = 0; i < edgeStorage.size(); i++)
+	{
+		assert(edgeStorage[i] != std::numeric_limits<size_t>::max());
+		assert(edgeStorage[i] < nodeLength.size());
+	}
+	std::vector<std::vector<size_t>> tmp;
+	std::swap(tmp, tempConstructionOutEdges);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(inNeighbors.size() == nodeLength.size());
-	assert(outNeighbors.size() == nodeLength.size());
+	assert(tempConstructionOutEdges.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(nodeLookup.size() == originalNodeSize.size());
@@ -265,6 +396,7 @@ void AlignmentGraph::Finalize(int wordSize)
 		assert(originalNodeSize[i] != 0);
 	}
 	RenumberAmbiguousToEnd();
+	buildEdges();
 	ambiguousNodes.clear();
 	findLinearizable();
 	doComponentOrder();
@@ -272,23 +404,12 @@ void AlignmentGraph::Finalize(int wordSize)
 	finalized = true;
 	int specialNodes = 0;
 	size_t edges = 0;
-	for (size_t i = 0; i < inNeighbors.size(); i++)
-	{
-		inNeighbors[i].shrink_to_fit();
-		outNeighbors[i].shrink_to_fit();
-		if (inNeighbors[i].size() >= 2) specialNodes++;
-		edges += inNeighbors[i].size();
-	}
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(inNeighbors.size() == nodeLength.size());
-	assert(outNeighbors.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(nodeOffset.size() == nodeLength.size());
 	nodeLength.shrink_to_fit();
 	nodeIDs.shrink_to_fit();
-	inNeighbors.shrink_to_fit();
-	outNeighbors.shrink_to_fit();
 	reverse.shrink_to_fit();
 	nodeSequences.shrink_to_fit();
 	ambiguousNodeSequences.shrink_to_fit();
@@ -318,8 +439,8 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		seen.erase(v);
 		assert(visited.count(v) == 0);
 		visited.insert(v);
-		if (outNeighbors[v].size() == 0) return std::make_pair(false, 0);
-		for (const size_t u : outNeighbors[v])
+		if (OutNeighbors(v).size() == 0) return std::make_pair(false, 0);
+		for (const size_t u : OutNeighbors(v))
 		{
 			if (ignorableTip[u]) continue;
 			if (u == v) continue;
@@ -327,7 +448,7 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 			assert(visited.count(u) == 0);
 			seen.insert(u);
 			bool hasNonvisitedParent = false;
-			for (const size_t w : inNeighbors[u])
+			for (const size_t w : InNeighbors(u))
 			{
 				if (w == u) continue;
 				if (!ignorableTip[w] && visited.count(w) == 0)
@@ -341,7 +462,7 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		if (S.size() == 1 && seen.size() == 1 && seen.count(S[0]) == 1)
 		{
 			const size_t t = S.back();
-			for (const size_t u : outNeighbors[t])
+			for (const size_t u : OutNeighbors(t))
 			{
 				if (u == start) return std::make_pair(false, 0);
 			}
@@ -391,7 +512,7 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 		if (ignorableTip[top]) continue;
 		visited.insert(top);
 		merge(chainNumber, rank, BigraphNodeID(start), BigraphNodeID(top));
-		for (const auto neighbor : outNeighbors[top])
+		for (const auto neighbor : OutNeighbors(top))
 		{
 			if (visited.count(neighbor) == 1) continue;
 			if (neighbor == bubbleEnd) continue;
@@ -416,14 +537,14 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 		stack.pop_back();
 		if (chainApproxPos[v] != std::numeric_limits<size_t>::max()) continue;
 		chainApproxPos[v] = dist;
-		for (const size_t u : outNeighbors[v])
+		for (const size_t u : OutNeighbors(v))
 		{
 			if (chainNumber[BigraphNodeID(u)] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
 			assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
 			stack.emplace_back(u, dist + NodeLength(u));
 		}
-		for (const size_t u : inNeighbors[v])
+		for (const size_t u : InNeighbors(v))
 		{
 			if (chainNumber[BigraphNodeID(u)] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
@@ -449,7 +570,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!fwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : outNeighbors[i])
+		for (auto neighbor : OutNeighbors(i))
 		{
 			assert(componentNumber[neighbor] >= componentNumber[i]);
 			if (componentNumber[neighbor] == componentNumber[i])
@@ -468,7 +589,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!fwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : outNeighbors[i])
+		for (auto neighbor : OutNeighbors(i))
 		{
 			assert(fwTipComponent[componentNumber[neighbor]]);
 			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
@@ -480,7 +601,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!bwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : inNeighbors[i])
+		for (auto neighbor : InNeighbors(i))
 		{
 			assert(componentNumber[neighbor] <= componentNumber[i]);
 			if (componentNumber[neighbor] == componentNumber[i])
@@ -499,7 +620,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!bwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : inNeighbors[i])
+		for (auto neighbor : InNeighbors(i))
 		{
 			assert(bwTipComponent[componentNumber[neighbor]]);
 			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
@@ -514,7 +635,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		}
 		if (bwTipComponent[componentNumber[i]])
 		{
-			for (auto neighbor : outNeighbors[i])
+			for (auto neighbor : OutNeighbors(i))
 			{
 				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
 				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
@@ -522,7 +643,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		}
 		if (fwTipComponent[componentNumber[i]])
 		{
-			for (auto neighbor : inNeighbors[i])
+			for (auto neighbor : InNeighbors(i))
 			{
 				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
 				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
@@ -537,8 +658,9 @@ void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& i
 	for (size_t i = 0; i < nodeLength.size(); i++)
 	{
 		size_t uniqueFwNeighbor = std::numeric_limits<size_t>::max();
-		for (auto u : outNeighbors[i])
+		for (auto u : OutNeighbors(i))
 		{
+			assert(u < nodeLength.size());
 			if (ignorableTip[u]) continue;
 			if (u == i) continue;
 			if (uniqueFwNeighbor == std::numeric_limits<size_t>::max())
@@ -552,8 +674,9 @@ void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& i
 			}
 		}
 		size_t uniqueBwNeighbor = std::numeric_limits<size_t>::max();
-		for (auto u : inNeighbors[i])
+		for (auto u : InNeighbors(i))
 		{
+			assert(u < nodeLength.size());
 			if (ignorableTip[u]) continue;
 			if (u == i) continue;
 			if (uniqueBwNeighbor == std::numeric_limits<size_t>::max())
@@ -640,24 +763,24 @@ void AlignmentGraph::findLinearizable()
 	for (size_t node = 0; node < nodeLength.size(); node++)
 	{
 		if (checked[node]) continue;
-		if (inNeighbors[node].size() != 1)
+		if (InNeighbors(node).size() != 1)
 		{
 			checked[node] = true;
 			continue;
 		}
 		checked[node] = true;
-		assert(inNeighbors[node].size() == 1);
+		assert(InNeighbors(node).size() == 1);
 		assert(stack.size() == 0);
 		stack.push_back(node);
 		onStack[node] = true;
 		while (true)
 		{
 			assert(stack.size() <= nodeLength.size());
-			if (inNeighbors[stack.back()].size() != 1)
+			if (InNeighbors(stack.back()).size() != 1)
 			{
 				for (size_t i = 0; i < stack.size()-1; i++)
 				{
-					assert(inNeighbors[stack[i]].size() == 1);
+					assert(InNeighbors(stack[i]).size() == 1);
 					checked[stack[i]] = true;
 					linearizable[stack[i]] = true;
 					onStack[stack[i]] = false;
@@ -668,12 +791,12 @@ void AlignmentGraph::findLinearizable()
 				stack.clear();
 				break;
 			}
-			assert(inNeighbors[stack.back()].size() == 1);
+			assert(InNeighbors(stack.back()).size() == 1);
 			if (checked[stack.back()])
 			{
 				for (size_t i = 0; i < stack.size()-1; i++)
 				{
-					assert(inNeighbors[stack[i]].size() == 1);
+					assert(InNeighbors(stack[i]).size() == 1);
 					checked[stack[i]] = true;
 					linearizable[stack[i]] = true;
 					onStack[stack[i]] = false;
@@ -684,8 +807,8 @@ void AlignmentGraph::findLinearizable()
 				stack.clear();
 				break;
 			}
-			assert(inNeighbors[stack.back()].size() == 1);
-			auto neighbor = inNeighbors[stack.back()][0];
+			assert(InNeighbors(stack.back()).size() == 1);
+			auto neighbor = InNeighbors(stack.back())[0];
 			if (neighbor == node)
 			{
 				for (size_t i = 0; i < stack.size(); i++)
@@ -717,8 +840,8 @@ void AlignmentGraph::findLinearizable()
 				stack.clear();
 				break;
 			}
-			stack.push_back(inNeighbors[stack.back()][0]);
-			onStack[stack.back()] = true;
+			stack.push_back(neighbor);
+			onStack[neighbor] = true;
 		}
 	}
 }
@@ -911,8 +1034,7 @@ size_t AlignmentGraph::OriginalNodeSize(int nodeId) const
 void AlignmentGraph::RenumberAmbiguousToEnd()
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(inNeighbors.size() == nodeLength.size());
-	assert(outNeighbors.size() == nodeLength.size());
+	assert(tempConstructionOutEdges.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(ambiguousNodes.size() == nodeLength.size());
@@ -951,33 +1073,18 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 	nodeLength = reorder(nodeLength, renumbering);
 	nodeOffset = reorder(nodeOffset, renumbering);
 	nodeIDs = reorder(nodeIDs, renumbering);
-	inNeighbors = reorder(inNeighbors, renumbering);
-	outNeighbors = reorder(outNeighbors, renumbering);
+	tempConstructionOutEdges = reorder(tempConstructionOutEdges, renumbering);
 	reverse = reorder(reverse, renumbering);
 	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
 		nodeLookup[i] = renumber(nodeLookup[i], renumbering);
 	}
-	assert(inNeighbors.size() == outNeighbors.size());
-	for (size_t i = 0; i < inNeighbors.size(); i++)
+	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
 	{
-		inNeighbors[i] = renumber(inNeighbors[i], renumbering);
-		outNeighbors[i] = renumber(outNeighbors[i], renumbering);
+		tempConstructionOutEdges[i] = renumber(tempConstructionOutEdges[i], renumbering);
 	}
 
 #ifndef NDEBUG
-	assert(inNeighbors.size() == outNeighbors.size());
-	for (size_t i = 0; i < inNeighbors.size(); i++)
-	{
-		for (auto neighbor : inNeighbors[i])
-		{
-			assert(std::find(outNeighbors[neighbor].begin(), outNeighbors[neighbor].end(), i) != outNeighbors[neighbor].end());
-		}
-		for (auto neighbor : outNeighbors[i])
-		{
-			assert(std::find(inNeighbors[neighbor].begin(), inNeighbors[neighbor].end(), i) != inNeighbors[neighbor].end());
-		}
-	}
 	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
 		size_t foundSize = 0;
@@ -1043,9 +1150,9 @@ void AlignmentGraph::doComponentOrder()
 			startloop:
 				[[fallthrough]];
 			case 1:
-				if (neighborI >= outNeighbors[v].size()) goto endloop;
-				assert(neighborI < outNeighbors[v].size());
-				w = outNeighbors[v][neighborI];
+				if (neighborI >= OutNeighbors(v).size()) goto endloop;
+				assert(neighborI < OutNeighbors(v).size());
+				w = OutNeighbors(v)[neighborI];
 				if (index[w] == std::numeric_limits<size_t>::max())
 				{
 					assert(lowlink[w] == std::numeric_limits<size_t>::max());
@@ -1066,8 +1173,8 @@ void AlignmentGraph::doComponentOrder()
 					goto startloop;
 				}
 			case 2:
-				assert(neighborI < outNeighbors[v].size());
-				w = outNeighbors[v][neighborI];
+				assert(neighborI < OutNeighbors(v).size());
+				w = OutNeighbors(v)[neighborI];
 				assert(index[w] != std::numeric_limits<size_t>::max());
 				assert(lowlink[w] != std::numeric_limits<size_t>::max());
 				lowlink[v] = std::min(lowlink[v], lowlink[w]);
@@ -1098,7 +1205,7 @@ void AlignmentGraph::doComponentOrder()
 #ifdef EXTRACORRECTNESSASSERTIONS
 	for (size_t i = 0; i < nodeLength.size(); i++)
 	{
-		for (auto neighbor : outNeighbors[i])
+		for (auto neighbor : OutNeighbors(i))
 		{
 			assert(componentNumber[neighbor] >= componentNumber[i]);
 		}
@@ -1119,4 +1226,29 @@ size_t AlignmentGraph::SizeInBP() const
 size_t AlignmentGraph::BigraphNodeID(size_t directedNodeId) const
 {
 	return nodeIDs[directedNodeId];
+}
+
+AlignmentGraph::NodeEdgeIterator AlignmentGraph::OutNeighbors(size_t nodeId) const
+{
+	size_t explicitInfo = explicitEdges[nodeId];
+	size_t implicitEdge = std::numeric_limits<size_t>::max();
+	if (hasImplicitOutEdge[nodeId]) implicitEdge = nodeId+1;
+	size_t startIndex = explicitInfo >> 20;
+	size_t count = explicitInfo & 1023; 
+	assert(startIndex + count <= edgeStorage.size());
+	AlignmentGraph::NodeEdgeIterator result { implicitEdge, edgeStorage.data()+startIndex, edgeStorage.data()+startIndex+count };
+	return result;
+}
+
+AlignmentGraph::NodeEdgeIterator AlignmentGraph::InNeighbors(size_t nodeId) const
+{
+	size_t explicitInfo = explicitEdges[nodeId];
+	size_t implicitEdge = std::numeric_limits<size_t>::max();
+	if (nodeId > 0 && hasImplicitOutEdge[nodeId-1]) implicitEdge = nodeId-1;
+	size_t startIndex = (explicitInfo >> 20) + (explicitInfo & 1023);
+	size_t count = (explicitInfo >> 10) & 1023;
+	assert(startIndex + count <= edgeStorage.size());
+	assert(implicitEdge == std::numeric_limits<size_t>::max() || implicitEdge < nodeLength.size());
+	AlignmentGraph::NodeEdgeIterator result { implicitEdge, edgeStorage.data()+startIndex, edgeStorage.data()+startIndex+count };
+	return result;
 }

@@ -236,7 +236,7 @@ private:
 			{
 				foundMinScore = std::min(foundMinScore, previousSlice.node(node).startSlice.scoreEnd+1);
 			}
-			for (auto neighbor : params.graph.inNeighbors[node])
+			for (auto neighbor : params.graph.InNeighbors(node))
 			{
 				if (currentSlice.hasNode(neighbor) && currentSlice.node(neighbor).exists)
 				{
@@ -260,7 +260,7 @@ private:
 				eq = Common::characterMatch(sequence[j+i], params.graph.NodeSequences(node, 0));
 				if (eq) hasMatch = true;
 				ScoreType foundMinScore = pair.second.startSlice.getValue(i-1)+1;
-				for (auto neighbor : params.graph.inNeighbors[node])
+				for (auto neighbor : params.graph.InNeighbors(node))
 				{
 					if (!currentSlice.hasNode(neighbor)) continue;
 					if (!currentSlice.node(neighbor).exists) continue;
@@ -368,7 +368,7 @@ private:
 				if (node.second.minScore > previousQuitScore) continue;
 				if (params.graph.linearizable[node.first])
 				{
-					auto neighbor = params.graph.inNeighbors[node.first][0];
+					auto neighbor = params.graph.InNeighbors(node.first)[0];
 				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
 				 	{
 				 		//linear area, no need to add the later node into the queue 
@@ -507,7 +507,7 @@ private:
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
 				{
-					for (auto neighbor : params.graph.outNeighbors[i])
+					for (auto neighbor : params.graph.OutNeighbors(i))
 					{
 						if (calculableQueue.IsComponentPriorityQueue())
 						{
