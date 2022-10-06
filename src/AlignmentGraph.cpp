@@ -382,7 +382,7 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 	std::unordered_set<size_t> visited;
 	std::vector<size_t> stack;
 	stack.push_back(start);
-	merge(chainNumber, rank, start, bubbleEnd);
+	merge(chainNumber, rank, BigraphNodeID(start), BigraphNodeID(bubbleEnd));
 	while (stack.size() > 0)
 	{
 		const size_t top = stack.back();
@@ -390,7 +390,7 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 		if (visited.count(top) == 1) continue;
 		if (ignorableTip[top]) continue;
 		visited.insert(top);
-		merge(chainNumber, rank, start, top);
+		merge(chainNumber, rank, BigraphNodeID(start), BigraphNodeID(top));
 		for (const auto neighbor : outNeighbors[top])
 		{
 			if (visited.count(neighbor) == 1) continue;
@@ -406,7 +406,7 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 	assert(std::numeric_limits<size_t>::max() / SPLIT_NODE_SIZE > nodeLength.size());
 	assert(std::numeric_limits<size_t>::max() > nodeLength.size() * SPLIT_NODE_SIZE * 2);
 	std::vector<std::pair<size_t, size_t>> stack;
-	size_t chain = chainNumber[start];
+	size_t chain = chainNumber[BigraphNodeID(start)];
 	stack.emplace_back(start, (nodeLength.size() + 5) * SPLIT_NODE_SIZE);
 	while (stack.size() > 0)
 	{
@@ -418,14 +418,14 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 		chainApproxPos[v] = dist;
 		for (const size_t u : outNeighbors[v])
 		{
-			if (chainNumber[u] != chain) continue;
+			if (chainNumber[BigraphNodeID(u)] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
 			assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
 			stack.emplace_back(u, dist + NodeLength(u));
 		}
 		for (const size_t u : inNeighbors[v])
 		{
-			if (chainNumber[u] != chain) continue;
+			if (chainNumber[BigraphNodeID(u)] != chain) continue;
 			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
 			assert(dist > NodeLength(v));
 			stack.emplace_back(u, dist - NodeLength(v));
@@ -471,7 +471,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		for (auto neighbor : outNeighbors[i])
 		{
 			assert(fwTipComponent[componentNumber[neighbor]]);
-			merge(chainNumber, rank, i, neighbor);
+			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
 		}
 	}
 	std::vector<bool> bwTipComponent;
@@ -502,7 +502,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		for (auto neighbor : inNeighbors[i])
 		{
 			assert(bwTipComponent[componentNumber[neighbor]]);
-			merge(chainNumber, rank, i, neighbor);
+			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
 		}
 	}
 	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> result;
@@ -516,16 +516,16 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		{
 			for (auto neighbor : outNeighbors[i])
 			{
-				if (chainNumber[neighbor] == chainNumber[i]) continue;
-				result[chainNumber[i]].insert(neighbor);
+				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
+				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
 			}
 		}
 		if (fwTipComponent[componentNumber[i]])
 		{
 			for (auto neighbor : inNeighbors[i])
 			{
-				if (chainNumber[neighbor] == chainNumber[i]) continue;
-				result[chainNumber[i]].insert(neighbor);
+				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
+				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
 			}
 		}
 	}
@@ -572,13 +572,13 @@ void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& i
 		if (uniqueBwNeighbor == std::numeric_limits<size_t>::max()-1) continue;
 		ignorableTip[i] = true;
 		assert(uniqueBwNeighbor == uniqueFwNeighbor);
-		merge(chainNumber, rank, i, uniqueFwNeighbor);
+		merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(uniqueFwNeighbor));
 	}
 }
 
 void AlignmentGraph::findChains()
 {
-	chainNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	chainNumber.resize(nodeLookup.size(), std::numeric_limits<size_t>::max());
 	for (size_t i = 0; i < chainNumber.size(); i++)
 	{
 		chainNumber[i] = i;
@@ -586,15 +586,7 @@ void AlignmentGraph::findChains()
 	std::vector<bool> ignorableTip;
 	ignorableTip.resize(nodeLength.size(), false);
 	std::vector<size_t> rank;
-	rank.resize(nodeLength.size(), 0);
-	for (size_t i = 0; i < nodeLookup.size(); i++)
-	{
-		assert(nodeLookup[i].size() > 0);
-		for (size_t j = 1; j < nodeLookup[i].size(); j++)
-		{
-			merge(chainNumber, rank, nodeLookup[i][0], nodeLookup[i][j]);
-		}
-	}
+	rank.resize(chainNumber.size(), 0);
 	auto tipChainers = chainTips(rank, ignorableTip);
 	chainCycles(rank, ignorableTip);
 	for (size_t i = 0; i < nodeLookup.size(); i++)
@@ -608,9 +600,9 @@ void AlignmentGraph::findChains()
 		{
 			if (uniqueNeighbor == std::numeric_limits<size_t>::max())
 			{
-				uniqueNeighbor = chainNumber[n];
+				uniqueNeighbor = n;
 			}
-			if (uniqueNeighbor != chainNumber[n])
+			if (uniqueNeighbor != n)
 			{
 				uniqueNeighbor = std::numeric_limits<size_t>::max()-1;
 				break;
@@ -631,7 +623,7 @@ void AlignmentGraph::findChains()
 		find(chainNumber, i);
 	}
 	chainApproxPos.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
-	for (size_t i = 0; i < chainNumber.size(); i++)
+	for (size_t i = 0; i < chainApproxPos.size(); i++)
 	{
 		if (chainApproxPos[i] == std::numeric_limits<size_t>::max()) fixChainApproxPos(i);
 	}

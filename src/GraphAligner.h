@@ -148,7 +148,7 @@ public:
 			assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[nodeIndex]);
 			size_t realOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[nodeIndex];
 			assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
-			seedPoses[params.graph.chainNumber[nodeIndex]].emplace_back(i, params.graph.chainApproxPos[nodeIndex] + realOffset - seedHits[i].seqPos, nodeIndex);
+			seedPoses[params.graph.chainNumber[params.graph.BigraphNodeID(nodeIndex)]].emplace_back(i, params.graph.chainApproxPos[nodeIndex] + realOffset - seedHits[i].seqPos, nodeIndex);
 		}
 		std::vector<SeedCluster> clusters;
 		for (auto& pair : seedPoses)
