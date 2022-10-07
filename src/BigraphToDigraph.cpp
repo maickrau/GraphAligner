@@ -260,17 +260,20 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 			}
 		}
 		std::string name = graph.OriginalNodeName(i);
-		auto nodes = ConvertGFANodeToNodes(i, graph.nodes[i], name);
-		std::vector<size_t> breakpointsFw = breakpoints[i * 2];
-		std::vector<size_t> breakpointsBw = breakpoints[i * 2 + 1];
-		breakpointsFw.push_back(0);
-		breakpointsFw.push_back(graph.nodes[i].size());
-		breakpointsBw.push_back(0);
-		breakpointsBw.push_back(graph.nodes[i].size());
-		std::sort(breakpointsFw.begin(), breakpointsFw.end());
-		std::sort(breakpointsBw.begin(), breakpointsBw.end());
-		result.AddNode(nodes.first.nodeId, nodes.first.sequence, nodes.first.name, !nodes.first.rightEnd, breakpointsFw);
-		result.AddNode(nodes.second.nodeId, nodes.second.sequence, nodes.second.name, !nodes.second.rightEnd, breakpointsBw);
+		{
+			std::vector<size_t> breakpointsFw = breakpoints[i * 2];
+			breakpointsFw.push_back(0);
+			breakpointsFw.push_back(graph.nodes[i].size());
+			std::sort(breakpointsFw.begin(), breakpointsFw.end());
+			result.AddNode((size_t)(i * 2), graph.nodes[i], name, false, breakpointsFw);
+		}
+		{
+			std::vector<size_t> breakpointsBw = breakpoints[i * 2 + 1];
+			breakpointsBw.push_back(0);
+			breakpointsBw.push_back(graph.nodes[i].size());
+			std::sort(breakpointsBw.begin(), breakpointsBw.end());
+			result.AddNode((size_t)(i * 2 + 1), CommonUtils::ReverseComplement(graph.nodes[i]), name, true, breakpointsBw);
+		}
 	}
 	for (const auto& t : graph.edges)
 	{
