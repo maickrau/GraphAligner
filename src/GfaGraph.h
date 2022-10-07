@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include "DNAString.h"
 
 class NodePos
 {
@@ -53,7 +54,7 @@ public:
 	static GfaGraph LoadFromFile(std::string filename);
 	static GfaGraph LoadFromStream(std::istream& stream);
 	std::string OriginalNodeName(int nodeId) const;
-	std::vector<std::string> nodes;
+	std::vector<DNAString> nodes;
 	std::vector<std::tuple<NodePos, NodePos, size_t>> edges;
 	std::vector<std::string> originalNodeName;
 private:

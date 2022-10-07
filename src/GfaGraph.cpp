@@ -60,7 +60,7 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 	return LoadFromStream(file);
 }
 
-size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::string& name, std::vector<std::string>& nodeSeqs, std::vector<std::string>& originalNodeName)
+size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::string& name, std::vector<DNAString>& nodeSeqs, std::vector<std::string>& originalNodeName)
 {
 	auto found = assigned.find(name);
 	if (found == assigned.end())
@@ -70,7 +70,7 @@ size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::s
 		int result = assigned.size();
 		assigned[name] = result;
 		originalNodeName.emplace_back(name);
-		nodeSeqs.push_back("*");
+		nodeSeqs.emplace_back();
 		return result;
 	}
 	assert(found->second < originalNodeName.size());
@@ -150,7 +150,7 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 	}
 	for (size_t i = 0; i < result.nodes.size(); i++)
 	{
-		if (result.nodes[i] != "*") continue;
+		if (result.nodes[i].size() > 0) continue;
 		throw CommonUtils::InvalidGraphException { std::string { "Node " + result.originalNodeName[i] + " is present in edges but missing in nodes" } };
 	}
 	for (auto t : result.edges)
@@ -167,11 +167,11 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 	}
 	for (const auto& t : result.edges)
 	{
-		if (std::get<0>(t).id >= result.nodes.size() || result.nodes[std::get<0>(t).id] == "*")
+		if (std::get<0>(t).id >= result.nodes.size() || result.nodes[std::get<0>(t).id].size() == 0)
 		{
 			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}
-		if (std::get<1>(t).id >= result.nodes.size() || result.nodes[std::get<1>(t).id] == "*")
+		if (std::get<1>(t).id >= result.nodes.size() || result.nodes[std::get<1>(t).id].size() == 0)
 		{
 			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}

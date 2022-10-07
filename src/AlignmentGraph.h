@@ -9,6 +9,7 @@
 #include <set>
 #include <phmap.h>
 #include "ThreadReadAssertion.h"
+#include "DNAString.h"
 
 class AlignmentGraph
 {
@@ -116,7 +117,7 @@ public:
 	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numNodes, size_t numSplitNodes);
-	void AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
+	void AddNode(int nodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
 	void AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset);
 	void Finalize(int wordSize);
 	std::pair<int, size_t> GetReversePosition(int nodeId, size_t offset) const;

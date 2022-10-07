@@ -7,6 +7,7 @@
 #include "AlignmentGraph.h"
 #include "vg.pb.h"
 #include "GfaGraph.h"
+#include "DNAString.h"
 
 class DirectedGraph
 {

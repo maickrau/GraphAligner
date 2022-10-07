@@ -110,7 +110,7 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	nodeOffset.reserve(numSplitNodes);
 }
 
-void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
+void AlignmentGraph::AddNode(int nodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);

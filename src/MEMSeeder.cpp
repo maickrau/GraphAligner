@@ -64,7 +64,7 @@ void MEMSeeder::initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexCons
 	{
 		nodePositions.push_back(seq.size());
 		nodeIDs.push_back(i);
-		seq += graph.nodes[i];
+		seq += graph.nodes[i].toString();
 		seq += '`';
 	}
 	for (size_t i = 0; i < seq.size(); i++)

@@ -252,13 +252,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 	}
 	for (size_t i = 0; i < graph.nodes.size(); i++)
 	{
-		for (size_t j = 0; j < graph.nodes[i].size(); j++)
-		{
-			if (!allowed[graph.nodes[i][j]])
-			{
-				throw CommonUtils::InvalidGraphException("Invalid sequence character: " + graph.nodes[i][j]);
-			}
-		}
 		std::string name = graph.OriginalNodeName(i);
 		{
 			std::vector<size_t> breakpointsFw = breakpoints[i * 2];
@@ -272,7 +265,7 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 			breakpointsBw.push_back(0);
 			breakpointsBw.push_back(graph.nodes[i].size());
 			std::sort(breakpointsBw.begin(), breakpointsBw.end());
-			result.AddNode((size_t)(i * 2 + 1), CommonUtils::ReverseComplement(graph.nodes[i]), name, true, breakpointsBw);
+			result.AddNode((size_t)(i * 2 + 1), graph.nodes[i].reverseComplement(), name, true, breakpointsBw);
 		}
 	}
 	for (const auto& t : graph.edges)
