@@ -145,10 +145,11 @@ public:
 				forwardNodeId = seedHits[i].nodeID * 2;
 			}
 			size_t nodeIndex = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
+			assert(forwardNodeId == params.graph.BigraphNodeID(nodeIndex));
 			assert(seedHits[i].nodeOffset >= params.graph.nodeOffset[nodeIndex]);
-			size_t realOffset = seedHits[i].nodeOffset - params.graph.nodeOffset[nodeIndex];
-			assert(params.graph.chainApproxPos[nodeIndex] + realOffset >= seedHits[i].seqPos);
-			seedPoses[params.graph.chainNumber[params.graph.BigraphNodeID(nodeIndex)]].emplace_back(i, params.graph.chainApproxPos[nodeIndex] + realOffset - seedHits[i].seqPos, nodeIndex);
+			assert(seedHits[i].nodeOffset < params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex));
+			assert(params.graph.chainApproxPos[forwardNodeId] + seedHits[i].nodeOffset > seedHits[i].seqPos);
+			seedPoses[params.graph.chainNumber[forwardNodeId]].emplace_back(i, params.graph.chainApproxPos[forwardNodeId] + seedHits[i].nodeOffset - seedHits[i].seqPos, nodeIndex);
 		}
 		std::vector<SeedCluster> clusters;
 		for (auto& pair : seedPoses)

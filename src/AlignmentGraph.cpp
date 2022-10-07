@@ -551,7 +551,7 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 	assert(std::numeric_limits<size_t>::max() / SPLIT_NODE_SIZE > nodeLength.size());
 	assert(std::numeric_limits<size_t>::max() > nodeLength.size() * SPLIT_NODE_SIZE * 2);
 	std::vector<std::pair<size_t, size_t>> stack;
-	size_t chain = chainNumber[BigraphNodeID(start)];
+	size_t chain = chainNumber[start];
 	stack.emplace_back(start, (nodeLength.size() + 5) * SPLIT_NODE_SIZE);
 	while (stack.size() > 0)
 	{
@@ -561,19 +561,24 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 		stack.pop_back();
 		if (chainApproxPos[v] != std::numeric_limits<size_t>::max()) continue;
 		chainApproxPos[v] = dist;
-		for (const size_t u : OutNeighbors(v))
+		for (const size_t diNode : nodeLookup[v])
 		{
-			if (chainNumber[BigraphNodeID(u)] != chain) continue;
-			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
-			assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
-			stack.emplace_back(u, dist + NodeLength(u));
-		}
-		for (const size_t u : InNeighbors(v))
-		{
-			if (chainNumber[BigraphNodeID(u)] != chain) continue;
-			if (chainApproxPos[u] != std::numeric_limits<size_t>::max()) continue;
-			assert(dist > NodeLength(v));
-			stack.emplace_back(u, dist - NodeLength(v));
+			for (const size_t u : OutNeighbors(diNode))
+			{
+				if (chainNumber[BigraphNodeID(u)] != chain) continue;
+				if (chainApproxPos[BigraphNodeID(u)] != std::numeric_limits<size_t>::max()) continue;
+				assert(nodeOffset[u] < dist);
+				assert(dist - nodeOffset[u] < std::numeric_limits<size_t>::max() - nodeOffset[diNode] - NodeLength(diNode));
+				assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
+				stack.emplace_back(u, dist + nodeOffset[diNode] + NodeLength(diNode) - nodeOffset[u]);
+			}
+			for (const size_t u : InNeighbors(diNode))
+			{
+				if (chainNumber[BigraphNodeID(u)] != chain) continue;
+				if (chainApproxPos[BigraphNodeID(u)] != std::numeric_limits<size_t>::max()) continue;
+				assert(dist + nodeOffset[diNode] > nodeOffset[u] + NodeLength(u));
+				stack.emplace_back(u, dist + nodeOffset[diNode] - (nodeOffset[u] + NodeLength(u)));
+			}
 		}
 	}
 }
@@ -769,7 +774,7 @@ void AlignmentGraph::findChains()
 	{
 		find(chainNumber, i);
 	}
-	chainApproxPos.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	chainApproxPos.resize(nodeLookup.size(), std::numeric_limits<size_t>::max());
 	for (size_t i = 0; i < chainApproxPos.size(); i++)
 	{
 		if (chainApproxPos[i] == std::numeric_limits<size_t>::max()) fixChainApproxPos(i);
