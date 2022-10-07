@@ -106,7 +106,6 @@ void AlignmentGraph::ReserveNodes(size_t numNodes, size_t numSplitNodes)
 	originalNodeName.resize(numNodes, "");
 	nodeIDs.reserve(numSplitNodes);
 	nodeLength.reserve(numSplitNodes);
-	tempConstructionOutEdges.reserve(numSplitNodes);
 	reverse.reserve(numSplitNodes);
 	nodeOffset.reserve(numSplitNodes);
 }
@@ -138,12 +137,9 @@ void AlignmentGraph::AddNode(int nodeId, const std::string& sequence, const std:
 			AddNode(nodeId, offset, sequence.substr(offset, size), reverseNode);
 			if (offset > 0)
 			{
-				assert(tempConstructionOutEdges.size() >= 2);
-				assert(nodeIDs.size() == tempConstructionOutEdges.size());
 				assert(nodeOffset.size() == nodeIDs.size());
 				assert(nodeIDs[nodeIDs.size()-2] == nodeIDs[nodeIDs.size()-1]);
 				assert(nodeOffset[nodeIDs.size()-2] + NodeLength(nodeIDs.size()-2) == nodeOffset[nodeIDs.size()-1]);
-				tempConstructionOutEdges[nodeIDs.size()-2].push_back(nodeIDs.size()-1);
 			}
 		}
 	}
@@ -159,7 +155,6 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 	nodeLookup[nodeId].push_back(nodeLength.size());
 	nodeLength.push_back(sequence.size());
 	nodeIDs.push_back(nodeId);
-	tempConstructionOutEdges.emplace_back();
 	reverse.push_back(reverseNode);
 	nodeOffset.push_back(offset);
 	NodeChunkSequence normalSeq;
@@ -289,7 +284,6 @@ void AlignmentGraph::AddNode(int nodeId, int offset, const std::string& sequence
 		nodeSequences.emplace_back(normalSeq);
 	}
 	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeLength.size() == tempConstructionOutEdges.size());
 }
 
 void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t startOffset)
@@ -298,52 +292,61 @@ void AlignmentGraph::AddEdgeNodeId(int node_id_from, int node_id_to, size_t star
 	assert(!finalized);
 	assert(node_id_from < nodeLookup.size());
 	assert(node_id_to < nodeLookup.size());
-	size_t from = nodeLookup.at(node_id_from).back();
-	size_t to = std::numeric_limits<size_t>::max();
-	assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[node_id_from]);
-	for (auto node : nodeLookup[node_id_to])
-	{
-		if (nodeOffset[node] == startOffset)
-		{
-			to = node;
-		}
-	}
-	assert(to != std::numeric_limits<size_t>::max());
-	//don't add double edges
-	if (std::find(tempConstructionOutEdges[from].begin(), tempConstructionOutEdges[from].end(), to) == tempConstructionOutEdges[from].end()) tempConstructionOutEdges[from].push_back(to);
+	std::tuple<size_t, size_t, size_t> key { node_id_from, node_id_to, startOffset };
+	tempConstructionOutEdges.insert(key);
 }
 
 void AlignmentGraph::buildEdges()
 {
-	assert(nodeLength.size() == tempConstructionOutEdges.size());
 	hasImplicitOutEdge.resize(nodeLength.size(), false);
 	std::vector<uint16_t> explicitInEdgeCount;
 	std::vector<uint16_t> explicitOutEdgeCount;
 	explicitInEdgeCount.resize(nodeLength.size(), 0);
 	explicitOutEdgeCount.resize(nodeLength.size(), 0);
 	size_t totalExplicitEdges = 0;
-	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		for (auto edge : tempConstructionOutEdges[i])
+		for (size_t j = 1; j < nodeLookup[i].size(); j++)
 		{
-			if (edge == i+1)
+			size_t from = nodeLookup[i][j-1];
+			size_t to = nodeLookup[i][j];
+			if (to == from+1)
 			{
-				hasImplicitOutEdge[i] = true;
+				hasImplicitOutEdge[from] = true;
 			}
 			else
 			{
-				explicitOutEdgeCount[i] += 1;
-				explicitInEdgeCount[edge] += 1;
+				explicitOutEdgeCount[from] += 1;
+				explicitInEdgeCount[to] += 1;
 				totalExplicitEdges += 2;
-				assert(explicitInEdgeCount[edge] < 1024);
-				assert(explicitOutEdgeCount[i] < 1024);
+				assert(explicitOutEdgeCount[from] < 1024);
+				assert(explicitInEdgeCount[to] < 1024);
 			}
+		}
+	}
+	for (auto t : tempConstructionOutEdges)
+	{
+		size_t from = nodeLookup[std::get<0>(t)].back();
+		assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[std::get<0>(t)]);
+		size_t to = GetUnitigNode(std::get<1>(t), std::get<2>(t));
+		assert(nodeOffset[to] == std::get<2>(t));
+		if (to == from+1)
+		{
+			hasImplicitOutEdge[from] = true;
+		}
+		else
+		{
+			explicitOutEdgeCount[from] += 1;
+			explicitInEdgeCount[to] += 1;
+			totalExplicitEdges += 2;
+			assert(explicitOutEdgeCount[from] < 1024);
+			assert(explicitInEdgeCount[to] < 1024);
 		}
 	}
 	assert(totalExplicitEdges < 17592186044416ll); // 2^44, 44 bits for start index, 10 bits for in-edge count, 10 for out-edge count
 	size_t start = 0;
 	explicitEdges.resize(nodeLength.size());
-	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
+	for (size_t i = 0; i < explicitEdges.size(); i++)
 	{
 		assert(explicitOutEdgeCount[i] < 1024);
 		assert(explicitInEdgeCount[i] < 1024);
@@ -352,10 +355,12 @@ void AlignmentGraph::buildEdges()
 	}
 	assert(start == totalExplicitEdges);
 	edgeStorage.resize(totalExplicitEdges, std::numeric_limits<size_t>::max());
-	for (size_t from = 0; from < tempConstructionOutEdges.size(); from++)
+	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
-		for (size_t to : tempConstructionOutEdges[from])
+		for (size_t j = 1; j < nodeLookup[i].size(); j++)
 		{
+			size_t from = nodeLookup[i][j-1];
+			size_t to = nodeLookup[i][j];
 			if (to == from+1) continue;
 			assert(explicitOutEdgeCount[from] >= 1);
 			explicitOutEdgeCount[from] -= 1;
@@ -371,19 +376,38 @@ void AlignmentGraph::buildEdges()
 			edgeStorage[inIndex] = from;
 		}
 	}
+	for (auto t : tempConstructionOutEdges)
+	{
+		size_t from = nodeLookup[std::get<0>(t)].back();
+		assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[std::get<0>(t)]);
+		size_t to = GetUnitigNode(std::get<1>(t), std::get<2>(t));
+		assert(nodeOffset[to] == std::get<2>(t));
+		if (to == from+1) continue;
+		assert(explicitOutEdgeCount[from] >= 1);
+		explicitOutEdgeCount[from] -= 1;
+		size_t outIndex = (explicitEdges[from] >> 20) + explicitOutEdgeCount[from];
+		assert(outIndex < edgeStorage.size());
+		assert(edgeStorage[outIndex] == std::numeric_limits<size_t>::max());
+		edgeStorage[outIndex] = to;
+		assert(explicitInEdgeCount[to] >= 1);
+		explicitInEdgeCount[to] -= 1;
+		size_t inIndex = (explicitEdges[to] >> 20) + (explicitEdges[to] & 1023) + explicitInEdgeCount[to];
+		assert(inIndex < edgeStorage.size());
+		assert(edgeStorage[inIndex] == std::numeric_limits<size_t>::max());
+		edgeStorage[inIndex] = from;
+	}
 	for (size_t i = 0; i < edgeStorage.size(); i++)
 	{
 		assert(edgeStorage[i] != std::numeric_limits<size_t>::max());
 		assert(edgeStorage[i] < nodeLength.size());
 	}
-	std::vector<std::vector<size_t>> tmp;
+	std::set<std::tuple<size_t, size_t, size_t>> tmp;
 	std::swap(tmp, tempConstructionOutEdges);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(tempConstructionOutEdges.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(nodeLookup.size() == originalNodeSize.size());
@@ -1034,7 +1058,6 @@ size_t AlignmentGraph::OriginalNodeSize(int nodeId) const
 void AlignmentGraph::RenumberAmbiguousToEnd()
 {
 	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(tempConstructionOutEdges.size() == nodeLength.size());
 	assert(reverse.size() == nodeLength.size());
 	assert(nodeIDs.size() == nodeLength.size());
 	assert(ambiguousNodes.size() == nodeLength.size());
@@ -1073,15 +1096,10 @@ void AlignmentGraph::RenumberAmbiguousToEnd()
 	nodeLength = reorder(nodeLength, renumbering);
 	nodeOffset = reorder(nodeOffset, renumbering);
 	nodeIDs = reorder(nodeIDs, renumbering);
-	tempConstructionOutEdges = reorder(tempConstructionOutEdges, renumbering);
 	reverse = reorder(reverse, renumbering);
 	for (size_t i = 0; i < nodeLookup.size(); i++)
 	{
 		nodeLookup[i] = renumber(nodeLookup[i], renumbering);
-	}
-	for (size_t i = 0; i < tempConstructionOutEdges.size(); i++)
-	{
-		tempConstructionOutEdges[i] = renumber(tempConstructionOutEdges[i], renumbering);
 	}
 
 #ifndef NDEBUG

@@ -6,6 +6,7 @@
 #include <vector>
 #include <tuple>
 #include <unordered_set>
+#include <set>
 #include <phmap.h>
 #include "ThreadReadAssertion.h"
 
@@ -153,7 +154,7 @@ private:
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<bool> hasImplicitOutEdge;
-	std::vector<std::vector<size_t>> tempConstructionOutEdges;
+	std::set<std::tuple<size_t, size_t, size_t>> tempConstructionOutEdges;
 	std::vector<size_t> explicitEdges;
 	std::vector<size_t> edgeStorage;
 	std::vector<bool> reverse;
