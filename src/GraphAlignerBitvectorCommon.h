@@ -1668,11 +1668,11 @@ public:
 		result.bandwidth = 1;
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
-		assert(offset < params.graph.originalNodeSize.at(bigraphNodeId));
+		assert(offset < params.graph.BigraphNodeSize(bigraphNodeId));
 		size_t nodeIndex = params.graph.GetUnitigNode(bigraphNodeId, offset);
-		assert(params.graph.nodeOffset[nodeIndex] <= offset);
-		assert(params.graph.nodeOffset[nodeIndex] + params.graph.NodeLength(nodeIndex) > offset);
-		size_t offsetInNode = offset - params.graph.nodeOffset[nodeIndex];
+		assert(params.graph.NodeOffset(nodeIndex) <= offset);
+		assert(params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex) > offset);
+		size_t offsetInNode = offset - params.graph.NodeOffset(nodeIndex);
 		assert(offsetInNode < params.graph.NodeLength(nodeIndex));
 		result.scores.addNodeToMap(nodeIndex);
 		result.minScoreNode = nodeIndex;

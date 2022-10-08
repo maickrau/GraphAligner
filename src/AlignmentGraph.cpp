@@ -1280,3 +1280,8 @@ size_t AlignmentGraph::BigraphNodeCount() const
 {
 	return originalNodeName.size();
 }
+
+size_t AlignmentGraph::NodeOffset(size_t directedNodeId) const
+{
+	return nodeOffset[directedNodeId];
+}

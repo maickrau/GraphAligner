@@ -126,6 +126,7 @@ public:
 	size_t SizeInBP() const;
 	size_t BigraphNodeID(size_t directedNodeId) const;
 	size_t NodeLength(size_t nodeIndex) const;
+	size_t NodeOffset(size_t directedNodeId) const;
 	char NodeSequences(size_t node, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t node) const;
 	AmbiguousChunkSequence AmbiguousNodeChunks(size_t node) const;

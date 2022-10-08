@@ -334,7 +334,7 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 		}
 		if (skipStart)
 		{
-			nodeMinimizerStart[graph.BigraphNodeID(i)] = std::max(nodeMinimizerStart[graph.BigraphNodeID(i)], graph.nodeOffset[i]);
+			nodeMinimizerStart[graph.BigraphNodeID(i)] = std::max(nodeMinimizerStart[graph.BigraphNodeID(i)], graph.NodeOffset(i));
 		}
 	}
 
@@ -356,18 +356,18 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 				}
 				if (nodeId == graph.nodeLookup.size()) break;
 				std::string sequence;
-				sequence.resize(graph.originalNodeSize.at(nodeId));
+				sequence.resize(graph.BigraphNodeSize(nodeId));
 				for (size_t pos = 0; pos < sequence.size(); pos++)
 				{
 					size_t nodeidHere = graph.GetUnitigNode(nodeId, pos);
-					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.nodeOffset[nodeidHere]);
+					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.NodeOffset(nodeidHere));
 				}
 				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &nodeMinimizerStart, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
 				{
 					if (pos < nodeMinimizerStart.at(nodeId)) return;
 					size_t splitNode = graph.GetUnitigNode(nodeId, pos);
 					assert(splitNode < (size_t)1 << positionSize);
-					size_t remainingOffset = pos - graph.nodeOffset[splitNode];
+					size_t remainingOffset = pos - graph.NodeOffset(splitNode);
 					assert(remainingOffset < 64);
 					std::pair<uint64_t, uint64_t> readThis;
 					while (positionDistributor[thread].try_dequeue(readThis))
@@ -545,9 +545,7 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 {
 	assert(nodeId >= 0);
 	assert((size_t)nodeId < graph.NodeSize());
-	assert((size_t)nodeId < graph.nodeOffset.size());
-	assert((size_t)nodeId < graph.reverse.size());
-	SeedHit result { graph.BigraphNodeID((size_t)nodeId)/2, nodeOffset + graph.nodeOffset[(size_t)nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
+	SeedHit result { graph.BigraphNodeID((size_t)nodeId)/2, nodeOffset + graph.NodeOffset((size_t)nodeId), seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
 	return result;
 }
 

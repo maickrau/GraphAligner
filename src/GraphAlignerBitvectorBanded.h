@@ -50,10 +50,10 @@ public:
 		{
 			auto fwNodeIndex = fwTrace.trace[0].DPposition.node;
 			size_t bigraphNodeId = params.graph.BigraphNodeID(fwNodeIndex);
-			size_t bigraphOffset = fwTrace.trace[0].DPposition.nodeOffset + params.graph.nodeOffset[fwNodeIndex];
+			size_t bigraphOffset = fwTrace.trace[0].DPposition.nodeOffset + params.graph.NodeOffset(fwNodeIndex);
 			auto reversePos = params.graph.GetReversePosition(bigraphNodeId, bigraphOffset);
 
-			assert(reversePos.second < params.graph.originalNodeSize.at(reversePos.first));
+			assert(reversePos.second < params.graph.BigraphNodeSize(reversePos.first));
 			size_t nodeIndex = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
 			assert(fwTrace.trace[0].DPposition.seqPos < sequence.size());
 			size_t seqPos = sequence.size() - 1 - fwTrace.trace[0].DPposition.seqPos;

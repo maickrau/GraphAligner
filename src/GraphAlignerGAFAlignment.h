@@ -87,7 +87,7 @@ public:
 			mismatches += 1;
 		}
 		addPosToString(nodePath, currentPos, params);
-		nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId);
+		nodePathLen += params.graph.BigraphNodeSize(currentPos.nodeId);
 		for (size_t pos = 1; pos < trace.size(); pos++)
 		{
 			assert(trace[pos].DPposition.seqPos < sequence.size());
@@ -102,12 +102,12 @@ public:
 
 			if (!insideNode)
 			{
-				size_t skippedBefore = params.graph.originalNodeSize.at(currentPos.nodeId) - 1 - trace[pos-1].DPposition.nodeOffset;
+				size_t skippedBefore = params.graph.BigraphNodeSize(currentPos.nodeId) - 1 - trace[pos-1].DPposition.nodeOffset;
 				currentPos = newPos;
 				addPosToString(nodePath, currentPos, params);
-				assert(trace[pos].DPposition.nodeOffset < params.graph.originalNodeSize.at(currentPos.nodeId));
+				assert(trace[pos].DPposition.nodeOffset < params.graph.BigraphNodeSize(currentPos.nodeId));
 				size_t skippedAfter = trace[pos].DPposition.nodeOffset;
-				nodePathLen += params.graph.originalNodeSize.at(currentPos.nodeId) - (skippedBefore + skippedAfter);
+				nodePathLen += params.graph.BigraphNodeSize(currentPos.nodeId) - (skippedBefore + skippedAfter);
 			}
 
 			if (trace[pos-1].DPposition.seqPos == trace[pos].DPposition.seqPos)
@@ -187,7 +187,7 @@ public:
 		assert(matches + mismatches + deletions + insertions == trace.size());
 		if (includecigar) addCigarItem(cigar, editLength, currentEdit);
 
-		nodePathEnd = nodePathLen - (params.graph.originalNodeSize.at(trace.back().DPposition.node) - 1 - trace.back().DPposition.nodeOffset);
+		nodePathEnd = nodePathLen - (params.graph.BigraphNodeSize(trace.back().DPposition.node) - 1 - trace.back().DPposition.nodeOffset);
 
 		std::stringstream sstr;
 		sstr << readName << "\t" << readLen << "\t" << readStart << "\t" << readEnd << "\t" << (strand ? "+" : "-") << "\t" << nodePath.str() << "\t" << nodePathLen << "\t" << nodePathStart << "\t" << nodePathEnd << "\t" << matches << "\t" << blockLength << "\t" << mappingQuality;
