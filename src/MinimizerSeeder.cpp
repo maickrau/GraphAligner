@@ -348,13 +348,13 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 			std::pair<uint64_t, uint64_t> readThis;
 			while (true)
 			{
-				size_t nodeId = graph.nodeLookup.size();
+				size_t nodeId = graph.BigraphNodeCount();
 				{
 					std::lock_guard<std::mutex> guard { nodeMutex };
 					nodeId = nodeI;
-					if (nodeI != graph.nodeLookup.size()) ++nodeI;
+					if (nodeI != graph.BigraphNodeCount()) ++nodeI;
 				}
-				if (nodeId == graph.nodeLookup.size()) break;
+				if (nodeId == graph.BigraphNodeCount()) break;
 				std::string sequence;
 				sequence.resize(graph.BigraphNodeSize(nodeId));
 				for (size_t pos = 0; pos < sequence.size(); pos++)
@@ -545,7 +545,7 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 {
 	assert(nodeId >= 0);
 	assert((size_t)nodeId < graph.NodeSize());
-	SeedHit result { graph.BigraphNodeID((size_t)nodeId)/2, nodeOffset + graph.NodeOffset((size_t)nodeId), seqPos, minimizerLength, maxCount - count, graph.reverse[(size_t)nodeId] };
+	SeedHit result { graph.BigraphNodeID((size_t)nodeId)/2, nodeOffset + graph.NodeOffset((size_t)nodeId), seqPos, minimizerLength, maxCount - count, graph.Reverse((size_t)nodeId) };
 	return result;
 }
 

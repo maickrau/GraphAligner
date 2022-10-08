@@ -1196,7 +1196,7 @@ public:
 		std::vector<WordSlice> result;
 		result.reserve(nodeLength);
 		auto sliceCopy = slice;
-		if (node < params.graph.firstAmbiguous)
+		if (node < params.graph.FirstAmbiguous())
 		{
 			calculateNodeInner<false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); }, seqOffset);
 		}

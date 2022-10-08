@@ -76,7 +76,7 @@ public:
 
 	AlignmentResult AlignClusters(const std::string& seq_id, const std::string& sequence, const std::vector<SeedCluster>& seedClusters, AlignerGraphsizedState& reusableState) const
 	{
-		assert(params.graph.finalized);
+		assert(params.graph.Finalized());
 		AlignmentResult result;
 		result.readName = seq_id;
 		assert(seedClusters.size() > 0);
@@ -376,7 +376,7 @@ private:
 	AlignmentResult::AlignmentItem fullstartOneWay(const std::string& seq_id, AlignerGraphsizedState& reusableState, const std::string& fwSequence, const std::string& bwSequence, size_t offset) const
 	{
 		auto timeStart = std::chrono::system_clock::now();
-		assert(params.graph.finalized);
+		assert(params.graph.Finalized());
 		std::string_view fwView { fwSequence.data() + offset, fwSequence.size() - offset };
 		auto fwTrace = getBacktraceFullStart(fwView, reusableState);
 		auto timeEnd = std::chrono::system_clock::now();
@@ -739,7 +739,7 @@ private:
 
 // 	AlignmentResult::AlignmentItem getAlignmentFromSeed(const std::string& seq_id, const std::string& sequence, const std::string& revSequence, SeedHit seedHit, AlignerGraphsizedState& reusableState) const
 // 	{
-// 		assert(params.graph.finalized);
+// 		assert(params.graph.Finalized());
 // 		auto timeStart = std::chrono::system_clock::now();
 
 // 		auto trace = getTwoDirectionalTrace(sequence, revSequence, seedHit, reusableState);

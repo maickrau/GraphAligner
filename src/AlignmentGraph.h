@@ -140,6 +140,10 @@ public:
 	size_t ComponentNumber(size_t digraphNodeId) const;
 	NodeEdgeIterator OutNeighbors(size_t nodeId) const;
 	NodeEdgeIterator InNeighbors(size_t nodeId) const;
+	bool Reverse(size_t digraphNodeId) const;
+	bool Linearizable(size_t digraphNodeId) const;
+	bool Finalized() const;
+	size_t FirstAmbiguous() const;
 	static AlignmentGraph DummyGraph();
 private:
 	void buildEdges();
@@ -174,21 +178,6 @@ private:
 	size_t bpSize;
 	size_t firstAmbiguous;
 	bool finalized;
-
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAligner;
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAlignerVGAlignment;
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAlignerGAFAlignment;
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAlignerBitvectorBanded;
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAlignerBitvectorCommon;
-	template <typename LengthType, typename ScoreType, typename Word>
-	friend class GraphAlignerBitvectorDijkstra;
-	friend class DirectedGraph;
-	friend class MinimizerSeeder;
 };
 
 

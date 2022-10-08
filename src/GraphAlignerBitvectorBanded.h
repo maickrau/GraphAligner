@@ -366,7 +366,7 @@ private:
 				assert(node.second.minScore <= node.second.startSlice.scoreEnd);
 				assert(node.second.minScore <= node.second.endSlice.scoreEnd);
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.linearizable[node.first])
+				if (params.graph.Linearizable(node.first))
 				{
 					auto neighbor = params.graph.InNeighbors(node.first)[0];
 				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
@@ -465,7 +465,7 @@ private:
 				previousThisNode.exists = false;
 			}
 			NodeCalculationResult nodeCalc;
-			if (i < params.graph.firstAmbiguous)
+			if (i < params.graph.FirstAmbiguous())
 			{
 				nodeCalc = BV::calculateNodeClipPrecise(params, i, thisNode, EqV, previousThisNode, *extras, previousBand, params.graph.NodeChunks(i), extraSlice, j);
 				assert(nodeCalc.maxExactEndposScore != std::numeric_limits<ScoreType>::min());

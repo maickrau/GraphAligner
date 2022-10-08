@@ -1300,3 +1300,23 @@ size_t AlignmentGraph::ComponentNumber(size_t digraphNodeId) const
 {
 	return componentNumber[digraphNodeId];
 }
+
+bool AlignmentGraph::Reverse(size_t digraphNodeId) const
+{
+	return reverse[digraphNodeId];
+}
+
+bool AlignmentGraph::Linearizable(size_t digraphNodeId) const
+{
+	return linearizable[digraphNodeId];
+}
+
+bool AlignmentGraph::Finalized() const
+{
+	return finalized;
+}
+
+size_t AlignmentGraph::FirstAmbiguous() const
+{
+	return firstAmbiguous;
+}
