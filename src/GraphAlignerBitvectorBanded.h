@@ -54,7 +54,7 @@ public:
 			auto reversePos = params.graph.GetReversePosition(bigraphNodeId, bigraphOffset);
 
 			assert(reversePos.second < params.graph.BigraphNodeSize(reversePos.first));
-			size_t nodeIndex = params.graph.GetUnitigNode(reversePos.first, reversePos.second);
+			size_t nodeIndex = params.graph.GetDigraphNode(reversePos.first, reversePos.second);
 			assert(fwTrace.trace[0].DPposition.seqPos < sequence.size());
 			size_t seqPos = sequence.size() - 1 - fwTrace.trace[0].DPposition.seqPos;
 			assert(seqPos < sequence.size());

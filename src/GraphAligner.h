@@ -144,7 +144,7 @@ public:
 			{
 				forwardNodeId = seedHits[i].nodeID * 2;
 			}
-			size_t nodeIndex = params.graph.GetUnitigNode(forwardNodeId, seedHits[i].nodeOffset);
+			size_t nodeIndex = params.graph.GetDigraphNode(forwardNodeId, seedHits[i].nodeOffset);
 			assert(forwardNodeId == params.graph.BigraphNodeID(nodeIndex));
 			assert(seedHits[i].nodeOffset >= params.graph.NodeOffset(nodeIndex));
 			assert(seedHits[i].nodeOffset < params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex));
@@ -248,7 +248,7 @@ private:
 				assert(graphPos.nodeOffset < params.graph.BigraphNodeSize(graphPos.node)-1);
 				graphPos.nodeOffset += 1;
 			}
-			size_t unitigNode = params.graph.GetUnitigNode(graphPos.node, graphPos.nodeOffset);
+			size_t unitigNode = params.graph.GetDigraphNode(graphPos.node, graphPos.nodeOffset);
 			size_t nodeOffset = params.graph.NodeOffset(unitigNode);
 			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i-1].graphCharacter)
 			{
@@ -296,7 +296,7 @@ private:
 				assert(graphPos.nodeOffset != 0);
 				graphPos.nodeOffset -= 1;
 			}
-			size_t unitigNode = params.graph.GetUnitigNode(graphPos.node, graphPos.nodeOffset);
+			size_t unitigNode = params.graph.GetDigraphNode(graphPos.node, graphPos.nodeOffset);
 			size_t nodeOffset = params.graph.NodeOffset(unitigNode);
 			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i-1].graphCharacter)
 			{
@@ -900,7 +900,7 @@ private:
 			}
 
 			assert(newpos.nodeOffset < params.graph.BigraphNodeSize(newpos.node));
-			size_t nodeIndex = params.graph.GetUnitigNode(newpos.node, newpos.nodeOffset);
+			size_t nodeIndex = params.graph.GetDigraphNode(newpos.node, newpos.nodeOffset);
 			assert(params.graph.NodeOffset(nodeIndex) <= newpos.nodeOffset);
 			assert(params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex) > newpos.nodeOffset);
 			size_t offsetInNode = newpos.nodeOffset - params.graph.NodeOffset(nodeIndex);
@@ -909,7 +909,7 @@ private:
 			newpos.nodeOffset = offsetInNode;
 
 			assert(oldpos.nodeOffset < params.graph.BigraphNodeSize(oldpos.node));
-			nodeIndex = params.graph.GetUnitigNode(oldpos.node, oldpos.nodeOffset);
+			nodeIndex = params.graph.GetDigraphNode(oldpos.node, oldpos.nodeOffset);
 			assert(params.graph.NodeOffset(nodeIndex) <= oldpos.nodeOffset);
 			assert(params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex) > oldpos.nodeOffset);
 			offsetInNode = oldpos.nodeOffset - params.graph.NodeOffset(nodeIndex);
@@ -943,8 +943,8 @@ private:
 				auto revNewNode = (trace[i].DPposition.node % 2 == 0) ? (trace[i].DPposition.node + 1) : (trace[i].DPposition.node - 1);
 				auto revOldOffset = params.graph.BigraphNodeSize(trace[i-1].DPposition.node) - trace[i-1].DPposition.nodeOffset - 1;
 				auto revNewOffset = params.graph.BigraphNodeSize(trace[i].DPposition.node) - trace[i].DPposition.nodeOffset - 1;
-				auto revOldNodeIndex = params.graph.GetUnitigNode(revOldNode, revOldOffset);
-				auto revNewNodeIndex = params.graph.GetUnitigNode(revNewNode, revNewOffset);
+				auto revOldNodeIndex = params.graph.GetDigraphNode(revOldNode, revOldOffset);
+				auto revNewNodeIndex = params.graph.GetDigraphNode(revNewNode, revNewOffset);
 				auto revOldNodeOffset = revOldOffset - params.graph.NodeOffset(revOldNodeIndex);
 				auto revNewNodeOffset = revNewOffset - params.graph.NodeOffset(revNewNodeIndex);
 				bool foundReverse = std::find(params.graph.OutNeighbors(revNewNodeIndex).begin(), params.graph.OutNeighbors(revNewNodeIndex).end(), revOldNodeIndex) != params.graph.OutNeighbors(revNewNodeIndex).end();

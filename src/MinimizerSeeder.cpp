@@ -359,13 +359,13 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 				sequence.resize(graph.BigraphNodeSize(nodeId));
 				for (size_t pos = 0; pos < sequence.size(); pos++)
 				{
-					size_t nodeidHere = graph.GetUnitigNode(nodeId, pos);
+					size_t nodeidHere = graph.GetDigraphNode(nodeId, pos);
 					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.NodeOffset(nodeidHere));
 				}
 				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &nodeMinimizerStart, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
 				{
 					if (pos < nodeMinimizerStart.at(nodeId)) return;
-					size_t splitNode = graph.GetUnitigNode(nodeId, pos);
+					size_t splitNode = graph.GetDigraphNode(nodeId, pos);
 					assert(splitNode < (size_t)1 << positionSize);
 					size_t remainingOffset = pos - graph.NodeOffset(splitNode);
 					assert(remainingOffset < 64);

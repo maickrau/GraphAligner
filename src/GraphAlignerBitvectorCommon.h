@@ -1669,7 +1669,7 @@ public:
 		result.minScore = 0;
 		result.scores.addEmptyNodeMap(1);
 		assert(offset < params.graph.BigraphNodeSize(bigraphNodeId));
-		size_t nodeIndex = params.graph.GetUnitigNode(bigraphNodeId, offset);
+		size_t nodeIndex = params.graph.GetDigraphNode(bigraphNodeId, offset);
 		assert(params.graph.NodeOffset(nodeIndex) <= offset);
 		assert(params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex) > offset);
 		size_t offsetInNode = offset - params.graph.NodeOffset(nodeIndex);
