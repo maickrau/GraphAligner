@@ -1021,7 +1021,7 @@ bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosi
 	return !(*this == other);
 }
 
-std::string AlignmentGraph::OriginalNodeName(int nodeId) const
+std::string AlignmentGraph::BigraphNodeName(int nodeId) const
 {
 	assert(nodeId < originalNodeName.size());
 	assert(originalNodeName[nodeId] != "");
@@ -1053,7 +1053,7 @@ std::vector<T> reorder(const std::vector<T>& vec, const std::vector<size_t>& ren
 	return result;
 }
 
-size_t AlignmentGraph::OriginalNodeSize(int nodeId) const
+size_t AlignmentGraph::BigraphNodeSize(int nodeId) const
 {
 	assert(nodeId < originalNodeSize.size());
 	assert(originalNodeSize[nodeId] != std::numeric_limits<size_t>::max());
@@ -1274,4 +1274,9 @@ AlignmentGraph::NodeEdgeIterator AlignmentGraph::InNeighbors(size_t nodeId) cons
 	assert(implicitEdge == std::numeric_limits<size_t>::max() || implicitEdge < nodeLength.size());
 	AlignmentGraph::NodeEdgeIterator result { implicitEdge, edgeStorage.data()+startIndex, edgeStorage.data()+startIndex+count };
 	return result;
+}
+
+size_t AlignmentGraph::BigraphNodeCount() const
+{
+	return originalNodeName.size();
 }

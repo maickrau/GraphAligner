@@ -114,7 +114,7 @@ namespace AlignmentSelection
 				path.push_back(currentNodeId);
 			}
 		}
-		rightClip = graph.OriginalNodeSize(trace.back().DPposition.node) - trace.back().DPposition.nodeOffset;
+		rightClip = graph.BigraphNodeSize(trace.back().DPposition.node) - trace.back().DPposition.nodeOffset;
 		return std::make_tuple(leftClip, rightClip, path);
 	}
 

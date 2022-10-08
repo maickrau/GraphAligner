@@ -211,15 +211,8 @@ private:
 		{
 			str << ">";
 		}
-		std::string nodeName = params.graph.originalNodeName.at(pos.nodeId);
-		if (nodeName == "")
-		{
-			str << pos.nodeId/2;
-		}
-		else
-		{
-			str << nodeName;
-		}
+		std::string nodeName = params.graph.BigraphNodeName(pos.nodeId);
+		str << nodeName;
 	}
 
 	static void addCigarItem(std::stringstream& str, size_t editLength, EditType type)

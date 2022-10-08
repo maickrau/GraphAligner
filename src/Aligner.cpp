@@ -156,7 +156,7 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Al
 		int digraphNodeId = alignment.path().mapping(i).position().node_id();
 		int originalNodeId = digraphNodeId / 2;
 		alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_node_id(originalNodeId);
-		std::string name = graph.OriginalNodeName(digraphNodeId);
+		std::string name = graph.BigraphNodeName(digraphNodeId);
 		if (name.size() > 0)
 		{
 			alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_name(name);
@@ -689,9 +689,9 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 std::unordered_map<std::string, std::vector<SeedHit>> loadGafSeeds(const AlignmentGraph& alignmentGraph, const std::string& gafFile)
 {
 	std::unordered_map<std::string, size_t> nodeNameMap;
-	for (size_t i = 0; i < alignmentGraph.originalNodeName.size(); i++)
+	for (size_t i = 0; i < alignmentGraph.BigraphNodeCount(); i++)
 	{
-		nodeNameMap[alignmentGraph.OriginalNodeName(i)] = i/2; // because of duplicating fw / bw
+		nodeNameMap[alignmentGraph.BigraphNodeName(i)] = i/2; // because of duplicating fw / bw
 	}
 	std::unordered_map<std::string, std::vector<SeedHit>> result;
 	std::ifstream file { gafFile };

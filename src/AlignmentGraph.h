@@ -130,13 +130,13 @@ public:
 	NodeChunkSequence NodeChunks(size_t node) const;
 	AmbiguousChunkSequence AmbiguousNodeChunks(size_t node) const;
 	size_t GetUnitigNode(int nodeId, size_t offset) const;
-	std::string OriginalNodeName(int nodeId) const;
-	size_t OriginalNodeSize(int nodeId) const;
+	std::string BigraphNodeName(int nodeId) const;
+	size_t BigraphNodeSize(int nodeId) const;
+	size_t BigraphNodeCount() const;
 	size_t ComponentSize() const;
 	NodeEdgeIterator OutNeighbors(size_t nodeId) const;
 	NodeEdgeIterator InNeighbors(size_t nodeId) const;
 	static AlignmentGraph DummyGraph();
-	std::vector<std::string> originalNodeName;
 private:
 	void buildEdges();
 	void fixChainApproxPos(const size_t start);
@@ -149,24 +149,25 @@ private:
 	void AddNode(int nodeId, int offset, const std::string& sequence, bool reverseNode);
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
-	std::vector<uint8_t> nodeLength;
+	std::vector<std::string> originalNodeName;
 	std::vector<std::vector<size_t>> nodeLookup;
 	std::vector<size_t> originalNodeSize;
+	std::vector<size_t> componentNumber;
+	std::vector<size_t> chainNumber;
+	std::vector<size_t> chainApproxPos;
+	std::vector<uint8_t> nodeLength;
 	std::vector<size_t> nodeOffset;
 	std::vector<int> nodeIDs;
 	std::vector<bool> hasImplicitOutEdge;
-	std::set<std::tuple<size_t, size_t, size_t>> tempConstructionOutEdges;
 	std::vector<size_t> explicitEdges;
 	std::vector<size_t> edgeStorage;
 	std::vector<bool> reverse;
 	std::vector<bool> linearizable;
 	std::vector<NodeChunkSequence> nodeSequences;
-	size_t bpSize;
 	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
+	std::set<std::tuple<size_t, size_t, size_t>> tempConstructionOutEdges;
 	std::vector<bool> ambiguousNodes;
-	std::vector<size_t> componentNumber;
-	std::vector<size_t> chainNumber;
-	std::vector<size_t> chainApproxPos;
+	size_t bpSize;
 	size_t firstAmbiguous;
 	bool finalized;
 
