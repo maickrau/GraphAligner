@@ -1285,3 +1285,18 @@ size_t AlignmentGraph::NodeOffset(size_t directedNodeId) const
 {
 	return nodeOffset[directedNodeId];
 }
+
+size_t AlignmentGraph::ChainApproxPos(size_t bigraphNodeId) const
+{
+	return chainApproxPos[bigraphNodeId];
+}
+
+size_t AlignmentGraph::ChainNumber(size_t bigraphNodeId) const
+{
+	return chainNumber[bigraphNodeId];
+}
+
+size_t AlignmentGraph::ComponentNumber(size_t digraphNodeId) const
+{
+	return componentNumber[digraphNodeId];
+}

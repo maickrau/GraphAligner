@@ -297,7 +297,7 @@ private:
 		{
 			EdgeWithPriority insertEdge { node, extraSlice.getValue(0), extraSlice, true };
 			insertEdge.forceCalculation = true;
-			calculableQueue.insert(params.graph.componentNumber[node], extraSlice.getValue(0), insertEdge);
+			calculableQueue.insert(params.graph.ComponentNumber(node), extraSlice.getValue(0), insertEdge);
 		}
 	}
 
@@ -350,7 +350,7 @@ private:
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
 				if (calculableQueue.IsComponentPriorityQueue())
 				{
-					calculableQueue.insert(params.graph.componentNumber[node.first], node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 				else
 				{
@@ -379,7 +379,7 @@ private:
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
 				if (calculableQueue.IsComponentPriorityQueue())
 				{
-					calculableQueue.insert(params.graph.componentNumber[node.first], node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 				else
 				{
@@ -511,7 +511,7 @@ private:
 					{
 						if (calculableQueue.IsComponentPriorityQueue())
 						{
-							calculableQueue.insert(params.graph.componentNumber[neighbor], newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+							calculableQueue.insert(params.graph.ComponentNumber(neighbor), newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
 						}
 						else
 						{

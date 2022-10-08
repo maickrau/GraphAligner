@@ -135,6 +135,9 @@ public:
 	size_t BigraphNodeSize(int nodeId) const;
 	size_t BigraphNodeCount() const;
 	size_t ComponentSize() const;
+	size_t ChainApproxPos(size_t bigraphNodeId) const;
+	size_t ChainNumber(size_t bigraphNodeId) const;
+	size_t ComponentNumber(size_t digraphNodeId) const;
 	NodeEdgeIterator OutNeighbors(size_t nodeId) const;
 	NodeEdgeIterator InNeighbors(size_t nodeId) const;
 	static AlignmentGraph DummyGraph();
