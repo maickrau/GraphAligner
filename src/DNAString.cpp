@@ -367,3 +367,34 @@ std::string DNAString::toString() const
 	lastIndex = 0;
 	return result;
 }
+
+void DNAString::rewindIterators(size_t size) const
+{
+	assert(size > 0);
+	assert(lastSubstringEnd >= size);
+	for (size_t i = 0; i < size; i++)
+	{
+		if (storage[lastIndex] >> 63)
+		{
+			lastOffset -= 2;
+		}
+		else
+		{
+			lastOffset -= 4;
+		}
+		if (lastOffset > 64)
+		{
+			assert(lastIndex > 0);
+			lastIndex -= 1;
+			if (storage[lastIndex] >> 63)
+			{
+				lastOffset = 60;
+			}
+			else
+			{
+				lastOffset = 56;
+			}
+		}
+	}
+	lastSubstringEnd -= size;
+}

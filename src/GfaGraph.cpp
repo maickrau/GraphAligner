@@ -203,3 +203,13 @@ std::string GfaGraph::OriginalNodeName(int nodeId) const
 	assert(nodeId < originalNodeName.size());
 	return originalNodeName[nodeId];
 }
+
+size_t GfaGraph::totalBp() const
+{
+	size_t result = 0;
+	for (size_t i = 0; i < nodes.size(); i++)
+	{
+		result += nodes[i].size();
+	}
+	return result;
+}

@@ -226,6 +226,7 @@ public:
 		assert(cells <= WordConfiguration<Word>::WordSize);
 		ScoreType result = maxXScoreLocalMinima(seqOffset, errorCost, cells, extraMask);
 #ifdef EXTRACORRECTNESSASSERTIONS
+		// todo figure out why breaks
 		assert(result == maxXScoreCellByCell(seqOffset, errorCost, cells));
 #endif
 		return result;

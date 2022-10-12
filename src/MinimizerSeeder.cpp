@@ -355,13 +355,8 @@ void MinimizerSeeder::initMinimizers(size_t numThreads)
 					if (nodeI != graph.BigraphNodeCount()) ++nodeI;
 				}
 				if (nodeId == graph.BigraphNodeCount()) break;
-				std::string sequence;
-				sequence.resize(graph.BigraphNodeSize(nodeId));
-				for (size_t pos = 0; pos < sequence.size(); pos++)
-				{
-					size_t nodeidHere = graph.GetDigraphNode(nodeId, pos);
-					sequence[pos] = graph.NodeSequences(nodeidHere, pos - graph.NodeOffset(nodeidHere));
-				}
+				std::string sequence = graph.BigraphNodeSeq(nodeId);
+				assert(sequence.size() == graph.BigraphNodeSize(nodeId));
 				iterateMinimizers(sequence, minimizerLength, windowSize, [this, &nodeMinimizerStart, &positionDistributor, &kmerPerBucket, &positionPerBucket, &vecPos, positionSize, thread, nodeId](size_t pos, size_t kmer)
 				{
 					if (pos < nodeMinimizerStart.at(nodeId)) return;

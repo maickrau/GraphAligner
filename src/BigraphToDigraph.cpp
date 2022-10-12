@@ -238,7 +238,8 @@ AlignmentGraph DirectedGraph::BuildFromVG(const vg::Graph& graph)
 AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 {
 	AlignmentGraph result;
-	result.ReserveNodes(graph.nodes.size()*2, graph.nodes.size()*2);
+	size_t estimatedDigraphNodes = (graph.totalBp()/AlignmentGraph::SPLIT_NODE_SIZE + graph.nodes.size() + graph.edges.size())*2 + 10;
+	result.ReserveNodes(graph.nodes.size()*2, estimatedDigraphNodes);
 	std::vector<std::vector<size_t>> breakpoints;
 	breakpoints.resize(graph.nodes.size() * 2);
 	for (const auto& t : graph.edges)
@@ -275,5 +276,6 @@ AlignmentGraph DirectedGraph::BuildFromGFA(const GfaGraph& graph)
 		result.AddEdgeNodeId(pair.second.fromId, pair.second.toId, pair.second.overlap);
 	}
 	result.Finalize(64);
+	assert(result.FirstAmbiguous() < estimatedDigraphNodes);
 	return result;
 }

@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <set>
 #include <phmap.h>
+#include "RankBitvector.h"
 #include "ThreadReadAssertion.h"
 #include "DNAString.h"
 
@@ -117,10 +118,10 @@ public:
 	};
 	AlignmentGraph();
 	void ReserveNodes(size_t numBigraphNodes, size_t numDigraphNodes);
-	void AddNode(int bigraphNodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
-	void AddEdgeNodeId(int bigraphIdFrom, int bigraphIdTo, size_t startOffset);
+	void AddNode(size_t bigraphNodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints);
+	void AddEdgeNodeId(size_t bigraphIdFrom, size_t bigraphIdTo, size_t startOffset);
 	void Finalize(int wordSize);
-	std::pair<int, size_t> GetReversePosition(int bigraphNodeId, size_t offset) const;
+	std::pair<size_t, size_t> GetReversePosition(size_t bigraphNodeId, size_t offset) const;
 	size_t NodeSize() const;
 	size_t SizeInBP() const;
 	size_t BigraphNodeID(size_t digraphNodeId) const;
@@ -129,9 +130,9 @@ public:
 	char NodeSequences(size_t digraphNodeId, size_t offset) const;
 	NodeChunkSequence NodeChunks(size_t digraphNodeId) const;
 	AmbiguousChunkSequence AmbiguousNodeChunks(size_t digraphNodeId) const;
-	size_t GetDigraphNode(int bigraphNodeId, size_t offset) const;
-	std::string BigraphNodeName(int bigraphNodeId) const;
-	size_t BigraphNodeSize(int bigraphNodeId) const;
+	size_t GetDigraphNode(size_t bigraphNodeId, size_t offset) const;
+	std::string BigraphNodeName(size_t bigraphNodeId) const;
+	size_t BigraphNodeSize(size_t bigraphNodeId) const;
 	size_t BigraphNodeCount() const;
 	size_t ComponentSize() const;
 	size_t ChainApproxPos(size_t bigraphNodeId) const;
@@ -143,40 +144,51 @@ public:
 	bool Linearizable(size_t digraphNodeId) const;
 	bool Finalized() const;
 	size_t FirstAmbiguous() const;
+	std::string BigraphNodeSeq(size_t bigraphNodeId) const;
 	static AlignmentGraph DummyGraph();
 private:
-	void buildEdges();
+	void makeDinodeIntermediateMapping();
+	void sparsenComponentNumbers();
+	void replaceIntermediateEdgesWithDinodes();
+	size_t addIntermediateNodes(size_t bigraphNodeId, const DNAString& sequence, size_t start, size_t end);
 	void fixChainApproxPos(const size_t start);
 	std::pair<bool, size_t> findBubble(const size_t start, const std::vector<bool>& ignorableTip);
 	void chainBubble(const size_t start, const std::vector<bool>& ignorableTip, std::vector<size_t>& rank);
 	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> chainTips(std::vector<size_t>& rank, std::vector<bool>& ignorableTip);
 	void chainCycles(std::vector<size_t>& rank, std::vector<bool>& ignorableTip);
+	size_t intermediateNodeLength(size_t intermediateId) const;
 	void findChains();
-	void findLinearizable();
-	void AddNode(int bigraphNodeId, int offset, const std::string& sequence, bool reverseNode);
+	void AddAmbiguousDinode(const std::string& sequence);
+	void AddNormalDinode(const std::string& sequence);
 	void RenumberAmbiguousToEnd();
 	void doComponentOrder();
-	std::vector<std::string> originalNodeName;
-	std::vector<std::vector<size_t>> nodeLookup;
-	std::vector<size_t> originalNodeSize;
-	std::vector<size_t> componentNumber;
-	std::vector<size_t> chainNumber;
-	std::vector<size_t> chainApproxPos;
-	std::vector<uint8_t> nodeLength;
-	std::vector<size_t> nodeOffset;
-	std::vector<int> nodeIDs;
-	std::vector<bool> hasImplicitOutEdge;
-	std::vector<size_t> explicitEdges;
-	std::vector<size_t> edgeStorage;
-	std::vector<bool> reverse;
-	std::vector<bool> linearizable;
-	std::vector<NodeChunkSequence> nodeSequences;
-	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
-	std::set<std::tuple<size_t, size_t, size_t>> tempConstructionOutEdges;
-	std::vector<bool> ambiguousNodes;
+	size_t intermediateNodeCount() const;
+	size_t digraphToIntermediate(size_t digraphNodeId) const;
+	size_t intermediateLastDinode(size_t intermediate) const;
+	size_t intermediateDinodesCount(size_t intermediate) const;
 	size_t bpSize;
 	size_t firstAmbiguous;
 	bool finalized;
+	// bigraph
+	std::vector<std::string> originalNodeName;
+	std::vector<std::vector<size_t>> bigraphIntermediateList;
+	std::vector<size_t> originalNodeSize;
+	std::vector<size_t> chainNumber;
+	std::vector<size_t> chainApproxPos;
+	std::vector<bool> reverse;
+	// intermediates
+	std::vector<bool> partOfStronglyConnectedComponent;
+	std::vector<size_t> componentNumber;
+	std::vector<uint8_t> lastDinodeLength;
+	std::vector<size_t> firstDinodeOffset;
+	std::vector<size_t> intermediateBigraphNodeIDs;
+	std::vector<size_t> intermediateDinodesStart;
+	std::vector<std::vector<size_t>> intermediateInEdges; // during construction points to intermediates, after points to dinodes
+	std::vector<std::vector<size_t>> intermediateOutEdges; // during construction points to intermediates, after points to dinodes
+	// digraph
+	RankBitvector firstOfIntermediates;
+	std::vector<NodeChunkSequence> nodeSequences;
+	std::vector<AmbiguousChunkSequence> ambiguousNodeSequences;
 };
 
 

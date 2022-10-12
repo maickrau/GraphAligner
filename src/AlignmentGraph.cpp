@@ -86,89 +86,252 @@ AlignmentGraph::EdgeIterator AlignmentGraph::EdgeIterator::operator++(int)
 }
 
 AlignmentGraph::AlignmentGraph() :
-nodeLength(),
-nodeLookup(),
-nodeIDs(),
-nodeSequences(),
-bpSize(0),
-ambiguousNodeSequences(),
-firstAmbiguous(std::numeric_limits<size_t>::max()),
-finalized(false)
+	bpSize(0),
+	firstAmbiguous(std::numeric_limits<size_t>::max()),
+	finalized(false),
+	originalNodeName(),
+	bigraphIntermediateList(),
+	originalNodeSize(),
+	chainNumber(),
+	chainApproxPos(),
+	reverse(),
+	componentNumber(),
+	lastDinodeLength(),
+	firstDinodeOffset(),
+	intermediateBigraphNodeIDs(),
+	intermediateDinodesStart(),
+	intermediateInEdges(),
+	intermediateOutEdges(),
+	firstOfIntermediates(),
+	nodeSequences(),
+	ambiguousNodeSequences()
 {
 }
 
 void AlignmentGraph::ReserveNodes(size_t numBigraphNodes, size_t numDigraphNodes)
 {
+	originalNodeName.reserve(numBigraphNodes);
+	bigraphIntermediateList.reserve(numBigraphNodes);
+	originalNodeSize.reserve(numBigraphNodes);
+	chainNumber.reserve(numBigraphNodes);
+	chainApproxPos.reserve(numBigraphNodes);
+	reverse.reserve(numBigraphNodes);
 	nodeSequences.reserve(numDigraphNodes);
-	ambiguousNodeSequences.reserve(numDigraphNodes);
-	nodeLookup.resize(numBigraphNodes);
-	originalNodeSize.resize(numBigraphNodes, std::numeric_limits<size_t>::max());
-	originalNodeName.resize(numBigraphNodes, "");
-	nodeIDs.reserve(numDigraphNodes);
-	nodeLength.reserve(numDigraphNodes);
-	reverse.reserve(numDigraphNodes);
-	nodeOffset.reserve(numDigraphNodes);
 }
 
-void AlignmentGraph::AddNode(int bigraphNodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
+void AlignmentGraph::AddNode(size_t bigraphNodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(bigraphNodeId < nodeLookup.size());
-	assert(bigraphNodeId < originalNodeSize.size());
-	assert(bigraphNodeId < originalNodeName.size());
-	assert(nodeLookup[bigraphNodeId].size() == 0);
-	assert(originalNodeSize[bigraphNodeId] == std::numeric_limits<size_t>::max());
-	assert(originalNodeName[bigraphNodeId].size() == 0);
-	originalNodeSize[bigraphNodeId] = sequence.size();
-	originalNodeName[bigraphNodeId] = name;
+	assert(bigraphNodeId == BigraphNodeCount());
+	originalNodeName.push_back(name);
+	bigraphIntermediateList.emplace_back();
+	originalNodeSize.push_back(sequence.size());
+	reverse.push_back(reverseNode);
 	assert(breakpoints.size() >= 2);
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
+	bpSize += sequence.size();
 	for (size_t breakpoint = 1; breakpoint < breakpoints.size(); breakpoint++)
 	{
 		if (breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
-		assert(breakpoints[breakpoint] > breakpoints[breakpoint-1]);
-		for (size_t offset = breakpoints[breakpoint-1]; offset < breakpoints[breakpoint]; offset += SPLIT_NODE_SIZE)
-		{
-			size_t size = SPLIT_NODE_SIZE;
-			if (breakpoints[breakpoint] - offset < size) size = breakpoints[breakpoint] - offset;
-			assert(size > 0);
-			AddNode(bigraphNodeId, offset, sequence.substr(offset, size), reverseNode);
-			if (offset > 0)
-			{
-				assert(nodeOffset.size() == nodeIDs.size());
-				assert(nodeIDs[nodeIDs.size()-2] == nodeIDs[nodeIDs.size()-1]);
-				assert(nodeOffset[nodeIDs.size()-2] + NodeLength(nodeIDs.size()-2) == nodeOffset[nodeIDs.size()-1]);
-			}
-		}
+		addIntermediateNodes(bigraphNodeId, sequence, breakpoints[breakpoint-1], breakpoints[breakpoint]);
 	}
 }
 
-void AlignmentGraph::AddNode(int bigraphNodeId, int offset, const std::string& sequence, bool reverseNode)
+size_t AlignmentGraph::intermediateNodeCount() const
+{
+	return intermediateDinodesStart.size();
+}
+
+size_t AlignmentGraph::addIntermediateNodes(size_t bigraphNodeId, const DNAString& sequence, size_t start, size_t end)
+{
+	size_t thisNode = intermediateNodeCount();
+	assert(end > start);
+	bool currentlyAmbiguous = false;
+	for (size_t offset = start; offset < end; offset += SPLIT_NODE_SIZE)
+	{
+		size_t size = SPLIT_NODE_SIZE;
+		if (offset+size >= end) size = end - offset;
+		assert(size > 0);
+		bool ambiguous = false;
+		std::string seq = sequence.substr(offset, size);
+		for (size_t i = 0; i < size; i++)
+		{
+			switch(seq[i])
+			{
+				case 'a':
+				case 'A':
+				case 'c':
+				case 'C':
+				case 'g':
+				case 'G':
+				case 't':
+				case 'T':
+				case 'u':
+				case 'U':
+					break;
+				default:
+					ambiguous = true;
+					break;
+			}
+		}
+		if (offset > start && ambiguous != currentlyAmbiguous)
+		{
+			sequence.rewindIterators(size);
+			size_t newNode = addIntermediateNodes(bigraphNodeId, sequence, offset, end);
+			assert(std::find(intermediateOutEdges[thisNode].begin(), intermediateOutEdges[thisNode].end(), newNode) == intermediateOutEdges[thisNode].end());
+			assert(std::find(intermediateInEdges[newNode].begin(), intermediateInEdges[newNode].end(), thisNode) == intermediateInEdges[newNode].end());
+			intermediateOutEdges[thisNode].push_back(newNode);
+			intermediateInEdges[newNode].push_back(thisNode);
+			return thisNode;
+		}
+		if (offset == start)
+		{
+			currentlyAmbiguous = ambiguous;
+			assert(intermediateNodeCount() == thisNode);
+			lastDinodeLength.push_back(size);
+			firstDinodeOffset.push_back(start);
+			intermediateBigraphNodeIDs.push_back(bigraphNodeId);
+			if (ambiguous)
+			{
+				intermediateDinodesStart.push_back(ambiguousNodeSequences.size() + std::numeric_limits<size_t>::max()/2);
+			}
+			else
+			{
+				intermediateDinodesStart.push_back(nodeSequences.size());
+			}
+			intermediateInEdges.emplace_back();
+			intermediateOutEdges.emplace_back();
+			bigraphIntermediateList[bigraphNodeId].push_back(thisNode);
+			assert(intermediateNodeCount() == thisNode+1);
+		}
+		if (ambiguous)
+		{
+			AddAmbiguousDinode(seq);
+		}
+		else
+		{
+			AddNormalDinode(seq);
+		}
+		lastDinodeLength[thisNode] = seq.size();
+	}
+	return thisNode;
+}
+
+void AlignmentGraph::AddAmbiguousDinode(const std::string& sequence)
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
 	assert(sequence.size() <= SPLIT_NODE_SIZE);
-
-	bpSize += sequence.size();
-	nodeLookup[bigraphNodeId].push_back(nodeLength.size());
-	nodeLength.push_back(sequence.size());
-	nodeIDs.push_back(bigraphNodeId);
-	reverse.push_back(reverseNode);
-	nodeOffset.push_back(offset);
-	NodeChunkSequence normalSeq;
-	for (size_t i = 0; i < CHUNKS_IN_NODE; i++)
-	{
-		normalSeq[i] = 0;
-	}
 	AmbiguousChunkSequence ambiguousSeq;
 	ambiguousSeq.A = 0;
 	ambiguousSeq.C = 0;
 	ambiguousSeq.G = 0;
 	ambiguousSeq.T = 0;
-	bool ambiguous = false;
 	assert(sequence.size() <= sizeof(size_t)*8);
+	for (size_t i = 0; i < sequence.size(); i++)
+	{
+		size_t chunk = i / BP_IN_CHUNK;
+		assert(chunk < CHUNKS_IN_NODE);
+		switch(sequence[i])
+		{
+			case 'a':
+			case 'A':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				break;
+			case 'c':
+			case 'C':
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				break;
+			case 'g':
+			case 'G':
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				break;
+			case 't':
+			case 'T':
+			case 'u':
+			case 'U':
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'r':
+			case 'R':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				break;
+			case 'y':
+			case 'Y':
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 's':
+			case 'S':
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				break;
+			case 'w':
+			case 'W':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'k':
+			case 'K':
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'm':
+			case 'M':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				break;
+			case 'b':
+			case 'B':
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'd':
+			case 'D':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'h':
+			case 'H':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			case 'v':
+			case 'V':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				break;
+			case 'n':
+			case 'N':
+				ambiguousSeq.A |= ((size_t)1) << (i);
+				ambiguousSeq.C |= ((size_t)1) << (i);
+				ambiguousSeq.G |= ((size_t)1) << (i);
+				ambiguousSeq.T |= ((size_t)1) << (i);
+				break;
+			default:
+				assert(false);
+		}
+	}
+	ambiguousNodeSequences.emplace_back(ambiguousSeq);
+}
+
+void AlignmentGraph::AddNormalDinode(const std::string& sequence)
+{
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
+	assert(!finalized);
+	assert(sequence.size() <= SPLIT_NODE_SIZE);
+	NodeChunkSequence normalSeq;
+	for (size_t i = 0; i < CHUNKS_IN_NODE; i++)
+	{
+		normalSeq[i] = 0;
+	}
 	for (size_t i = 0; i < sequence.size(); i++)
 	{
 		size_t chunk = i / BP_IN_CHUNK;
@@ -178,274 +341,249 @@ void AlignmentGraph::AddNode(int bigraphNodeId, int offset, const std::string& s
 		{
 			case 'a':
 			case 'A':
-				ambiguousSeq.A |= ((size_t)1) << (i);
 				normalSeq[chunk] |= ((size_t)0) << offset;
 				break;
 			case 'c':
 			case 'C':
-				ambiguousSeq.C |= ((size_t)1) << (i);
 				normalSeq[chunk] |= ((size_t)1) << offset;
 				break;
 			case 'g':
 			case 'G':
-				ambiguousSeq.G |= ((size_t)1) << (i);
 				normalSeq[chunk] |= ((size_t)2) << offset;
 				break;
 			case 't':
 			case 'T':
 			case 'u':
 			case 'U':
-				ambiguousSeq.T |= ((size_t)1) << (i);
 				normalSeq[chunk] |= ((size_t)3) << offset;
-				break;
-			case 'r':
-			case 'R':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'y':
-			case 'Y':
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 's':
-			case 'S':
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'w':
-			case 'W':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'k':
-			case 'K':
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'm':
-			case 'M':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'b':
-			case 'B':
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'd':
-			case 'D':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'h':
-			case 'H':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'v':
-			case 'V':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguous = true;
-				break;
-			case 'n':
-			case 'N':
-				ambiguousSeq.A |= ((size_t)1) << (i);
-				ambiguousSeq.C |= ((size_t)1) << (i);
-				ambiguousSeq.G |= ((size_t)1) << (i);
-				ambiguousSeq.T |= ((size_t)1) << (i);
-				ambiguous = true;
 				break;
 			default:
 				assert(false);
 		}
 	}
-	ambiguousNodes.push_back(ambiguous);
-	if (ambiguous)
-	{
-		ambiguousNodeSequences.emplace_back(ambiguousSeq);
-	}
-	else
-	{
-		nodeSequences.emplace_back(normalSeq);
-	}
-	assert(nodeIDs.size() == nodeLength.size());
+	nodeSequences.emplace_back(normalSeq);
 }
 
-void AlignmentGraph::AddEdgeNodeId(int bigraphNodeIdFrom, int bigraphNodeIdTo, size_t startOffset)
+void AlignmentGraph::AddEdgeNodeId(size_t bigraphNodeIdFrom, size_t bigraphNodeIdTo, size_t startOffset)
 {
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
-	assert(bigraphNodeIdFrom < nodeLookup.size());
-	assert(bigraphNodeIdTo < nodeLookup.size());
-	std::tuple<size_t, size_t, size_t> key { bigraphNodeIdFrom, bigraphNodeIdTo, startOffset };
-	tempConstructionOutEdges.insert(key);
-}
-
-void AlignmentGraph::buildEdges()
-{
-	hasImplicitOutEdge.resize(nodeLength.size(), false);
-	std::vector<uint16_t> explicitInEdgeCount;
-	std::vector<uint16_t> explicitOutEdgeCount;
-	explicitInEdgeCount.resize(nodeLength.size(), 0);
-	explicitOutEdgeCount.resize(nodeLength.size(), 0);
-	size_t totalExplicitEdges = 0;
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+	assert(bigraphNodeIdFrom < bigraphIntermediateList.size());
+	assert(bigraphNodeIdTo < bigraphIntermediateList.size());
+	assert(bigraphIntermediateList[bigraphNodeIdFrom].size() > 0);
+	assert(bigraphIntermediateList[bigraphNodeIdTo].size() > 0);
+	size_t intermediateFrom = bigraphIntermediateList[bigraphNodeIdFrom].back();
+	size_t intermediateTo = std::numeric_limits<size_t>::max();
+	for (auto node : bigraphIntermediateList[bigraphNodeIdTo])
 	{
-		for (size_t j = 1; j < nodeLookup[i].size(); j++)
+		if (firstDinodeOffset[node] == startOffset)
 		{
-			size_t from = nodeLookup[i][j-1];
-			size_t to = nodeLookup[i][j];
-			if (to == from+1)
-			{
-				hasImplicitOutEdge[from] = true;
-			}
-			else
-			{
-				explicitOutEdgeCount[from] += 1;
-				explicitInEdgeCount[to] += 1;
-				totalExplicitEdges += 2;
-				assert(explicitOutEdgeCount[from] < 1024);
-				assert(explicitInEdgeCount[to] < 1024);
-			}
+			intermediateTo = node;
+			break;
 		}
 	}
-	for (auto t : tempConstructionOutEdges)
-	{
-		size_t from = nodeLookup[std::get<0>(t)].back();
-		assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[std::get<0>(t)]);
-		size_t to = GetDigraphNode(std::get<1>(t), std::get<2>(t));
-		assert(nodeOffset[to] == std::get<2>(t));
-		if (to == from+1)
-		{
-			hasImplicitOutEdge[from] = true;
-		}
-		else
-		{
-			explicitOutEdgeCount[from] += 1;
-			explicitInEdgeCount[to] += 1;
-			totalExplicitEdges += 2;
-			assert(explicitOutEdgeCount[from] < 1024);
-			assert(explicitInEdgeCount[to] < 1024);
-		}
-	}
-	assert(totalExplicitEdges < 17592186044416ll); // 2^44, 44 bits for start index, 10 bits for in-edge count, 10 for out-edge count
-	size_t start = 0;
-	explicitEdges.resize(nodeLength.size());
-	for (size_t i = 0; i < explicitEdges.size(); i++)
-	{
-		assert(explicitOutEdgeCount[i] < 1024);
-		assert(explicitInEdgeCount[i] < 1024);
-		explicitEdges[i] = (start << 20) + (explicitInEdgeCount[i] << 10) + explicitOutEdgeCount[i];
-		start += explicitInEdgeCount[i] + explicitOutEdgeCount[i];
-	}
-	assert(start == totalExplicitEdges);
-	edgeStorage.resize(totalExplicitEdges, std::numeric_limits<size_t>::max());
-	for (size_t i = 0; i < nodeLookup.size(); i++)
-	{
-		for (size_t j = 1; j < nodeLookup[i].size(); j++)
-		{
-			size_t from = nodeLookup[i][j-1];
-			size_t to = nodeLookup[i][j];
-			if (to == from+1) continue;
-			assert(explicitOutEdgeCount[from] >= 1);
-			explicitOutEdgeCount[from] -= 1;
-			size_t outIndex = (explicitEdges[from] >> 20) + explicitOutEdgeCount[from];
-			assert(outIndex < edgeStorage.size());
-			assert(edgeStorage[outIndex] == std::numeric_limits<size_t>::max());
-			edgeStorage[outIndex] = to;
-			assert(explicitInEdgeCount[to] >= 1);
-			explicitInEdgeCount[to] -= 1;
-			size_t inIndex = (explicitEdges[to] >> 20) + (explicitEdges[to] & 1023) + explicitInEdgeCount[to];
-			assert(inIndex < edgeStorage.size());
-			assert(edgeStorage[inIndex] == std::numeric_limits<size_t>::max());
-			edgeStorage[inIndex] = from;
-		}
-	}
-	for (auto t : tempConstructionOutEdges)
-	{
-		size_t from = nodeLookup[std::get<0>(t)].back();
-		assert(nodeOffset[from] + NodeLength(from) == originalNodeSize[std::get<0>(t)]);
-		size_t to = GetDigraphNode(std::get<1>(t), std::get<2>(t));
-		assert(nodeOffset[to] == std::get<2>(t));
-		if (to == from+1) continue;
-		assert(explicitOutEdgeCount[from] >= 1);
-		explicitOutEdgeCount[from] -= 1;
-		size_t outIndex = (explicitEdges[from] >> 20) + explicitOutEdgeCount[from];
-		assert(outIndex < edgeStorage.size());
-		assert(edgeStorage[outIndex] == std::numeric_limits<size_t>::max());
-		edgeStorage[outIndex] = to;
-		assert(explicitInEdgeCount[to] >= 1);
-		explicitInEdgeCount[to] -= 1;
-		size_t inIndex = (explicitEdges[to] >> 20) + (explicitEdges[to] & 1023) + explicitInEdgeCount[to];
-		assert(inIndex < edgeStorage.size());
-		assert(edgeStorage[inIndex] == std::numeric_limits<size_t>::max());
-		edgeStorage[inIndex] = from;
-	}
-	for (size_t i = 0; i < edgeStorage.size(); i++)
-	{
-		assert(edgeStorage[i] != std::numeric_limits<size_t>::max());
-		assert(edgeStorage[i] < nodeLength.size());
-	}
-	std::set<std::tuple<size_t, size_t, size_t>> tmp;
-	std::swap(tmp, tempConstructionOutEdges);
+	assert(intermediateTo != std::numeric_limits<size_t>::max());
+	if (std::find(intermediateOutEdges[intermediateFrom].begin(), intermediateOutEdges[intermediateFrom].end(), intermediateTo) == intermediateOutEdges[intermediateFrom].end()) intermediateOutEdges[intermediateFrom].push_back(intermediateTo);
+	if (std::find(intermediateInEdges[intermediateTo].begin(), intermediateInEdges[intermediateTo].end(), intermediateFrom) == intermediateInEdges[intermediateTo].end()) intermediateInEdges[intermediateTo].push_back(intermediateFrom);
 }
 
 void AlignmentGraph::Finalize(int wordSize)
 {
-	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(reverse.size() == nodeLength.size());
-	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeLookup.size() == originalNodeSize.size());
-	assert(nodeLookup.size() == originalNodeName.size());
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+	assert(originalNodeName.size() == BigraphNodeCount());
+	assert(bigraphIntermediateList.size() == BigraphNodeCount());
+	assert(originalNodeSize.size() == BigraphNodeCount());
+	assert(reverse.size() == BigraphNodeCount());
+	assert(chainNumber.size() == 0);
+	assert(chainApproxPos.size() == 0);
+	assert(intermediateOutEdges.size() == intermediateInEdges.size());
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
 	{
-		assert(nodeLookup[i].size() > 0);
+		for (auto neighbor : intermediateOutEdges[i])
+		{
+			assert(std::find(intermediateInEdges[neighbor].begin(), intermediateInEdges[neighbor].end(), i) != intermediateInEdges[neighbor].end());
+		}
+	}
+	for (size_t i = 0; i < bigraphIntermediateList.size(); i++)
+	{
+		assert(bigraphIntermediateList[i].size() > 0);
 		assert(originalNodeName[i] != "");
 		assert(originalNodeSize[i] != std::numeric_limits<size_t>::max());
 		assert(originalNodeSize[i] != 0);
 	}
 	RenumberAmbiguousToEnd();
-	buildEdges();
-	ambiguousNodes.clear();
-	findLinearizable();
+	makeDinodeIntermediateMapping();
 	doComponentOrder();
 	findChains();
+	sparsenComponentNumbers();
+	replaceIntermediateEdgesWithDinodes();
 	finalized = true;
-	int specialNodes = 0;
-	size_t edges = 0;
-	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(reverse.size() == nodeLength.size());
-	assert(nodeIDs.size() == nodeLength.size());
-	assert(nodeOffset.size() == nodeLength.size());
-	nodeLength.shrink_to_fit();
-	nodeIDs.shrink_to_fit();
-	reverse.shrink_to_fit();
-	nodeSequences.shrink_to_fit();
-	ambiguousNodeSequences.shrink_to_fit();
-#ifndef NDEBUG
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+
+	assert(chainNumber.size() == BigraphNodeCount());
+	assert(chainApproxPos.size() == BigraphNodeCount());
+	assert(nodeSequences.size() + ambiguousNodeSequences.size() == NodeSize());
+	assert(firstOfIntermediates.size() == NodeSize()+1);
+
+	assert(originalNodeName.size() == BigraphNodeCount());
+	assert(bigraphIntermediateList.size() == BigraphNodeCount());
+	assert(originalNodeSize.size() == BigraphNodeCount());
+	assert(chainNumber.size() == BigraphNodeCount());
+	assert(chainApproxPos.size() == BigraphNodeCount());
+	assert(reverse.size() == BigraphNodeCount());
+	assert(componentNumber.size() == lastDinodeLength.size());
+	assert(componentNumber.size() == firstDinodeOffset.size());
+	assert(componentNumber.size() == intermediateBigraphNodeIDs.size());
+	assert(componentNumber.size() == intermediateDinodesStart.size());
+	assert(componentNumber.size() == intermediateInEdges.size());
+	assert(componentNumber.size() == intermediateOutEdges.size());
+	for (size_t i = 0; i < BigraphNodeCount(); i++)
 	{
-		for (size_t j = 1; j < nodeLookup[i].size(); j++)
+		size_t intermediateLenSum = 0;
+		for (auto interNode : bigraphIntermediateList[i])
 		{
-			assert(nodeOffset[nodeLookup[i][j-1]] < nodeOffset[nodeLookup[i][j]]);
+			assert(intermediateBigraphNodeIDs[interNode] == i);
+			intermediateLenSum += intermediateNodeLength(interNode);
+		}
+		for (size_t j = 1; j < bigraphIntermediateList[i].size(); j++)
+		{
+			assert(firstDinodeOffset[bigraphIntermediateList[i][j]] > firstDinodeOffset[bigraphIntermediateList[i][j-1]]);
+		}
+		assert(intermediateLenSum == BigraphNodeSize(i));
+	}
+	for (size_t i = 0; i < intermediateBigraphNodeIDs.size(); i++)
+	{
+		assert(i == 0 || intermediateDinodesStart[i] > intermediateDinodesStart[i-1]);
+		size_t bigraphNodeId = intermediateBigraphNodeIDs[i];
+		assert(std::find(bigraphIntermediateList[bigraphNodeId].begin(), bigraphIntermediateList[bigraphNodeId].end(), i) != bigraphIntermediateList[bigraphNodeId].end());
+		for (auto neighborDinode : intermediateOutEdges[i])
+		{
+			size_t neighbor = digraphToIntermediate(neighborDinode);
+			assert(componentNumber[neighbor] >= componentNumber[i]);
+			size_t last = intermediateLastDinode(i);
+			assert(std::find(intermediateInEdges[neighbor].begin(), intermediateInEdges[neighbor].end(), last) != intermediateInEdges[neighbor].end());
+		}
+		for (auto neighborDinode : intermediateInEdges[i])
+		{
+			size_t neighbor = digraphToIntermediate(neighborDinode);
+			assert(componentNumber[neighbor] <= componentNumber[i]);
+			size_t first = intermediateDinodesStart[i];
+			assert(std::find(intermediateOutEdges[neighbor].begin(), intermediateOutEdges[neighbor].end(), first) != intermediateOutEdges[neighbor].end());
+		}
+		assert(lastDinodeLength[i] == NodeLength(intermediateLastDinode(i)));
+	}
+	for (size_t i = 0; i < NodeSize(); i++)
+	{
+		for (auto neighbor : OutNeighbors(i))
+		{
+			assert(neighbor < NodeSize());
+			auto other = InNeighbors(neighbor);
+			assert(std::find(other.begin(), other.end(), i) != other.end());
+		}
+		for (auto neighbor : InNeighbors(i))
+		{
+			assert(neighbor < NodeSize());
+			auto other = OutNeighbors(neighbor);
+			assert(std::find(other.begin(), other.end(), i) != other.end());
 		}
 	}
-#endif
+}
+
+void AlignmentGraph::makeDinodeIntermediateMapping()
+{
+	firstOfIntermediates.resize(nodeSequences.size() + ambiguousNodeSequences.size() + 1);
+	for (size_t i = 0; i < intermediateDinodesStart.size(); i++)
+	{
+		assert(!firstOfIntermediates[intermediateDinodesStart[i]]);
+		firstOfIntermediates.set(intermediateDinodesStart[i], true);
+	}
+	firstOfIntermediates.set(nodeSequences.size() + ambiguousNodeSequences.size(), true);
+	firstOfIntermediates.buildRanks();
+}
+
+void AlignmentGraph::sparsenComponentNumbers()
+{
+	partOfStronglyConnectedComponent.resize(componentNumber.size(), false);
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
+	{
+		for (auto edge : intermediateOutEdges[i])
+		{
+			assert(componentNumber[edge] >= componentNumber[i]);
+			if (componentNumber[edge] == componentNumber[i])
+			{
+				partOfStronglyConnectedComponent[i] = true;
+				partOfStronglyConnectedComponent[edge] = true;
+			}
+		}
+		for (auto edge : intermediateInEdges[i])
+		{
+			assert(componentNumber[edge] <= componentNumber[i]);
+			if (componentNumber[edge] == componentNumber[i])
+			{
+				partOfStronglyConnectedComponent[i] = true;
+				partOfStronglyConnectedComponent[edge] = true;
+			}
+		}
+	}
+	std::vector<size_t> order;
+	order.reserve(componentNumber.size());
+	for (size_t i = 0; i < componentNumber.size(); i++)
+	{
+		order.push_back(i);
+	}
+	std::sort(order.begin(), order.end(), [this](size_t left, size_t right) { return componentNumber[left] < componentNumber[right]; });
+	size_t extraAdd = 0;
+	size_t nextAdd = 0;
+	size_t lastNumber = std::numeric_limits<size_t>::max();
+	size_t lastRawNumber = std::numeric_limits<size_t>::max();
+	for (size_t i : order)
+	{
+		assert(componentNumber[i] >= lastRawNumber || lastRawNumber == std::numeric_limits<size_t>::max());
+		if (componentNumber[i] != lastRawNumber)
+		{
+			extraAdd += nextAdd;
+			nextAdd = 0;
+		}
+		else
+		{
+			assert(partOfStronglyConnectedComponent[i]);
+		}
+		lastRawNumber = componentNumber[i];
+		componentNumber[i] += extraAdd;
+		assert(componentNumber[i] >= lastNumber || lastNumber == std::numeric_limits<size_t>::max());
+		nextAdd += intermediateDinodesCount(i);
+		lastNumber = componentNumber[i];
+	}
+}
+
+void AlignmentGraph::replaceIntermediateEdgesWithDinodes()
+{
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
+	{
+		for (auto neighbor : intermediateOutEdges[i])
+		{
+			assert(std::find(intermediateInEdges[neighbor].begin(), intermediateInEdges[neighbor].end(), i) != intermediateInEdges[neighbor].end());
+		}
+	}
+	for (size_t i = 0; i < intermediateInEdges.size(); i++)
+	{
+		for (auto neighbor : intermediateInEdges[i])
+		{
+			assert(std::find(intermediateOutEdges[neighbor].begin(), intermediateOutEdges[neighbor].end(), i) != intermediateOutEdges[neighbor].end());
+		}
+	}
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
+	{
+		for (size_t j = 0; j < intermediateOutEdges[i].size(); j++)
+		{
+			intermediateOutEdges[i][j] = intermediateDinodesStart[intermediateOutEdges[i][j]];
+		}
+	}
+	for (size_t i = 0; i < intermediateInEdges.size(); i++)
+	{
+		for (size_t j = 0; j < intermediateInEdges[i].size(); j++)
+		{
+			intermediateInEdges[i][j] = intermediateLastDinode(intermediateInEdges[i][j]);
+		}
+	}
 }
 
 std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std::vector<bool>& ignorableTip)
@@ -463,8 +601,8 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		seen.erase(v);
 		assert(visited.count(v) == 0);
 		visited.insert(v);
-		if (OutNeighbors(v).size() == 0) return std::make_pair(false, 0);
-		for (const size_t u : OutNeighbors(v))
+		if (intermediateOutEdges[v].size() == 0) return std::make_pair(false, 0);
+		for (const size_t u : intermediateOutEdges[v])
 		{
 			if (ignorableTip[u]) continue;
 			if (u == v) continue;
@@ -472,7 +610,7 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 			assert(visited.count(u) == 0);
 			seen.insert(u);
 			bool hasNonvisitedParent = false;
-			for (const size_t w : InNeighbors(u))
+			for (const size_t w : intermediateInEdges[u])
 			{
 				if (w == u) continue;
 				if (!ignorableTip[w] && visited.count(w) == 0)
@@ -486,7 +624,7 @@ std::pair<bool, size_t> AlignmentGraph::findBubble(const size_t start, const std
 		if (S.size() == 1 && seen.size() == 1 && seen.count(S[0]) == 1)
 		{
 			const size_t t = S.back();
-			for (const size_t u : OutNeighbors(t))
+			for (const size_t u : intermediateOutEdges[t])
 			{
 				if (u == start) return std::make_pair(false, 0);
 			}
@@ -527,7 +665,7 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 	std::unordered_set<size_t> visited;
 	std::vector<size_t> stack;
 	stack.push_back(start);
-	merge(chainNumber, rank, BigraphNodeID(start), BigraphNodeID(bubbleEnd));
+	merge(chainNumber, rank, intermediateBigraphNodeIDs[start], intermediateBigraphNodeIDs[bubbleEnd]);
 	while (stack.size() > 0)
 	{
 		const size_t top = stack.back();
@@ -535,8 +673,8 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 		if (visited.count(top) == 1) continue;
 		if (ignorableTip[top]) continue;
 		visited.insert(top);
-		merge(chainNumber, rank, BigraphNodeID(start), BigraphNodeID(top));
-		for (const auto neighbor : OutNeighbors(top))
+		merge(chainNumber, rank, intermediateBigraphNodeIDs[start], intermediateBigraphNodeIDs[top]);
+		for (const auto neighbor : intermediateOutEdges[top])
 		{
 			if (visited.count(neighbor) == 1) continue;
 			if (neighbor == bubbleEnd) continue;
@@ -548,47 +686,64 @@ void AlignmentGraph::chainBubble(const size_t start, const std::vector<bool>& ig
 void AlignmentGraph::fixChainApproxPos(const size_t start)
 {
 	assert(chainApproxPos[start] == std::numeric_limits<size_t>::max());
-	assert(std::numeric_limits<size_t>::max() / SPLIT_NODE_SIZE > nodeLength.size());
-	assert(std::numeric_limits<size_t>::max() > nodeLength.size() * SPLIT_NODE_SIZE * 2);
+	assert(std::numeric_limits<size_t>::max() / SPLIT_NODE_SIZE > NodeSize());
+	assert(std::numeric_limits<size_t>::max() > NodeSize() * SPLIT_NODE_SIZE * 2);
 	std::vector<std::pair<size_t, size_t>> stack;
 	size_t chain = chainNumber[start];
-	stack.emplace_back(start, (nodeLength.size() + 5) * SPLIT_NODE_SIZE);
+	stack.emplace_back(start, (NodeSize() + 5) * SPLIT_NODE_SIZE);
 	while (stack.size() > 0)
 	{
 		size_t v;
 		size_t dist;
 		std::tie(v, dist) = stack.back();
 		stack.pop_back();
+		assert(v < chainApproxPos.size());
 		if (chainApproxPos[v] != std::numeric_limits<size_t>::max()) continue;
 		chainApproxPos[v] = dist;
-		for (const size_t diNode : nodeLookup[v])
+		for (const size_t interNode : bigraphIntermediateList[v])
 		{
-			for (const size_t u : OutNeighbors(diNode))
+			for (const size_t u : intermediateOutEdges[interNode])
 			{
-				if (chainNumber[BigraphNodeID(u)] != chain) continue;
-				if (chainApproxPos[BigraphNodeID(u)] != std::numeric_limits<size_t>::max()) continue;
-				assert(nodeOffset[u] < dist);
-				assert(dist - nodeOffset[u] < std::numeric_limits<size_t>::max() - nodeOffset[diNode] - NodeLength(diNode));
-				assert(std::numeric_limits<size_t>::max() - NodeLength(u) > dist);
-				stack.emplace_back(u, dist + nodeOffset[diNode] + NodeLength(diNode) - nodeOffset[u]);
+				if (chainNumber[intermediateBigraphNodeIDs[u]] != chain) continue;
+				if (chainApproxPos[intermediateBigraphNodeIDs[u]] != std::numeric_limits<size_t>::max()) continue;
+				assert(firstDinodeOffset[u] < dist);
+				assert(dist - firstDinodeOffset[u] < std::numeric_limits<size_t>::max() - firstDinodeOffset[interNode] - intermediateNodeLength(interNode));
+				assert(std::numeric_limits<size_t>::max() - intermediateNodeLength(u) > dist);
+				stack.emplace_back(intermediateBigraphNodeIDs[u], dist + firstDinodeOffset[interNode] + intermediateNodeLength(interNode) - firstDinodeOffset[u]);
 			}
-			for (const size_t u : InNeighbors(diNode))
+			for (const size_t u : intermediateInEdges[interNode])
 			{
-				if (chainNumber[BigraphNodeID(u)] != chain) continue;
-				if (chainApproxPos[BigraphNodeID(u)] != std::numeric_limits<size_t>::max()) continue;
-				assert(dist + nodeOffset[diNode] > nodeOffset[u] + NodeLength(u));
-				stack.emplace_back(u, dist + nodeOffset[diNode] - (nodeOffset[u] + NodeLength(u)));
+				if (chainNumber[intermediateBigraphNodeIDs[u]] != chain) continue;
+				if (chainApproxPos[intermediateBigraphNodeIDs[u]] != std::numeric_limits<size_t>::max()) continue;
+				assert(dist + firstDinodeOffset[interNode] > firstDinodeOffset[u] + intermediateNodeLength(u));
+				stack.emplace_back(intermediateBigraphNodeIDs[u], dist + firstDinodeOffset[interNode] - (firstDinodeOffset[u] + intermediateNodeLength(u)));
 			}
 		}
 	}
 }
 
+size_t AlignmentGraph::intermediateNodeLength(size_t intermediate) const
+{
+	size_t bigraphNodeId = intermediateBigraphNodeIDs[intermediate];
+	for (size_t i = 0; i < bigraphIntermediateList[bigraphNodeId].size(); i++)
+	{
+		if (bigraphIntermediateList[bigraphNodeId][i] != intermediate) continue;
+		if (i+1 < bigraphIntermediateList[bigraphNodeId].size())
+		{
+			return firstDinodeOffset[bigraphIntermediateList[bigraphNodeId][i+1]] - firstDinodeOffset[bigraphIntermediateList[bigraphNodeId][i]];
+		}
+		return BigraphNodeSize(bigraphNodeId) - firstDinodeOffset[bigraphIntermediateList[bigraphNodeId][i]];
+	}
+	assert(false);
+	return 0;
+}
+
 phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTips(std::vector<size_t>& rank, std::vector<bool>& ignorableTip)
 {
-	assert(componentNumber.size() == NodeSize());
+	assert(componentNumber.size() == intermediateBigraphNodeIDs.size());
 	std::vector<size_t> order;
-	order.reserve(NodeSize());
-	for (size_t i = 0; i < NodeSize(); i++)
+	order.reserve(intermediateBigraphNodeIDs.size());
+	for (size_t i = 0; i < intermediateBigraphNodeIDs.size(); i++)
 	{
 		order.push_back(i);
 	}
@@ -599,7 +754,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!fwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : OutNeighbors(i))
+		for (auto neighbor : intermediateOutEdges[i])
 		{
 			assert(componentNumber[neighbor] >= componentNumber[i]);
 			if (componentNumber[neighbor] == componentNumber[i])
@@ -618,10 +773,10 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!fwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : OutNeighbors(i))
+		for (auto neighbor : intermediateOutEdges[i])
 		{
 			assert(fwTipComponent[componentNumber[neighbor]]);
-			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
+			merge(chainNumber, rank, intermediateBigraphNodeIDs[i], intermediateBigraphNodeIDs[neighbor]);
 		}
 	}
 	std::vector<bool> bwTipComponent;
@@ -630,7 +785,7 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!bwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : InNeighbors(i))
+		for (auto neighbor : intermediateInEdges[i])
 		{
 			assert(componentNumber[neighbor] <= componentNumber[i]);
 			if (componentNumber[neighbor] == componentNumber[i])
@@ -649,14 +804,14 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 	{
 		size_t i = order[ind];
 		if (!bwTipComponent[componentNumber[i]]) continue;
-		for (auto neighbor : InNeighbors(i))
+		for (auto neighbor : intermediateInEdges[i])
 		{
 			assert(bwTipComponent[componentNumber[neighbor]]);
-			merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(neighbor));
+			merge(chainNumber, rank, intermediateBigraphNodeIDs[i], intermediateBigraphNodeIDs[neighbor]);
 		}
 	}
 	phmap::flat_hash_map<size_t, std::unordered_set<size_t>> result;
-	for (size_t i = 0; i < NodeSize(); i++)
+	for (size_t i = 0; i < intermediateBigraphNodeIDs.size(); i++)
 	{
 		if (bwTipComponent[componentNumber[i]] || fwTipComponent[componentNumber[i]])
 		{
@@ -664,18 +819,18 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 		}
 		if (bwTipComponent[componentNumber[i]])
 		{
-			for (auto neighbor : OutNeighbors(i))
+			for (auto neighbor : intermediateOutEdges[i])
 			{
-				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
-				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
+				if (intermediateBigraphNodeIDs[neighbor] == intermediateBigraphNodeIDs[i]) continue;
+				result[intermediateBigraphNodeIDs[i]].insert(intermediateBigraphNodeIDs[neighbor]);
 			}
 		}
 		if (fwTipComponent[componentNumber[i]])
 		{
-			for (auto neighbor : InNeighbors(i))
+			for (auto neighbor : intermediateInEdges[i])
 			{
-				if (BigraphNodeID(neighbor) == BigraphNodeID(i)) continue;
-				result[BigraphNodeID(i)].insert(BigraphNodeID(neighbor));
+				if (intermediateBigraphNodeIDs[neighbor] == intermediateBigraphNodeIDs[i]) continue;
+				result[intermediateBigraphNodeIDs[i]].insert(intermediateBigraphNodeIDs[neighbor]);
 			}
 		}
 	}
@@ -684,12 +839,12 @@ phmap::flat_hash_map<size_t, std::unordered_set<size_t>> AlignmentGraph::chainTi
 
 void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& ignorableTip)
 {
-	for (size_t i = 0; i < nodeLength.size(); i++)
+	for (size_t i = 0; i < intermediateBigraphNodeIDs.size(); i++)
 	{
 		size_t uniqueFwNeighbor = std::numeric_limits<size_t>::max();
-		for (auto u : OutNeighbors(i))
+		for (auto u : intermediateOutEdges[i])
 		{
-			assert(u < nodeLength.size());
+			assert(u < intermediateBigraphNodeIDs.size());
 			if (ignorableTip[u]) continue;
 			if (u == i) continue;
 			if (uniqueFwNeighbor == std::numeric_limits<size_t>::max())
@@ -703,9 +858,9 @@ void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& i
 			}
 		}
 		size_t uniqueBwNeighbor = std::numeric_limits<size_t>::max();
-		for (auto u : InNeighbors(i))
+		for (auto u : intermediateInEdges[i])
 		{
-			assert(u < nodeLength.size());
+			assert(u < intermediateBigraphNodeIDs.size());
 			if (ignorableTip[u]) continue;
 			if (u == i) continue;
 			if (uniqueBwNeighbor == std::numeric_limits<size_t>::max())
@@ -724,26 +879,26 @@ void AlignmentGraph::chainCycles(std::vector<size_t>& rank, std::vector<bool>& i
 		if (uniqueBwNeighbor == std::numeric_limits<size_t>::max()-1) continue;
 		ignorableTip[i] = true;
 		assert(uniqueBwNeighbor == uniqueFwNeighbor);
-		merge(chainNumber, rank, BigraphNodeID(i), BigraphNodeID(uniqueFwNeighbor));
+		merge(chainNumber, rank, intermediateBigraphNodeIDs[i], intermediateBigraphNodeIDs[uniqueFwNeighbor]);
 	}
 }
 
 void AlignmentGraph::findChains()
 {
-	chainNumber.resize(nodeLookup.size(), std::numeric_limits<size_t>::max());
+	chainNumber.resize(BigraphNodeCount(), std::numeric_limits<size_t>::max());
 	for (size_t i = 0; i < chainNumber.size(); i++)
 	{
 		chainNumber[i] = i;
 	}
 	std::vector<bool> ignorableTip;
-	ignorableTip.resize(nodeLength.size(), false);
+	ignorableTip.resize(intermediateInEdges.size(), false);
 	std::vector<size_t> rank;
 	rank.resize(chainNumber.size(), 0);
 	auto tipChainers = chainTips(rank, ignorableTip);
 	chainCycles(rank, ignorableTip);
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+	for (size_t i = 0; i < bigraphIntermediateList.size(); i++)
 	{
-		chainBubble(nodeLookup[i].back(), ignorableTip, rank);
+		chainBubble(bigraphIntermediateList[i].back(), ignorableTip, rank);
 	}
 	for (auto& pair : tipChainers)
 	{
@@ -764,144 +919,48 @@ void AlignmentGraph::findChains()
 		if (uniqueNeighbor == std::numeric_limits<size_t>::max()-1) continue;
 		merge(chainNumber, rank, pair.first, *pair.second.begin());
 	}
-	{
-		std::vector<size_t> tmp;
-		std::vector<bool> tmp2;
-		std::swap(rank, tmp);
-		std::swap(ignorableTip, tmp2);
-	}
 	for (size_t i = 0; i < chainNumber.size(); i++)
 	{
 		find(chainNumber, i);
 	}
-	chainApproxPos.resize(nodeLookup.size(), std::numeric_limits<size_t>::max());
+	chainApproxPos.resize(BigraphNodeCount(), std::numeric_limits<size_t>::max());
 	for (size_t i = 0; i < chainApproxPos.size(); i++)
 	{
 		if (chainApproxPos[i] == std::numeric_limits<size_t>::max()) fixChainApproxPos(i);
 	}
 }
 
-void AlignmentGraph::findLinearizable()
-{
-	linearizable.resize(nodeLength.size(), false);
-	std::vector<bool> checked;
-	checked.resize(nodeLength.size(), false);
-	std::vector<size_t> stack;
-	std::vector<bool> onStack;
-	onStack.resize(nodeLength.size(), false);
-	for (size_t node = 0; node < nodeLength.size(); node++)
-	{
-		if (checked[node]) continue;
-		if (InNeighbors(node).size() != 1)
-		{
-			checked[node] = true;
-			continue;
-		}
-		checked[node] = true;
-		assert(InNeighbors(node).size() == 1);
-		assert(stack.size() == 0);
-		stack.push_back(node);
-		onStack[node] = true;
-		while (true)
-		{
-			assert(stack.size() <= nodeLength.size());
-			if (InNeighbors(stack.back()).size() != 1)
-			{
-				for (size_t i = 0; i < stack.size()-1; i++)
-				{
-					assert(InNeighbors(stack[i]).size() == 1);
-					checked[stack[i]] = true;
-					linearizable[stack[i]] = true;
-					onStack[stack[i]] = false;
-				}
-				linearizable[stack.back()] = false;
-				checked[stack.back()] = true;
-				onStack[stack.back()] = false;
-				stack.clear();
-				break;
-			}
-			assert(InNeighbors(stack.back()).size() == 1);
-			if (checked[stack.back()])
-			{
-				for (size_t i = 0; i < stack.size()-1; i++)
-				{
-					assert(InNeighbors(stack[i]).size() == 1);
-					checked[stack[i]] = true;
-					linearizable[stack[i]] = true;
-					onStack[stack[i]] = false;
-				}
-				linearizable[stack.back()] = false;
-				checked[stack.back()] = true;
-				onStack[stack.back()] = false;
-				stack.clear();
-				break;
-			}
-			assert(InNeighbors(stack.back()).size() == 1);
-			auto neighbor = InNeighbors(stack.back())[0];
-			if (neighbor == node)
-			{
-				for (size_t i = 0; i < stack.size(); i++)
-				{
-					checked[stack[i]] = true;
-					linearizable[stack[i]] = false;
-					onStack[stack[i]] = false;
-				}
-				stack.clear();
-				break;
-			}
-			if (onStack[neighbor])
-			{
-				assert(neighbor != node);
-				size_t i = stack.size();
-				for (; i > 0; i--)
-				{
-					if (stack[i] == neighbor) break;
-					checked[stack[i]] = true;
-					linearizable[stack[i]] = false;
-					onStack[stack[i]] = false;
-				}
-				for (size_t j = 0; j < i; j++)
-				{
-					checked[stack[j]] = true;
-					linearizable[stack[j]] = true;
-					onStack[stack[j]] = false;
-				}
-				stack.clear();
-				break;
-			}
-			stack.push_back(neighbor);
-			onStack[neighbor] = true;
-		}
-	}
-}
-
 #ifdef NDEBUG
 	__attribute__((always_inline))
 #endif
-size_t AlignmentGraph::NodeLength(size_t index) const
+size_t AlignmentGraph::NodeLength(size_t digraphNodeId) const
 {
-	return nodeLength[index];
+	if (firstOfIntermediates[digraphNodeId+1])
+	{
+		return lastDinodeLength[digraphToIntermediate(digraphNodeId)];
+	}
+	return SPLIT_NODE_SIZE;
 }
 
-char AlignmentGraph::NodeSequences(size_t node, size_t pos) const
+char AlignmentGraph::NodeSequences(size_t digraphNodeId, size_t pos) const
 {
-	assert(pos < NodeLength(node));
-	if (node < firstAmbiguous)
+	assert(pos < NodeLength(digraphNodeId));
+	if (digraphNodeId < firstAmbiguous)
 	{
-		assert(node < nodeSequences.size());
+		assert(digraphNodeId < nodeSequences.size());
 		size_t chunk = pos / BP_IN_CHUNK;
 		size_t offset = (pos % BP_IN_CHUNK) * 2;
-		return "ACGT"[(nodeSequences[node][chunk] >> offset) & 3];
+		return "ACGT"[(nodeSequences[digraphNodeId][chunk] >> offset) & 3];
 	}
 	else
 	{
-		assert(node >= firstAmbiguous);
-		assert(node - firstAmbiguous < ambiguousNodeSequences.size());
+		assert(digraphNodeId >= firstAmbiguous);
+		assert(digraphNodeId - firstAmbiguous < ambiguousNodeSequences.size());
 		assert(pos < sizeof(size_t) * 8);
-		bool A = (ambiguousNodeSequences[node - firstAmbiguous].A >> pos) & 1;
-		bool C = (ambiguousNodeSequences[node - firstAmbiguous].C >> pos) & 1;
-		bool G = (ambiguousNodeSequences[node - firstAmbiguous].G >> pos) & 1;
-		bool T = (ambiguousNodeSequences[node - firstAmbiguous].T >> pos) & 1;
+		bool A = (ambiguousNodeSequences[digraphNodeId - firstAmbiguous].A >> pos) & 1;
+		bool C = (ambiguousNodeSequences[digraphNodeId - firstAmbiguous].C >> pos) & 1;
+		bool G = (ambiguousNodeSequences[digraphNodeId - firstAmbiguous].G >> pos) & 1;
+		bool T = (ambiguousNodeSequences[digraphNodeId - firstAmbiguous].T >> pos) & 1;
 		assert(A + C + G + T >= 1);
 		assert(A + C + G + T <= 4);
 		if ( A && !C && !G && !T) return 'A';
@@ -945,7 +1004,7 @@ AlignmentGraph::AmbiguousChunkSequence AlignmentGraph::AmbiguousNodeChunks(size_
 
 size_t AlignmentGraph::NodeSize() const
 {
-	return nodeLength.size();
+	return nodeSequences.size() + ambiguousNodeSequences.size();
 }
 
 class NodeWithDistance
@@ -961,31 +1020,32 @@ public:
 	size_t distance;
 };
 
-size_t AlignmentGraph::GetDigraphNode(int bigraphNodeId, size_t offset) const
+size_t AlignmentGraph::GetDigraphNode(size_t bigraphNodeId, size_t offset) const
 {
-	assert(nodeLookup[bigraphNodeId].size() > 0);
-	//guess the index
-	size_t index = nodeLookup[bigraphNodeId].size() * ((double)offset / (double)originalNodeSize.at(bigraphNodeId));
-	if (index >= nodeLookup[bigraphNodeId].size()) index = nodeLookup[bigraphNodeId].size()-1;
-	//go to the exact index
-	while (index < nodeLookup[bigraphNodeId].size()-1 && (nodeOffset[nodeLookup[bigraphNodeId][index]] + NodeLength(nodeLookup[bigraphNodeId][index]) <= offset)) index++;
-	while (index > 0 && (nodeOffset[nodeLookup[bigraphNodeId][index]] > offset)) index--;
-	assert(index != nodeLookup[bigraphNodeId].size());
-	size_t result = nodeLookup[bigraphNodeId][index];
-	assert(BigraphNodeID(result) == bigraphNodeId);
-	assert(nodeOffset[result] <= offset);
-	assert(nodeOffset[result] + NodeLength(result) > offset);
-	return result;
+	assert(offset < originalNodeSize[bigraphNodeId]);
+	assert(bigraphIntermediateList[bigraphNodeId].size() > 0);
+	size_t intermediateNode = bigraphIntermediateList[bigraphNodeId].back();
+	for (size_t i = 1; i < bigraphIntermediateList[bigraphNodeId].size(); i++)
+	{
+		if (firstDinodeOffset[bigraphIntermediateList[bigraphNodeId][i]] > offset)
+		{
+			intermediateNode = bigraphIntermediateList[bigraphNodeId][i-1];
+			break;
+		}
+	}
+	assert(offset >= firstDinodeOffset[intermediateNode]);
+	size_t extraOffset = offset - firstDinodeOffset[intermediateNode];
+	return intermediateDinodesStart[intermediateNode] + extraOffset / SPLIT_NODE_SIZE;
 }
 
-std::pair<int, size_t> AlignmentGraph::GetReversePosition(int bigraphNodeId, size_t offset) const
+std::pair<size_t, size_t> AlignmentGraph::GetReversePosition(size_t bigraphNodeId, size_t offset) const
 {
-	assert(bigraphNodeId < nodeLookup.size());
+	assert(bigraphNodeId < BigraphNodeCount());
 	size_t originalSize = originalNodeSize[bigraphNodeId];
 	assert(offset < originalSize);
 	size_t newOffset = originalSize - offset - 1;
 	assert(newOffset < originalSize);
-	int reverseNodeId;
+	size_t reverseNodeId;
 	if (bigraphNodeId % 2 == 0)
 	{
 		reverseNodeId = (bigraphNodeId / 2) * 2 + 1;
@@ -1021,7 +1081,7 @@ bool AlignmentGraph::MatrixPosition::operator!=(const AlignmentGraph::MatrixPosi
 	return !(*this == other);
 }
 
-std::string AlignmentGraph::BigraphNodeName(int bigraphNodeId) const
+std::string AlignmentGraph::BigraphNodeName(size_t bigraphNodeId) const
 {
 	assert(bigraphNodeId < originalNodeName.size());
 	assert(originalNodeName[bigraphNodeId] != "");
@@ -1053,7 +1113,7 @@ std::vector<T> reorder(const std::vector<T>& vec, const std::vector<size_t>& ren
 	return result;
 }
 
-size_t AlignmentGraph::BigraphNodeSize(int bigraphNodeId) const
+size_t AlignmentGraph::BigraphNodeSize(size_t bigraphNodeId) const
 {
 	assert(bigraphNodeId < originalNodeSize.size());
 	assert(originalNodeSize[bigraphNodeId] != std::numeric_limits<size_t>::max());
@@ -1062,94 +1122,107 @@ size_t AlignmentGraph::BigraphNodeSize(int bigraphNodeId) const
 
 void AlignmentGraph::RenumberAmbiguousToEnd()
 {
-	assert(nodeSequences.size() + ambiguousNodeSequences.size() == nodeLength.size());
-	assert(reverse.size() == nodeLength.size());
-	assert(nodeIDs.size() == nodeLength.size());
-	assert(ambiguousNodes.size() == nodeLength.size());
-	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
+	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	std::vector<size_t> renumbering;
-	renumbering.reserve(ambiguousNodes.size());
-	size_t nonAmbiguousCount = 0;
+	renumbering.resize(intermediateDinodesStart.size(), std::numeric_limits<size_t>::max());
+	size_t normalCount = 0;
 	size_t ambiguousCount = 0;
-	for (size_t i = 0; i < ambiguousNodes.size(); i++)
+	for (size_t i = 0; i < intermediateDinodesStart.size(); i++)
 	{
-		if (!ambiguousNodes[i])
+		if (intermediateDinodesStart[i] >= std::numeric_limits<size_t>::max()/2)
 		{
-			renumbering.push_back(nonAmbiguousCount);
-			nonAmbiguousCount++;
+			ambiguousCount += 1;
 		}
 		else
 		{
-			assert(ambiguousCount < ambiguousNodes.size());
-			assert(ambiguousNodes.size()-1-ambiguousCount >= nonAmbiguousCount);
-			renumbering.push_back(ambiguousNodes.size()-1-ambiguousCount);
-			ambiguousCount++;
+			normalCount += 1;
 		}
 	}
-	assert(renumbering.size() == ambiguousNodes.size());
-	assert(nonAmbiguousCount + ambiguousCount == ambiguousNodes.size());
-	assert(ambiguousCount == ambiguousNodeSequences.size());
-	assert(nonAmbiguousCount == nodeSequences.size());
-	firstAmbiguous = nonAmbiguousCount;
-
+	assert(ambiguousCount + normalCount == renumbering.size());
+	size_t normalDone = 0;
+	size_t ambiguousDone = 0;
+	for (size_t i = 0; i < intermediateDinodesStart.size(); i++)
+	{
+		if (intermediateDinodesStart[i] >= std::numeric_limits<size_t>::max()/2)
+		{
+			renumbering[i] = normalCount + ambiguousDone;
+			ambiguousDone += 1;
+		}
+		else
+		{
+			renumbering[i] = normalDone;
+			normalDone += 1;
+		}
+		assert(renumbering[i] < renumbering.size());
+	}
+	for (size_t i = 0; i < renumbering.size(); i++)
+	{
+		assert(renumbering[i] != std::numeric_limits<size_t>::max());
+	}
+	assert(normalDone == normalCount);
+	assert(ambiguousDone == ambiguousCount);
+	assert(normalDone + ambiguousDone == intermediateDinodesStart.size());
+	firstAmbiguous = nodeSequences.size();
 	if (ambiguousCount == 0) return;
 
-	//the ambiguous nodes were added in the reverse order, reverse the sequence containers too
-	std::reverse(ambiguousNodeSequences.begin(), ambiguousNodeSequences.end());
-
-	nodeLength = reorder(nodeLength, renumbering);
-	nodeOffset = reorder(nodeOffset, renumbering);
-	nodeIDs = reorder(nodeIDs, renumbering);
-	reverse = reorder(reverse, renumbering);
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+	for (size_t i = 0; i < bigraphIntermediateList.size(); i++)
 	{
-		nodeLookup[i] = renumber(nodeLookup[i], renumbering);
+		bigraphIntermediateList[i] = renumber(bigraphIntermediateList[i], renumbering);
 	}
-
-#ifndef NDEBUG
-	for (size_t i = 0; i < nodeLookup.size(); i++)
+	lastDinodeLength = reorder(lastDinodeLength, renumbering);
+	firstDinodeOffset = reorder(firstDinodeOffset, renumbering);
+	intermediateBigraphNodeIDs = reorder(intermediateBigraphNodeIDs, renumbering);
+	intermediateDinodesStart = reorder(intermediateDinodesStart, renumbering);
+	intermediateInEdges = reorder(intermediateInEdges, renumbering);
+	intermediateOutEdges = reorder(intermediateOutEdges, renumbering);
+	for (size_t i = 0; i < intermediateInEdges.size(); i++)
 	{
-		size_t foundSize = 0;
-		std::set<size_t> offsets;
-		size_t lastOffset = 0;
-		for (auto node : nodeLookup[i])
+		intermediateInEdges[i] = renumber(intermediateInEdges[i], renumbering);
+		intermediateOutEdges[i] = renumber(intermediateOutEdges[i], renumbering);
+	}
+	for (size_t i = 0; i < intermediateDinodesStart.size(); i++)
+	{
+		assert(i == 0 || intermediateDinodesStart[i] > intermediateDinodesStart[i-1]);
+		if (intermediateDinodesStart[i] >= std::numeric_limits<size_t>::max()/2)
 		{
-			assert(offsets.count(nodeOffset[node]) == 0);
-			assert(offsets.size() == 0 || nodeOffset[node] > lastOffset);
-			lastOffset = nodeOffset[node];
-			offsets.insert(nodeOffset[node]);
-			assert(BigraphNodeID(node) == i);
-			foundSize += NodeLength(node);
+			intermediateDinodesStart[i] -= std::numeric_limits<size_t>::max()/2;
+			intermediateDinodesStart[i] += nodeSequences.size();
 		}
-		assert(foundSize == originalNodeSize[i]);
+		assert(i == 0 || intermediateDinodesStart[i] > intermediateDinodesStart[i-1]);
 	}
-#endif
 }
 
 void AlignmentGraph::doComponentOrder()
 {
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
+	{
+		for (auto neighbor : intermediateOutEdges[i])
+		{
+			assert(std::find(intermediateInEdges[neighbor].begin(), intermediateInEdges[neighbor].end(), i) != intermediateInEdges[neighbor].end());
+		}
+	}
 	std::vector<std::tuple<size_t, int, size_t>> callStack;
 	size_t i = 0;
 	std::vector<size_t> index;
 	std::vector<size_t> lowlink;
 	std::vector<bool> onStack;
 	std::vector<size_t> stack;
-	index.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
-	lowlink.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
-	onStack.resize(nodeLength.size(), false);
+	index.resize(intermediateBigraphNodeIDs.size(), std::numeric_limits<size_t>::max());
+	lowlink.resize(intermediateBigraphNodeIDs.size(), std::numeric_limits<size_t>::max());
+	onStack.resize(intermediateBigraphNodeIDs.size(), false);
 	size_t checknode = 0;
 	size_t nextComponent = 0;
-	componentNumber.resize(nodeLength.size(), std::numeric_limits<size_t>::max());
+	componentNumber.resize(intermediateBigraphNodeIDs.size(), std::numeric_limits<size_t>::max());
 	while (true)
 	{
 		if (callStack.size() == 0)
 		{
-			while (checknode < nodeLength.size() && index[checknode] != std::numeric_limits<size_t>::max())
+			while (checknode < intermediateBigraphNodeIDs.size() && index[checknode] != std::numeric_limits<size_t>::max())
 			{
 				checknode++;
 			}
-			if (checknode == nodeLength.size()) break;
+			if (checknode == intermediateBigraphNodeIDs.size()) break;
 			callStack.emplace_back(checknode, 0, 0);
 			checknode++;
 		}
@@ -1173,9 +1246,9 @@ void AlignmentGraph::doComponentOrder()
 			startloop:
 				[[fallthrough]];
 			case 1:
-				if (neighborI >= OutNeighbors(v).size()) goto endloop;
-				assert(neighborI < OutNeighbors(v).size());
-				w = OutNeighbors(v)[neighborI];
+				if (neighborI >= intermediateOutEdges[v].size()) goto endloop;
+				assert(neighborI < intermediateOutEdges[v].size());
+				w = intermediateOutEdges[v][neighborI];
 				if (index[w] == std::numeric_limits<size_t>::max())
 				{
 					assert(lowlink[w] == std::numeric_limits<size_t>::max());
@@ -1196,8 +1269,8 @@ void AlignmentGraph::doComponentOrder()
 					goto startloop;
 				}
 			case 2:
-				assert(neighborI < OutNeighbors(v).size());
-				w = OutNeighbors(v)[neighborI];
+				assert(neighborI < intermediateOutEdges[v].size());
+				w = intermediateOutEdges[v][neighborI];
 				assert(index[w] != std::numeric_limits<size_t>::max());
 				assert(lowlink[w] != std::numeric_limits<size_t>::max());
 				lowlink[v] = std::min(lowlink[v], lowlink[w]);
@@ -1225,20 +1298,22 @@ void AlignmentGraph::doComponentOrder()
 		assert(componentNumber[i] <= nextComponent-1);
 		componentNumber[i] = nextComponent-1-componentNumber[i];
 	}
-#ifdef EXTRACORRECTNESSASSERTIONS
-	for (size_t i = 0; i < nodeLength.size(); i++)
+	for (size_t i = 0; i < intermediateOutEdges.size(); i++)
 	{
-		for (auto neighbor : OutNeighbors(i))
+		for (auto neighbor : intermediateOutEdges[i])
 		{
 			assert(componentNumber[neighbor] >= componentNumber[i]);
 		}
+		for (auto neighbor : intermediateInEdges[i])
+		{
+			assert(componentNumber[neighbor] <= componentNumber[i]);
+		}
 	}
-#endif
 }
 
 size_t AlignmentGraph::ComponentSize() const
 {
-	return componentNumber.size();
+	return NodeSize();
 }
 
 size_t AlignmentGraph::SizeInBP() const
@@ -1246,34 +1321,34 @@ size_t AlignmentGraph::SizeInBP() const
 	return bpSize;
 }
 
-size_t AlignmentGraph::BigraphNodeID(size_t directedNodeId) const
+size_t AlignmentGraph::BigraphNodeID(size_t digraphNodeId) const
 {
-	return nodeIDs[directedNodeId];
+	assert(Finalized());
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	return intermediateBigraphNodeIDs[intermediate];
 }
 
 AlignmentGraph::NodeEdgeIterator AlignmentGraph::OutNeighbors(size_t digraphNodeId) const
 {
-	size_t explicitInfo = explicitEdges[digraphNodeId];
-	size_t implicitEdge = std::numeric_limits<size_t>::max();
-	if (hasImplicitOutEdge[digraphNodeId]) implicitEdge = digraphNodeId+1;
-	size_t startIndex = explicitInfo >> 20;
-	size_t count = explicitInfo & 1023; 
-	assert(startIndex + count <= edgeStorage.size());
-	AlignmentGraph::NodeEdgeIterator result { implicitEdge, edgeStorage.data()+startIndex, edgeStorage.data()+startIndex+count };
-	return result;
+	assert(Finalized());
+	assert(digraphNodeId < NodeSize());
+	if (!firstOfIntermediates[digraphNodeId+1])
+	{
+		return AlignmentGraph::NodeEdgeIterator { digraphNodeId+1, nullptr, nullptr };
+	}
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	return AlignmentGraph::NodeEdgeIterator { std::numeric_limits<size_t>::max(), intermediateOutEdges[intermediate].data(), intermediateOutEdges[intermediate].data() + intermediateOutEdges[intermediate].size() };
 }
 
 AlignmentGraph::NodeEdgeIterator AlignmentGraph::InNeighbors(size_t digraphNodeId) const
 {
-	size_t explicitInfo = explicitEdges[digraphNodeId];
-	size_t implicitEdge = std::numeric_limits<size_t>::max();
-	if (digraphNodeId > 0 && hasImplicitOutEdge[digraphNodeId-1]) implicitEdge = digraphNodeId-1;
-	size_t startIndex = (explicitInfo >> 20) + (explicitInfo & 1023);
-	size_t count = (explicitInfo >> 10) & 1023;
-	assert(startIndex + count <= edgeStorage.size());
-	assert(implicitEdge == std::numeric_limits<size_t>::max() || implicitEdge < nodeLength.size());
-	AlignmentGraph::NodeEdgeIterator result { implicitEdge, edgeStorage.data()+startIndex, edgeStorage.data()+startIndex+count };
-	return result;
+	assert(digraphNodeId < NodeSize());
+	if (!firstOfIntermediates[digraphNodeId])
+	{
+		return AlignmentGraph::NodeEdgeIterator { digraphNodeId - 1, nullptr, nullptr };
+	}
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	return AlignmentGraph::NodeEdgeIterator { std::numeric_limits<size_t>::max(), intermediateInEdges[intermediate].data(), intermediateInEdges[intermediate].data() + intermediateInEdges[intermediate].size() };
 }
 
 size_t AlignmentGraph::BigraphNodeCount() const
@@ -1283,7 +1358,13 @@ size_t AlignmentGraph::BigraphNodeCount() const
 
 size_t AlignmentGraph::NodeOffset(size_t digraphNodeId) const
 {
-	return nodeOffset[digraphNodeId];
+	assert(Finalized());
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	assert(intermediateDinodesStart[intermediate] <= digraphNodeId);
+	assert(intermediateDinodesCount(intermediate) + intermediateDinodesStart[intermediate] > digraphNodeId);
+	size_t result = firstDinodeOffset[intermediate] + (digraphNodeId - intermediateDinodesStart[intermediate]) * SPLIT_NODE_SIZE;
+	assert(result < firstDinodeOffset[intermediate] + intermediateNodeLength(intermediate));
+	return result;
 }
 
 size_t AlignmentGraph::ChainApproxPos(size_t bigraphNodeId) const
@@ -1298,17 +1379,28 @@ size_t AlignmentGraph::ChainNumber(size_t bigraphNodeId) const
 
 size_t AlignmentGraph::ComponentNumber(size_t digraphNodeId) const
 {
-	return componentNumber[digraphNodeId];
+	assert(Finalized());
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	assert(digraphNodeId >= intermediateDinodesStart[intermediate]);
+	size_t extra = 0;
+	if (!partOfStronglyConnectedComponent[intermediate])
+	{
+		extra = digraphNodeId - intermediateDinodesStart[intermediate];
+	}
+	return componentNumber[intermediate] + extra;
 }
 
 bool AlignmentGraph::Reverse(size_t digraphNodeId) const
 {
-	return reverse[digraphNodeId];
+	assert(Finalized());
+	size_t intermediate = digraphToIntermediate(digraphNodeId);
+	size_t bigraphNodeId = intermediateBigraphNodeIDs[intermediate];
+	return reverse[bigraphNodeId];
 }
 
 bool AlignmentGraph::Linearizable(size_t digraphNodeId) const
 {
-	return linearizable[digraphNodeId];
+	return !firstOfIntermediates[digraphNodeId];
 }
 
 bool AlignmentGraph::Finalized() const
@@ -1319,4 +1411,54 @@ bool AlignmentGraph::Finalized() const
 size_t AlignmentGraph::FirstAmbiguous() const
 {
 	return firstAmbiguous;
+}
+
+size_t AlignmentGraph::digraphToIntermediate(size_t digraphNodeId) const
+{
+	assert(digraphNodeId < NodeSize());
+	assert(firstOfIntermediates.size() == NodeSize()+1);
+	size_t result = firstOfIntermediates.rankOne(digraphNodeId) + (firstOfIntermediates[digraphNodeId] ? 1 : 0) - 1;
+	assert(result < intermediateDinodesStart.size());
+	// assert(digraphNodeId >= intermediateDinodesStart[result]);
+	// assert(digraphNodeId <= intermediateLastDinode(result));
+	return result;
+}
+
+size_t AlignmentGraph::intermediateLastDinode(size_t intermediate) const
+{
+	size_t result = intermediateDinodesStart[intermediate];
+	result += 1;
+	while (!firstOfIntermediates[result])
+	{
+		result += 1;
+	}
+	result -= 1;
+	assert(digraphToIntermediate(result) == intermediate);
+	assert(result == NodeSize()-1 || digraphToIntermediate(result+1) != intermediate);
+	return result;
+}
+
+size_t AlignmentGraph::intermediateDinodesCount(size_t intermediate) const
+{
+	return intermediateLastDinode(intermediate) - intermediateDinodesStart[intermediate] + 1;
+}
+
+std::string AlignmentGraph::BigraphNodeSeq(size_t bigraphNodeId) const
+{
+	std::string result;
+	result.reserve(BigraphNodeSize(bigraphNodeId));
+	for (auto interNode : bigraphIntermediateList[bigraphNodeId])
+	{
+		size_t end = intermediateLastDinode(interNode)+1;
+		for (size_t digraphNodeId = intermediateDinodesStart[interNode]; digraphNodeId < end; digraphNodeId++)
+		{
+			size_t len = NodeLength(digraphNodeId);
+			for (size_t i = 0; i < len; i++)
+			{
+				result.push_back(NodeSequences(digraphNodeId, i));
+			}
+		}
+	}
+	assert(result.size() == BigraphNodeSize(bigraphNodeId));
+	return result;
 }

@@ -1343,6 +1343,7 @@ public:
 				{
 #ifdef EXTRACORRECTNESSASSERTIONS
 					auto debugTest = ws.mergeWith(slice.startSlice);
+					// todo figure out why breaks
 					assert(debugTest.VP == ws.VP);
 					assert(debugTest.VN == ws.VN);
 					assert(debugTest.scoreEnd == ws.scoreEnd);
@@ -1356,6 +1357,7 @@ public:
 					{
 #ifdef EXTRACORRECTNESSASSERTIONS
 						auto debugTest = ws.mergeWith(slice.startSlice);
+						// todo figure out why breaks
 						assert(debugTest.VP == ws.VP);
 						assert(debugTest.VN == ws.VN);
 						assert(debugTest.scoreEnd == ws.scoreEnd);

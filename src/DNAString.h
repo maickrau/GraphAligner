@@ -14,6 +14,7 @@ public:
 	DNAString reverseComplement() const;
 	std::string substr(size_t start, size_t length) const;
 	std::string toString() const;
+	void rewindIterators(size_t size) const;
 private:
 	size_t addString(const std::string& str);
 	void buildFromString(const std::string& str);

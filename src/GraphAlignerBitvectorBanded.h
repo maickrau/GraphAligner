@@ -251,6 +251,7 @@ private:
 			if (pair.second.startSlice.getValue(0) <= maxScore || foundMinScore <= maxScore)
 			{
 				assert(foundMinScore != std::numeric_limits<ScoreType>::max());
+				// todo figure out why breaks
 				assert(pair.second.startSlice.getValue(0) == foundMinScore || pair.second.startSlice.getValue(0) == extraSlice.getValue(0));
 			}
 			bool hasMatch = Common::characterMatch(sequence[0], params.graph.NodeSequences(node, 0));
@@ -269,6 +270,7 @@ private:
 				}
 				if (pair.second.startSlice.getValue(i) <= maxScore || foundMinScore <= maxScore)
 				{
+					// todo figure out why breaks
 					assert(pair.second.startSlice.getValue(i) == foundMinScore || pair.second.startSlice.getValue(i) == extraSlice.getValue(i));
 				}
 			}
