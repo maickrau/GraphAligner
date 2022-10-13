@@ -1360,10 +1360,10 @@ size_t AlignmentGraph::NodeOffset(size_t digraphNodeId) const
 {
 	assert(Finalized());
 	size_t intermediate = digraphToIntermediate(digraphNodeId);
-	assert(intermediateDinodesStart[intermediate] <= digraphNodeId);
-	assert(intermediateDinodesCount(intermediate) + intermediateDinodesStart[intermediate] > digraphNodeId);
+	// assert(intermediateDinodesStart[intermediate] <= digraphNodeId);
+	// assert(intermediateDinodesCount(intermediate) + intermediateDinodesStart[intermediate] > digraphNodeId);
 	size_t result = firstDinodeOffset[intermediate] + (digraphNodeId - intermediateDinodesStart[intermediate]) * SPLIT_NODE_SIZE;
-	assert(result < firstDinodeOffset[intermediate] + intermediateNodeLength(intermediate));
+	// assert(result < firstDinodeOffset[intermediate] + intermediateNodeLength(intermediate));
 	return result;
 }
 
