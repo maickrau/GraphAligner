@@ -90,6 +90,7 @@ int main(int argc, char** argv)
 		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
 		("unique-mem-bonus-factor", boost::program_options::value<double>(), "bonus priority factor for unique MEMs")
 		("low-memory-mem-index-construction", "lower memory construction for MEM index")
+		("mem-index-no-wavelet-tree", "higher memory but faster MEM index")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -159,6 +160,7 @@ int main(int argc, char** argv)
 	params.realignFile = "";
 	params.uniqueMemBonusFactor = 1.0;
 	params.lowMemoryMEMIndexConstruction = false;
+	params.MEMindexUsesWaveletTree = true;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -229,6 +231,7 @@ int main(int argc, char** argv)
 	if (vm.count("overlap-incompatible-cutoff")) params.overlapIncompatibleCutoff = vm["overlap-incompatible-cutoff"].as<double>();
 	if (vm.count("unique-mem-bonus-factor")) params.uniqueMemBonusFactor = vm["unique-mem-bonus-factor"].as<double>();
 	if (vm.count("low-memory-mem-index-construction")) params.lowMemoryMEMIndexConstruction = true;
+	if (vm.count("mem-index-no-wavelet-tree")) params.MEMindexUsesWaveletTree = false;
 
 	if (vm.count("X-drop"))
 	{

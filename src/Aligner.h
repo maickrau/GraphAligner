@@ -49,6 +49,7 @@ struct AlignerParams
 	std::string realignFile;
 	double uniqueMemBonusFactor;
 	bool lowMemoryMEMIndexConstruction;
+	bool MEMindexUsesWaveletTree;
 };
 
 void alignReads(AlignerParams params);
