@@ -55,6 +55,7 @@ void MEMSeeder::loadFrom(const std::string& prefix)
 	index.load(file);
 	deserialize(file, nodePositions);
 	deserialize(file, nodeIDs);
+	prefixIndex = MEMfinder::buildPrefixIndex(index, 10);
 }
 
 void MEMSeeder::initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree)
@@ -102,6 +103,7 @@ void MEMSeeder::initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexCons
 	{
 		index.initialize(std::move(seq), 16, useWaveletTree);
 	}
+	prefixIndex = MEMfinder::buildPrefixIndex(index, 10);
 }
 
 void MEMSeeder::initTree(const vg::Graph& graph, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree)
@@ -149,6 +151,7 @@ void MEMSeeder::initTree(const vg::Graph& graph, const bool lowMemoryMEMIndexCon
 	{
 		index.initialize(std::move(seq), 16, useWaveletTree);
 	}
+	prefixIndex = MEMfinder::buildPrefixIndex(index, 10);
 }
 
 size_t MEMSeeder::getNodeIndex(size_t indexPos) const
@@ -183,7 +186,15 @@ std::vector<SeedHit> MEMSeeder::getMemSeeds(const std::string& sequence, size_t 
 {
 	assert(index.initialized());
 	std::vector<SeedHit> result;
-	auto matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor);
+	std::vector<MEMfinder::Match> matches;
+	if (minLen < 10)
+	{
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor);
+	}
+	else
+	{
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, prefixIndex, 10);
+	}
 	assert(matches.size() <= maxCount);
 	result.reserve(matches.size());
 	for (size_t i = 0; i < matches.size(); i++)

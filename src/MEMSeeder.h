@@ -25,6 +25,7 @@ private:
 	void initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree);
 	void initTree(const vg::Graph& graph, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree);
 	FMIndex index;
+	std::vector<std::pair<size_t, size_t>> prefixIndex;
 	std::vector<uint64_t> nodePositions;
 	std::vector<uint64_t> nodeIDs;
 	const double uniqueBonusFactor;
