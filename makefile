@@ -47,7 +47,7 @@ $(SRCDIR)/%.pb.cc $(SRCDIR)/%.pb.h: $(SRCDIR)/%.proto
 	protoc -I=$(SRCDIR) --cpp_out=$(SRCDIR) $<
 
 MEMfinder/lib/memfinder.a:
-	$(MAKE) -C MEMfinder lib
+	$(MAKE) -C MEMfinder lib DEBUGFLAG="-DNDEBUG"
 
 all: $(BINDIR)/GraphAligner
 
