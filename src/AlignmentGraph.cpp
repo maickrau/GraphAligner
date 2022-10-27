@@ -492,7 +492,7 @@ void AlignmentGraph::makeDinodeIntermediateMapping()
 	firstOfIntermediates.resize(nodeSequences.size() + ambiguousNodeSequences.size() + 1);
 	for (size_t i = 0; i < intermediateDinodesStart.size(); i++)
 	{
-		assert(!firstOfIntermediates[intermediateDinodesStart[i]]);
+		assert(!firstOfIntermediates.get(intermediateDinodesStart[i]));
 		firstOfIntermediates.set(intermediateDinodesStart[i], true);
 	}
 	firstOfIntermediates.set(nodeSequences.size() + ambiguousNodeSequences.size(), true);
@@ -935,7 +935,7 @@ void AlignmentGraph::findChains()
 #endif
 size_t AlignmentGraph::NodeLength(size_t digraphNodeId) const
 {
-	if (firstOfIntermediates[digraphNodeId+1])
+	if (firstOfIntermediates.get(digraphNodeId+1))
 	{
 		return lastDinodeLength[digraphToIntermediate(digraphNodeId)];
 	}
@@ -1332,7 +1332,7 @@ AlignmentGraph::NodeEdgeIterator AlignmentGraph::OutNeighbors(size_t digraphNode
 {
 	assert(Finalized());
 	assert(digraphNodeId < NodeSize());
-	if (!firstOfIntermediates[digraphNodeId+1])
+	if (!firstOfIntermediates.get(digraphNodeId+1))
 	{
 		return AlignmentGraph::NodeEdgeIterator { digraphNodeId+1, nullptr, nullptr };
 	}
@@ -1343,7 +1343,7 @@ AlignmentGraph::NodeEdgeIterator AlignmentGraph::OutNeighbors(size_t digraphNode
 AlignmentGraph::NodeEdgeIterator AlignmentGraph::InNeighbors(size_t digraphNodeId) const
 {
 	assert(digraphNodeId < NodeSize());
-	if (!firstOfIntermediates[digraphNodeId])
+	if (!firstOfIntermediates.get(digraphNodeId))
 	{
 		return AlignmentGraph::NodeEdgeIterator { digraphNodeId - 1, nullptr, nullptr };
 	}
@@ -1400,7 +1400,7 @@ bool AlignmentGraph::Reverse(size_t digraphNodeId) const
 
 bool AlignmentGraph::Linearizable(size_t digraphNodeId) const
 {
-	return !firstOfIntermediates[digraphNodeId];
+	return !firstOfIntermediates.get(digraphNodeId);
 }
 
 bool AlignmentGraph::Finalized() const
@@ -1417,7 +1417,7 @@ size_t AlignmentGraph::digraphToIntermediate(size_t digraphNodeId) const
 {
 	assert(digraphNodeId < NodeSize());
 	assert(firstOfIntermediates.size() == NodeSize()+1);
-	size_t result = firstOfIntermediates.rankOne(digraphNodeId) + (firstOfIntermediates[digraphNodeId] ? 1 : 0) - 1;
+	size_t result = firstOfIntermediates.rankOne(digraphNodeId) + (firstOfIntermediates.get(digraphNodeId) ? 1 : 0) - 1;
 	assert(result < intermediateDinodesStart.size());
 	// assert(digraphNodeId >= intermediateDinodesStart[result]);
 	// assert(digraphNodeId <= intermediateLastDinode(result));
@@ -1428,7 +1428,7 @@ size_t AlignmentGraph::intermediateLastDinode(size_t intermediate) const
 {
 	size_t result = intermediateDinodesStart[intermediate];
 	result += 1;
-	while (!firstOfIntermediates[result])
+	while (!firstOfIntermediates.get(result))
 	{
 		result += 1;
 	}
