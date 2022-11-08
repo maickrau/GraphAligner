@@ -690,7 +690,7 @@ void AlignmentGraph::fixChainApproxPos(const size_t start)
 	assert(std::numeric_limits<size_t>::max() > NodeSize() * SPLIT_NODE_SIZE * 2);
 	std::vector<std::pair<size_t, size_t>> stack;
 	size_t chain = chainNumber[start];
-	stack.emplace_back(start, (NodeSize() + 5) * SPLIT_NODE_SIZE);
+	stack.emplace_back(start, std::numeric_limits<size_t>::max()/2);
 	while (stack.size() > 0)
 	{
 		size_t v;
