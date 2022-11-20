@@ -189,11 +189,11 @@ std::vector<SeedHit> MEMSeeder::getMemSeeds(const std::string& sequence, size_t 
 	std::vector<MEMfinder::Match> matches;
 	if (minLen < 10)
 	{
-		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor);
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, 5000);
 	}
 	else
 	{
-		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, prefixIndex, 10);
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, prefixIndex, 10, 5000);
 	}
 	assert(matches.size() <= maxCount);
 	result.reserve(matches.size());
