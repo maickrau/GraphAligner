@@ -68,6 +68,7 @@ int main(int argc, char** argv)
 		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches (int) (-1 for all)")
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
+		("seeds-mxm-windowsize", boost::program_options::value<size_t>(), "window size for mem/mum seeding (int) (0 for no windowing)")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -161,6 +162,7 @@ int main(int argc, char** argv)
 	params.uniqueMemBonusFactor = 1.0;
 	params.lowMemoryMEMIndexConstruction = false;
 	params.MEMindexUsesWaveletTree = true;
+	params.MEMwindowsize = 0;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -212,6 +214,7 @@ int main(int argc, char** argv)
 	if (vm.count("seeds-mem-count")) params.memCount = vm["seeds-mem-count"].as<size_t>();
 	if (vm.count("seeds-mum-count")) params.mumCount = vm["seeds-mum-count"].as<size_t>();
 	if (vm.count("seeds-mxm-cache-prefix")) params.seederCachePrefix = vm["seeds-mxm-cache-prefix"].as<std::string>();
+	if (vm.count("seeds-mxm-windowsize")) params.MEMwindowsize = vm["seeds-mxm-windowsize"].as<size_t>();
 	if (vm.count("seedless-DP")) params.dynamicRowStart = true;
 	if (vm.count("DP-restart-stride")) params.DPRestartStride = vm["DP-restart-stride"].as<size_t>();
 	if (vm.count("multimap-score-fraction")) params.multimapScoreFraction = vm["multimap-score-fraction"].as<double>();

@@ -649,7 +649,7 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 				if (loadMxmSeeder)
 				{
 					std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
-					*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix, params.uniqueMemBonusFactor, params.lowMemoryMEMIndexConstruction, params.MEMindexUsesWaveletTree };
+					*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix, params.uniqueMemBonusFactor, params.lowMemoryMEMIndexConstruction, params.MEMindexUsesWaveletTree, params.MEMwindowsize };
 				}
 				std::cout << "Build alignment graph" << std::endl;
 				auto result = DirectedGraph::BuildFromVG(graph);
@@ -666,7 +666,7 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 			if (loadMxmSeeder)
 			{
 				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
-				*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix, params.uniqueMemBonusFactor, params.lowMemoryMEMIndexConstruction, params.MEMindexUsesWaveletTree };
+				*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix, params.uniqueMemBonusFactor, params.lowMemoryMEMIndexConstruction, params.MEMindexUsesWaveletTree, params.MEMwindowsize };
 			}
 			std::cout << "Build alignment graph" << std::endl;
 			auto result = DirectedGraph::BuildFromGFA(graph);

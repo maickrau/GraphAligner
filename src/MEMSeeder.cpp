@@ -9,8 +9,9 @@ bool fileExists(const std::string& fileName)
 	return file.good();
 }
 
-MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree) :
-	uniqueBonusFactor(uniqueBonusFactor)
+MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree, const size_t windowSize) :
+	uniqueBonusFactor(uniqueBonusFactor),
+	windowSize(windowSize)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
 	{
@@ -27,8 +28,9 @@ MEMSeeder::MEMSeeder(const GfaGraph& graph, const std::string& cachePrefix, cons
 	}
 }
 
-MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree) :
-	uniqueBonusFactor(uniqueBonusFactor)
+MEMSeeder::MEMSeeder(const vg::Graph& graph, const std::string& cachePrefix, const double uniqueBonusFactor, const bool lowMemoryMEMIndexConstruction, const bool useWaveletTree, const size_t windowSize) :
+	uniqueBonusFactor(uniqueBonusFactor),
+	windowSize(windowSize)
 {
 	if (cachePrefix.size() > 0 && fileExists(cachePrefix + ".index"))
 	{
@@ -187,13 +189,15 @@ std::vector<SeedHit> MEMSeeder::getMemSeeds(const std::string& sequence, size_t 
 	assert(index.initialized());
 	std::vector<SeedHit> result;
 	std::vector<MEMfinder::Match> matches;
+	size_t window = windowSize;
+	if (window == 0) window = sequence.size();
 	if (minLen < 10)
 	{
-		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, 5000);
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, window);
 	}
 	else
 	{
-		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, prefixIndex, 10, 5000);
+		matches = MEMfinder::getBestFwBwMEMs(index, sequence, minLen, maxCount, uniqueBonusFactor, prefixIndex, 10, window);
 	}
 	assert(matches.size() <= maxCount);
 	result.reserve(matches.size());

@@ -50,6 +50,7 @@ struct AlignerParams
 	double uniqueMemBonusFactor;
 	bool lowMemoryMEMIndexConstruction;
 	bool MEMindexUsesWaveletTree;
+	size_t MEMwindowsize;
 };
 
 void alignReads(AlignerParams params);
