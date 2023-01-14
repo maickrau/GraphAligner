@@ -132,10 +132,17 @@ void AlignmentGraph::AddNode(size_t bigraphNodeId, const DNAString& sequence, co
 	assert(breakpoints[0] == 0);
 	assert(breakpoints.back() == sequence.size());
 	bpSize += sequence.size();
+	size_t lastAdded = std::numeric_limits<size_t>::max();
 	for (size_t breakpoint = 1; breakpoint < breakpoints.size(); breakpoint++)
 	{
 		if (breakpoints[breakpoint] == breakpoints[breakpoint-1]) continue;
-		addIntermediateNodes(bigraphNodeId, sequence, breakpoints[breakpoint-1], breakpoints[breakpoint]);
+		size_t thisNode = addIntermediateNodes(bigraphNodeId, sequence, breakpoints[breakpoint-1], breakpoints[breakpoint]);
+		if (lastAdded != std::numeric_limits<size_t>::max())
+		{
+			intermediateOutEdges[lastAdded].push_back(thisNode);
+			intermediateInEdges[thisNode].push_back(lastAdded);
+		}
+		lastAdded = thisNode;
 	}
 }
 
@@ -1036,6 +1043,17 @@ size_t AlignmentGraph::GetDigraphNode(size_t bigraphNodeId, size_t offset) const
 	assert(offset >= firstDinodeOffset[intermediateNode]);
 	size_t extraOffset = offset - firstDinodeOffset[intermediateNode];
 	return intermediateDinodesStart[intermediateNode] + extraOffset / SPLIT_NODE_SIZE;
+}
+
+std::pair<size_t, size_t> AlignmentGraph::GetReverseDigraphPosition(size_t digraphNodeId, size_t offset) const
+{
+	size_t bigraphNodeId = BigraphNodeID(digraphNodeId);
+	size_t bigraphOffset = offset + NodeOffset(digraphNodeId);
+	auto reverseBigraphPos = GetReversePosition(bigraphNodeId, bigraphOffset);
+	size_t revdigraphNodeId = GetDigraphNode(reverseBigraphPos.first, reverseBigraphPos.second);
+	size_t revoffset = reverseBigraphPos.second - NodeOffset(revdigraphNodeId);
+	assert(revoffset < NodeLength(revdigraphNodeId));
+	return std::make_pair(revdigraphNodeId, revoffset);
 }
 
 std::pair<size_t, size_t> AlignmentGraph::GetReversePosition(size_t bigraphNodeId, size_t offset) const

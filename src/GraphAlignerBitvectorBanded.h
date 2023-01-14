@@ -48,19 +48,16 @@ public:
 		std::vector<OnewayTrace> revTraces;
 		for (const auto& fwTrace : traces)
 		{
-			auto fwNodeIndex = fwTrace.trace[0].DPposition.node;
-			size_t bigraphNodeId = params.graph.BigraphNodeID(fwNodeIndex);
-			size_t bigraphOffset = fwTrace.trace[0].DPposition.nodeOffset + params.graph.NodeOffset(fwNodeIndex);
-			auto reversePos = params.graph.GetReversePosition(bigraphNodeId, bigraphOffset);
+			auto reversePos = params.graph.GetReverseDigraphPosition(fwTrace.trace[0].DPposition.node, fwTrace.trace[0].DPposition.nodeOffset);
+			assert(params.graph.GetReverseDigraphPosition(reversePos.first, reversePos.second).first == fwTrace.trace[0].DPposition.node);
+			assert(params.graph.GetReverseDigraphPosition(reversePos.first, reversePos.second).second == fwTrace.trace[0].DPposition.nodeOffset);
 
-			assert(reversePos.second < params.graph.BigraphNodeSize(reversePos.first));
-			size_t nodeIndex = params.graph.GetDigraphNode(reversePos.first, reversePos.second);
 			assert(fwTrace.trace[0].DPposition.seqPos < sequence.size());
 			size_t seqPos = sequence.size() - 1 - fwTrace.trace[0].DPposition.seqPos;
 			assert(seqPos < sequence.size());
 
 			std::vector<ProcessedSeedHit> fakeBwSeeds;
-			fakeBwSeeds.emplace_back(seqPos, nodeIndex);
+			fakeBwSeeds.emplace_back(seqPos, reversePos.first);
 
 			std::vector<ScoreType> fakeMaxScores;
 			fakeMaxScores.resize(sliceMaxScores.size(), 0);

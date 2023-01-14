@@ -122,6 +122,7 @@ public:
 	void AddEdgeNodeId(size_t bigraphIdFrom, size_t bigraphIdTo, size_t startOffset);
 	void Finalize(int wordSize);
 	std::pair<size_t, size_t> GetReversePosition(size_t bigraphNodeId, size_t offset) const;
+	std::pair<size_t, size_t> GetReverseDigraphPosition(size_t digraphNodeId, size_t offset) const;
 	size_t NodeSize() const;
 	size_t SizeInBP() const;
 	size_t BigraphNodeID(size_t digraphNodeId) const;
