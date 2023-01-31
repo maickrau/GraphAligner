@@ -6,6 +6,20 @@
 #include "CommonUtils.h"
 #include "ThreadReadAssertion.h"
 
+bool isNumber(const std::string name)
+{
+	assert(name.size() >= 1);
+	if (name.size() == 0 && name == "0") return true;
+	if (name[0] < '1') return false;
+	if (name[0] > '9') return false;
+	for (size_t i = 1; i < name.size(); i++)
+	{
+		if (name[i] < '0') return false;
+		if (name[i] > '9') return false;
+	}
+	return true;
+}
+
 AlignmentGraph dummy;
 
 AlignmentGraph AlignmentGraph::DummyGraph()
@@ -104,7 +118,8 @@ AlignmentGraph::AlignmentGraph() :
 	intermediateOutEdges(),
 	firstOfIntermediates(),
 	nodeSequences(),
-	ambiguousNodeSequences()
+	ambiguousNodeSequences(),
+	allNodeNamesAreNumbers(true)
 {
 }
 
@@ -121,6 +136,7 @@ void AlignmentGraph::ReserveNodes(size_t numBigraphNodes, size_t numDigraphNodes
 
 void AlignmentGraph::AddNode(size_t bigraphNodeId, const DNAString& sequence, const std::string& name, bool reverseNode, const std::vector<size_t>& breakpoints)
 {
+	if (!isNumber(name)) allNodeNamesAreNumbers = false;
 	assert(firstAmbiguous == std::numeric_limits<size_t>::max());
 	assert(!finalized);
 	assert(bigraphNodeId == BigraphNodeCount());
@@ -1479,4 +1495,9 @@ std::string AlignmentGraph::BigraphNodeSeq(size_t bigraphNodeId) const
 	}
 	assert(result.size() == BigraphNodeSize(bigraphNodeId));
 	return result;
+}
+
+bool AlignmentGraph::AllNodeNamesAreNumbers() const
+{
+	return allNodeNamesAreNumbers;
 }

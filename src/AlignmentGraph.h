@@ -147,6 +147,7 @@ public:
 	size_t FirstAmbiguous() const;
 	std::string BigraphNodeSeq(size_t bigraphNodeId) const;
 	static AlignmentGraph DummyGraph();
+	bool AllNodeNamesAreNumbers() const;
 private:
 	void makeDinodeIntermediateMapping();
 	void sparsenComponentNumbers();
@@ -170,6 +171,7 @@ private:
 	size_t bpSize;
 	size_t firstAmbiguous;
 	bool finalized;
+	bool allNodeNamesAreNumbers;
 	// bigraph
 	std::vector<std::string> originalNodeName;
 	std::vector<std::vector<size_t>> bigraphIntermediateList;

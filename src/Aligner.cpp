@@ -160,6 +160,10 @@ void replaceDigraphNodeIdsWithOriginalNodeIds(vg::Alignment& alignment, const Al
 		if (name.size() > 0)
 		{
 			alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_name(name);
+			if (graph.AllNodeNamesAreNumbers())
+			{
+				alignment.mutable_path()->mutable_mapping(i)->mutable_position()->set_node_id(std::stoull(name));
+			}
 		}
 	}
 }
