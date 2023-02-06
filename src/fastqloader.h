@@ -19,6 +19,7 @@ public:
 			if (line[0] != '@') continue;
 			FastQ newread;
 			if (line.back() == '\r') line.pop_back();
+			while (line.back() == ' ') line.pop_back();
 			newread.seq_id = line.substr(1);
 			std::getline(file, line);
 			if (line.back() == '\r') line.pop_back();
@@ -26,7 +27,12 @@ public:
 			std::getline(file, line);
 			std::getline(file, line);
 			if (line.back() == '\r') line.pop_back();
-			if (includeQuality) newread.quality = line;
+			while (line.back() == ' ') line.pop_back();
+			if (includeQuality)
+			{
+				newread.quality = line;
+				assert(newread.quality.size() == newread.sequence.size());
+			}
 			f(newread);
 		} while (file.good());
 	}
@@ -58,6 +64,7 @@ public:
 				if (line.size() == 0) continue;
 				if (line[0] == '>') break;
 				if (line.back() == '\r') line.pop_back();
+				while (line.back() == ' ') line.pop_back();
 				newread.sequence += line;
 			} while (file.good());
 			if (includeQuality)
