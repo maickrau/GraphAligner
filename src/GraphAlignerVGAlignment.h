@@ -34,7 +34,7 @@ class GraphAlignerVGAlignment
 	};
 public:
 
-	static std::shared_ptr<vg::Alignment> traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<TraceItem>& trace, size_t cellsProcessed, bool reverse)
+	static std::shared_ptr<vg::Alignment> traceToAlignment(const std::string& seq_id, const std::string& sequence, ScoreType score, const std::vector<TraceItem>& trace, size_t mappingQuality, size_t cellsProcessed, bool reverse)
 	{
 		if (trace.size() == 0) return nullptr;
 		vg::Alignment* aln = new vg::Alignment;
@@ -42,6 +42,7 @@ public:
 		result->set_name(seq_id);
 		result->set_score(score);
 		result->set_sequence(sequence);
+		result->set_mapping_quality(mappingQuality);
 		auto path = new vg::Path;
 		result->set_allocated_path(path);
 		MergedNodePos currentPos;

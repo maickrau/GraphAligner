@@ -105,7 +105,7 @@ public:
 	void AddAlignment(const std::string& seq_id, const std::string& sequence, AlignmentResult::AlignmentItem& alignment) const
 	{
 		assert(alignment.trace->trace.size() > 0);
-		auto vgAln = VGAlignment::traceToAlignment(seq_id, sequence, alignment.trace->score, alignment.trace->trace, 0, false);
+		auto vgAln = VGAlignment::traceToAlignment(seq_id, sequence, alignment.trace->score, alignment.trace->trace, alignment.mappingQuality, 0, false);
 		alignment.alignment = vgAln;
 		alignment.alignment->set_sequence(sequence.substr(alignment.alignmentStart, alignment.alignmentEnd - alignment.alignmentStart));
 		alignment.alignment->set_query_position(alignment.alignmentStart);
