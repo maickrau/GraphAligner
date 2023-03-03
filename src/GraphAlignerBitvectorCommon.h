@@ -741,6 +741,10 @@ public:
 			assert((ScoreType)slice.slices[currentSlice].bandwidth < std::numeric_limits<ScoreType>::max());
 			assert(slice.slices[currentSlice].minScore < std::numeric_limits<ScoreType>::max() - (ScoreType)slice.slices[currentSlice].bandwidth);
 			lastScore = nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize);
+			if (result.trace.back().DPposition.seqPos == 0 && nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(0) == extraSlice.getValue(0))
+			{
+				break;
+			}
 			if (result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().DPposition.nodeOffset == 0)
 			{
 				auto bt = pickBacktraceCorner(params, slice.slices[currentSlice].scores, slice.slices[currentSlice-1].scores, currentNode, slice.slices[currentSlice].j, sequence, slice.slices[currentSlice].minScore + slice.slices[currentSlice].bandwidth, slice.slices[currentSlice].scoresNotValid, slice.slices[currentSlice-1].minScore + slice.slices[currentSlice-1].bandwidth, slice.slices[currentSlice-1].scoresNotValid, extraSlice);
