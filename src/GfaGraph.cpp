@@ -2,6 +2,7 @@
 #include <limits>
 #include <fstream>
 #include <sstream>
+#include <zstr.hpp> //https://github.com/mateidavid/zstr
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
 #include "CommonUtils.h"
@@ -56,8 +57,19 @@ edges()
 
 GfaGraph GfaGraph::LoadFromFile(std::string filename)
 {
-	std::ifstream file {filename};
-	return LoadFromStream(file);
+	if (filename.substr(filename.size()-3) == ".gz")
+	{
+		assert(filename.substr(filename.size()-7) == ".gfa.gz");
+		zstr::ifstream file { filename };
+		return LoadFromStream(file);
+	}
+	else
+	{
+		assert(filename.substr(filename.size()-4) == ".gfa");
+		std::ifstream file { filename };
+		return LoadFromStream(file);
+	}
+	zstr::ifstream file { filename };
 }
 
 size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::string& name, std::vector<DNAString>& nodeSeqs, std::vector<std::string>& originalNodeName)

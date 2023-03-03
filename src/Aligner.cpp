@@ -664,7 +664,7 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 				return DirectedGraph::StreamVGGraphFromFile(graphFile);
 			}
 		}
-		else if (graphFile.substr(graphFile.size() - 4) == ".gfa")
+		else if (graphFile.substr(graphFile.size() - 4) == ".gfa" || (graphFile.size() > 7 && graphFile.substr(graphFile.size() - 7) == ".gfa.gz"))
 		{
 			auto graph = GfaGraph::LoadFromFile(graphFile);
 			if (loadMxmSeeder)
