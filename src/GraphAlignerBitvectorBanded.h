@@ -282,15 +282,6 @@ private:
 		std::cerr << " " << seedHit.alignmentGraphNodeId << "(" << seedHit.nodeID << ")";
 #endif
 		size_t node = seedHit.alignmentGraphNodeId;
-		assert(node != std::numeric_limits<size_t>::max());
-		if (storeNodeExactEndposScores) nodeMaxExactEndposScore[node] = 0;
-		currentBand[node] = true;
-		currentSlice.addNodeToMap(node);
-		currentSlice.setMinScore(node, extraSlice.scoreEnd);
-		auto& nodeScores = currentSlice.node(node);
-		nodeScores.startSlice = extraSlice;
-		nodeScores.endSlice = extraSlice;
-		nodeScores.exists = true;
 		assert(calculableQueue.IsComponentPriorityQueue());
 		if (calculableQueue.IsComponentPriorityQueue())
 		{
@@ -433,11 +424,22 @@ private:
 				continue;
 			}
 			auto i = pair.target;
+			bool firstCalc = false;
 			if (!currentBand[i])
 			{
 				assert(!currentSlice.hasNode(i));
 				currentSlice.addNode(i);
 				currentBand[i] = true;
+				firstCalc = true;
+				if (hasSeedStart[i])
+				{
+					currentSlice.addNodeToMap(i);
+					currentSlice.setMinScore(i, seedstartSlice.scoreEnd);
+					auto& nodeScores = currentSlice.node(i);
+					nodeScores.startSlice = seedstartSlice;
+					nodeScores.endSlice = seedstartSlice;
+					nodeScores.exists = true;
+				}
 			}
 			assert(currentBand[i]);
 			const std::vector<EdgeWithPriority>* extras;
@@ -499,9 +501,10 @@ private:
 #endif
 			auto newEnd = thisNode.endSlice;
 
-			if (newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
+			if (firstCalc || newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
 			{
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
+				if (firstCalc) newEndMinScore = newEnd.getMinScore();
 				// assert(newEndMinScore >= previousMinScore || newEndMinScore >= seedstartSlice.getScoreBeforeStart());
 				assert(newEndMinScore != std::numeric_limits<ScoreType>::max());
 				if (newEndMinScore <= currentMinScoreAtEndRow + bandwidth)
