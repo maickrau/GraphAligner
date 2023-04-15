@@ -303,7 +303,7 @@ private:
 		if (seedstartSlice.scoreEnd != std::numeric_limits<ScoreType>::max() && previousMinScore > seedstartSlice.scoreEnd)
 		{
 			previousMinScore = seedstartSlice.scoreEnd;
-			previousQuitScore = seedstartSlice.scoreEnd + bandwidth;
+			previousQuitScore = std::max(previousQuitScore, seedstartSlice.scoreEnd + bandwidth);
 		}
 		double averageErrorRate = 0;
 		if (j > 0)
