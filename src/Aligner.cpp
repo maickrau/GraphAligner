@@ -403,6 +403,88 @@ std::string hpcCollapse(const std::string& read)
 	return result;
 }
 
+AlignmentResult alignFromSeeds(const AlignmentGraph& alignmentGraph, GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const std::vector<SeedCluster>& seeds, AlignerParams params, AlignmentStats& stats, BufferedWriter& coutoutput, BufferedWriter& cerroutput, const std::string& readName, const std::string& sequence)
+{
+	if (seeds.size() == 0) return AlignmentResult {};
+	auto alntimeStart = std::chrono::system_clock::now();
+	auto alignments = AlignClusters(alignmentGraph, readName, sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, seeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction, params.clipAmbiguousEnds, params.maxTraceCount);
+	AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
+	AlignmentSelection::AddMappingQualities(alignments.alignments);
+	auto alntimeEnd = std::chrono::system_clock::now();
+	size_t alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
+	coutoutput << "Read " << readName << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
+	return alignments;
+}
+
+AlignmentResult findSeedsAndAlign(const AlignmentGraph& alignmentGraph, GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const Seeder& seeder, AlignerParams params, AlignmentStats& stats, BufferedWriter& coutoutput, BufferedWriter& cerroutput, const std::string& readName, const std::string& sequence)
+{
+	auto timeStart = std::chrono::system_clock::now();
+	std::vector<SeedHit> seeds = seeder.getSeeds(readName, sequence);
+	auto timeEnd = std::chrono::system_clock::now();
+	size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
+	coutoutput << "Read " << readName << " seeding took " << time << "ms" << BufferedWriter::Flush;
+	stats.seeds += seeds.size();
+	if (seeds.size() == 0)
+	{
+		coutoutput << "Read " << readName << " has no seed hits" << BufferedWriter::Flush;
+		cerroutput << "Read " << readName << " has no seed hits" << BufferedWriter::Flush;
+		coutoutput << "Read " << readName << " alignment failed" << BufferedWriter::Flush;
+		cerroutput << "Read " << readName << " alignment failed" << BufferedWriter::Flush;
+		return AlignmentResult {};
+	}
+	auto clusterTimeStart = std::chrono::system_clock::now();
+	auto processedSeeds = ClusterSeeds(alignmentGraph, seeds, params.seedClusterMinSize);
+	if (processedSeeds.size() > params.maxClusterExtend)
+	{
+		cerroutput << "Read " << readName << " has " << processedSeeds.size() << " seed clusters, flattening down to " << params.maxClusterExtend << BufferedWriter::Flush;
+		for (size_t i = params.maxClusterExtend; i < processedSeeds.size(); i++)
+		{
+			processedSeeds[params.maxClusterExtend-1].hits.insert(processedSeeds[params.maxClusterExtend-1].hits.end(), processedSeeds[i].hits.begin(), processedSeeds[i].hits.end());
+		}
+		processedSeeds[params.maxClusterExtend-1].clusterGoodness = 0;
+		std::sort(processedSeeds[params.maxClusterExtend-1].hits.begin(), processedSeeds[params.maxClusterExtend-1].hits.end(), [](const ProcessedSeedHit& left, const ProcessedSeedHit& right) { return left.seqPos < right.seqPos; });
+		processedSeeds.erase(processedSeeds.begin() + params.maxClusterExtend, processedSeeds.end());
+	}
+	auto clusterTimeEnd = std::chrono::system_clock::now();
+	size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
+	coutoutput << "Read " << readName << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
+	if (processedSeeds.size() == 0)
+	{
+		coutoutput << "Read " << readName << " has no seed clusters" << BufferedWriter::Flush;
+		cerroutput << "Read " << readName << " has no seed clusters" << BufferedWriter::Flush;
+		coutoutput << "Read " << readName << " alignment failed" << BufferedWriter::Flush;
+		cerroutput << "Read " << readName << " alignment failed" << BufferedWriter::Flush;
+		return AlignmentResult {};
+	}
+	stats.seedsFound += seeds.size();
+	stats.readsWithASeed += 1;
+	stats.bpInReadsWithASeed += sequence.size();
+	return alignFromSeeds(alignmentGraph, reusableState, processedSeeds, params, stats, coutoutput, cerroutput, readName, sequence);
+}
+
+bool alignmentConsistent(const AlignmentResult& oldAln, const AlignmentResult& newAln, size_t offset)
+{
+	if (oldAln.alignments.size() == 0) return false;
+	if (newAln.alignments.size() == 0) return false;
+	size_t oldPos = 0;
+	for (size_t newPos = 0; newPos < newAln.alignments[0].trace->trace.size(); newPos++)
+	{
+		while (oldAln.alignments[0].trace->trace[oldPos].DPposition.seqPos < newAln.alignments[0].trace->trace[newPos].DPposition.seqPos+offset)
+		{
+			oldPos += 1;
+			if (oldPos == oldAln.alignments[0].trace->trace.size()) return false;
+		}
+		if (oldAln.alignments[0].trace->trace[oldPos].DPposition.node == newAln.alignments[0].trace->trace[newPos].DPposition.node)
+		{
+			if (oldAln.alignments[0].trace->trace[oldPos].DPposition.nodeOffset == newAln.alignments[0].trace->trace[newPos].DPposition.nodeOffset)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& GAFOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	moodycamel::ProducerToken GAMToken { GAMOut };
@@ -455,67 +537,68 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		AlignmentResult alignments;
 
-		size_t alntimems = 0;
 		try
 		{
 			if (seeder.mode != Seeder::Mode::None)
 			{
-				auto timeStart = std::chrono::system_clock::now();
-				std::vector<SeedHit> seeds = seeder.getSeeds(fastq->seq_id, fastq->sequence);
-				auto timeEnd = std::chrono::system_clock::now();
-				size_t time = std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count();
-				coutoutput << "Read " << fastq->seq_id << " seeding took " << time << "ms" << BufferedWriter::Flush;
-				stats.seeds += seeds.size();
-				if (seeds.size() == 0)
+				std::vector<SeedCluster> seeds;
+				AlignmentResult lastPart;
+				lastPart = findSeedsAndAlign(alignmentGraph, reusableState, seeder, params, stats, coutoutput, cerroutput, fastq->seq_id, fastq->sequence.substr(0, 10000));
+				std::sort(lastPart.alignments.begin(), lastPart.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentXScore > right.alignmentXScore; });
+				bool lastAdded = false;
+				for (size_t i = 9000; i+10000 < fastq->sequence.size(); i += 9000)
 				{
-					coutoutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-					cerroutput << "Read " << fastq->seq_id << " has no seed hits" << BufferedWriter::Flush;
-					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
-					continue;
-				}
-				auto clusterTimeStart = std::chrono::system_clock::now();
-				auto processedSeeds = ClusterSeeds(alignmentGraph, seeds, params.seedClusterMinSize);
-				if (processedSeeds.size() > params.maxClusterExtend)
-				{
-					cerroutput << "Read " << fastq->seq_id << " has " << processedSeeds.size() << " seed clusters, flattening down to " << params.maxClusterExtend << BufferedWriter::Flush;
-					for (size_t i = params.maxClusterExtend; i < processedSeeds.size(); i++)
+					auto partAlignments = findSeedsAndAlign(alignmentGraph, reusableState, seeder, params, stats, coutoutput, cerroutput, fastq->seq_id, fastq->sequence.substr(i, 10000));
+					std::sort(partAlignments.alignments.begin(), partAlignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentXScore > right.alignmentXScore; });
+					if (partAlignments.alignments.size() == 0 || lastPart.alignments.size() == 0)
 					{
-						processedSeeds[params.maxClusterExtend-1].hits.insert(processedSeeds[params.maxClusterExtend-1].hits.end(), processedSeeds[i].hits.begin(), processedSeeds[i].hits.end());
+						lastPart = partAlignments;
+						lastAdded = false;
+						continue;
 					}
-					processedSeeds[params.maxClusterExtend-1].clusterGoodness = 0;
-					std::sort(processedSeeds[params.maxClusterExtend-1].hits.begin(), processedSeeds[params.maxClusterExtend-1].hits.end(), [](const ProcessedSeedHit& left, const ProcessedSeedHit& right) { return left.seqPos < right.seqPos; });
-					processedSeeds.erase(processedSeeds.begin() + params.maxClusterExtend, processedSeeds.end());
+					if (!alignmentConsistent(lastPart, partAlignments, 9000))
+					{
+						lastPart = partAlignments;
+						lastAdded = false;
+						continue;
+					}
+					if (!lastAdded)
+					{
+						const auto& aln = lastPart.alignments[0];
+						{
+							if (aln.trace->trace[0].DPposition.seqPos > 100) continue;
+							if (aln.trace->trace.back().DPposition.seqPos < 9900) continue;
+							seeds.emplace_back();
+							seeds.back().hits.emplace_back(i+aln.trace->trace[0].DPposition.seqPos, alignmentGraph.GetDigraphNode(aln.trace->trace[0].DPposition.node, aln.trace->trace[0].DPposition.nodeOffset));
+							seeds.back().hits.emplace_back(i+aln.trace->trace.back().DPposition.seqPos, alignmentGraph.GetDigraphNode(aln.trace->trace.back().DPposition.node, aln.trace->trace.back().DPposition.nodeOffset));
+						}
+					}
+					// partAlignments.alignments = AlignmentSelection::SelectAlignments(partAlignments.alignments, selectionOptions);
+					// for (const auto& aln : partAlignments.alignments)
+					const auto& aln = partAlignments.alignments[0];
+					{
+						if (aln.trace->trace[0].DPposition.seqPos > 100) continue;
+						if (aln.trace->trace.back().DPposition.seqPos < 9900) continue;
+						seeds.emplace_back();
+						seeds.back().hits.emplace_back(i+aln.trace->trace[0].DPposition.seqPos, alignmentGraph.GetDigraphNode(aln.trace->trace[0].DPposition.node, aln.trace->trace[0].DPposition.nodeOffset));
+						seeds.back().hits.emplace_back(i+aln.trace->trace.back().DPposition.seqPos, alignmentGraph.GetDigraphNode(aln.trace->trace.back().DPposition.node, aln.trace->trace.back().DPposition.nodeOffset));
+					}
+					lastAdded = true;
 				}
-				auto clusterTimeEnd = std::chrono::system_clock::now();
-				size_t clusterTime = std::chrono::duration_cast<std::chrono::milliseconds>(clusterTimeEnd - clusterTimeStart).count();
-				coutoutput << "Read " << fastq->seq_id << " clustering took " << clusterTime << "ms" << BufferedWriter::Flush;
-				if (processedSeeds.size() == 0)
+				alignments = alignFromSeeds(alignmentGraph, reusableState, seeds, params, stats, coutoutput, cerroutput, fastq->seq_id, fastq->sequence);
+				if (alignments.alignments.size() == 0)
 				{
-					coutoutput << "Read " << fastq->seq_id << " has no seed clusters" << BufferedWriter::Flush;
-					cerroutput << "Read " << fastq->seq_id << " has no seed clusters" << BufferedWriter::Flush;
-					coutoutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
-					cerroutput << "Read " << fastq->seq_id << " alignment failed" << BufferedWriter::Flush;
 					if (params.outputCorrectedFile != "") writeCorrectedToQueue(correctedToken, params, fastq->seq_id, fastq->sequence, correctedOut, alignments);
 					continue;
 				}
-				stats.seedsFound += seeds.size();
-				stats.readsWithASeed += 1;
-				stats.bpInReadsWithASeed += fastq->sequence.size();
-				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction, params.clipAmbiguousEnds, params.maxTraceCount);
-				AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
-				AlignmentSelection::AddMappingQualities(alignments.alignments);
-				auto alntimeEnd = std::chrono::system_clock::now();
-				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 			}
 			else
 			{
 				auto alntimeStart = std::chrono::system_clock::now();
 				alignments = AlignOneWay(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, !params.verboseMode, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.DPRestartStride, params.clipAmbiguousEnds);
 				auto alntimeEnd = std::chrono::system_clock::now();
-				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
+				size_t alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
+				coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
 			}
 		}
 		catch (const ThreadReadAssertion::AssertionFailure& a)
@@ -529,7 +612,6 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 
 		stats.allAlignmentsCount += alignments.alignments.size();
 
-		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
 		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions);
 
 		//failed alignment, don't output
