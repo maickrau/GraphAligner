@@ -1317,15 +1317,15 @@ public:
 
 		assert(hasWs);
 
-		result.minScore = ws.scoreEnd;
-		result.minScoreNode = i;
-		result.minScoreNodeOffset = 0;
-		
 		if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max())
 		{
 			ws = ws.mergeWith(extraSlice);
 		}
 
+		result.minScore = ws.scoreEnd;
+		result.minScoreNode = i;
+		result.minScoreNodeOffset = 0;
+		
 		result.maxExactEndposScore = ws.maxXScore(seqOffset, params.XscoreErrorCost);
 		result.maxExactEndposNode = i;
 
@@ -1516,6 +1516,11 @@ public:
 		else
 		{
 			forceMask = WordConfiguration<Word>::AllOnes;
+		}
+		if (ws.scoreEnd < result.minScore)
+		{
+			result.minScore = ws.scoreEnd;
+			result.minScoreNodeOffset = pos;
 		}
 		bool endIncomparable = forceMask & ((Word)1 << (Word)(nodeLength-1));
 		slice.startSlice = ws;
