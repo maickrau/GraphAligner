@@ -18,6 +18,7 @@
 #include "ReadCorrection.h"
 #include "MinimizerSeeder.h"
 #include "AlignmentSelection.h"
+#include "DiploidHeuristic.h"
 
 struct Seeder
 {
@@ -759,6 +760,11 @@ void alignReads(AlignerParams params)
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MEMSeeder* memseeder = nullptr;
 	auto alignmentGraph = getGraph(params.graphFile, &memseeder, params);
+	DiploidHeuristicSplitter diploidHeuristic;
+	std::cerr << "begin split" << std::endl;
+	diploidHeuristic.initializePairs(alignmentGraph);
+	std::cerr << "splitted" << std::endl;
+	std::exit(0);
 	bool loadMinimizerSeeder = params.minimizerSeedDensity != 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
 	if (loadMinimizerSeeder)
