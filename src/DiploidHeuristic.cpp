@@ -100,23 +100,17 @@ void iterateSmallSyncmers(const size_t k, const size_t s, const std::string& seq
 	}
 }
 
-template <typename F>
-void iterateSmallSyncmers(const std::string& sequence, F callback)
+void countKmers(phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, const std::string& seq, const size_t maxCount, const size_t k)
 {
-	iterateSmallSyncmers(21, 5, sequence, callback);
-}
-
-void countKmers(phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, const std::string& seq, size_t maxCount)
-{
-	iterateSmallSyncmers(seq, [&kmerCount, maxCount](size_t pos, uint64_t kmer)
+	iterateSmallSyncmers(k, 5, seq, [&kmerCount, maxCount](size_t pos, uint64_t kmer)
 	{
 		if (kmerCount[kmer] < maxCount) kmerCount[kmer] += 1;
 	});
 }
 
-void getKmerPositions(const phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>>& kmerPosition, const std::string& seq, const size_t node)
+void getKmerPositions(const phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>>& kmerPosition, const std::string& seq, const size_t node, const size_t k)
 {
-	iterateSmallSyncmers(seq, [&kmerCount, &kmerPosition, node](size_t pos, uint64_t kmer)
+	iterateSmallSyncmers(k, 5, seq, [&kmerCount, &kmerPosition, node](size_t pos, uint64_t kmer)
 	{
 		if (kmerCount.at(kmer) > 2) return;
 		auto found = kmerPosition.find(kmer);
@@ -138,11 +132,10 @@ void DiploidHeuristicSplitter::getHomologyPairs(const phmap::flat_hash_map<uint6
 	std::vector<std::vector<uint64_t>> validStrings;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
-		std::cerr << "strings " << i << "/" << graph.BigraphNodeCount() << std::endl;
 		std::string seq = graph.BigraphNodeSeq(i);
-		iterateSplittedSeqs(seq, [this, &currentString, &validStrings, &kmerCount, &kmerPosition](std::string str)
+		iterateSplittedSeqs(seq, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](std::string str)
 		{
-			iterateSmallSyncmers(str, [this, &currentString, &validStrings, &kmerCount, &kmerPosition](size_t pos, uint64_t kmer)
+			iterateSmallSyncmers(k, 5, str, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](size_t pos, uint64_t kmer)
 			{
 				if (kmerCount.at(kmer) > 2)
 				{
@@ -162,6 +155,11 @@ void DiploidHeuristicSplitter::getHomologyPairs(const phmap::flat_hash_map<uint6
 				if (kmerCount.at(kmer) == 2)
 				{
 					if (kmerPosition.at(kmer).first == kmerPosition.at(kmer).second)
+					{
+						currentString.clear();
+						return;
+					}
+					if (graph.BigraphNodeName(kmerPosition.at(kmer).first) == graph.BigraphNodeName(kmerPosition.at(kmer).second))
 					{
 						currentString.clear();
 						return;
@@ -190,7 +188,6 @@ void DiploidHeuristicSplitter::getHomologyPairs(const phmap::flat_hash_map<uint6
 			});
 		});
 	}
-	std::cerr << "valid strings: " << validStrings.size() << std::endl;
 	std::map<std::pair<size_t, size_t>, std::pair<size_t, size_t>> potentialPairs;
 	for (size_t i = 0; i < validStrings.size(); i++)
 	{
@@ -231,22 +228,20 @@ void DiploidHeuristicSplitter::getHomologyPairs(const phmap::flat_hash_map<uint6
 	}
 	for (auto pair : pairs)
 	{
-		std::cerr << "haplotype homology pair: " << graph.BigraphNodeName(pair.first) << " " << graph.BigraphNodeName(pair.second) << std::endl;
 		homologyPairs.emplace_back(pair);
 	}
-	std::cerr << "forbidding kmer count: " << kmerForbidsNode.size() << std::endl;
 }
 
-void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph)
+void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph, size_t k)
 {
+	this->k = k;
 	phmap::flat_hash_map<uint64_t, uint8_t> kmerCount;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
-		std::cerr << "count " << i << "/" << graph.BigraphNodeCount() << std::endl;
-		iterateSplittedSeqs(seq, [&kmerCount](std::string str)
+		iterateSplittedSeqs(seq, [&kmerCount, k](std::string str)
 		{
-			countKmers(kmerCount, str, 3);
+			countKmers(kmerCount, str, 3, k);
 		});
 	}
 	size_t countOnes = 0;
@@ -256,16 +251,13 @@ void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph)
 		if (pair.second == 1) countOnes += 1;
 		if (pair.second == 2) countTwos += 1;
 	}
-	std::cerr << "count of ones: " << countOnes << std::endl;
-	std::cerr << "count of twos: " << countTwos << std::endl;
 	phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>> kmerPosition;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
-		std::cerr << "locate " << i << "/" << graph.BigraphNodeCount() << std::endl;
-		iterateSplittedSeqs(seq, [&kmerCount, &kmerPosition, i](std::string str)
+		iterateSplittedSeqs(seq, [&kmerCount, &kmerPosition, i, k](std::string str)
 		{
-			getKmerPositions(kmerCount, kmerPosition, str, i);
+			getKmerPositions(kmerCount, kmerPosition, str, i, k);
 		});
 	}
 	getHomologyPairs(kmerCount, kmerPosition, graph);
@@ -273,10 +265,11 @@ void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph)
 
 std::vector<size_t> DiploidHeuristicSplitter::getForbiddenNodes(std::string sequence) const
 {
+	if (homologyPairs.size() == 0) return std::vector<size_t> {};
 	phmap::flat_hash_map<size_t, size_t> forbidCount;
 	iterateSplittedSeqs(sequence, [this, &forbidCount](std::string str)
 	{
-		iterateSmallSyncmers(str, [this, &forbidCount](size_t pos, uint64_t kmer)
+		iterateSmallSyncmers(k, 5, str, [this, &forbidCount](size_t pos, uint64_t kmer)
 		{
 			if (kmerForbidsNode.count(kmer) == 0) return;
 			forbidCount[kmerForbidsNode.at(kmer)] += 1;

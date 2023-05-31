@@ -92,6 +92,7 @@ int main(int argc, char** argv)
 		("unique-mem-bonus-factor", boost::program_options::value<double>(), "bonus priority factor for unique MEMs")
 		("low-memory-mem-index-construction", "lower memory construction for MEM index")
 		("mem-index-no-wavelet-tree", "higher memory but faster MEM index")
+		("diploid-heuristic", "align to a diploid graph using haplotype aware heuristics")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -163,6 +164,7 @@ int main(int argc, char** argv)
 	params.lowMemoryMEMIndexConstruction = false;
 	params.MEMindexUsesWaveletTree = true;
 	params.MEMwindowsize = 0;
+	params.useDiploidHeuristic = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -235,6 +237,7 @@ int main(int argc, char** argv)
 	if (vm.count("unique-mem-bonus-factor")) params.uniqueMemBonusFactor = vm["unique-mem-bonus-factor"].as<double>();
 	if (vm.count("low-memory-mem-index-construction")) params.lowMemoryMEMIndexConstruction = true;
 	if (vm.count("mem-index-no-wavelet-tree")) params.MEMindexUsesWaveletTree = false;
+	if (vm.count("diploid-heuristic")) params.useDiploidHeuristic = true;
 
 	if (vm.count("X-drop"))
 	{

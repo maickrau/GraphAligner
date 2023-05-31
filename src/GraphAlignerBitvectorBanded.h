@@ -292,7 +292,7 @@ private:
 	}
 
 	template <bool HasVectorMap, bool PreviousHasVectorMap, typename PriorityQueue>
-	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, ScoreType bandwidth, ScoreType previousMinScore, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores) const
+	NodeCalculationResult calculateSlice(const std::string_view& sequence, const size_t j, NodeSlice<LengthType, ScoreType, Word, HasVectorMap>& currentSlice, const NodeSlice<LengthType, ScoreType, Word, PreviousHasVectorMap>& previousSlice, std::vector<bool>& currentBand, const std::vector<bool>& previousBand, PriorityQueue& calculableQueue, ScoreType previousQuitScore, ScoreType bandwidth, ScoreType previousMinScore, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice seedstartSlice, std::vector<bool>& hasSeedStart, std::unordered_set<size_t>& seedstartNodes, phmap::flat_hash_map<size_t, ScoreType>& nodeMaxExactEndposScore, bool storeNodeExactEndposScores, const std::vector<bool>& allowedBigraphNodes) const
 	{
 		if (previousMinScore == std::numeric_limits<ScoreType>::max() - bandwidth - 1)
 		{
@@ -336,6 +336,7 @@ private:
 		{
 			for (auto node : previousSlice)
 			{
+				assert(allowedBigraphNodes[params.graph.BigraphNodeID(node.first)]);
 				assert(node.second.minScore <= previousQuitScore);
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
 				if (calculableQueue.IsComponentPriorityQueue())
@@ -352,6 +353,7 @@ private:
 		{
 			for (auto node : previousSlice)
 			{
+				assert(allowedBigraphNodes[params.graph.BigraphNodeID(node.first)]);
 				assert(node.second.exists);
 				assert(node.second.minScore <= node.second.startSlice.scoreEnd);
 				assert(node.second.minScore <= node.second.endSlice.scoreEnd);
@@ -392,6 +394,7 @@ private:
 			for (size_t i = seedhitStart; i < seedhitEnd; i++)
 			{
 				if (hasSeedStart[seedHits[i].alignmentGraphNodeId]) continue;
+				assert(allowedBigraphNodes[params.graph.BigraphNodeID(seedHits[i].alignmentGraphNodeId)]);
 				addSeedHitToScoresAndQueue(seedHits[i], currentSlice, previousSlice, currentBand, previousBand, calculableQueue, seedstartSlice, nodeMaxExactEndposScore, storeNodeExactEndposScores);
 				assert(!hasSeedStart[seedHits[i].alignmentGraphNodeId]);
 				hasSeedStart[seedHits[i].alignmentGraphNodeId] = true;
@@ -425,6 +428,7 @@ private:
 			}
 			auto i = pair.target;
 			bool firstCalc = false;
+			assert(allowedBigraphNodes[params.graph.BigraphNodeID(i)]);
 			if (!currentBand[i])
 			{
 				assert(!currentSlice.hasNode(i));
@@ -511,6 +515,7 @@ private:
 				{
 					for (auto neighbor : params.graph.OutNeighbors(i))
 					{
+						if (!allowedBigraphNodes[params.graph.BigraphNodeID(neighbor)]) continue;
 						if (calculableQueue.IsComponentPriorityQueue())
 						{
 							calculableQueue.insert(params.graph.ComponentNumber(neighbor), newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
@@ -575,7 +580,7 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	void fillDPSlice(const std::string_view& sequence, DPSlice& slice, const DPSlice& previousSlice, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores, const std::vector<bool>& allowedBigraphNodes) const
 	{
 		NodeCalculationResult sliceResult;
 		assert((ScoreType)previousSlice.bandwidth < std::numeric_limits<ScoreType>::max());
@@ -585,18 +590,18 @@ private:
 		{
 			if (previousSlice.scoresVectorMap.hasVectorMapCurrently())
 			{
-				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores);
+				sliceResult = calculateSlice<true, true>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scoresVectorMap, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores, allowedBigraphNodes);
 			}
 			else
 			{
-				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores);
+				sliceResult = calculateSlice<true, false>(sequence, slice.j, slice.scoresVectorMap, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores, allowedBigraphNodes);
 			}
 			slice.scores = slice.scoresVectorMap.getMapSlice();
 		}
 		else
 		{
 			assert(!previousSlice.scoresVectorMap.hasVectorMapCurrently());
-			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores);
+			sliceResult = calculateSlice<false, false>(sequence, slice.j, slice.scores, previousSlice.scores, currentBand, previousBand, calculableQueue, previousSlice.minScore + previousSlice.bandwidth, bandwidth, previousSlice.minScore, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, slice.seedstartNodes, slice.nodeMaxExactEndposScore, storeNodeExactEndposScores, allowedBigraphNodes);
 		}
 		slice.cellsProcessed = sliceResult.cellsProcessed;
 		slice.minScoreNode = sliceResult.minScoreNode;
@@ -625,12 +630,12 @@ private:
 	}
 
 	template <typename PriorityQueue>
-	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores) const
+	DPSlice pickMethodAndExtendFill(const std::string_view& sequence, const DPSlice& previous, const std::vector<bool>& previousBand, std::vector<bool>& currentBand, PriorityQueue& calculableQueue, ScoreType bandwidth, const std::vector<ProcessedSeedHit>& seedHits, size_t seedhitStart, size_t seedhitEnd, const WordSlice extraSlice, std::vector<bool>& hasSeedStart, bool storeNodeExactEndposScores, const std::vector<bool>& allowedBigraphNodes) const
 	{
 		DPSlice bandTest;
 		bandTest.scores.addEmptyNodeMap(previous.scores.size());
 		bandTest.j = previous.j + WordConfiguration<Word>::WordSize;
-		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, storeNodeExactEndposScores);
+		fillDPSlice(sequence, bandTest, previous, previousBand, currentBand, calculableQueue, bandwidth, seedHits, seedhitStart, seedhitEnd, extraSlice, hasSeedStart, storeNodeExactEndposScores, allowedBigraphNodes);
 		return bandTest;
 	}
 
@@ -681,11 +686,11 @@ private:
 			DPSlice newSlice;
 			if (reusableState.componentQueue.valid())
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false, reusableState.allowedBigraphNodes);
 			}
 			else
 			{
-				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false);
+				newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.calculableQueue, bandwidth, fakeSeeds, std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max(), fakeSlice, reusableState.hasSeedStart, false, reusableState.allowedBigraphNodes);
 			}
 #ifdef SLICEVERBOSE
 			auto timeEnd = std::chrono::system_clock::now();
@@ -822,7 +827,7 @@ private:
 			assert(possibleScoreRemaining > 0);
 			// // can't get an alignment which would be backtraced. fake set the seed set to be empty
 			// if (possibleScoreRemaining < sliceMaxScores[slice]) lastSeedHit = nextSeedHit;
-			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, true);
+			DPSlice newSlice = pickMethodAndExtendFill(sequence, lastSlice, reusableState.previousBand, reusableState.currentBand, reusableState.componentQueue, bandwidth, seedHits, lastSeedHit, nextSeedHit, seedSlice, reusableState.hasSeedStart, true, reusableState.allowedBigraphNodes);
 			lastSeedHit = nextSeedHit;
 			XDropCurrentBest = std::max(XDropCurrentBest, newSlice.maxExactEndposScore);
 			if (newSlice.maxExactEndposScore < XDropCurrentBest - params.Xdropcutoff)

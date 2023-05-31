@@ -57,13 +57,15 @@ public:
 		calculableQueue(),
 		currentBand(),
 		previousBand(),
-		hasSeedStart()
+		hasSeedStart(),
+		allowedBigraphNodes()
 		{
 			componentQueue.initialize(graph.ComponentSize());
 			calculableQueue.initialize(WordConfiguration<Word>::WordSize * (WordConfiguration<Word>::WordSize + maxBandwidth + 1) + maxBandwidth + 1, graph.NodeSize());
 			currentBand.resize(graph.NodeSize(), false);
 			previousBand.resize(graph.NodeSize(), false);
 			hasSeedStart.resize(graph.NodeSize(), false);
+			allowedBigraphNodes.resize(graph.BigraphNodeCount(), true);
 		}
 		void clear()
 		{
@@ -72,12 +74,14 @@ public:
 			currentBand.assign(currentBand.size(), false);
 			previousBand.assign(previousBand.size(), false);
 			hasSeedStart.assign(hasSeedStart.size(), false);
+			allowedBigraphNodes.assign(allowedBigraphNodes.size(), true);
 		}
 		ComponentPriorityQueue<EdgeWithPriority, true> componentQueue;
 		ArrayPriorityQueue<EdgeWithPriority, true> calculableQueue;
 		std::vector<bool> currentBand;
 		std::vector<bool> previousBand;
 		std::vector<bool> hasSeedStart;
+		std::vector<bool> allowedBigraphNodes;
 	};
 	using MatrixPosition = AlignmentGraph::MatrixPosition;
 	class Params

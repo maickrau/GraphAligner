@@ -51,6 +51,7 @@ struct AlignerParams
 	bool lowMemoryMEMIndexConstruction;
 	bool MEMindexUsesWaveletTree;
 	size_t MEMwindowsize;
+	bool useDiploidHeuristic;
 };
 
 void alignReads(AlignerParams params);
