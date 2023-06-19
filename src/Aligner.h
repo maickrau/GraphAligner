@@ -52,6 +52,7 @@ struct AlignerParams
 	bool MEMindexUsesWaveletTree;
 	size_t MEMwindowsize;
 	bool useDiploidHeuristic;
+	std::string diploidHeuristicCacheFile;
 };
 
 void alignReads(AlignerParams params);

@@ -93,6 +93,7 @@ int main(int argc, char** argv)
 		("low-memory-mem-index-construction", "lower memory construction for MEM index")
 		("mem-index-no-wavelet-tree", "higher memory but faster MEM index")
 		("diploid-heuristic", "align to a diploid graph using haplotype aware heuristics")
+		("diploid-heuristic-cache", boost::program_options::value<std::string>(), "cache file for haplotype aware heuristic")
 	;
 
 	boost::program_options::options_description cmdline_options;
@@ -165,6 +166,7 @@ int main(int argc, char** argv)
 	params.MEMindexUsesWaveletTree = true;
 	params.MEMwindowsize = 0;
 	params.useDiploidHeuristic = false;
+	params.diploidHeuristicCacheFile = "";
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -238,6 +240,7 @@ int main(int argc, char** argv)
 	if (vm.count("low-memory-mem-index-construction")) params.lowMemoryMEMIndexConstruction = true;
 	if (vm.count("mem-index-no-wavelet-tree")) params.MEMindexUsesWaveletTree = false;
 	if (vm.count("diploid-heuristic")) params.useDiploidHeuristic = true;
+	if (vm.count("diploid-heuristic-cache")) params.diploidHeuristicCacheFile = vm["diploid-heuristic-cache"].as<std::string>();
 
 	if (vm.count("X-drop"))
 	{

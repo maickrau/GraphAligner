@@ -404,28 +404,18 @@ std::string hpcCollapse(const std::string& read)
 	return result;
 }
 
-void setForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristicK21, const DiploidHeuristicSplitter& diploidHeuristicK31, const std::string& sequence)
+void setForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristic, const std::string& sequence)
 {
-	for (size_t node : diploidHeuristicK21.getForbiddenNodes(sequence))
-	{
-		reusableState.allowedBigraphNodes[int(node/2)*2+0] = false;
-		reusableState.allowedBigraphNodes[int(node/2)*2+1] = false;
-	}
-	for (size_t node : diploidHeuristicK31.getForbiddenNodes(sequence))
+	for (size_t node : diploidHeuristic.getForbiddenNodes(sequence))
 	{
 		reusableState.allowedBigraphNodes[int(node/2)*2+0] = false;
 		reusableState.allowedBigraphNodes[int(node/2)*2+1] = false;
 	}
 }
 
-void unsetForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristicK21, const DiploidHeuristicSplitter& diploidHeuristicK31, const std::string& sequence)
+void unsetForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristic, const std::string& sequence)
 {
-	for (size_t node : diploidHeuristicK21.getForbiddenNodes(sequence))
-	{
-		reusableState.allowedBigraphNodes[int(node/2)*2+0] = true;
-		reusableState.allowedBigraphNodes[int(node/2)*2+1] = true;
-	}
-	for (size_t node : diploidHeuristicK31.getForbiddenNodes(sequence))
+	for (size_t node : diploidHeuristic.getForbiddenNodes(sequence))
 	{
 		reusableState.allowedBigraphNodes[int(node/2)*2+0] = true;
 		reusableState.allowedBigraphNodes[int(node/2)*2+1] = true;
@@ -443,7 +433,7 @@ void filterOutWrongHaplotypeSeeds(std::vector<SeedHit>& seeds, const GraphAligne
 	}
 }
 
-void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeuristicSplitter& diploidHeuristicK21, const DiploidHeuristicSplitter& diploidHeuristicK31, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& GAFOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
+void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeuristicSplitter& diploidHeuristic, moodycamel::ConcurrentQueue<std::shared_ptr<FastQ>>& readFastqsQueue, std::atomic<bool>& readStreamingFinished, int threadnum, const Seeder& seeder, AlignerParams params, moodycamel::ConcurrentQueue<std::string*>& GAMOut, moodycamel::ConcurrentQueue<std::string*>& JSONOut, moodycamel::ConcurrentQueue<std::string*>& GAFOut, moodycamel::ConcurrentQueue<std::string*>& correctedOut, moodycamel::ConcurrentQueue<std::string*>& correctedClippedOut, moodycamel::ConcurrentQueue<std::string*>& deallocqueue, AlignmentStats& stats)
 {
 	moodycamel::ProducerToken GAMToken { GAMOut };
 	moodycamel::ProducerToken JSONToken { JSONOut };
@@ -503,7 +493,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeu
 				auto timeStart = std::chrono::system_clock::now();
 				if (params.useDiploidHeuristic)
 				{
-					setForbiddenNodes(reusableState, diploidHeuristicK21, diploidHeuristicK31, fastq->sequence);
+					setForbiddenNodes(reusableState, diploidHeuristic, fastq->sequence);
 				}
 				std::vector<SeedHit> seeds = seeder.getSeeds(fastq->seq_id, fastq->sequence);
 				if (params.useDiploidHeuristic) filterOutWrongHaplotypeSeeds(seeds, reusableState);
@@ -556,7 +546,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeu
 				alntimems = std::chrono::duration_cast<std::chrono::milliseconds>(alntimeEnd - alntimeStart).count();
 				if (params.useDiploidHeuristic)
 				{
-					unsetForbiddenNodes(reusableState, diploidHeuristicK21, diploidHeuristicK31, fastq->sequence);
+					unsetForbiddenNodes(reusableState, diploidHeuristic, fastq->sequence);
 				}
 			}
 			else
@@ -808,13 +798,29 @@ void alignReads(AlignerParams params)
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MEMSeeder* memseeder = nullptr;
 	auto alignmentGraph = getGraph(params.graphFile, &memseeder, params);
-	DiploidHeuristicSplitter diploidHeuristicK21;
-	DiploidHeuristicSplitter diploidHeuristicK31;
+	DiploidHeuristicSplitter diploidHeuristic;
 	if (params.useDiploidHeuristic)
 	{
-		std::cerr << "Find diploid haplotype informative k-mers" << std::endl;
-		diploidHeuristicK21.initializePairs(alignmentGraph, 21);
-		diploidHeuristicK31.initializePairs(alignmentGraph, 31);
+		bool loaded = false;
+		if (params.diploidHeuristicCacheFile != "")
+		{
+			std::ifstream file { params.diploidHeuristicCacheFile, std::ios::binary };
+			if (file.good())
+			{
+				file.close();
+				diploidHeuristic.read(params.diploidHeuristicCacheFile);
+				loaded = true;
+			}
+		}
+		if (!loaded)
+		{
+			std::cout << "Find diploid haplotype informative k-mers" << std::endl;
+			diploidHeuristic.initializePairs(alignmentGraph);
+			if (params.diploidHeuristicCacheFile != "")
+			{
+				diploidHeuristic.write(params.diploidHeuristicCacheFile);
+			}
+		}
 	}
 	bool loadMinimizerSeeder = params.minimizerSeedDensity != 0;
 	MinimizerSeeder* minimizerseeder = nullptr;
@@ -929,7 +935,7 @@ void alignReads(AlignerParams params)
 
 	for (size_t i = 0; i < params.numThreads; i++)
 	{
-		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputGAM, &outputJSON, &outputGAF, &outputCorrected, &outputCorrectedClipped, &deallocAlns, &stats, &diploidHeuristicK21, &diploidHeuristicK31]() { runComponentMappings(alignmentGraph, diploidHeuristicK21, diploidHeuristicK31, readFastqsQueue, readStreamingFinished, i, seeder, params, outputGAM, outputJSON, outputGAF, outputCorrected, outputCorrectedClipped, deallocAlns, stats); });
+		threads.emplace_back([&alignmentGraph, &readFastqsQueue, &readStreamingFinished, i, seeder, params, &outputGAM, &outputJSON, &outputGAF, &outputCorrected, &outputCorrectedClipped, &deallocAlns, &stats, &diploidHeuristic]() { runComponentMappings(alignmentGraph, diploidHeuristic, readFastqsQueue, readStreamingFinished, i, seeder, params, outputGAM, outputJSON, outputGAF, outputCorrected, outputCorrectedClipped, deallocAlns, stats); });
 	}
 
 	for (size_t i = 0; i < params.numThreads; i++)
