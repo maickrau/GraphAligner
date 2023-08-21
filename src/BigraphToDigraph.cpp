@@ -195,6 +195,15 @@ AlignmentGraph DirectedGraph::StreamVGGraphFromFile(std::string filename)
 		};
 		stream::for_each(graphfile, lambda);
 	}
+	if (result.BigraphNodeCount() == 0)
+	{
+		std::cerr << "Failed to load vg graph." << std::endl;
+		std::cerr << "This graph might be in a format other than protobuf. GraphAligner only supports vg graphs in protobuf format." << std::endl;
+		std::cerr << "Check the graph format with:" << std::endl;
+		std::cerr << "vg stats -F " << filename << std::endl;
+		std::cerr << "or try converting the graph to GFA" << std::endl;
+		std::abort();
+	}
 	result.Finalize(64);
 	return result;
 }
