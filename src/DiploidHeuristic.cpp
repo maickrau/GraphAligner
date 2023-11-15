@@ -195,11 +195,11 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<_
 			});
 		});
 	}
-	std::map<std::pair<size_t, size_t>, std::pair<size_t, size_t>> potentialPairs;
+	std::map<std::pair<__uint128_t, __uint128_t>, std::pair<size_t, size_t>> potentialPairs;
 	for (size_t i = 0; i < validStrings.size(); i++)
 	{
 		assert(validStrings[i].size() >= 3);
-		std::pair<size_t, size_t> key { validStrings[i][0], validStrings[i].back() };
+		std::pair<__uint128_t, __uint128_t> key { validStrings[i][0], validStrings[i].back() };
 		assert(kmerPosition.at(validStrings[i][0]) == kmerPosition.at(validStrings[i].back()));
 		if (potentialPairs.count(key) == 0)
 		{
