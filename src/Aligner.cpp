@@ -802,22 +802,44 @@ void alignReads(AlignerParams params)
 	if (params.useDiploidHeuristic)
 	{
 		bool loaded = false;
+		std::cout << "diploid k values:";
+		for (auto k : params.diploidHeuristicK) std::cout << " " << k;
+		std::cout << std::endl;
 		if (params.diploidHeuristicCacheFile != "")
 		{
 			std::ifstream file { params.diploidHeuristicCacheFile, std::ios::binary };
 			if (file.good())
 			{
+				std::cout << "Read diploid haplotype informative k-mers from " << params.diploidHeuristicCacheFile << std::endl;
 				file.close();
 				diploidHeuristic.read(params.diploidHeuristicCacheFile);
 				loaded = true;
+				auto foundk = diploidHeuristic.getKValues();
+				bool valid = true;
+				if (foundk.size() != params.diploidHeuristicK.size())
+				{
+					valid = false;
+				}
+				for (size_t i = 0; i < foundk.size() && valid; i++)
+				{
+					if (foundk[i] != params.diploidHeuristicK[i]) valid = false;
+				}
+				if (!valid)
+				{
+					std::cerr << "Diploid heuristic cache k values do not match parameters" << std::endl;
+					std::cerr << "This might be due to changing parameters between runs" << std::endl;
+					std::cerr << "Remove the old diploid heuristic cache " << params.diploidHeuristicCacheFile << " and rerun" << std::endl;
+					std::abort();
+				}
 			}
 		}
 		if (!loaded)
 		{
 			std::cout << "Find diploid haplotype informative k-mers" << std::endl;
-			diploidHeuristic.initializePairs(alignmentGraph);
+			diploidHeuristic.initializePairs(alignmentGraph, params.diploidHeuristicK);
 			if (params.diploidHeuristicCacheFile != "")
 			{
+				std::cout << "Save diploid haplotype informative k-mers to " << params.diploidHeuristicCacheFile << std::endl;
 				diploidHeuristic.write(params.diploidHeuristicCacheFile);
 			}
 		}

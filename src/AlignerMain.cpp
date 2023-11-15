@@ -92,7 +92,7 @@ int main(int argc, char** argv)
 		("unique-mem-bonus-factor", boost::program_options::value<double>(), "bonus priority factor for unique MEMs")
 		("low-memory-mem-index-construction", "lower memory construction for MEM index")
 		("mem-index-no-wavelet-tree", "higher memory but faster MEM index")
-		("diploid-heuristic", "align to a diploid graph using haplotype aware heuristics")
+		("diploid-heuristic", boost::program_options::value<std::vector<size_t>>()->multitoken(), "align to a diploid graph using haplotype aware heuristics using listed k-mer sizes (ints)")
 		("diploid-heuristic-cache", boost::program_options::value<std::string>(), "cache file for haplotype aware heuristic")
 	;
 
@@ -239,8 +239,25 @@ int main(int argc, char** argv)
 	if (vm.count("unique-mem-bonus-factor")) params.uniqueMemBonusFactor = vm["unique-mem-bonus-factor"].as<double>();
 	if (vm.count("low-memory-mem-index-construction")) params.lowMemoryMEMIndexConstruction = true;
 	if (vm.count("mem-index-no-wavelet-tree")) params.MEMindexUsesWaveletTree = false;
-	if (vm.count("diploid-heuristic")) params.useDiploidHeuristic = true;
 	if (vm.count("diploid-heuristic-cache")) params.diploidHeuristicCacheFile = vm["diploid-heuristic-cache"].as<std::string>();
+	if (vm.count("diploid-heuristic"))
+	{
+		params.useDiploidHeuristic = true;
+		params.diploidHeuristicK = vm["diploid-heuristic"].as<std::vector<size_t>>();
+		for (auto k : params.diploidHeuristicK)
+		{
+			if (k % 2 == 0)
+			{
+				std::cerr << "diploid heuristic k must be odd" << std::endl;
+				paramError = true;
+			}
+			if (k > 63)
+			{
+				std::cerr << "diploid heuristic maximum k is 63" << std::endl;
+				paramError = true;
+			}
+		}
+	}
 
 	if (vm.count("X-drop"))
 	{

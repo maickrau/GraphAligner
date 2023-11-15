@@ -48,4 +48,17 @@ private:
 	std::stringstream stringstream;
 };
 
+#if !defined(__clang__)
+namespace std
+{
+	template <> struct hash<__uint128_t>
+	{
+		size_t operator()(__uint128_t x) const
+		{
+			return (size_t)x ^ (size_t)(x >> 64);
+		}
+	};
+}
+#endif
+
 #endif

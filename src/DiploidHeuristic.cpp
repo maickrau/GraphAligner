@@ -1,4 +1,5 @@
 #include <map>
+#include "CommonUtils.h"
 #include "DiploidHeuristic.h"
 #include "Serialize.h"
 
@@ -55,10 +56,10 @@ template <typename F>
 void iterateSmallSyncmers(const size_t k, const size_t s, const std::string& sequence, F callback)
 {
 	if (sequence.size() < k) return;
-	uint64_t kmer = 0;
-	uint64_t smer = 0;
-	const uint64_t smerMask = ~(0xFFFFFFFFFFFFFFFF << (s * 2));
-	const uint64_t kmerMask = ~(0xFFFFFFFFFFFFFFFF << (k * 2));
+	__uint128_t kmer = 0;
+	__uint128_t smer = 0;
+	const __uint128_t smerMask = ((__uint128_t)1 << (__uint128_t)(s*2)) - (__uint128_t)1;
+	const __uint128_t kmerMask = ((__uint128_t)1 << (__uint128_t)(k*2)) - (__uint128_t)1;
 	std::vector<std::pair<size_t, size_t>> window;
 	for (size_t i = 0; i < s; i++)
 	{
@@ -101,17 +102,17 @@ void iterateSmallSyncmers(const size_t k, const size_t s, const std::string& seq
 	}
 }
 
-void countKmers(phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, const std::string& seq, const size_t maxCount, const size_t k)
+void countKmers(phmap::flat_hash_map<__uint128_t, uint8_t>& kmerCount, const std::string& seq, const size_t maxCount, const size_t k)
 {
-	iterateSmallSyncmers(k, 5, seq, [&kmerCount, maxCount](size_t pos, uint64_t kmer)
+	iterateSmallSyncmers(k, 5, seq, [&kmerCount, maxCount](size_t pos, __uint128_t kmer)
 	{
 		if (kmerCount[kmer] < maxCount) kmerCount[kmer] += 1;
 	});
 }
 
-void getKmerPositions(const phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>>& kmerPosition, const std::string& seq, const size_t node, const size_t k)
+void getKmerPositions(const phmap::flat_hash_map<__uint128_t, uint8_t>& kmerCount, phmap::flat_hash_map<__uint128_t, std::pair<size_t, size_t>>& kmerPosition, const std::string& seq, const size_t node, const size_t k)
 {
-	iterateSmallSyncmers(k, 5, seq, [&kmerCount, &kmerPosition, node](size_t pos, uint64_t kmer)
+	iterateSmallSyncmers(k, 5, seq, [&kmerCount, &kmerPosition, node](size_t pos, __uint128_t kmer)
 	{
 		if (kmerCount.at(kmer) > 2) return;
 		auto found = kmerPosition.find(kmer);
@@ -127,16 +128,21 @@ void getKmerPositions(const phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, 
 	});
 }
 
-void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<uint64_t, uint8_t>& kmerCount, const phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>>& kmerPosition, const AlignmentGraph& graph)
+size_t DiploidHeuristicSplitterOneK::getk() const
 {
-	std::vector<uint64_t> currentString;
-	std::vector<std::vector<uint64_t>> validStrings;
+	return k;
+}
+
+void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<__uint128_t, uint8_t>& kmerCount, const phmap::flat_hash_map<__uint128_t, std::pair<size_t, size_t>>& kmerPosition, const AlignmentGraph& graph)
+{
+	std::vector<__uint128_t> currentString;
+	std::vector<std::vector<__uint128_t>> validStrings;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
 		iterateSplittedSeqs(seq, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](std::string str)
 		{
-			iterateSmallSyncmers(k, 5, str, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](size_t pos, uint64_t kmer)
+			iterateSmallSyncmers(k, 5, str, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](size_t pos, __uint128_t kmer)
 			{
 				if (kmerCount.at(kmer) > 2)
 				{
@@ -236,7 +242,7 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<u
 void DiploidHeuristicSplitterOneK::initializePairs(const AlignmentGraph& graph, size_t k)
 {
 	this->k = k;
-	phmap::flat_hash_map<uint64_t, uint8_t> kmerCount;
+	phmap::flat_hash_map<__uint128_t, uint8_t> kmerCount;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
@@ -252,7 +258,7 @@ void DiploidHeuristicSplitterOneK::initializePairs(const AlignmentGraph& graph, 
 		if (pair.second == 1) countOnes += 1;
 		if (pair.second == 2) countTwos += 1;
 	}
-	phmap::flat_hash_map<uint64_t, std::pair<size_t, size_t>> kmerPosition;
+	phmap::flat_hash_map<__uint128_t, std::pair<size_t, size_t>> kmerPosition;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
@@ -270,7 +276,7 @@ phmap::flat_hash_set<size_t> DiploidHeuristicSplitterOneK::getForbiddenNodes(std
 	phmap::flat_hash_map<size_t, size_t> forbidCount;
 	iterateSplittedSeqs(sequence, [this, &forbidCount](std::string str)
 	{
-		iterateSmallSyncmers(k, 5, str, [this, &forbidCount](size_t pos, uint64_t kmer)
+		iterateSmallSyncmers(k, 5, str, [this, &forbidCount](size_t pos, __uint128_t kmer)
 		{
 			if (kmerForbidsNode.count(kmer) == 0) return;
 			forbidCount[kmerForbidsNode.at(kmer)] += 1;
@@ -293,7 +299,7 @@ void DiploidHeuristicSplitterOneK::write(std::ostream& file) const
 	serialize(file, (uint64_t)kmerForbidsNode.size());
 	for (auto pair : kmerForbidsNode)
 	{
-		serialize(file, pair.first);
+		serialize(file, (__uint128_t)pair.first);
 		serialize(file, (uint64_t)pair.second);
 	}
 	serialize(file, homologyPairs.size());
@@ -313,7 +319,7 @@ void DiploidHeuristicSplitterOneK::read(std::istream& file)
 	deserialize(file, numItems);
 	for (size_t i = 0; i < numItems; i++)
 	{
-		uint64_t key;
+		__uint128_t key;
 		uint64_t value;
 		deserialize(file, key);
 		deserialize(file, value);
@@ -332,41 +338,56 @@ void DiploidHeuristicSplitterOneK::read(std::istream& file)
 	assert(file.good());
 }
 
-void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph)
+void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph, const std::vector<size_t>& kValues)
 {
-	splitters.resize(2);
-	splitters[0].initializePairs(graph, 21);
-	splitters[1].initializePairs(graph, 31);
+	splitters.resize(kValues.size());
+	for (size_t i = 0; i < kValues.size(); i++)
+	{
+		splitters[i].initializePairs(graph, kValues[i]);
+	}
 }
 
 std::vector<size_t> DiploidHeuristicSplitter::getForbiddenNodes(std::string sequence) const
 {
-	phmap::flat_hash_set<size_t> first = splitters[0].getForbiddenNodes(sequence);
-	phmap::flat_hash_set<size_t> second = splitters[1].getForbiddenNodes(sequence);
-	std::vector<size_t> result;
-	for (auto n : first)
+	phmap::flat_hash_set<size_t> result;
+	for (size_t i = 0; i < splitters.size(); i++)
 	{
-		result.emplace_back(n);
+		phmap::flat_hash_set<size_t> forbidden = splitters[i].getForbiddenNodes(sequence);
+		result.insert(forbidden.begin(), forbidden.end());
 	}
-	for (auto n : second)
-	{
-		if (first.count(n) == 1) continue;
-		result.emplace_back(n);
-	}
-	return result;
+	std::vector<size_t> resultVec { result.begin(), result.end() };
+	return resultVec;
 }
 
 void DiploidHeuristicSplitter::write(std::string filename) const
 {
 	std::ofstream file { filename, std::ios::binary };
-	splitters[0].write(file);
-	splitters[1].write(file);
+	uint64_t splitterCount = splitters.size();
+	serialize(file, (uint64_t)splitterCount);
+	for (size_t i = 0; i < splitters.size(); i++)
+	{
+		splitters[i].write(file);
+	}
 }
 
 void DiploidHeuristicSplitter::read(std::string filename)
 {
-	splitters.resize(2);
 	std::ifstream file { filename, std::ios::binary };
-	splitters[0].read(file);
-	splitters[1].read(file);
+	uint64_t splitterCount;
+	deserialize(file, splitterCount);
+	splitters.resize(splitterCount);
+	for (size_t i = 0; i < splitters.size(); i++)
+	{
+		splitters[i].read(file);
+	}
+}
+
+std::vector<size_t> DiploidHeuristicSplitter::getKValues() const
+{
+	std::vector<size_t> result;
+	for (size_t i = 0; i < splitters.size(); i++)
+	{
+		result.push_back(splitters[i].getk());
+	}
+	return result;
 }
