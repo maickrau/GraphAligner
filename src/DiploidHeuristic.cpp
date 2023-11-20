@@ -302,7 +302,7 @@ void DiploidHeuristicSplitterOneK::write(std::ostream& file) const
 		serialize(file, (__uint128_t)pair.first);
 		serialize(file, (uint64_t)pair.second);
 	}
-	serialize(file, homologyPairs.size());
+	serialize(file, (uint64_t)homologyPairs.size());
 	for (size_t i = 0; i < (uint64_t)homologyPairs.size(); i++)
 	{
 		serialize(file, (uint64_t)homologyPairs[i].first);
