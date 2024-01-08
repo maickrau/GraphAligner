@@ -338,6 +338,8 @@ void AlignmentGraph::AddAmbiguousDinode(const std::string& sequence)
 				ambiguousSeq.G |= ((size_t)1) << (i);
 				ambiguousSeq.T |= ((size_t)1) << (i);
 				break;
+			case '-':
+				break;
 			default:
 				assert(false);
 		}

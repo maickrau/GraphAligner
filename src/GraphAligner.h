@@ -354,7 +354,17 @@ private:
 		{
 			std::string_view backwardPart { bwSequence.data() + bwSequence.size() - fwTrace.trace[0].DPposition.seqPos, fwTrace.trace[0].DPposition.seqPos };
 			auto reversePos = params.graph.GetReversePosition(fwTrace.trace[0].DPposition.node, fwTrace.trace[0].DPposition.nodeOffset);
-			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.Xdropcutoff, reusableState);
+			std::vector<std::tuple<size_t, int, int>> forbiddenPositions;
+			int spanOffset = (int)bwSequence.size() - (int)fwTrace.trace[0].DPposition.seqPos;
+			int spanLength = (int)fwTrace.trace[0].DPposition.seqPos;
+			for (auto t : reusableState.bigraphNodeForbiddenSpans)
+			{
+				if ((int)bwSequence.size()-std::get<1>(t) + spanOffset < 0) continue;
+				if ((int)bwSequence.size()-std::get<2>(t) + spanOffset > spanLength) continue;
+				forbiddenPositions.emplace_back(int(std::get<0>(t)/2)*2 + 1 - (std::get<0>(t) % 2), (int)bwSequence.size()-std::get<2>(t) + spanOffset, (int)bwSequence.size()-std::get<1>(t) + spanOffset);
+				assert(std::get<2>(forbiddenPositions.back()) > std::get<1>(forbiddenPositions.back()));
+			}
+			bwTrace = bvAligner.getReverseTraceFromSeed(backwardPart, reversePos.first, reversePos.second, params.Xdropcutoff, forbiddenPositions, reusableState);
 			if (!bwTrace.failed())
 			{
 #ifdef EXTRACORRECTNESSASSERTIONS
@@ -466,7 +476,7 @@ private:
 
 	OnewayTrace getBacktraceFullStart(const std::string_view& seq, AlignerGraphsizedState& reusableState) const
 	{
-		return bvAligner.getBacktraceFullStart(seq, params.Xdropcutoff, reusableState);
+		return bvAligner.getBacktraceFullStart(seq, params.Xdropcutoff, reusableState.bigraphNodeForbiddenSpans, reusableState);
 	}
 
 	std::vector<OnewayTrace> getMultiseedTraces(const std::string& sequence, const std::string& revSequence, const std::vector<ProcessedSeedHit>& seedHits, AlignerGraphsizedState& reusableState, std::vector<ScoreType>& sliceMaxScores) const

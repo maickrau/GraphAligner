@@ -136,6 +136,8 @@ namespace CommonUtils
 			case 'H':
 			case 'h':
 				return 'D';
+			case '-':
+				return '-';
 			default:
 				assert(false);
 				return 'N';

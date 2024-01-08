@@ -135,14 +135,15 @@ size_t DiploidHeuristicSplitterOneK::getk() const
 
 void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<__uint128_t, uint8_t>& kmerCount, const phmap::flat_hash_map<__uint128_t, std::pair<size_t, size_t>>& kmerPosition, const AlignmentGraph& graph)
 {
-	std::vector<__uint128_t> currentString;
-	std::vector<std::vector<__uint128_t>> validStrings;
+	std::vector<std::pair<__uint128_t, size_t>> currentString;
+	std::vector<std::pair<std::vector<std::pair<__uint128_t, size_t>>, size_t>> validStrings;
 	for (size_t i = 0; i < graph.BigraphNodeCount(); i++)
 	{
 		std::string seq = graph.BigraphNodeSeq(i);
-		iterateSplittedSeqs(seq, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](std::string str)
+		nodeLengths[i] = seq.size();
+		iterateSplittedSeqs(seq, [this, &currentString, i, &validStrings, &kmerCount, &kmerPosition, &graph](std::string str)
 		{
-			iterateSmallSyncmers(k, 5, str, [this, &currentString, &validStrings, &kmerCount, &kmerPosition, &graph](size_t pos, __uint128_t kmer)
+			iterateSmallSyncmers(k, 5, str, [this, &currentString, i, &validStrings, &kmerCount, &kmerPosition, &graph](size_t pos, __uint128_t kmer)
 			{
 				if (kmerCount.at(kmer) > 2)
 				{
@@ -153,7 +154,7 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<_
 				{
 					if (currentString.size() >= 1)
 					{
-						currentString.push_back(kmer);
+						currentString.emplace_back(kmer, pos);
 						return;
 					}
 					currentString.clear();
@@ -173,23 +174,23 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<_
 					}
 					if (currentString.size() == 0)
 					{
-						currentString.push_back(kmer);
+						currentString.emplace_back(kmer, pos);
 						return;
 					}
 					if (currentString.size() == 1)
 					{
-						currentString[0] = kmer;
+						currentString[0] = std::make_pair(kmer, pos);
 						return;
 					}
 					assert(currentString.size() >= 2);
-					currentString.push_back(kmer);
-					if (kmerPosition.at(currentString[0]) != kmerPosition.at(currentString.back()))
+					currentString.emplace_back(kmer, pos);
+					if (kmerPosition.at(currentString[0].first) != kmerPosition.at(currentString.back().first))
 					{
 						currentString.clear();
-						currentString.push_back(kmer);
+						currentString.emplace_back(kmer, pos);
 						return;
 					}
-					validStrings.push_back(currentString);
+					validStrings.emplace_back(currentString, i);
 					currentString.clear();
 				}
 			});
@@ -198,9 +199,9 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<_
 	std::map<std::pair<__uint128_t, __uint128_t>, std::pair<size_t, size_t>> potentialPairs;
 	for (size_t i = 0; i < validStrings.size(); i++)
 	{
-		assert(validStrings[i].size() >= 3);
-		std::pair<__uint128_t, __uint128_t> key { validStrings[i][0], validStrings[i].back() };
-		assert(kmerPosition.at(validStrings[i][0]) == kmerPosition.at(validStrings[i].back()));
+		assert(validStrings[i].first.size() >= 3);
+		std::pair<__uint128_t, __uint128_t> key { validStrings[i].first[0].first, validStrings[i].first.back().first };
+		assert(kmerPosition.at(validStrings[i].first[0].first) == kmerPosition.at(validStrings[i].first.back().first));
 		if (potentialPairs.count(key) == 0)
 		{
 			potentialPairs[key] = std::make_pair(i, std::numeric_limits<size_t>::max());
@@ -214,28 +215,31 @@ void DiploidHeuristicSplitterOneK::getHomologyPairs(const phmap::flat_hash_map<_
 			potentialPairs[key] = std::make_pair(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max());
 		}
 	}
-	phmap::flat_hash_set<std::pair<size_t, size_t>> pairs;
+	phmap::flat_hash_map<size_t, phmap::flat_hash_set<size_t>> pairs;
 	for (auto pair : potentialPairs)
 	{
 		if (pair.second.second == std::numeric_limits<size_t>::max()) continue;
-		size_t firstNode = kmerPosition.at(validStrings[pair.second.first][1]).first;
-		size_t secondNode = kmerPosition.at(validStrings[pair.second.second][1]).first;
+		size_t firstNode = validStrings[pair.second.first].second;
+		assert(kmerPosition.at(validStrings[pair.second.first].first[1].first).first == firstNode);
+		size_t secondNode = validStrings[pair.second.second].second;
+		assert(kmerPosition.at(validStrings[pair.second.second].first[1].first).first == secondNode);
 		assert(secondNode > firstNode);
-		for (size_t i = 1; i < validStrings[pair.second.first].size()-1; i++)
+		for (size_t i = 1; i < validStrings[pair.second.first].first.size()-1; i++)
 		{
-			assert(kmerPosition.at(validStrings[pair.second.first][i]).first == firstNode);
-			kmerForbidsNode[validStrings[pair.second.first][i]] = secondNode;
+			assert(kmerPosition.at(validStrings[pair.second.first].first[i].first).first == firstNode);
+			kmerImpliesNode[validStrings[pair.second.first].first[i].first] = std::make_pair(firstNode, validStrings[pair.second.first].first[i].second);
 		}
-		for (size_t i = 1; i < validStrings[pair.second.second].size()-1; i++)
+		for (size_t i = 1; i < validStrings[pair.second.second].first.size()-1; i++)
 		{
-			assert(kmerPosition.at(validStrings[pair.second.second][i]).first == secondNode);
-			kmerForbidsNode[validStrings[pair.second.second][i]] = firstNode;
+			assert(kmerPosition.at(validStrings[pair.second.second].first[i].first).first == secondNode);
+			kmerImpliesNode[validStrings[pair.second.second].first[i].first] = std::make_pair(secondNode, validStrings[pair.second.second].first[i].second);
 		}
-		pairs.emplace(firstNode, secondNode);
+		pairs[firstNode].emplace(secondNode);
+		pairs[secondNode].emplace(firstNode);
 	}
 	for (auto pair : pairs)
 	{
-		homologyPairs.emplace_back(pair);
+		conflictPairs[pair.first].insert(conflictPairs[pair.first].end(), pair.second.begin(), pair.second.end());
 	}
 }
 
@@ -270,25 +274,87 @@ void DiploidHeuristicSplitterOneK::initializePairs(const AlignmentGraph& graph, 
 	getHomologyPairs(kmerCount, kmerPosition, graph);
 }
 
-phmap::flat_hash_set<size_t> DiploidHeuristicSplitterOneK::getForbiddenNodes(std::string sequence) const
+phmap::flat_hash_set<std::tuple<size_t, int, int>> DiploidHeuristicSplitterOneK::getForbiddenNodes(std::string sequence) const
 {
-	if (homologyPairs.size() == 0) return phmap::flat_hash_set<size_t> {};
-	phmap::flat_hash_map<size_t, size_t> forbidCount;
-	iterateSplittedSeqs(sequence, [this, &forbidCount](std::string str)
+	if (conflictPairs.size() == 0) return phmap::flat_hash_set<std::tuple<size_t, int, int>> {};
+	phmap::flat_hash_map<size_t, std::vector<int>> forbidPositions;
+	iterateSplittedSeqs(sequence, [this, &forbidPositions](std::string str)
 	{
-		iterateSmallSyncmers(k, 5, str, [this, &forbidCount](size_t pos, __uint128_t kmer)
+		iterateSmallSyncmers(k, 5, str, [this, &forbidPositions](size_t pos, __uint128_t kmer)
 		{
-			if (kmerForbidsNode.count(kmer) == 0) return;
-			forbidCount[kmerForbidsNode.at(kmer)] += 1;
+			if (kmerImpliesNode.count(kmer) == 0) return;
+			std::pair<size_t, size_t> val = kmerImpliesNode.at(kmer);
+			forbidPositions[val.first].emplace_back((int)pos - (int)val.second);
 		});
 	});
-	phmap::flat_hash_set<size_t> result;
-	for (auto pair : homologyPairs)
+	phmap::flat_hash_map<size_t, std::vector<std::pair<int, int>>> solidPositions;
+	for (auto& pair : forbidPositions)
 	{
-		if (forbidCount[pair.first] <= 3 && forbidCount[pair.second] <= 3) continue;
-		if (forbidCount[pair.first] >= 1 && forbidCount[pair.second] >= 1 && forbidCount[pair.first] < forbidCount[pair.second]*10 && forbidCount[pair.second] < forbidCount[pair.first]*10) continue;
-		if (forbidCount[pair.first] > forbidCount[pair.second]) result.emplace(pair.first);
-		if (forbidCount[pair.second] > forbidCount[pair.first]) result.emplace(pair.second);
+		std::sort(pair.second.begin(), pair.second.end());
+		size_t clusterStart = 0;
+		for (size_t i = 1; i < pair.second.size(); i++)
+		{
+			if (pair.second[i] > pair.second[clusterStart] + 100)
+			{
+				if (i - clusterStart >= 3)
+				{
+					int pos = (pair.second[clusterStart] + pair.second[i-1])/2;
+					solidPositions[pair.first].emplace_back(pos, pos + nodeLengths.at(pair.first));
+				}
+				clusterStart = i;
+			}
+		}
+		if (pair.second.size() - clusterStart >= 3)
+		{
+			int pos = (pair.second[clusterStart] + pair.second.back())/2;
+			solidPositions[pair.first].emplace_back(pos, pos + nodeLengths.at(pair.first));
+		}
+	}
+	phmap::flat_hash_map<size_t, std::vector<std::pair<int, int>>> forbiddenSpans;
+	for (const auto& pair : solidPositions)
+	{
+		if (conflictPairs.count(pair.first) == 0) continue;
+		for (const auto pos : pair.second)
+		{
+			for (const size_t otherNode : conflictPairs.at(pair.first))
+			{
+				bool canBlock = true;
+				if (solidPositions.count(otherNode) == 1)
+				{
+					for (const auto& pos2 : solidPositions.at(otherNode))
+					{
+						if (pos2.first < pos.second && pos2.second > pos.first)
+						{
+							canBlock = false;
+							break;
+						}
+					}
+				}
+				if (!canBlock) continue;
+				forbiddenSpans[otherNode].emplace_back(pos.first, pos.second);
+			}
+		}
+	}
+	phmap::flat_hash_set<std::tuple<size_t, int, int>> result;
+	for (auto& pair : forbiddenSpans)
+	{
+		std::sort(pair.second.begin(), pair.second.end(), [](auto left, auto right) { return left.first < right.first; });
+		int currentSpanStart = 0;
+		int currentSpanEnd = 0;
+		for (size_t i = 1; i < pair.second.size(); i++)
+		{
+			if (pair.second[i].first > currentSpanEnd)
+			{
+				if (currentSpanEnd > currentSpanStart) result.emplace(pair.first, currentSpanStart, currentSpanEnd);
+				currentSpanStart = pair.second[i].first;
+				currentSpanEnd = pair.second[i].second;
+			}
+			else
+			{
+				currentSpanEnd = std::max(currentSpanEnd, pair.second[i].second);
+			}
+		}
+		if (currentSpanEnd > currentSpanStart) result.emplace(pair.first, currentSpanStart, currentSpanEnd);
 	}
 	return result;
 }
@@ -296,17 +362,28 @@ phmap::flat_hash_set<size_t> DiploidHeuristicSplitterOneK::getForbiddenNodes(std
 void DiploidHeuristicSplitterOneK::write(std::ostream& file) const
 {
 	serialize(file, (uint64_t)k);
-	serialize(file, (uint64_t)kmerForbidsNode.size());
-	for (auto pair : kmerForbidsNode)
+	serialize(file, (uint64_t)kmerImpliesNode.size());
+	for (auto pair : kmerImpliesNode)
 	{
 		serialize(file, (__uint128_t)pair.first);
-		serialize(file, (uint64_t)pair.second);
+		serialize(file, (uint64_t)pair.second.first);
+		serialize(file, (uint64_t)pair.second.second);
 	}
-	serialize(file, (uint64_t)homologyPairs.size());
-	for (size_t i = 0; i < (uint64_t)homologyPairs.size(); i++)
+	serialize(file, (uint64_t)conflictPairs.size());
+	for (const auto& pair : conflictPairs)
 	{
-		serialize(file, (uint64_t)homologyPairs[i].first);
-		serialize(file, (uint64_t)homologyPairs[i].second);
+		serialize(file, (uint64_t)pair.first);
+		serialize(file, (uint64_t)pair.second.size());
+		for (auto node : pair.second)
+		{
+			serialize(file, (uint64_t)node);
+		}
+	}
+	serialize(file, (uint64_t)nodeLengths.size());
+	for (auto pair : nodeLengths)
+	{
+		serialize(file, (uint64_t)pair.first);
+		serialize(file, (uint64_t)pair.second);
 	}
 }
 
@@ -320,20 +397,33 @@ void DiploidHeuristicSplitterOneK::read(std::istream& file)
 	for (size_t i = 0; i < numItems; i++)
 	{
 		__uint128_t key;
-		uint64_t value;
+		uint64_t value1, value2;
 		deserialize(file, key);
-		deserialize(file, value);
-		kmerForbidsNode[key] = value;
+		deserialize(file, value1);
+		deserialize(file, value2);
+		kmerImpliesNode[key] = std::make_pair(value1, value2);
 	}
 	deserialize(file, numItems);
-	homologyPairs.resize(numItems);
 	for (size_t i = 0; i < numItems; i++)
 	{
 		uint64_t val;
 		deserialize(file, val);
-		homologyPairs[i].first = val;
-		deserialize(file, val);
-		homologyPairs[i].second = val;
+		uint64_t count;
+		deserialize(file, count);
+		for (size_t j = 0; j < count; j++)
+		{
+			uint64_t othernode;
+			deserialize(file, othernode);
+			conflictPairs[val].emplace_back(othernode);
+		}
+	}
+	deserialize(file, numItems);
+	for (size_t i = 0; i < numItems; i++)
+	{
+		uint64_t key, value;
+		deserialize(file, key);
+		deserialize(file, value);
+		nodeLengths[key] = value;
 	}
 	assert(file.good());
 }
@@ -347,15 +437,15 @@ void DiploidHeuristicSplitter::initializePairs(const AlignmentGraph& graph, cons
 	}
 }
 
-std::vector<size_t> DiploidHeuristicSplitter::getForbiddenNodes(std::string sequence) const
+std::vector<std::tuple<size_t, int, int>> DiploidHeuristicSplitter::getForbiddenNodes(std::string sequence) const
 {
-	phmap::flat_hash_set<size_t> result;
+	phmap::flat_hash_set<std::tuple<size_t, int, int>> result;
 	for (size_t i = 0; i < splitters.size(); i++)
 	{
-		phmap::flat_hash_set<size_t> forbidden = splitters[i].getForbiddenNodes(sequence);
+		phmap::flat_hash_set<std::tuple<size_t, int, int>> forbidden = splitters[i].getForbiddenNodes(sequence);
 		result.insert(forbidden.begin(), forbidden.end());
 	}
-	std::vector<size_t> resultVec { result.begin(), result.end() };
+	std::vector<std::tuple<size_t, int, int>> resultVec { result.begin(), result.end() };
 	return resultVec;
 }
 

@@ -406,28 +406,42 @@ std::string hpcCollapse(const std::string& read)
 
 void setForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristic, const std::string& sequence)
 {
-	for (size_t node : diploidHeuristic.getForbiddenNodes(sequence))
+	for (std::tuple<size_t, int, int> t : diploidHeuristic.getForbiddenNodes(sequence))
 	{
-		reusableState.allowedBigraphNodes[int(node/2)*2+0] = false;
-		reusableState.allowedBigraphNodes[int(node/2)*2+1] = false;
+		reusableState.bigraphNodeForbiddenSpans.emplace_back(std::get<0>(t), std::get<1>(t), std::get<2>(t));
 	}
 }
 
 void unsetForbiddenNodes(GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState, const DiploidHeuristicSplitter& diploidHeuristic, const std::string& sequence)
 {
-	for (size_t node : diploidHeuristic.getForbiddenNodes(sequence))
-	{
-		reusableState.allowedBigraphNodes[int(node/2)*2+0] = true;
-		reusableState.allowedBigraphNodes[int(node/2)*2+1] = true;
-	}
+	reusableState.bigraphNodeForbiddenSpans.clear();
 }
 
 void filterOutWrongHaplotypeSeeds(std::vector<SeedHit>& seeds, const GraphAlignerCommon<size_t, int64_t, uint64_t>::AlignerGraphsizedState& reusableState)
 {
+	phmap::flat_hash_map<size_t, std::vector<std::pair<int, int>>> forbiddenSpans;
+	for (auto t : reusableState.bigraphNodeForbiddenSpans)
+	{
+		size_t roundedStart = 0;
+		size_t roundedEnd = 0;
+		if (std::get<1>(t) > 0) roundedStart = (std::get<1>(t) / 64) * 64;
+		if (std::get<2>(t) > 0) roundedEnd = ((std::get<2>(t) + 63) / 64) * 64;
+		forbiddenSpans[std::get<0>(t)].emplace_back(roundedStart, roundedEnd);
+	}
 	for (size_t i = seeds.size()-1; i < seeds.size(); i--)
 	{
 		size_t bigraphNodeId = seeds[i].nodeID*2 + (seeds[i].reverse ? 1 : 0);
-		if (reusableState.allowedBigraphNodes[bigraphNodeId]) continue;
+		if (forbiddenSpans[bigraphNodeId].size() == 0) continue;
+		bool forbidden = false;
+		for (auto span : forbiddenSpans[bigraphNodeId])
+		{
+			if ((int)seeds[i].seqPos >= span.first && (int)seeds[i].seqPos < span.second)
+			{
+				forbidden = true;
+				break;
+			}
+		}
+		if (!forbidden) continue;
 		std::swap(seeds[i], seeds.back());
 		seeds.pop_back();
 	}
@@ -539,7 +553,12 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeu
 				stats.readsWithASeed += 1;
 				stats.bpInReadsWithASeed += fastq->sequence.size();
 				auto alntimeStart = std::chrono::system_clock::now();
-				alignments = AlignClusters(alignmentGraph, fastq->seq_id, fastq->sequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction, params.clipAmbiguousEnds, params.maxTraceCount);
+				std::string paddedSequence = fastq->sequence;
+				while (paddedSequence.size() % 64 != 0)
+				{
+					paddedSequence += '-';
+				}
+				alignments = AlignClusters(alignmentGraph, fastq->seq_id, paddedSequence, params.alignmentBandwidth, params.maxCellsPerSlice, !params.verboseMode, processedSeeds, reusableState, params.preciseClippingIdentityCutoff, params.Xdropcutoff, params.multimapScoreFraction, params.clipAmbiguousEnds, params.maxTraceCount);
 				AlignmentSelection::RemoveDuplicateAlignments(alignmentGraph, alignments.alignments);
 				AlignmentSelection::AddMappingQualities(alignments.alignments);
 				auto alntimeEnd = std::chrono::system_clock::now();

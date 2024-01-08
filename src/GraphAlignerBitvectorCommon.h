@@ -104,6 +104,8 @@ public:
 				case 'N':
 				case 'n':
 					return A() | C() | G() | T();
+				case '-':
+					return 0;
 				default:
 					assert(false);
 			}
@@ -282,6 +284,7 @@ public:
 		Word BT = WordConfiguration<Word>::AllZeros;
 		Word BC = WordConfiguration<Word>::AllZeros;
 		Word BG = WordConfiguration<Word>::AllZeros;
+		bool hasMismatch = false;
 		for (int i = 0; i < WordConfiguration<Word>::WordSize && j+i < sequence.size(); i++)
 		{
 			Word mask = ((Word)1) << i;
@@ -303,6 +306,9 @@ public:
 				case 'T':
 					BT |= mask;
 					break;
+				case '-':
+					hasMismatch = true;
+					break;
 				default:
 					if (Common::characterMatch(sequence[j+i], 'A')) BA |= mask;
 					if (Common::characterMatch(sequence[j+i], 'C')) BC |= mask;
@@ -311,7 +317,7 @@ public:
 					break;
 			}
 		}
-		assert((j + WordConfiguration<Word>::WordSize > sequence.size()) || (BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes);
+		assert((j + WordConfiguration<Word>::WordSize > sequence.size()) || (BA | BC | BT | BG) == WordConfiguration<Word>::AllOnes || hasMismatch);
 		assert((j + WordConfiguration<Word>::WordSize <= sequence.size()) || ((BA | BC | BT | BG) & (WordConfiguration<Word>::AllOnes << (WordConfiguration<Word>::WordSize - j + sequence.size()))) == WordConfiguration<Word>::AllZeros);
 		EqVector EqV {BA, BT, BC, BG};
 		return EqV;
@@ -827,6 +833,10 @@ public:
 			for (auto pos : inner)
 			{
 				result.trace.emplace_back(pos, false, sequence, params.graph);
+				if (nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize) == extraSlice.getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize))
+				{
+					break;
+				}
 			}
 			if (nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize) == extraSlice.getValue(result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize))
 			{
