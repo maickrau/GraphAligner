@@ -843,6 +843,7 @@ public:
 				break;
 			}
 		}
+		while (result.trace.size() >= 1 && !Common::characterMatch(result.trace.back().sequenceCharacter, result.trace.back().graphCharacter)) result.trace.pop_back();
 		assert(result.score >= lastScore);
 		result.score -= lastScore;
 		do
