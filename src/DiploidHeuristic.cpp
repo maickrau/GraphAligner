@@ -338,11 +338,14 @@ phmap::flat_hash_set<std::tuple<size_t, int, int>> DiploidHeuristicSplitterOneK:
 	phmap::flat_hash_set<std::tuple<size_t, int, int>> result;
 	for (auto& pair : forbiddenSpans)
 	{
+		assert(pair.second.size() >= 1);
 		std::sort(pair.second.begin(), pair.second.end(), [](auto left, auto right) { return left.first < right.first; });
-		int currentSpanStart = 0;
-		int currentSpanEnd = 0;
+		assert(pair.second[0].second > pair.second[0].first);
+		int currentSpanStart = pair.second[0].first;
+		int currentSpanEnd = pair.second[0].second;
 		for (size_t i = 1; i < pair.second.size(); i++)
 		{
+			assert(pair.second[i].second > pair.second[i].first);
 			if (pair.second[i].first > currentSpanEnd)
 			{
 				if (currentSpanEnd > currentSpanStart) result.emplace(pair.first, currentSpanStart, currentSpanEnd);

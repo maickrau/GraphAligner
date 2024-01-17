@@ -311,6 +311,31 @@ private:
 			previousMinScore = seedstartSlice.scoreEnd;
 			previousQuitScore = std::max(previousQuitScore, seedstartSlice.scoreEnd + bandwidth);
 		}
+		if (j > 0)
+		{
+			bool hasPreviousNode = false;
+			for (auto node : previousSlice)
+			{
+				if (!(allowedBigraphNodesThisSlice[params.graph.BigraphNodeID(node.first)])) continue;
+				hasPreviousNode = true;
+				if (node.second.minScore > previousQuitScore) continue;
+				if (params.graph.Linearizable(node.first))
+				{
+					auto neighbor = params.graph.InNeighbors(node.first)[0];
+					if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
+					{
+						//linear area, no need to add the later node into the queue
+						//because calculating the earlier node will guarantee that the later node will get added
+						continue;
+					}
+				}
+				hasPreviousNode = true;
+			}
+			if (!hasPreviousNode)
+			{
+				previousQuitScore = std::max(previousQuitScore, seedstartSlice.scoreEnd + bandwidth);
+			}
+		}
 		double averageErrorRate = 0;
 		if (j > 0)
 		{
