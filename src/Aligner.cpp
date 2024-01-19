@@ -484,6 +484,10 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, const DiploidHeu
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 		if (fastq == nullptr) break;
+		if (!params.keepSequenceNameTags)
+		{
+			fastq->seq_id = fastq->seq_id.substr(0, fastq->seq_id.find_first_of(" \t\r\n"));
+		}
 		assertSetNoRead(fastq->seq_id);
 		assert(fastq->quality.size() == 0);
 		if (params.hpcCollapse) fastq->sequence = hpcCollapse(fastq->sequence);

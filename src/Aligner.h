@@ -54,6 +54,7 @@ struct AlignerParams
 	bool useDiploidHeuristic;
 	std::vector<size_t> diploidHeuristicK;
 	std::string diploidHeuristicCacheFile;
+	bool keepSequenceNameTags;
 };
 
 void alignReads(AlignerParams params);

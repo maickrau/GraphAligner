@@ -55,6 +55,7 @@ int main(int argc, char** argv)
 		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg (double)")
 		("min-alignment-score", boost::program_options::value<double>(), "discard alignments with alignment score < arg (double) (default 0)")
 		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double) (default 0.9)")
+		("keep-sequence-name-tags", "Keep tags in input sequence names")
 	;
 	boost::program_options::options_description seeding("Seeding");
 	seeding.add_options()
@@ -167,6 +168,7 @@ int main(int argc, char** argv)
 	params.MEMwindowsize = 0;
 	params.useDiploidHeuristic = false;
 	params.diploidHeuristicCacheFile = "";
+	params.keepSequenceNameTags = false;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -230,6 +232,7 @@ int main(int argc, char** argv)
 	if (vm.count("min-alignment-score")) params.minAlignmentScore = vm["min-alignment-score"].as<double>();
 	if (vm.count("max-trace-count")) params.maxTraceCount = vm["max-trace-count"].as<size_t>();
 
+	if (vm.count("keep-sequence-name-tags")) params.keepSequenceNameTags = true;
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 	if (vm.count("hpc-collapse-reads")) params.hpcCollapse = true;
