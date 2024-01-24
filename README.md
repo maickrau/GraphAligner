@@ -18,7 +18,7 @@ Bioconda is the recommended installation method. If you however want to compile 
 - `cd GraphAligner`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment_linux.yml` or `conda env create -f CondaEnvironment_osx.yml`
-- `source activate GraphAligner`
+- `conda activate GraphAligner`
 - `make bin/GraphAligner`
 
 Note that miniconda is only required during compilation and not during runtime. After compilation you can run the binary without the miniconda environment or copy the binary elsewhere.
