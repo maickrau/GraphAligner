@@ -128,7 +128,7 @@ start:
 	}
 	window.clear();
 	window.emplace_back(offset+minimizerLength-1, kmer, hash(kmer));
-	for (size_t i = minimizerLength; i < minimizerLength + realWindow; i++)
+	for (size_t i = minimizerLength; i < minimizerLength + realWindow-1; i++)
 	{
 		if (!validChar[str[offset + i]])
 		{
@@ -148,7 +148,7 @@ start:
 		callback(std::get<0>(*iter), std::get<1>(*iter));
 		++iter;
 	}
-	for (size_t i = minimizerLength + realWindow; offset+i < str.size(); i++)
+	for (size_t i = minimizerLength + realWindow-1; offset+i < str.size(); i++)
 	{
 		if (!validChar[str[offset+i]])
 		{
@@ -166,7 +166,7 @@ start:
 			frontPopped = true;
 			window.pop_front();
 		}
-		if (frontPopped)
+		if (frontPopped && window.size() >= 2 && std::get<2>(window.front()) == oldMinimum)
 		{
 			while (window.size() >= 2 && std::get<2>(window.front()) == std::get<2>(*(window.begin()+1))) window.pop_front();
 		}
@@ -271,12 +271,10 @@ void iterateMinimizers(const std::string& str, size_t minimizerLength, size_t wi
 	std::vector<std::pair<size_t, size_t>> otherMinimizers;
 	iterateMinimizersSimple(str, minimizerLength, windowSize, [&simpleMinimizers](size_t pos, size_t kmer) { simpleMinimizers.emplace_back(pos, kmer); });
 	iterateMinimizersReal(str, minimizerLength, windowSize, [&otherMinimizers](size_t pos, size_t kmer) { otherMinimizers.emplace_back(pos, kmer); });
-	std::sort(otherMinimizers.begin(), otherMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
-	std::sort(simpleMinimizers.begin(), simpleMinimizers.end(), [](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return left.first < right.first; });
-	// assert(simpleMinimizers.size() == otherMinimizers.size());
+	assert(simpleMinimizers.size() == otherMinimizers.size());
 	for (size_t i = 0; i < otherMinimizers.size(); i++)
 	{
-		// assert(simpleMinimizers[i] == otherMinimizers[i]);
+		assert(simpleMinimizers[i] == otherMinimizers[i]);
 		callback(otherMinimizers[i].first, otherMinimizers[i].second);
 	}
 }
