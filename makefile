@@ -1,6 +1,6 @@
 PLATFORM=$(shell uname -s)
 GPP=$(CXX)
-CPPFLAGS=-Wall -Wextra -std=c++17 -O3 -g -Iconcurrentqueue -IBBHash -Izstr/src -Iparallel-hashmap/parallel_hashmap/ `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash` -Wno-unused-parameter -IMEMfinder/src -I`jemalloc-config --includedir`
+CPPFLAGS=-Wall -Wextra -std=c++17 -O3 -g -Iconcurrentqueue -IBBHash -Izstr/src -Iparallel-hashmap/parallel_hashmap/ `pkg-config --cflags protobuf` `pkg-config --cflags libsparsehash` -Wno-unused-parameter -IMEMfinder/src -I`jemalloc-config --includedir` -Icxxopts/include
 # silly workaround: bamtools does not have pkg-config cflags for finding the include directory
 # instead assume it's a folder at the same location as zlib
 CPPFLAGS+=`pkg-config --cflags zlib`/bamtools
@@ -9,7 +9,7 @@ ODIR=obj
 BINDIR=bin
 SRCDIR=src
 
-LIBS=-lm -lz -lboost_program_options `pkg-config --libs protobuf` -lsdsl -lbamtools
+LIBS=-lm -lz `pkg-config --libs protobuf` -lsdsl -lbamtools
 JEMALLOCFLAGS= -L`jemalloc-config --libdir` -Wl,-rpath,`jemalloc-config --libdir` -ljemalloc `jemalloc-config --libs`
 
 _DEPS = vg.pb.h fastqloader.h GraphAlignerWrapper.h vg.pb.h BigraphToDigraph.h stream.hpp Aligner.h ThreadReadAssertion.h AlignmentGraph.h CommonUtils.h GfaGraph.h ReadCorrection.h MinimizerSeeder.h AlignmentSelection.h EValue.h MEMSeeder.h DNAString.h DiploidHeuristic.h

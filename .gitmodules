@@ -13,3 +13,6 @@
 [submodule "MEMfinder"]
 	path = MEMfinder
 	url = https://github.com/maickrau/MEMfinder.git
+[submodule "cxxopts"]
+	path = cxxopts
+	url = https://github.com/maickrau/cxxopts.git

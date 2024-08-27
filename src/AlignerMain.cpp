@@ -1,9 +1,9 @@
-#include <boost/program_options.hpp>
 #include <iostream>
 #include <unistd.h>
 #include <fstream>
 #include <limits>
 #include <csignal>
+#include "cxxopts.hpp"
 #include "Aligner.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
@@ -31,92 +31,72 @@ int main(int argc, char** argv)
 	act.sa_flags = 0;
 	sigaction(SIGSEGV, &act, 0);
 
-	boost::program_options::options_description mandatory("Mandatory parameters");
-	mandatory.add_options()
-		("graph,g", boost::program_options::value<std::string>(), "input graph (.gfa / .vg)")
-		("reads,f", boost::program_options::value<std::vector<std::string>>()->multitoken(), "input reads (fasta or fastq, uncompressed or gzipped)")
-		("alignments-out,a", boost::program_options::value<std::vector<std::string>>(), "output alignment file (.gaf/.gam/.json)")
-		("corrected-out", boost::program_options::value<std::string>(), "output corrected reads file (.fa/.fa.gz)")
-		("corrected-clipped-out", boost::program_options::value<std::string>(), "output corrected clipped reads file (.fa/.fa.gz)")
+	cxxopts::Options options { "GraphAligner" };
+	options.add_options("Mandatory parameters")
+		("graph,g", "input graph (.gfa / .vg)", cxxopts::value<std::string>())
+		("reads,f", "input reads (fasta or fastq, uncompressed or gzipped, or bam)", cxxopts::value<std::vector<std::string>>()->multitoken())
+		("alignments-out,a", "output alignment file (.gaf/.gam/.json)", cxxopts::value<std::vector<std::string>>())
+		("corrected-out", "output corrected reads file (.fa/.fa.gz)", cxxopts::value<std::string>())
+		("corrected-clipped-out", "output corrected clipped reads file (.fa/.fa.gz)", cxxopts::value<std::string>())
 	;
-	boost::program_options::options_description presets("Preset parameters");
-	presets.add_options()
-		("preset,x", boost::program_options::value<std::string>(), 
-			"Preset parameters\n"
-			"dbg - Parameters optimized for de Bruijn graphs\n"
-			"vg - Parameters optimized for variation graphs")
+	options.add_options("Preset")
+		("preset,x", "use parameter preset", cxxopts::value<std::string>())
 	;
-	boost::program_options::options_description general("General parameters");
-	general.add_options()
+	options.add_options("General parameters")
 		("help,h", "help message")
 		("version", "print version")
-		("threads,t", boost::program_options::value<size_t>(), "number of threads (int) (default 1)")
+		("threads,t", "number of threads (int) (default 1)", cxxopts::value<size_t>())
 		("verbose", "print progress messages")
-		("E-cutoff", boost::program_options::value<double>(), "discard alignments with E-value > arg (double)")
-		("min-alignment-score", boost::program_options::value<double>(), "discard alignments with alignment score < arg (double) (default 0)")
-		("multimap-score-fraction", boost::program_options::value<double>(), "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double) (default 0.9)")
+		("E-cutoff", "discard alignments with E-value > arg (double)", cxxopts::value<double>())
+		("min-alignment-score", "discard alignments with alignment score < arg (double) (default 0)", cxxopts::value<double>())
+		("multimap-score-fraction", "discard alignments whose alignment score is less than this fraction of the best overlapping alignment (double) (default 0.9)", cxxopts::value<double>())
 		("keep-sequence-name-tags", "Keep tags in input sequence names")
 	;
-	boost::program_options::options_description seeding("Seeding");
-	seeding.add_options()
-		("max-cluster-extend", boost::program_options::value<size_t>(), "extend up to arg seed clusters (int) (-1 for all) (default 10)")
-		("seeds-clustersize", boost::program_options::value<size_t>(), "discard seed clusters with fewer than arg seeds (int)")
-		("seeds-minimizer-length", boost::program_options::value<size_t>(), "k-mer length for minimizer seeding (int)")
-		("seeds-minimizer-windowsize", boost::program_options::value<size_t>(), "window size for minimizer seeding (int)")
-		("seeds-minimizer-density", boost::program_options::value<double>(), "keep approximately (arg * sequence length) least frequent minimizers (double) (-1 for all)")
-		("seeds-minimizer-ignore-frequent", boost::program_options::value<double>(), "ignore arg most frequent fraction of minimizers (double)")
-		("seeds-mum-count", boost::program_options::value<size_t>(), "arg longest maximal unique matches (int) (-1 for all)")
-		("seeds-mem-count", boost::program_options::value<size_t>(), "arg longest maximal exact matches (int) (-1 for all)")
-		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
-		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
-		("seeds-mxm-windowsize", boost::program_options::value<size_t>(), "window size for mem/mum seeding (int) (0 for no windowing)")
+	options.add_options("Seeding")
+		("max-cluster-extend", "extend up to arg seed clusters (int) (-1 for all) (default 10)", cxxopts::value<size_t>())
+		("seeds-clustersize", "discard seed clusters with fewer than arg seeds (int)", cxxopts::value<size_t>())
+		("seeds-minimizer-length", "k-mer length for minimizer seeding (int)", cxxopts::value<size_t>())
+		("seeds-minimizer-windowsize", "window size for minimizer seeding (int)", cxxopts::value<size_t>())
+		("seeds-minimizer-density", "keep approximately (arg * sequence length) least frequent minimizers (double) (-1 for all)", cxxopts::value<double>())
+		("seeds-minimizer-ignore-frequent", "ignore arg most frequent fraction of minimizers (double)", cxxopts::value<double>())
+		("seeds-mum-count", "arg longest maximal unique matches (int) (-1 for all)", cxxopts::value<size_t>())
+		("seeds-mem-count", "arg longest maximal exact matches (int) (-1 for all)", cxxopts::value<size_t>())
+		("seeds-mxm-length", "minimum length for maximal unique / exact matches (int)", cxxopts::value<size_t>())
+		("seeds-mxm-cache-prefix", "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)", cxxopts::value<std::string>())
+		("seeds-mxm-windowsize", "window size for mem/mum seeding (int) (0 for no windowing)", cxxopts::value<size_t>())
 	;
-	boost::program_options::options_description alignment("Extension");
-	alignment.add_options()
-		("bandwidth,b", boost::program_options::value<size_t>(), "alignment bandwidth (int)")
-		("tangle-effort,C", boost::program_options::value<size_t>(), "tangle effort limit (int) (-1 for unlimited)")
-		("X-drop", boost::program_options::value<int>(), "X-drop alignment ending score cutoff (int)")
-		("precise-clipping", boost::program_options::value<double>(), "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (double) (default 0.66)")
-		("max-trace-count", boost::program_options::value<size_t>(), "backtrace from up to arg highest scoring local maxima per cluster (int) (-1 for all)")
+	options.add_options("Extension")
+		("bandwidth,b", "alignment bandwidth (int)", cxxopts::value<size_t>())
+		("tangle-effort,C", "tangle effort limit (int) (-1 for unlimited)", cxxopts::value<size_t>())
+		("X-drop", "X-drop alignment ending score cutoff (int)", cxxopts::value<int>())
+		("precise-clipping", "clip the alignment ends with arg as the identity cutoff between correct / wrong alignments (double) (default 0.66)", cxxopts::value<double>())
+		("max-trace-count", "backtrace from up to arg highest scoring local maxima per cluster (int) (-1 for all)", cxxopts::value<size_t>())
 	;
-	boost::program_options::options_description hidden("hidden");
-	hidden.add_options()
+	options.add_options("hidden")
 		("cigar-match-mismatch", "use M for matches and mismatches in the cigar string instead of = and X")
-		("seeds-file,s", boost::program_options::value<std::vector<std::string>>()->multitoken(), "external seeds (.gam)")
+		("seeds-file,s", "external seeds (.gam)", cxxopts::value<std::vector<std::string>>()->multitoken())
 		("seedless-DP", "no seeding, instead use DP alignment algorithm for the entire first row. VERY SLOW except on tiny graphs")
-		("DP-restart-stride", boost::program_options::value<size_t>(), "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)")
+		("DP-restart-stride", "if --seedless-DP doesn't span the entire read, restart after arg base pairs (int)", cxxopts::value<size_t>())
 		("hpc-collapse-reads", "Collapse homopolymer runs in input reads")
 		("discard-cigar", "Don't include CIGAR string in gaf output")
-		("clip-ambiguous-ends", boost::program_options::value<int>(), "clip ambiguous alignment ends with alignment score cutoff arg")
-		("overlap-incompatible-cutoff", boost::program_options::value<double>(), "consider two partial alignments incompatible if they overlap by arg% of the length of the shorter one")
-		("realign", boost::program_options::value<std::string>(), "realign alignments from given gaf file (.gaf)")
-		("unique-mem-bonus-factor", boost::program_options::value<double>(), "bonus priority factor for unique MEMs")
+		("clip-ambiguous-ends", "clip ambiguous alignment ends with alignment score cutoff arg", cxxopts::value<int>())
+		("overlap-incompatible-cutoff", "consider two partial alignments incompatible if they overlap by arg% of the length of the shorter one", cxxopts::value<double>())
+		("realign", "realign alignments from given gaf file (.gaf)", cxxopts::value<std::string>())
+		("unique-mem-bonus-factor", "bonus priority factor for unique MEMs", cxxopts::value<double>())
 		("low-memory-mem-index-construction", "lower memory construction for MEM index")
 		("mem-index-no-wavelet-tree", "higher memory but faster MEM index")
-		("diploid-heuristic", boost::program_options::value<std::vector<size_t>>()->multitoken(), "align to a diploid graph using haplotype aware heuristics using listed k-mer sizes (ints)")
-		("diploid-heuristic-cache", boost::program_options::value<std::string>(), "cache file for haplotype aware heuristic")
+		("diploid-heuristic", "align to a diploid graph using haplotype aware heuristics using listed k-mer sizes (ints)", cxxopts::value<std::vector<size_t>>()->multitoken())
+		("diploid-heuristic-cache", "cache file for haplotype aware heuristic", cxxopts::value<std::string>())
 	;
 
-	boost::program_options::options_description cmdline_options;
-	cmdline_options.add(mandatory).add(general).add(seeding).add(alignment).add(hidden).add(presets);
-
-	boost::program_options::variables_map vm;
-	try
-	{
-		boost::program_options::store(boost::program_options::parse_command_line(argc, argv, cmdline_options), vm);
-	}
-	catch (std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-		std::cerr << "run with option -h for help" << std::endl;
-		std::exit(1);
-	}
-	boost::program_options::notify(vm);
+	auto vm = options.parse(argc, argv);
 
 	if (vm.count("help"))
 	{
-		std::cerr << mandatory << std::endl << general << std::endl << seeding << std::endl << alignment << std::endl;
-		std::cerr << presets << std::endl;
+		std::cerr << options.help({"Mandatory parameters", "Preset", "General parameters", "Seeding", "Extension"}) << std::endl;
+		std::cerr << "Preset parameters" << std::endl
+		          << "\tdbg - Parameters optimized for de Bruijn graphs" << std::endl
+		          << "\tvg - Parameters optimized for variation graphs" << std::endl;
 		std::exit(0);
 	}
 	if (vm.count("version"))
