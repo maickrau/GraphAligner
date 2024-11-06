@@ -21,3 +21,15 @@ FastQ FastQ::reverseComplement() const
 	std::reverse(result.quality.begin(), result.quality.end());
 	return result;
 }
+
+std::string FastQ::lowercase(std::string str)
+{
+	for (size_t i = 0; i < str.size(); i++)
+	{
+		if (str[i] >= 'A' && str[i] <= 'Z')
+		{
+			str[i] += 'a'-'A';
+		}
+	}
+	return str;
+}

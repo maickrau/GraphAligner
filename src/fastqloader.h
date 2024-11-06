@@ -137,22 +137,22 @@ public:
 	{
 		bool gzipped = false;
 		std::string originalFilename = filename;
-		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".gz")
+		if (filename.size() > 3 && lowercase(filename.substr(filename.size()-3)) == ".gz")
 		{
 			gzipped = true;
 			filename = filename.substr(0, filename.size()-3);
 		}
 		bool fastq = false;
 		bool fasta = false;
-		if (filename.size() > 4 && (filename.substr(filename.size()-4) == ".bam" || filename.substr(filename.size()-4) == ".sam"))
+		if (filename.size() > 4 && (lowercase(filename.substr(filename.size()-4)) == ".bam" || lowercase(filename.substr(filename.size()-4)) == ".sam"))
 		{
 			streamBam(originalFilename, includeQuality, f);
 			return;
 		}
-		if (filename.size() > 6 && filename.substr(filename.size()-6) == ".fastq") fastq = true;
-		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".fq") fastq = true;
-		if (filename.size() > 6 && filename.substr(filename.size()-6) == ".fasta") fasta = true;
-		if (filename.size() > 3 && filename.substr(filename.size()-3) == ".fa") fasta = true;
+		if (filename.size() > 6 && lowercase(filename.substr(filename.size()-6)) == ".fastq") fastq = true;
+		if (filename.size() > 3 && lowercase(filename.substr(filename.size()-3)) == ".fq") fastq = true;
+		if (filename.size() > 6 && lowercase(filename.substr(filename.size()-6)) == ".fasta") fasta = true;
+		if (filename.size() > 3 && lowercase(filename.substr(filename.size()-3)) == ".fa") fasta = true;
 		if (fasta)
 		{
 			if (gzipped)
@@ -186,6 +186,8 @@ public:
 	std::string seq_id;
 	std::string sequence;
 	std::string quality;
+private:
+	static std::string lowercase(std::string str);
 };
 
 std::vector<FastQ> loadFastqFromFile(std::string filename, bool includeQuality = true);
