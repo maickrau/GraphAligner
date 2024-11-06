@@ -179,7 +179,8 @@ public:
 				return;
 			}
 		}
-		std::cerr << "Input sequence file cannot be read: " << originalFilename << std::endl;
+		std::cerr << "Can't determine type of input sequence file: " << originalFilename << std::endl;
+		std::cerr << "Allowed file endings are: .fa, .fq, .fasta, .fastq, .fa.gz, .fq.gz, .fasta.gz, .fastq.gz, .bam, .sam" << std::endl;
 		std::abort();
 	}
 	FastQ reverseComplement() const;
