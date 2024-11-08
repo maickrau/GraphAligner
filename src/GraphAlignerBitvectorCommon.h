@@ -882,6 +882,7 @@ public:
 				if (found) continue;
 			}
 		} while (false);
+		if (result.trace.size() == 0) return OnewayTrace::TraceFailed();
 		return result;
 	}
 
