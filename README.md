@@ -35,7 +35,9 @@ See [Parameters](#parameters), the option `GraphAligner --help` and the subsecti
 
 The command above outputs the following alignment in `test/aln.gaf`:
 
-`read	71	0	71	+	>1>2>4	87	3	73	67	72	60	NM:i:5	AS:f:56.3	dv:f:0.0694444	id:f:0.930556	cg:Z:4=1X2=1I38=1D5=1I5=1X13=`
+```
+read	71	0	71	+	>1>2>4	87	3	73	67	72	60	NM:i:5	AS:f:56.3	dv:f:0.0694444	id:f:0.930556	cg:Z:4=1X2=1I38=1D5=1I5=1X13=
+```
 
 which aligned the read to the nodes 1,2,4 with an identity of 93%. See [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf) for more information about the output format. Alternatively try `-a aln.gam` for output compatible with [vg](https://github.com/vgteam/vg/).
 
