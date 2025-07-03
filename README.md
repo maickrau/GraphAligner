@@ -18,7 +18,7 @@ Bioconda is the recommended installation method. If you however want to compile 
 - `cd GraphAligner`
 - `git submodule update --init --recursive`
 - `conda env create -f CondaEnvironment_linux.yml` or `conda env create -f CondaEnvironment_osx.yml`
-- `source activate GraphAligner`
+- `conda activate GraphAligner`
 - `make bin/GraphAligner`
 
 If you want to compile without miniconda, you will need to install [boost](https://www.boost.org/), [protobuf and protoc](https://developers.google.com/protocol-buffers), [sdsl](https://github.com/simongog/sdsl-lite), [jemalloc](https://github.com/jemalloc/jemalloc), [htslib](https://github.com/samtools/htslib) and [sparsehash](https://github.com/sparsehash/sparsehash).
