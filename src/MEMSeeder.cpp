@@ -99,11 +99,11 @@ void MEMSeeder::initTree(const GfaGraph& graph, const bool lowMemoryMEMIndexCons
 	seq.push_back(0);
 	if (lowMemoryMEMIndexConstruction)
 	{
-		index.initializeLowMemory(std::move(seq), 16, useWaveletTree);
+		index.initializeLowMemory(std::move(seq), 16, useWaveletTree ? FMIndex::IndexPrefixStructureType::useDNAPrefixSumIndex : FMIndex::IndexPrefixStructureType::useFlatRanks);
 	}
 	else
 	{
-		index.initialize(std::move(seq), 16, useWaveletTree);
+		index.initialize(std::move(seq), 16, useWaveletTree ? FMIndex::IndexPrefixStructureType::useDNAPrefixSumIndex : FMIndex::IndexPrefixStructureType::useFlatRanks);
 	}
 	prefixIndex = MEMfinder::buildPrefixIndex(index, 10);
 }
@@ -147,11 +147,11 @@ void MEMSeeder::initTree(const vg::Graph& graph, const bool lowMemoryMEMIndexCon
 	seq.push_back(0);
 	if (lowMemoryMEMIndexConstruction)
 	{
-		index.initializeLowMemory(std::move(seq), 16, useWaveletTree);
+		index.initializeLowMemory(std::move(seq), 16, useWaveletTree ? FMIndex::IndexPrefixStructureType::useDNAPrefixSumIndex : FMIndex::IndexPrefixStructureType::useFlatRanks);
 	}
 	else
 	{
-		index.initialize(std::move(seq), 16, useWaveletTree);
+		index.initialize(std::move(seq), 16, useWaveletTree ? FMIndex::IndexPrefixStructureType::useDNAPrefixSumIndex : FMIndex::IndexPrefixStructureType::useFlatRanks);
 	}
 	prefixIndex = MEMfinder::buildPrefixIndex(index, 10);
 }
