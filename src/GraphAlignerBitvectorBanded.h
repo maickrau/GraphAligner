@@ -319,16 +319,6 @@ private:
 				if (!(allowedBigraphNodesThisSlice[params.graph.BigraphNodeID(node.first)])) continue;
 				hasPreviousNode = true;
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.Linearizable(node.first))
-				{
-					auto neighbor = params.graph.InNeighbors(node.first)[0];
-					if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
-					{
-						//linear area, no need to add the later node into the queue
-						//because calculating the earlier node will guarantee that the later node will get added
-						continue;
-					}
-				}
 				hasPreviousNode = true;
 			}
 			if (!hasPreviousNode)
@@ -389,24 +379,26 @@ private:
 				assert(node.second.minScore <= node.second.startSlice.scoreEnd);
 				assert(node.second.minScore <= node.second.endSlice.scoreEnd);
 				if (node.second.minScore > previousQuitScore) continue;
-				if (params.graph.Linearizable(node.first))
+				int scoreAddition = 0;
+				if (params.graph.Linearizable(node.first) && calculableQueue.IsComponentPriorityQueue())
 				{
 					auto neighbor = params.graph.InNeighbors(node.first)[0];
-				 	if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
-				 	{
-				 		//linear area, no need to add the later node into the queue 
-				 		//because calculating the earlier node will guarantee that the later node will get added
-				 		continue;
-				 	}
+					if (previousBand[neighbor] && previousSlice.node(neighbor).endSlice.scoreEnd < previousQuitScore && previousSlice.node(neighbor).minScore < previousQuitScore)
+					{
+						// linear area, add with lower priority
+						// because calculating the earlier node will add the later node to the queue, so adding nodes in non-topological order will cause redundant duplicated computation
+						// but insert anyways to guarantee the node is in the queue
+						scoreAddition = WordConfiguration<Word>::WordSize;
+					}
 				}
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
 				if (calculableQueue.IsComponentPriorityQueue())
 				{
-					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
 				}
 			}
 		}
