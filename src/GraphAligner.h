@@ -219,6 +219,7 @@ private:
 
 	void fixOverlapTraceEnd(OnewayTrace& trace) const
 	{
+		if (trace.trace.size() < 2) return;
 		size_t fixyStart = trace.trace.size()-1;
 		size_t seqAfterHere = 0;
 		for (size_t i = trace.trace.size()-1; i > 0; i--)
@@ -232,7 +233,6 @@ private:
 			fixyStart = i-1;
 		}
 		if (fixyStart == trace.trace.size()-1) return;
-		assert(fixyStart > 0);
 		assert(fixyStart < trace.trace.size());
 		std::vector<AlignmentGraph::MatrixPosition> fixyPart;
 		fixyPart.reserve(trace.trace.size());
