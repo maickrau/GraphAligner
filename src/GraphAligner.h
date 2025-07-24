@@ -223,15 +223,16 @@ private:
 		size_t seqAfterHere = 0;
 		for (size_t i = trace.trace.size()-1; i > 0; i--)
 		{
-			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i-1].nodeSwitch)
 			{
 				seqAfterHere += 1;
 			}
-			if (trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && !trace.trace[i].nodeSwitch) continue;
+			if (trace.trace[i].DPposition.node == trace.trace[i-1].DPposition.node && !trace.trace[i-1].nodeSwitch) continue;
 			if (seqAfterHere > params.graph.BigraphNodeSize(trace.trace[i-1].DPposition.node) - trace.trace[i-1].DPposition.nodeOffset-1) break;
 			fixyStart = i-1;
 		}
 		if (fixyStart == trace.trace.size()-1) return;
+		assert(fixyStart > 0);
 		assert(fixyStart < trace.trace.size());
 		std::vector<AlignmentGraph::MatrixPosition> fixyPart;
 		fixyPart.reserve(trace.trace.size());
@@ -243,14 +244,17 @@ private:
 				assert(trace.trace[i].DPposition.seqPos == trace.trace[i-1].DPposition.seqPos+1);
 				graphPos.seqPos += 1;
 			}
-			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i].nodeSwitch)
+			if (trace.trace[i].DPposition.nodeOffset != trace.trace[i-1].DPposition.nodeOffset || trace.trace[i].DPposition.node != trace.trace[i-1].DPposition.node || trace.trace[i-1].nodeSwitch)
 			{
 				assert(graphPos.nodeOffset < params.graph.BigraphNodeSize(graphPos.node)-1);
 				graphPos.nodeOffset += 1;
 			}
 			size_t unitigNode = params.graph.GetDigraphNode(graphPos.node, graphPos.nodeOffset);
 			size_t nodeOffset = params.graph.NodeOffset(unitigNode);
-			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i-1].graphCharacter)
+			assert(graphPos.nodeOffset >= nodeOffset);
+			assert(graphPos.nodeOffset < nodeOffset+64);
+			assert(graphPos.nodeOffset - nodeOffset < params.graph.NodeLength(unitigNode));
+			if (params.graph.NodeSequences(unitigNode, graphPos.nodeOffset - nodeOffset) != trace.trace[i].graphCharacter)
 			{
 				// imperfect overlap, can't be correctly fixed
 				fixyPart.clear();
@@ -259,9 +263,15 @@ private:
 			fixyPart.push_back(graphPos);
 		}
 		if (fixyPart.size() != trace.trace.size()-1-fixyStart) return;
+		bool fixedAnything = false;
 		for (size_t i = 0; i < fixyPart.size(); i++)
 		{
+			if (trace.trace[fixyStart+1+i].DPposition != fixyPart[i]) fixedAnything = true;
 			trace.trace[fixyStart+1+i].DPposition = fixyPart[i];
+		}
+		if (fixedAnything)
+		{
+			fixOverlapTraceEnd(trace);
 		}
 	}
 
@@ -307,9 +317,15 @@ private:
 			fixyPart.push_back(graphPos);
 		}
 		if (fixyPart.size() != fixyStart) return;
+		bool fixedAnything = false;
 		for (size_t i = 0; i < fixyPart.size(); i++)
 		{
+			if (trace.trace[fixyStart-1-i].DPposition != fixyPart[i]) fixedAnything = true;
 			trace.trace[fixyStart-1-i].DPposition = fixyPart[i];
+		}
+		if (fixedAnything)
+		{
+			fixOverlapTraceStart(trace);
 		}
 	}
 
@@ -651,6 +667,10 @@ private:
 				}
 				trace.score += 1;
 			}
+			trace.trace[i].sequenceCharacter = sequence[trace.trace[i].DPposition.seqPos];
+			size_t unitigNode = params.graph.GetDigraphNode(trace.trace[i].DPposition.node, trace.trace[i].DPposition.nodeOffset);
+			size_t nodeOffset = params.graph.NodeOffset(unitigNode);
+			trace.trace[i].graphCharacter = params.graph.NodeSequences(unitigNode, trace.trace[i].DPposition.nodeOffset - nodeOffset);
 		}
 		for (size_t i = 1; i < trace.trace.size(); i++)
 		{
