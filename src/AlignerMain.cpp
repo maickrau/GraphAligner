@@ -3,6 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <csignal>
+#include <cstdint>
 #include "cxxopts.hpp"
 #include "Aligner.h"
 #include "stream.hpp"

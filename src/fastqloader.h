@@ -4,6 +4,7 @@
 #include <exception>
 #include <string>
 #include <vector>
+#include <cstdint>
 #include <zstr.hpp> //https://github.com/mateidavid/zstr
 #include <api/BamReader.h>
 

@@ -2,6 +2,7 @@
 #include <limits>
 #include <fstream>
 #include <sstream>
+#include <cstdint>
 #include <zstr.hpp> //https://github.com/mateidavid/zstr
 #include "GfaGraph.h"
 #include "ThreadReadAssertion.h"
