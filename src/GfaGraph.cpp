@@ -171,22 +171,26 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 		auto from = std::get<0>(t);
 		auto to = std::get<1>(t);
 		auto overlap = std::get<2>(t);
-		assert(from.id < result.nodes.size());
-		assert(to.id < result.nodes.size());
-		if (result.nodes.at(from.id).size() <= overlap || result.nodes.at(to.id).size() <= overlap)
+		assert(from.id >= 0);
+		assert(to.id >= 0);
+		assert((size_t)from.id < result.nodes.size());
+		assert((size_t)to.id < result.nodes.size());
+		if (result.nodes.at((size_t)from.id).size() <= overlap || result.nodes.at((size_t)to.id).size() <= overlap)
 		{
-			throw CommonUtils::InvalidGraphException { std::string { "Overlap between nodes " + result.originalNodeName.at(from.id) + " and " + result.originalNodeName.at(to.id) + " fully contains one of the nodes. Fix the overlap to be strictly smaller than both nodes" } };
+			throw CommonUtils::InvalidGraphException { std::string { "Overlap between nodes " + result.originalNodeName.at((size_t)from.id) + " and " + result.originalNodeName.at((size_t)to.id) + " fully contains one of the nodes. Fix the overlap to be strictly smaller than both nodes" } };
 		}
 	}
 	for (const auto& t : result.edges)
 	{
-		if (std::get<0>(t).id >= result.nodes.size() || result.nodes[std::get<0>(t).id].size() == 0)
+		assert(std::get<0>(t).id >= 0);
+		assert(std::get<1>(t).id >= 0);
+		if ((size_t)std::get<0>(t).id >= result.nodes.size() || result.nodes[(size_t)std::get<0>(t).id].size() == 0)
 		{
-			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
+			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at((size_t)std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at((size_t)std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}
-		if (std::get<1>(t).id >= result.nodes.size() || result.nodes[std::get<1>(t).id].size() == 0)
+		if ((size_t)std::get<1>(t).id >= result.nodes.size() || result.nodes[(size_t)std::get<1>(t).id].size() == 0)
 		{
-			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at(std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at(std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
+			throw CommonUtils::InvalidGraphException { std::string { "The graph has an edge between non-existant node(s) " + result.originalNodeName.at((size_t)std::get<0>(t).id) + (std::get<0>(t).end ? "+" : "-") + " and " + result.originalNodeName.at((size_t)std::get<1>(t).id) + (std::get<1>(t).end ? "+" : "-") } };
 		}
 	}
 	std::sort(result.edges.begin(), result.edges.end(), [](std::tuple<NodePos, NodePos, size_t> left, std::tuple<NodePos, NodePos, size_t> right){
@@ -213,8 +217,9 @@ GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 
 std::string GfaGraph::OriginalNodeName(int nodeId) const
 {
-	assert(nodeId < originalNodeName.size());
-	return originalNodeName[nodeId];
+	assert(nodeId >= 0);
+	assert((size_t)nodeId < originalNodeName.size());
+	return originalNodeName[(size_t)nodeId];
 }
 
 size_t GfaGraph::totalBp() const

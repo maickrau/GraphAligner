@@ -776,13 +776,10 @@ std::unordered_map<std::string, std::vector<SeedHit>> loadGafSeeds(const Alignme
 		}
 		if (tabPoses[8] >= line.size()) continue;
 		std::string readName = line.substr(0, tabPoses[0]);
-		size_t readLength = std::stoi(line.substr(tabPoses[0]+1, tabPoses[1] - tabPoses[0] - 1));
 		size_t readStart = std::stoi(line.substr(tabPoses[1]+1, tabPoses[2] - tabPoses[1] - 1));
 		size_t readEnd = std::stoi(line.substr(tabPoses[2]+1, tabPoses[3] - tabPoses[2] - 1));
 		std::string path = line.substr(tabPoses[4]+1, tabPoses[5] - tabPoses[4] - 1);
-		size_t pathLength = std::stoi(line.substr(tabPoses[5]+1, tabPoses[6] - tabPoses[5] - 1));
 		size_t pathStart = std::stoi(line.substr(tabPoses[6]+1, tabPoses[7] - tabPoses[6] - 1));
-		size_t pathEnd = std::stoi(line.substr(tabPoses[7]+1, tabPoses[8] - tabPoses[7] - 1));
 		size_t secondNodeStart = 1;
 		assert(path.size() >= 2);
 		assert(path[0] == '>' || path[0] == '<');

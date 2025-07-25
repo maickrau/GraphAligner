@@ -15,9 +15,14 @@
 class AlignmentGraph
 {
 public:
-	class EdgeIterator : public std::iterator<std::input_iterator_tag, size_t>
+	class EdgeIterator
 	{
 	public:
+		using iterator_category = std::input_iterator_tag;
+		using value_type = size_t;
+		using difference_type = int;
+		using pointer = size_t*;
+		using reference = size_t&;
 		EdgeIterator(size_t implicitEdge, const size_t* vecPointer);
 		EdgeIterator& operator=(const EdgeIterator& other) = default;
 		bool operator!=(const EdgeIterator& other) const;

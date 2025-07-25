@@ -136,6 +136,7 @@ public:
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			int forwardNodeId;
+			assert(seedHits[i].nodeID >= 0);
 			if (seedHits[i].reverse)
 			{
 				forwardNodeId = seedHits[i].nodeID * 2 + 1;
@@ -145,7 +146,7 @@ public:
 				forwardNodeId = seedHits[i].nodeID * 2;
 			}
 			size_t nodeIndex = params.graph.GetDigraphNode(forwardNodeId, seedHits[i].nodeOffset);
-			assert(forwardNodeId == params.graph.BigraphNodeID(nodeIndex));
+			assert((size_t)forwardNodeId == params.graph.BigraphNodeID(nodeIndex));
 			assert(seedHits[i].nodeOffset >= params.graph.NodeOffset(nodeIndex));
 			assert(seedHits[i].nodeOffset < params.graph.NodeOffset(nodeIndex) + params.graph.NodeLength(nodeIndex));
 			assert(params.graph.ChainApproxPos(forwardNodeId) + seedHits[i].nodeOffset > seedHits[i].seqPos);
@@ -633,8 +634,8 @@ private:
 			trace.trace[i].graphCharacter = CommonUtils::Complement(trace.trace[i].graphCharacter);
 		}
 		trace.score = 0;
-		size_t lastDiagonalPos;
-		bool lastNodeSwitch;
+		size_t lastDiagonalPos = std::numeric_limits<size_t>::max();
+		bool lastNodeSwitch = false;
 		for (size_t i = 0; i < trace.trace.size(); i++)
 		{
 			if (diagonalIndices[i])
@@ -645,6 +646,7 @@ private:
 			}
 			else
 			{
+				assert(lastDiagonalPos != std::numeric_limits<size_t>::max());
 				assert(i < trace.trace.size()-1);
 				assert((trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos && trace.trace[i].DPposition.node == trace.trace[i+1].DPposition.node && trace.trace[i].DPposition.nodeOffset == trace.trace[i+1].DPposition.nodeOffset && !trace.trace[i].nodeSwitch) || (trace.trace[i].DPposition.seqPos == trace.trace[i+1].DPposition.seqPos && (trace.trace[i].DPposition.node != trace.trace[i+1].DPposition.node || trace.trace[i].DPposition.nodeOffset != trace.trace[i+1].DPposition.nodeOffset || trace.trace[i].nodeSwitch)));
 				if (trace.trace[i].DPposition.seqPos != trace.trace[i+1].DPposition.seqPos)

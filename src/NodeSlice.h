@@ -52,10 +52,15 @@ public:
 	using NodeSliceMapItem = NodeSliceMapItemStruct<LengthType, ScoreType, Word>;
 	using MapType = phmap::flat_hash_map<size_t, NodeSliceMapItem>;
 	using MapItem = NodeSliceMapItem;
-	class NodeSliceIterator : std::iterator<std::forward_iterator_tag, std::pair<size_t, MapItem>>
+	class NodeSliceIterator
 	{
 		using map_iterator = typename MapType::iterator;
 	public:
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = std::pair<size_t, MapItem>;
+		using difference_type = int;
+		using pointer = std::pair<size_t, MapItem>*;
+		using reference = int&;
 		template <bool HasVectorMap = UseVectorMap>
 		NodeSliceIterator(NodeSlice* slice, typename std::enable_if<!HasVectorMap, map_iterator>::type pos) :
 		slice(slice),
@@ -125,10 +130,15 @@ public:
 		map_iterator mappos;
 		size_t indexPos;
 	};
-	class NodeSliceConstIterator : std::iterator<std::forward_iterator_tag, const std::pair<size_t, MapItem>>
+	class NodeSliceConstIterator
 	{
 		using map_iterator = typename MapType::const_iterator;
 	public:
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = const std::pair<size_t, MapItem>;
+		using difference_type = int;
+		using pointer = const std::pair<size_t, MapItem>*;
+		using reference = const std::pair<size_t, MapItem>&;
 		template <bool HasVectorMap = UseVectorMap>
 		NodeSliceConstIterator(const NodeSlice* slice, typename std::enable_if<!HasVectorMap, map_iterator>::type pos) :
 		slice(slice),

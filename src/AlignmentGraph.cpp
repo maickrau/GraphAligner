@@ -103,6 +103,7 @@ AlignmentGraph::AlignmentGraph() :
 	bpSize(0),
 	firstAmbiguous(std::numeric_limits<size_t>::max()),
 	finalized(false),
+	allNodeNamesAreNumbers(true),
 	originalNodeName(),
 	bigraphIntermediateList(),
 	originalNodeSize(),
@@ -118,8 +119,7 @@ AlignmentGraph::AlignmentGraph() :
 	intermediateOutEdges(),
 	firstOfIntermediates(),
 	nodeSequences(),
-	ambiguousNodeSequences(),
-	allNodeNamesAreNumbers(true)
+	ambiguousNodeSequences()
 {
 }
 

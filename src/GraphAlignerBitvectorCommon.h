@@ -903,9 +903,7 @@ public:
 		assert((verticalOffset % WordConfiguration<Word>::WordSize) == 0);
 		size_t hori = pos.nodeOffset;
 		size_t vert = pos.seqPos - verticalOffset;
-		assert(vert >= 0);
 		assert(vert < WordConfiguration<Word>::WordSize);
-		assert(hori >= 0);
 		assert(hori < nodeSlices.size());
 		std::vector<MatrixPosition> result;
 		while (hori > 0 && vert > 0)
