@@ -32,8 +32,8 @@ public:
 	class EdgeWithPriority
 	{
 	public:
-		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(0), forceCalculation(false) {}
-		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), skipFirst(skipFirst), slice(slice), forceCalculation(false) {}
+		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingDelOne, WordSlice<LengthType, ScoreType, Word> incomingDelTwo, bool skipFirst) : target(target), priority(priority), incoming(incoming), incomingDelOne(incomingDelOne), incomingDelTwo(incomingDelTwo), skipFirst(skipFirst), slice(0), forceCalculation(false) {}
+		EdgeWithPriority(LengthType target, ScoreType priority, WordSlice<LengthType, ScoreType, Word> incoming, WordSlice<LengthType, ScoreType, Word> incomingDelOne, WordSlice<LengthType, ScoreType, Word> incomingDelTwo, bool skipFirst, size_t slice) : target(target), priority(priority), incoming(incoming), incomingDelOne(incomingDelOne), incomingDelTwo(incomingDelTwo), skipFirst(skipFirst), slice(slice), forceCalculation(false) {}
 		bool operator>(const EdgeWithPriority& other) const
 		{
 			return priority > other.priority;
@@ -45,6 +45,8 @@ public:
 		LengthType target;
 		ScoreType priority;
 		WordSlice<LengthType, ScoreType, Word> incoming;
+		WordSlice<LengthType, ScoreType, Word> incomingDelOne;
+		WordSlice<LengthType, ScoreType, Word> incomingDelTwo;
 		bool skipFirst;
 		size_t slice;
 		bool forceCalculation;
@@ -100,6 +102,7 @@ public:
 		multimapScoreFraction(multimapScoreFraction),
 		clipAmbiguousEnds(clipAmbiguousEnds),
 		maxTraceCount(maxTraceCount),
+		gapOpenCost(3),
 		discardCigar(false)
 		{
 		}
@@ -112,6 +115,7 @@ public:
 		const double multimapScoreFraction;
 		const ScoreType clipAmbiguousEnds;
 		const size_t maxTraceCount;
+		const ScoreType gapOpenCost;
 		bool discardCigar;
 	};
 	struct TraceItem

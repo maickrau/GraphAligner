@@ -17,10 +17,20 @@ struct NodeSliceMapItemStruct
 	static constexpr size_t NUM_CHUNKS = (AlignmentGraph::SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize - 1) / WordConfiguration<Word>::WordSize;
 	NodeSliceMapItemStruct() :
 	startSlice(),
+	startDelOne(),
+	startDelTwo(),
 	endSlice(),
+	endDelOne(),
+	endDelTwo(),
 	exists(false),
 	HP(),
 	HN(),
+	insOneStartScore(),
+	insTwoStartScore(),
+	insOneHP(),
+	insOneHN(),
+	insTwoHP(),
+	insTwoHN(),
 	minScore(0)
 #ifdef SLICEVERBOSE
 	,firstSlicesCalcedWhenCalced(std::numeric_limits<size_t>::max())
@@ -31,13 +41,27 @@ struct NodeSliceMapItemStruct
 		{
 			HP[i] = 0;
 			HN[i] = 0;
+			insOneHN[i] = 0;
+			insOneHP[i] = 0;
+			insTwoHP[i] = 0;
+			insTwoHN[i] = 0;
 		}
 	}
 	WordSlice<LengthType, ScoreType, Word> startSlice;
+	WordSlice<LengthType, ScoreType, Word> startDelOne;
+	WordSlice<LengthType, ScoreType, Word> startDelTwo;
 	WordSlice<LengthType, ScoreType, Word> endSlice;
+	WordSlice<LengthType, ScoreType, Word> endDelOne;
+	WordSlice<LengthType, ScoreType, Word> endDelTwo;
 	bool exists;
 	Word HP[NUM_CHUNKS];
 	Word HN[NUM_CHUNKS];
+	ScoreType insOneStartScore;
+	ScoreType insTwoStartScore;
+	Word insOneHP[NUM_CHUNKS];
+	Word insOneHN[NUM_CHUNKS];
+	Word insTwoHP[NUM_CHUNKS];
+	Word insTwoHN[NUM_CHUNKS];
 	ScoreType minScore;
 #ifdef SLICEVERBOSE
 	size_t firstSlicesCalcedWhenCalced;

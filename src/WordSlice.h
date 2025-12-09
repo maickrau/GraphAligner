@@ -16,6 +16,7 @@ public:
 	static constexpr int ChunkBits = 8;
 	static constexpr uint64_t AllZeros = 0x0000000000000000;
 	static constexpr uint64_t AllOnes = 0xFFFFFFFFFFFFFFFF;
+	static constexpr uint64_t EveryOtherOne = 0x5555555555555555;
 	static constexpr uint64_t LastBit = 0x8000000000000000;
 	//positions of the sign bits for each chunk
 	static constexpr uint64_t SignMask = 0x8080808080808080;
@@ -164,6 +165,22 @@ public:
 	Word VP;
 	Word VN;
 	ScoreType scoreEnd;
+
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	inline bool operator==(const WordSlice& other) const
+	{
+		return scoreEnd == other.scoreEnd && VP == other.VP && VN == other.VN;
+	}
+
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	inline bool operator!=(const WordSlice& other) const
+	{
+		return !(*this == other);
+	}
 
 #ifdef NDEBUG
 	__attribute__((always_inline))

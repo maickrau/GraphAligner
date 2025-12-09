@@ -657,6 +657,7 @@ public:
 
 	static OnewayTrace getReverseTraceFromTable(const Params& params, const std::vector<OnewayTrace>& otherTraces, std::vector<OnewayTrace>& fakeTraces, const std::string_view& sequence, const DPTable& slice, AlignerGraphsizedState& reusableState, MatrixPosition startPos, ScoreType startScore, bool sliceConsistency, bool multiseed)
 	{
+		std::cerr << "start backtrace with score " << startScore << std::endl;
 		assert(slice.slices.size() > 0);
 		size_t currentSlice = startPos.seqPos / WordConfiguration<Word>::WordSize + 1;
 		assert(currentSlice < slice.slices.size());
@@ -667,11 +668,21 @@ public:
 		result.trace.emplace_back(startPos, false, sequence, params.graph);
 		LengthType currentNode = std::numeric_limits<LengthType>::max();
 		std::vector<WordSlice> nodeSlices;
+		std::vector<WordSlice> nodeSlicesAffineInsertionOne;
+		std::vector<WordSlice> nodeSlicesAffineInsertionTwo;
+		std::vector<WordSlice> nodeSlicesAffineDeletionOne;
+		std::vector<WordSlice> nodeSlicesAffineDeletionTwo;
 		EqVector EqV = getEqVector(sequence, slice.slices[currentSlice].j);
 		WordSlice extraSlice;
 		ScoreType lastScore = std::numeric_limits<ScoreType>::max()-1;
 		std::vector<size_t> otherTracePoses;
 		std::vector<size_t> fakeTracePoses;
+		const size_t MATCHMATRIX = 0;
+		const size_t INSERTIONMATRIXONE = 1;
+		const size_t INSERTIONMATRIXTWO = 2;
+		const size_t DELETIONMATRIXONE = 3;
+		const size_t DELETIONMATRIXTWO = 4;
+		size_t currentMatrix = MATCHMATRIX;
 		for (size_t i = 0; i < otherTraces.size(); i++)
 		{
 			otherTracePoses.push_back(0);
@@ -733,7 +744,7 @@ public:
 				extraSlice.VN = WordConfiguration<Word>::AllZeros;
 				extraSlice.scoreEnd = std::numeric_limits<ScoreType>::max();
 				if (slice.slices[currentSlice].seedstartNodes.count(currentNode) == 1) extraSlice = getSeedSlice(slice.slices[currentSlice].j, sequence.size(), params);
-				nodeSlices = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency && !slice.slices[currentSlice].scoresNotValid && !slice.slices[currentSlice-1].scoresNotValid, extraSlice, slice.slices[currentSlice].j);
+				std::tie(nodeSlices, nodeSlicesAffineInsertionOne, nodeSlicesAffineInsertionTwo, nodeSlicesAffineDeletionOne, nodeSlicesAffineDeletionTwo) = recalcNodeWordslice(params, currentNode, slice.slices[currentSlice].scores.node(currentNode), EqV, previous, sliceConsistency && !slice.slices[currentSlice].scoresNotValid && !slice.slices[currentSlice-1].scoresNotValid, extraSlice, slice.slices[currentSlice].j);
 #ifdef SLICEVERBOSE
 				std::cerr << "j " << slice.slices[currentSlice].j << " firstbt-calc " << slice.slices[currentSlice].scores.node(currentNode).firstSlicesCalcedWhenCalced << " lastbt-calc " << slice.slices[currentSlice].scores.node(currentNode).slicesCalcedWhenCalced << std::endl;
 #endif
@@ -750,6 +761,83 @@ public:
 			if (result.trace.back().DPposition.seqPos == 0 && nodeSlices[result.trace.back().DPposition.nodeOffset].getValue(0) == extraSlice.getValue(0))
 			{
 				break;
+			}
+			if (currentMatrix == INSERTIONMATRIXONE)
+			{
+				if (checkAffineInsertionEnd(params, slice.slices[currentSlice].j, nodeSlices, nodeSlicesAffineInsertionOne, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = MATCHMATRIX;
+				}
+				else
+				{
+					result.trace.emplace_back(MatrixPosition { currentNode, result.trace.back().DPposition.nodeOffset, result.trace.back().DPposition.seqPos-1 }, false, sequence, params.graph);
+					currentMatrix = INSERTIONMATRIXTWO;
+				}
+				continue;
+			}
+			if (currentSlice == INSERTIONMATRIXTWO)
+			{
+				result.trace.emplace_back(MatrixPosition { currentNode, result.trace.back().DPposition.nodeOffset, result.trace.back().DPposition.seqPos-1 }, false, sequence, params.graph);
+				currentMatrix = INSERTIONMATRIXONE;
+				continue;
+			}
+			if (currentMatrix == DELETIONMATRIXONE)
+			{
+				if (checkAffineDeletionEnd(params, slice.slices[currentSlice].j, nodeSlices, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = MATCHMATRIX;
+				}
+				else
+				{
+					if (result.trace.back().DPposition.nodeOffset > 0)
+					{
+						result.trace.emplace_back(MatrixPosition { currentNode, result.trace.back().DPposition.nodeOffset-1, result.trace.back().DPposition.seqPos }, false, sequence, params.graph);
+					}
+					else
+					{
+						auto newPos = pickAffineDeletionNodeBoundary(params, slice.slices[currentSlice].j, nodeSlices, result.trace.back().DPposition, sequence, extraSlice, false);
+						result.trace.emplace_back(newPos, true, sequence, params.graph);
+					}
+					currentMatrix = DELETIONMATRIXTWO;
+				}
+				continue;
+			}
+			if (currentMatrix == DELETIONMATRIXTWO)
+			{
+				if (result.trace.back().DPposition.nodeOffset > 0)
+				{
+					result.trace.emplace_back(MatrixPosition { currentNode, result.trace.back().DPposition.nodeOffset-1, result.trace.back().DPposition.seqPos }, false, sequence, params.graph);
+				}
+				else
+				{
+					auto newPos = pickAffineDeletionNodeBoundary(params, slice.slices[currentSlice].j, nodeSlices, result.trace.back().DPposition, sequence, extraSlice, true);
+					result.trace.emplace_back(newPos, true, sequence, params.graph);
+				}
+				currentMatrix = DELETIONMATRIXONE;
+				continue;
+			}
+			if (currentMatrix == MATCHMATRIX)
+			{
+				if (checkAffineStart(params, slice.slices[currentSlice].j, nodeSlices, nodeSlicesAffineInsertionTwo, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = INSERTIONMATRIXTWO;
+					continue;
+				}
+				if (checkAffineStart(params, slice.slices[currentSlice].j, nodeSlices, nodeSlicesAffineInsertionOne, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = INSERTIONMATRIXONE;
+					continue;
+				}
+				if (checkAffineStart(params, slice.slices[currentSlice].j, nodeSlices, nodeSlicesAffineDeletionTwo, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = DELETIONMATRIXTWO;
+					continue;
+				}
+				if (checkAffineStart(params, slice.slices[currentSlice].j, nodeSlices, nodeSlicesAffineDeletionOne, result.trace.back().DPposition, sequence, extraSlice))
+				{
+					currentMatrix = DELETIONMATRIXONE;
+					continue;
+				}
 			}
 			if (result.trace.back().DPposition.seqPos % WordConfiguration<Word>::WordSize == 0 && result.trace.back().DPposition.nodeOffset == 0)
 			{
@@ -884,6 +972,71 @@ public:
 		} while (false);
 		if (result.trace.size() == 0) return OnewayTrace::TraceFailed();
 		return result;
+	}
+
+	static MatrixPosition pickAffineDeletionNodeBoundary(const Params& params, LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, const std::vector<WordSlice>& nodeSlicesAffineDeletionOne, const std::vector<WordSlice>& nodeSlicesAffine, MatrixPosition pos, const std::string_view& sequence, const WordSlice extraSlice, const bool deletionMatrixTwo)
+	{
+		const size_t node = pos.node;
+		const size_t vert = pos.seqPos - verticalOffset;
+		const ScoreType scoreHere = nodeSlices[0].getValue(vert);
+		for (auto neighbor : params.graph.InNeighbors(node))
+		{
+			if (!current.hasNode(neighbor)) continue;
+			WordSlice neighborSlice;
+			if (deletionMatrixTwo)
+			{
+				neighborSlice = current.node(neighbor).endSliceDelOne;
+			}
+			else
+			{
+				neighborSlice = current.node(neighbor).endSliceDelTwo;
+			}
+			const ScoreType compareScore = neighborSlice.getValue(vert);
+			if ((deletionMatrixTwo && compareScore == scoreHere) || (!deletionMatrixTwo && compareScore+1 == scoreHere))
+			{
+				return MatrixPosition { neighbor, paramt.graph.NodeLength(neighbor)-1, pos.seqPos };
+			}
+		}
+		assert(false);
+	}
+
+	static bool checkAffineDeletionEnd(const Params& params, LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, const std::vector<WordSlice>& nodeSlicesAffineDeletionOne, const std::vector<WordSlice>& nodeSlicesAffine, MatrixPosition pos, const std::string_view& sequence, const WordSlice extraSlice)
+	{
+		assert(verticalOffset <= pos.seqPos);
+		assert(verticalOffset + WordConfiguration<Word>::WordSize > pos.seqPos);
+		assert((verticalOffset % WordConfiguration<Word>::WordSize) == 0);
+		const size_t hori = pos.nodeOffset;
+		const size_t vert = pos.seqPos - verticalOffset;
+		const ScoreType scoreHere = nodeSlices[hori].getValue(vert);
+		const ScoreType affineScore = nodeSlicesAffineDeletionOne[hori].getValue(vert);
+		if (affineScore == scoreHere + params.gapOpenCost) return true;
+		return false;
+	}
+
+	static bool checkAffineInsertionEnd(const Params& params, LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, const std::vector<WordSlice>& nodeSlicesAffineInsertionOne, const std::vector<WordSlice>& nodeSlicesAffine, MatrixPosition pos, const std::string_view& sequence, const WordSlice extraSlice)
+	{
+		assert(verticalOffset <= pos.seqPos);
+		assert(verticalOffset + WordConfiguration<Word>::WordSize > pos.seqPos);
+		assert((verticalOffset % WordConfiguration<Word>::WordSize) == 0);
+		size_t hori = pos.nodeOffset;
+		size_t vert = pos.seqPos - verticalOffset;
+		ScoreType scoreHere = nodeSlices[hori].getValue(vert);
+		ScoreType affineScore = nodeSlicesAffineInsertionOne[hori].getValue(vert);
+		if (affineScore == scoreHere + params.gapOpenCost) return true;
+		return false;
+	}
+
+	static bool checkAffineStart(const Params& params, LengthType verticalOffset, const std::vector<WordSlice>& nodeSlices, const std::vector<WordSlice>& nodeSlicesAffine, MatrixPosition pos, const std::string_view& sequence, const WordSlice extraSlice)
+	{
+		assert(verticalOffset <= pos.seqPos);
+		assert(verticalOffset + WordConfiguration<Word>::WordSize > pos.seqPos);
+		assert((verticalOffset % WordConfiguration<Word>::WordSize) == 0);
+		size_t hori = pos.nodeOffset;
+		size_t vert = pos.seqPos - verticalOffset;
+		ScoreType scoreHere = nodeSlices[hori].getValue(vert);
+		ScoreType affineScore = nodeSlicesAffine[hori].getValue(vert);
+		if (affineScore == scoreHere) return true;
+		return false;
 	}
 
 	static void checkBacktraceCircularity(const OnewayTrace& result)
@@ -1202,21 +1355,29 @@ public:
 		}
 	}
 
-	static std::vector<WordSlice> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, bool sliceConsistency, const WordSlice extraSlice, ScoreType seqOffset)
+	static std::tuple<std::vector<WordSlice>, std::vector<WordSlice>, std::vector<WordSlice>, std::vector<WordSlice>, std::vector<WordSlice>> recalcNodeWordslice(const Params& params, LengthType node, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& slice, const EqVector& EqV, const typename NodeSlice<LengthType, ScoreType, Word, false>::NodeSliceMapItem& previousSlice, bool sliceConsistency, const WordSlice extraSlice, ScoreType seqOffset)
 	{
 		size_t nodeLength = params.graph.NodeLength(node);
 		std::vector<EdgeWithPriority> incoming; // also fake!
-		incoming.emplace_back(node, 0, slice.startSlice, true);
+		incoming.emplace_back(node, 0, slice.startSlice, slice.startDelOne, slice.startDelTwo, true);
 		std::vector<WordSlice> result;
 		result.reserve(nodeLength);
+		std::vector<WordSlice> resultAffineInsertionOne;
+		resultAffineInsertionOne.reserve(nodeLength);
+		std::vector<WordSlice> resultAffineInsertionTwo;
+		resultAffineInsertionTwo.reserve(nodeLength);
+		std::vector<WordSlice> resultAffineDeletionOne;
+		resultAffineDeletionOne.reserve(nodeLength);
+		std::vector<WordSlice> resultAffineDeletionTwo;
+		resultAffineDeletionTwo.reserve(nodeLength);
 		auto sliceCopy = slice;
 		if (node < params.graph.FirstAmbiguous())
 		{
-			calculateNodeInner<false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); }, seqOffset);
+			calculateNodeInner<false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.NodeChunks(node), extraSlice, [&result, &resultAffineDeletionOne, &resultAffineDeletionTwo, &resultAffineInsertionOne, &resultAffineInsertionTwo](const WordSlice& slice, const WordSlice& insertionSliceOne, const WordSlice& insertionSliceTwo, const WordSlice& deletionSliceOne, const WordSlice& deletionSliceTwo) { result.push_back(slice); resultAffineInsertionOne.push_back(insertionSliceOne); resultAffineInsertionTwo.push_back(insertionSliceTwo); resultAffineDeletionOne.push_back(deletionSliceOne); resultAffineDeletionTwo.push_back(deletionSliceTwo); }, seqOffset);
 		}
 		else
 		{
-			calculateNodeInner<false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), extraSlice, [&result](const WordSlice& slice) { result.push_back(slice); }, seqOffset);
+			calculateNodeInner<false>(params, node, sliceCopy, EqV, previousSlice, incoming, [](size_t pos) { return false; }, params.graph.AmbiguousNodeChunks(node), extraSlice, [&result, &resultAffineDeletionOne, &resultAffineDeletionTwo, &resultAffineInsertionOne, &resultAffineInsertionTwo](const WordSlice& slice) { result.push_back(slice); resultAffineInsertionOne.push_back(insertionSliceOne); resultAffineInsertionTwo.push_back(insertionSliceTwo); resultAffineDeletionOne.push_back(deletionSliceOne); resultAffineDeletionTwo.push_back(deletionSliceTwo); }, seqOffset);
 		}
 		assert(result.size() == nodeLength);
 		assert(!sliceConsistency || result[0].scoreEnd == slice.startSlice.scoreEnd);
@@ -1225,7 +1386,7 @@ public:
 		assert(!sliceConsistency || result.back().scoreEnd == slice.endSlice.scoreEnd);
 		assert(!sliceConsistency || result.back().VP == slice.endSlice.VP);
 		assert(!sliceConsistency || result.back().VN == slice.endSlice.VN);
-		return result;
+		return std::make_tuple(result, resultAffineInsertionOne, resultAffineInsertionTwo, resultAffineDeletionOne, resultAffineDeletionTwo);
 	}
 
 	template <typename NodeChunkType>
@@ -1235,6 +1396,137 @@ public:
 	static NodeCalculationResult calculateNodeClipPrecise(const Params& params, size_t i, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem& slice, const EqVector& EqV, typename NodeSlice<LengthType, ScoreType, Word, true>::NodeSliceMapItem previousSlice, const std::vector<EdgeWithPriority>& incoming, const std::vector<bool>& previousBand, NodeChunkType nodeChunks, const WordSlice extraSlice, ScoreType seqOffset)
 	{
 		return calculateNodeInner<true>(params, i, slice, EqV, previousSlice, incoming, [&previousBand](size_t pos) { return previousBand[pos]; }, nodeChunks, extraSlice, [](const WordSlice& slice){}, seqOffset);
+	}
+
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static WordSlice startDeletion(const WordSlice& matchSlice, const ScoreType gapOpenCost)
+	{
+		WordSlice result = matchSlice;
+		result.scoreEnd += gapOpenCost;
+		return result;
+	}
+
+#ifdef NDEBUG
+	__attribute__((always_inline))
+#endif
+	static std::tuple<WordSlice, ScoreType, ScoreType> getInsertionSlice(const Params& params, const WordSlice& matchSlice, const ScoreType insOneBefore, const ScoreType insTwoBefore)
+	{
+		assert(insOneBefore >= matchSlice.getScoreBeforeStart());
+		assert(insTwoBefore >= matchSlice.getScoreBeforeStart());
+		WordSlice insertionOne;
+		WordSlice insertionTwo;
+		insertionOne.scoreEnd = insOneBefore + WordConfiguration<Word>::WordSize / 2;
+		insertionOne.VN = 0;
+		insertionOne.VP = WordConfiguration<Word>::EveryOtherOne;
+		assert(insertionOne.getScoreBeforeStart() == insOneBefore);
+		insertionTwo.scoreEnd = insTwoBefore + WordConfiguration<Word>::WordSize / 2;
+		insertionTwo.VN = 0;
+		insertionTwo.VP = WordConfiguration<Word>::EveryOtherOne;
+		assert(insertionTwo.getScoreBeforeStart() == insTwoBefore);
+		bool changed = true;
+		WordSlice mergedMatchSoFar = matchSlice;
+		while (changed)
+		{
+			changed = false;
+			WordSlice gapOpen = mergedMatchSoFar;
+			gapOpen.scoreEnd += params.gapOpenCost;
+			WordSlice gapExtend = insertionTwo;
+			gapExtend.scoreEnd += 1;
+			gapExtend.scoreEnd -= (gapExtend.VP >> (WordConfiguration<Word>::WordSize-1)) & 1;
+			gapExtend.scoreEnd += (gapExtend.VN >> (WordConfiguration<Word>::WordSize-1)) & 1;
+			gapExtend.VP <<= 1;
+			gapExtend.VN <<= 1;
+			WordSlice newInsertionOne = insertionOne.mergeWith(gapOpen).mergeWith(gapExtend);
+			WordSlice gapExtendTwo = insertionOne;
+			gapExtendTwo.scoreEnd -= (gapExtendTwo.VP >> (WordConfiguration<Word>::WordSize-1)) & 1;
+			gapExtendTwo.scoreEnd += (gapExtendTwo.VN >> (WordConfiguration<Word>::WordSize-1)) & 1;
+			gapExtendTwo.VN <<= 1;
+			gapExtendTwo.VP <<= 1;
+			gapExtendTwo = gapExtendTwo.mergeWith(insertionTwo);
+			if (newInsertionOne != insertionOne)
+			{
+				changed =  true;
+				insertionOne = newInsertionOne;
+			}
+			if (gapExtendTwo != insertionTwo)
+			{
+				changed =  true;
+				insertionTwo = gapExtendTwo;
+			}
+			WordSlice newMatch = mergedMatchSoFar.mergeWith(insertionOne).mergeWith(insertionTwo);
+			if (newMatch != mergedMatchSoFar)
+			{
+				changed = true;
+				mergedMatchSoFar = newMatch;
+			}
+		}
+		int manualMatch = matchSlice.getScoreBeforeStart();
+		int manualOne = std::min(insOneBefore, manualMatch + params.gapOpenCost);
+		int manualTwo = insTwoBefore;
+		for (size_t i = 0; i < 64; i++)
+		{
+			int newManualTwo = manualOne;
+			manualOne = std::min<int>(manualTwo+1, matchSlice.getValueStartBased(i) + params.gapOpenCost);
+			manualTwo = std::min<int>(newManualTwo, manualTwo+1);
+			manualMatch = std::min<int>(matchSlice.getValueStartBased(i), std::min(manualOne, manualTwo));
+			if (!(mergedMatchSoFar.getValueStartBased(i) == manualMatch)/* || !(insertionOne.getValueStartBased(i) == manualOne) || !(insertionTwo.getValueStartBased(i) == manualTwo)*/)
+			{
+				std::cerr << i << " " << mergedMatchSoFar.getValueStartBased(i) << " " << manualMatch << " " << manualOne << " " << manualTwo << std::endl;
+				for (size_t i = 0; i < 64; i++)
+				{
+					std::cerr << matchSlice.getValueStartBased(i) << " ";
+				}
+				std::cerr << "(" << matchSlice.getScoreBeforeStart() << ")";
+				std::cerr << std::endl;
+				for (size_t i = 0; i < 64; i++)
+				{
+					std::cerr << mergedMatchSoFar.getValueStartBased(i) << " ";
+				}
+				std::cerr << "(" << mergedMatchSoFar.getScoreBeforeStart() << ")";
+				std::cerr << std::endl;
+				for (size_t i = 0; i < 64; i++)
+				{
+					std::cerr << insertionOne.getValueStartBased(i) << " ";
+				}
+				std::cerr << "(" << insertionOne.getScoreBeforeStart() << ")";
+				std::cerr << std::endl;
+				for (size_t i = 0; i < 64; i++)
+				{
+					std::cerr << insertionTwo.getValueStartBased(i) << " ";
+				}
+				std::cerr << "(" << insertionTwo.getScoreBeforeStart() << ")";
+				std::cerr << std::endl;
+				std::cerr << insOneBefore << " " << insTwoBefore << std::endl;
+			}
+			assert(mergedMatchSoFar.getValueStartBased(i) == manualMatch);
+//			assert(insertionOne.getValueStartBased(i) == manualOne);
+//			assert(insertionTwo.getValueStartBased(i) == manualTwo);
+		}
+/*		for (size_t i = 0; i < 64; i++)
+		{
+			std::cerr << matchSlice.getValueStartBased(i) << " ";
+		}
+		std::cerr << std::endl;
+		for (size_t i = 0; i < 64; i++)
+		{
+			std::cerr << mergedMatchSoFar.getValueStartBased(i) << " ";
+		}
+		std::cerr << std::endl;
+		for (size_t i = 0; i < 64; i++)
+		{
+			std::cerr << insertionOne.getValueStartBased(i) << " ";
+		}
+		std::cerr << std::endl;
+		for (size_t i = 0; i < 64; i++)
+		{
+			std::cerr << insertionTwo.getValueStartBased(i) << " ";
+		}
+		std::cerr << std::endl;
+		std::cerr << insOneBefore << " " << insTwoBefore << " " << insertionOne.scoreEnd << " " << insertionTwo.scoreEnd << std::endl;
+		*/
+		return std::make_tuple(mergedMatchSoFar, insertionOne.scoreEnd, insertionTwo.scoreEnd);
 	}
 
 	template <bool AllowEarlyLeave, typename NodeChunkType, typename WordsliceCallback, typename ExistenceCheckFunction>
@@ -1259,6 +1551,8 @@ public:
 		Word Eq = EqV.getEqI(nodeChunks[0] & 3);
 		bool hasSkipless = false;
 		bool forceCalculation = false;
+		WordSlice mergedIncomingDelOne;
+		WordSlice mergedIncomingDelTwo;
 
 		for (auto inc : incoming)
 		{
@@ -1269,11 +1563,15 @@ public:
 				if (!hasWs)
 				{
 					ws = inc.incoming;
+					mergedIncomingDelOne = inc.incomingDelOne;
+					mergedIncomingDelTwo = inc.incomingDelTwo;
 					hasWs = true;
 				}
 				else
 				{
 					ws = ws.mergeWith(inc.incoming);
+					mergedIncomingDelOne = mergedIncomingDelOne.mergeWith(inc.incomingDelOne);
+					mergedIncomingDelTwo = mergedIncomingDelTwo.mergeWith(inc.incomingDelTwo);
 				}
 				continue;
 			}
@@ -1313,15 +1611,44 @@ public:
 				newWs.VP &= WordConfiguration<Word>::AllOnes ^ 1;
 				newWs.VN |= 1;
 			}
+			WordSlice newDelOne = inc.incomingDelTwo;
+			newDelOne.scoreEnd += 1;
+			WordSlice newDelTwo = inc.incomingDelOne;
+			newDelOne = newDelOne.mergeWith(startDeletion(inc.incoming, params.gapOpenCost));
+			newWs = newWs.mergeWith(newDelOne);
+			newWs = newWs.mergeWith(newDelTwo);
+			Word newInsOneScore;
+			Word newInsTwoScore;
+			WordSlice insertionMerge;
+			ScoreType insOneBefore, insTwoBefore;
+			if (previousSlice.exists)
+			{
+				assert(previousSlice.insOneStartScore >= previousSlice.startSlice.scoreEnd);
+				assert(previousSlice.insTwoStartScore >= previousSlice.startSlice.scoreEnd);
+				insOneBefore = previousSlice.insOneStartScore;
+				insTwoBefore = previousSlice.insTwoStartScore;
+			}
+			else
+			{
+				// can't start an insertion from nonexistent previous slice, make sure the scores are high enough it never happens
+				insOneBefore = newWs.getScoreBeforeStart() + AlignmentGraph::SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize + params.gapOpenCost + 1;
+				insTwoBefore = insOneBefore;
+			}
+			std::tie(insertionMerge, newInsOneScore, newInsTwoScore) = getInsertionSlice(params, newWs, insOneBefore, insTwoBefore);
+			newWs = insertionMerge;
 			// assert(newWs.getScoreBeforeStart() >= debugLastRowMinScore || newWs.getScoreBeforeStart() >= extraSlice.getScoreBeforeStart());
 			if (!hasWs)
 			{
 				ws = newWs;
+				mergedIncomingDelOne = inc.incomingDelOne;
+				mergedIncomingDelTwo = inc.incomingDelTwo;
 				hasWs = true;
 			}
 			else
 			{
 				ws = ws.mergeWith(newWs);
+				mergedIncomingDelOne = mergedIncomingDelOne.mergeWith(inc.incomingDelOne);
+				mergedIncomingDelTwo = mergedIncomingDelTwo.mergeWith(inc.incomingDelTwo);
 			}
 		}
 
@@ -1338,6 +1665,7 @@ public:
 		
 		result.maxExactEndposScore = ws.maxXScore(seqOffset, params.XscoreErrorCost);
 		result.maxExactEndposNode = i;
+		bool wsChanged = false;
 
 		if (!forceCalculation && slice.exists)
 		{
@@ -1402,6 +1730,7 @@ public:
 							if constexpr (AllowEarlyLeave) return result;
 						}
 						ws = test;
+						wsChanged = true;
 					}
 				}
 			}
@@ -1413,6 +1742,7 @@ public:
 					if constexpr (AllowEarlyLeave) return result;
 				}
 				ws = test;
+				wsChanged = true;
 			}
 		}
 
@@ -1421,13 +1751,23 @@ public:
 			if (ws.getScoreBeforeStart() > previousSlice.startSlice.scoreEnd)
 			{
 				ws = ws.mergeWith(getSourceSliceFromScore(previousSlice.startSlice.scoreEnd));
+				wsChanged = true;
 			}
+		}
+
+		if (wsChanged)
+		{
+//			mergedIncomingDelOne = mergedIncomingDelOne.mergeWith(startDeletion(ws, params.gapOpenCost));
 		}
 
 		for (size_t i = 0; i < slice.NUM_CHUNKS; i++)
 		{
 			slice.HP[i] = WordConfiguration<Word>::AllZeros;
 			slice.HN[i] = WordConfiguration<Word>::AllZeros;
+			slice.insOneHP[i] = WordConfiguration<Word>::AllZeros;
+			slice.insOneHN[i] = WordConfiguration<Word>::AllZeros;
+			slice.insTwoHP[i] = WordConfiguration<Word>::AllZeros;
+			slice.insTwoHN[i] = WordConfiguration<Word>::AllZeros;
 		}
 
 		LengthType pos = 1;
@@ -1534,7 +1874,9 @@ public:
 		}
 		bool endIncomparable = forceMask & ((Word)1 << (Word)(nodeLength-1));
 		slice.startSlice = ws;
-		if constexpr (!AllowEarlyLeave) callback(ws);
+		slice.startDelOne = mergedIncomingDelOne;
+		slice.startDelTwo = mergedIncomingDelTwo;
+		if constexpr (!AllowEarlyLeave) callback(ws, mergedIncomingDelOne, mergedIncomingDelTwo);
 		slice.exists = true;
 		Word forceEq = WordConfiguration<Word>::AllOnes;
 		Word hinP, hinN;
@@ -1542,6 +1884,40 @@ public:
 		size_t smallChunk = 0;
 		size_t offset = 1;
 		pos = smallChunk * (WordConfiguration<Word>::WordSize / 2) + offset;
+		ScoreType insOneBefore;
+		ScoreType insTwoBefore;
+		Word insOneHP;
+		Word insOneHN;
+		Word insTwoHP;
+		Word insTwoHN;
+		if (previousSlice.exists)
+		{
+			assert(previousSlice.insOneStartScore >= previousSlice.startSlice.scoreEnd);
+			assert(previousSlice.insTwoStartScore >= previousSlice.startSlice.scoreEnd);
+			insOneBefore = previousSlice.insOneStartScore;
+			insTwoBefore = previousSlice.insTwoStartScore;
+			insOneHP = previousSlice.insOneHP[0];
+			insOneHN = previousSlice.insOneHN[0];
+			insTwoHP = previousSlice.insTwoHP[0];
+			insTwoHN = previousSlice.insTwoHN[0];
+		}
+		else
+		{
+			// can't start an insertion from nonexistent previous slice, make sure the scores are high enough it never happens
+			insOneBefore = ws.getScoreBeforeStart() + AlignmentGraph::SPLIT_NODE_SIZE + WordConfiguration<Word>::WordSize + params.gapOpenCost + 1;
+			insTwoBefore = insOneBefore;
+			insOneHP = WordConfiguration<Word>::AllOnes;
+			insOneHN = WordConfiguration<Word>::AllZeros;
+			insTwoHP = WordConfiguration<Word>::AllOnes;
+			insTwoHN = WordConfiguration<Word>::AllZeros;
+		}
+		Word insOneScore;
+		Word insTwoScore;
+		WordSlice insertionMerge;
+		std::tie(insertionMerge, insOneScore, insTwoScore) = getInsertionSlice(params, ws, insOneBefore, insTwoBefore);
+		ws = insertionMerge;
+		slice.insOneStartScore = insOneScore;
+		slice.insTwoStartScore = insTwoScore;
 		for (; smallChunk < params.graph.CHUNKS_IN_NODE; smallChunk++)
 		{
 			size_t bigChunk = smallChunk / 2;
@@ -1555,10 +1931,21 @@ public:
 			forceMask >>= offset;
 			for (; offset < WordConfiguration<Word>::WordSize / 2 && pos < nodeLength; offset++)
 			{
+				insOneHP >>= 1;
+				insOneHN >>= 1;
+				insTwoHP >>= 1;
+				insTwoHN >>= 1;
+				insOneBefore += insOneHP & 1;
+				insOneBefore -= insOneHN & 1;
+				insTwoBefore += insTwoHP & 1;
+				insTwoBefore -= insTwoHN & 1;
 				Eq = EqV.getEqI(charChunk & 3);
 				Eq &= forceEq;
 				Word newHP;
 				Word newHN;
+				WordSlice newDelOne = mergedIncomingDelTwo;
+				newDelOne.scoreEnd += 1;
+				WordSlice newDelTwo = mergedIncomingDelOne;
 				std::tie(newWs, newHP, newHN) = getNextSlice(Eq, ws, HP & 1, HN & 1);
 				if (forceMask & 1)
 				{
@@ -1568,16 +1955,19 @@ public:
 				if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max())
 				{
 					newWs = newWs.mergeWith(extraSlice);
-					assert(newWs.scoreEnd >= ws.scoreEnd-1);
-					assert(newWs.scoreEnd <= ws.scoreEnd+1);
-					hinP = newWs.scoreEnd == ws.scoreEnd+1 ? 1 : 0;
-					hinN = newWs.scoreEnd == ws.scoreEnd-1 ? 1 : 0;
 				}
-				else
-				{
-					hinP = newHP >> (WordConfiguration<Word>::WordSize-1);
-					hinN = newHN >> (WordConfiguration<Word>::WordSize-1);
-				}
+				newDelOne = newDelOne.mergeWith(startDeletion(ws, params.gapOpenCost));
+				newWs = newWs.mergeWith(newDelOne);
+				newWs = newWs.mergeWith(newDelTwo);
+				Word newInsOneScore;
+				Word newInsTwoScore;
+				WordSlice insertionMerge;
+				std::tie(insertionMerge, newInsOneScore, newInsTwoScore) = getInsertionSlice(params, newWs, insOneBefore, insTwoBefore);
+				newWs = insertionMerge;
+				assert(newWs.scoreEnd >= ws.scoreEnd-1);
+				assert(newWs.scoreEnd <= ws.scoreEnd+1);
+				hinP = (newWs.scoreEnd == ws.scoreEnd+1) ? 1 : 0;
+				hinN = (newWs.scoreEnd == ws.scoreEnd-1) ? 1 : 0;
 #ifdef EXTRACORRECTNESSASSERTIONS
 				assertSliceCorrectness(ws, newWs, Eq, (HP & 1) - (HN & 1), extraSlice);
 				if (hinP == 1) assert(newWs.scoreEnd == ws.scoreEnd+1);
@@ -1585,6 +1975,8 @@ public:
 #endif
 				// assert(!AllowEarlyLeave || newWs.getScoreBeforeStart() >= debugLastRowMinScore || newWs.getScoreBeforeStart() >= extraSlice.getScoreBeforeStart());
 				ws = newWs;
+				mergedIncomingDelOne = newDelOne;
+				mergedIncomingDelTwo = newDelTwo;
 				if (ws.scoreEnd < result.minScore)
 				{
 					result.minScore = ws.scoreEnd;
@@ -1599,11 +1991,29 @@ public:
 				pos++;
 				slice.HP[bigChunk] |= hinP << (offset + bigChunkOffset);
 				slice.HN[bigChunk] |= hinN << (offset + bigChunkOffset);
+				assert(newInsOneScore >= insOneScore-1);
+				assert(newInsOneScore <= insOneScore+1);
+				assert(newInsTwoScore >= insTwoScore-1);
+				assert(newInsTwoScore <= insTwoScore+1);
+				assert((slice.insOneHP[0] & slice.insOneHN[0]) == 0);
+				assert((slice.insTwoHP[0] & slice.insTwoHN[0]) == 0);
+				if (newInsOneScore == insOneScore+1) slice.insOneHP[bigChunk] |= (Word)1 << (offset + bigChunkOffset);
+				if (newInsOneScore == insOneScore-1) slice.insOneHN[bigChunk] |= (Word)1 << (offset + bigChunkOffset);
+				if (newInsTwoScore == insTwoScore+1) slice.insTwoHP[bigChunk] |= (Word)1 << (offset + bigChunkOffset);
+				if (newInsTwoScore == insTwoScore-1) slice.insTwoHN[bigChunk] |= (Word)1 << (offset + bigChunkOffset);
+				assert((slice.insOneHP[0] & slice.insOneHN[0]) == 0);
+				assert((slice.insTwoHP[0] & slice.insTwoHN[0]) == 0);
+				insOneScore = newInsOneScore;
+				insTwoScore = newInsTwoScore;
 			}
 			offset = 0;
 		}
+		assert((slice.insOneHP[0] & slice.insOneHN[0]) == 0);
+		assert((slice.insTwoHP[0] & slice.insTwoHN[0]) == 0);
 		result.cellsProcessed = pos;
 		slice.endSlice = ws;
+		slice.endDelOne = mergedIncomingDelOne;
+		slice.endDelTwo = mergedIncomingDelTwo;
 #ifndef NDEBUG
 		if (previousSlice.exists) assert(slice.endSlice.getScoreBeforeStart() <= previousSlice.endSlice.scoreEnd);
 		if (previousSlice.exists && !endIncomparable) assert(slice.endSlice.getScoreBeforeStart() == previousSlice.endSlice.scoreEnd || slice.endSlice.getScoreBeforeStart() == extraSlice.getScoreBeforeStart());

@@ -289,9 +289,12 @@ private:
 #endif
 		size_t node = seedHit.alignmentGraphNodeId;
 		assert(calculableQueue.IsComponentPriorityQueue());
+		WordSlice delOne = BV::startDeletion(extraSlice, params.gapOpenCost);
+		WordSlice delTwo = delOne;
+		delTwo.scoreEnd += 1;
 		if (calculableQueue.IsComponentPriorityQueue())
 		{
-			EdgeWithPriority insertEdge { node, extraSlice.getValue(0), extraSlice, true };
+			EdgeWithPriority insertEdge { node, extraSlice.getValue(0), extraSlice, delOne, delTwo, true };
 			insertEdge.forceCalculation = true;
 			calculableQueue.insert(params.graph.ComponentNumber(node), extraSlice.getValue(0), insertEdge);
 		}
@@ -360,13 +363,16 @@ private:
 				if (!(allowedBigraphNodesThisSlice[params.graph.BigraphNodeID(node.first)])) continue;
 				assert(node.second.minScore <= previousQuitScore);
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
+				WordSlice delOne = BV::startDeletion(startSlice, params.gapOpenCost);
+				WordSlice delTwo = delOne;
+				delTwo.scoreEnd += 1;
 				if (calculableQueue.IsComponentPriorityQueue())
 				{
-					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, delOne, delTwo, true });
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, delOne, delTwo, true });
 				}
 			}
 		}
@@ -392,13 +398,16 @@ private:
 					}
 				}
 				WordSlice startSlice = BV::getSourceSliceFromScore(node.second.startSlice.scoreEnd);
+				WordSlice delOne = BV::startDeletion(startSlice, params.gapOpenCost);
+				WordSlice delTwo = delOne;
+				delTwo.scoreEnd += 1;
 				if (calculableQueue.IsComponentPriorityQueue())
 				{
-					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(params.graph.ComponentNumber(node.first), node.second.minScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, delOne, delTwo, true });
 				}
 				else
 				{
-					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, true });
+					calculableQueue.insert(node.second.minScore*priorityMismatchPenalty - j - zeroScore + scoreAddition, EdgeWithPriority { node.first, node.second.minScore - previousMinScore, startSlice, delOne, delTwo, true });
 				}
 			}
 		}
@@ -473,7 +482,14 @@ private:
 			extras = &calculableQueue.getExtras(i);
 			auto& thisNode = currentSlice.node(i);
 			auto oldEnd = thisNode.endSlice;
-			if (!thisNode.exists) oldEnd = { 0, 0, std::numeric_limits<ScoreType>::max() };
+			auto oldDelOne = thisNode.endDelOne;
+			auto oldDelTwo = thisNode.endDelTwo;
+			if (!thisNode.exists)
+			{
+				oldEnd = { 0, 0, std::numeric_limits<ScoreType>::max() };
+				oldDelOne = oldEnd;
+				oldDelTwo = oldEnd;
+			}
 			WordSlice extraSlice = hasSeedStart[i] ? seedstartSlice : fakeSlice;
 			if (extraSlice.scoreEnd != std::numeric_limits<ScoreType>::max()) oldEnd = oldEnd.mergeWith(extraSlice);
 			typename NodeSlice<LengthType, ScoreType, Word, HasVectorMap>::NodeSliceMapItem previousThisNode;
@@ -530,8 +546,10 @@ private:
 			assert(currentSlice.node(i).firstSlicesCalcedWhenCalced <= currentSlice.node(i).slicesCalcedWhenCalced);
 #endif
 			auto newEnd = thisNode.endSlice;
+			auto newDelOne = thisNode.endDelOne;
+			auto newDelTwo = thisNode.endDelTwo;
 
-			if (firstCalc || newEnd.scoreEnd != oldEnd.scoreEnd || newEnd.VP != oldEnd.VP || newEnd.VN != oldEnd.VN)
+			if (firstCalc || newEnd != oldEnd || newDelOne != oldDelOne || newDelTwo != oldDelTwo)
 			{
 				ScoreType newEndMinScore = newEnd.changedMinScore(oldEnd);
 				if (firstCalc) newEndMinScore = newEnd.getMinScore();
@@ -544,14 +562,14 @@ private:
 						if (!allowedBigraphNodesThisSlice[params.graph.BigraphNodeID(neighbor)]) continue;
 						if (calculableQueue.IsComponentPriorityQueue())
 						{
-							calculableQueue.insert(params.graph.ComponentNumber(neighbor), newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+							calculableQueue.insert(params.graph.ComponentNumber(neighbor), newEndMinScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, newDelOne, newDelTwo, false });
 						}
 						else
 						{
 							ScoreType newEndPriorityScore = newEnd.getChangedPriorityScore(oldEnd, j, priorityMismatchPenalty);
 							assert(newEndPriorityScore != std::numeric_limits<ScoreType>::max());
 							assert(newEndPriorityScore >= zeroScore);
-							calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, false });
+							calculableQueue.insert(newEndPriorityScore - zeroScore, EdgeWithPriority { neighbor, newEndMinScore - previousMinScore, newEnd, newDelOne, newDelTwo, false });
 						}
 					}
 				}
